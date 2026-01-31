@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "migrate:dev": "drizzle-kit generate:migration --schema ./src/schema.ts --out ./drizzle/migrations --driver pg --db-url $DATABASE_URL",
+    "push:dev": "drizzle-kit push --schema ./src/schema.ts --driver pg --db-url $DATABASE_URL",
+    "pull:dev": "drizzle-kit pull --schema ./src/schema.ts --driver pg --db-url $DATABASE_URL"
   },
   "keywords": [],
   "author": "",
