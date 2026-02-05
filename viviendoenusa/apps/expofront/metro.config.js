@@ -1,23 +1,26 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
-// Find the project and workspace roots
 const projectRoot = __dirname;
-// This goes up TWO levels from /apps/expofront to the monorepo root
+// Subimos dos niveles para llegar a la raíz del monorepo: /viviendoenusa
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
 const config = getDefaultConfig(projectRoot);
 
-// 1. Watch all files in the entire monorepo
+// 1. Vigilar todos los archivos en el monorepo (Indispensable para Turborepo)
 config.watchFolders = [workspaceRoot];
 
-// 2. Force Metro to resolve modules from both the app and the workspace root
+// 2. Resolución de módulos: Primero local, luego raíz del monorepo
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// 3. (Optional) If using NativeWind, ensure it handles the workspace correctly
+// 3. Forzar a Metro a usar la raíz del workspace como contexto
+// Esto ayuda a que expo-router encuentre los archivos de configuración correctamente
+config.resolver.disableHierarchicalLookup = true;
+
+// 4. Configuración para Expo Router y soporte de SVGs/activos si los usas
 config.transformer.getTransformOptions = async () => ({
   transform: {
     experimentalImportSupport: false,

@@ -20,5 +20,9 @@
   "dependencies": {
     "drizzle-orm": "^0.45.1",
     "postgres": "^3.4.8"
-  }
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }
