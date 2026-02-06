@@ -1,6 +1,7 @@
 import { View, TextInput, Text } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { cn } from '../utils/twcn';
+import React from 'react';
 
 type ThemedTextInputProps = {
   label: string;
