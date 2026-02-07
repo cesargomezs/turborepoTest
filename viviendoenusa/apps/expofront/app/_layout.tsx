@@ -1,5 +1,4 @@
 // apps/expofront/app/_layout.tsx
-import React from 'react';
 
 import { ImageBackground } from 'react-native';
 import { useEffect } from 'react';
@@ -35,7 +34,7 @@ export default function RootLayout() {
   }
   return (
     <AppStateProvider store={store}>
-              <ThemeProvider
+        <ThemeProvider
           value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
         >
           <ImageBackground

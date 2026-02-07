@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "expofront",
-    "slug": "expofront",
+    "name": "Viviendo en USA",
+    "slug": "viviendo-en-usa-expofront",
     "version": "1.0.0",
     "scheme": "expofront-scheme",
     "orientation": "portrait",
@@ -35,7 +35,17 @@
     },
     "plugins": [
       "expo-router",
-      "expo-asset"
+      "expo-asset",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
     ]
   }
 }

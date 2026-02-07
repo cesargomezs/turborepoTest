@@ -6,6 +6,7 @@
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**"]
+      
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -14,6 +15,14 @@
       "dependsOn": ["^check-types"]
     },
     "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "ios": {        // Añade esto
+      "cache": false,
+      "persistent": true
+    },
+    "ios-build": {  // Si insistes en usar este nombre exacto
       "cache": false,
       "persistent": true
     }
