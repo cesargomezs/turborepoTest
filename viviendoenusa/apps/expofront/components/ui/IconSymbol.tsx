@@ -1,32 +1,25 @@
-// This file is a fallback for using MaterialIcons on Android and web.
-
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SymbolWeight } from 'expo-symbols';
 import React from 'react';
 import { OpaqueColorValue, StyleProp, TextStyle } from 'react-native';
 
-// Add your SFSymbol to MaterialIcons mappings here.
+// 1. Mapeo expandido con nombres comunes que usas en tu App
 const MAPPING = {
-  // See MaterialIcons here: https://icons.expo.fyi
-  // See SF Symbols in the SF Symbols app on Mac.
   'house.fill': 'home',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
-} as Partial<
-  Record<
-    import('expo-symbols').SymbolViewProps['name'],
-    React.ComponentProps<typeof MaterialIcons>['name']
-  >
->;
+  'expand-more': 'expand-more',
+  'expand-less': 'expand-less',
+  'calendar': 'event',
+  'translate': 'translate',
+  'home': 'home',
+} as const;
 
-export type IconSymbolName = keyof typeof MAPPING;
+// 2. Permitimos que acepte cualquier nombre de MaterialIcons como fallback 
+// para que no tengas que mapear absolutamente todo.
+export type IconSymbolName = keyof typeof MAPPING | React.ComponentProps<typeof MaterialIcons>['name'];
 
-/**
- * An icon component that uses native SFSymbols on iOS, and MaterialIcons on Android and web. This ensures a consistent look across platforms, and optimal resource usage.
- *
- * Icon `name`s are based on SFSymbols and require manual mapping to MaterialIcons.
- */
 export function IconSymbol({
   name,
   size = 24,
@@ -39,5 +32,15 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+  // 3. Lógica de selección: Si existe en el mapa, lo traduce; si no, usa el nombre directo.
+  const iconName = (MAPPING[name as keyof typeof MAPPING] || name) as React.ComponentProps<typeof MaterialIcons>['name'];
+
+  return (
+    <MaterialIcons 
+      color={color} 
+      size={size} 
+      name={iconName} 
+      style={style} 
+    />
+  );
 }

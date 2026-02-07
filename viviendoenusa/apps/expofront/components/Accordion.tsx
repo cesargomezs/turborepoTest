@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   TouchableOpacity,
   StyleSheet,
   Animated,
 } from 'react-native';
-import Icon from '@expo/vector-icons/MaterialIcons'; // Or any icon library
+import Icon from '@expo/vector-icons/MaterialIcons';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '@react-navigation/native';
+import { cn } from '../utils/twcn';
 
 const Accordion = ({
   title,
@@ -19,59 +20,71 @@ const Accordion = ({
   children: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const animation = new Animated.Value(0);
   const { dark } = useTheme();
+  
+  // Usamos useRef para que el valor animado persista entre renders
+  const animatedController = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedController, {
+      toValue: expanded ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false, // height no soporta native driver
+    }).start();
+  }, [expanded]);
 
   const toggleAccordion = () => {
     setExpanded(!expanded);
   };
 
-  const contentHeight = animation.interpolate({
+  // Interpolación para el giro del icono
+  const arrowAngle = animatedController.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 200], // Adjust the maximum height as needed
+    outputRange: ['0deg', '180deg'],
   });
 
   return (
-    <View className={`border border-gray-300 rounded-lg m-2 z-500 overflow-hidden ${className}`}>
-      <TouchableOpacity className="flex-row justify-between items-center p-2" onPress={toggleAccordion}>
-        <ThemedText style={styles.headerText}>{title}</ThemedText>
-        <Icon
-          name={expanded ? 'expand-less' : 'expand-more'}
-          size={24}
-          color={dark ? 'white' : 'black'}
-        />
+    <View 
+      className={cn(
+        "border rounded-2xl mb-4 overflow-hidden",
+        dark ? "border-white/20 bg-white/5" : "border-black/10 bg-black/5",
+        className
+      )}
+    >
+      <TouchableOpacity 
+        className="flex-row justify-between items-center p-4" 
+        onPress={toggleAccordion}
+        activeOpacity={0.7}
+      >
+        <ThemedText type="defaultSemiBold" className="text-lg">
+          {title}
+        </ThemedText>
+        <Animated.View style={{ transform: [{ rotate: arrowAngle }] }}>
+          <Icon
+            name="expand-more"
+            size={24}
+            color={dark ? 'white' : 'black'}
+          />
+        </Animated.View>
       </TouchableOpacity>
-      <View style={[styles.content, { height: contentHeight }]}>
-        {expanded && <View style={styles.contentInner}>{children}</View>}
-      </View>
+
+      {/* Contenedor animado */}
+      <Animated.View
+        style={{
+          maxHeight: animatedController.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 500], // Ajusta según el contenido máximo esperado
+          }),
+          opacity: animatedController,
+          overflow: 'hidden',
+        }}
+      >
+        <View className="p-4 pt-0 bg-transparent">
+          {children}
+        </View>
+      </Animated.View>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    zIndex: 100,
-    margin: 10,
-    overflow: 'hidden', // Important for hiding content when collapsed
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 10,
-  },
-  headerText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  content: {
-    overflow: 'hidden',
-  },
-  contentInner: {
-    padding: 10,
-  },
-});
 
 export default Accordion;

@@ -1,21 +1,21 @@
-// apps/expofront/app/_layout.tsx
-
 import { ImageBackground } from 'react-native';
 import { useEffect } from 'react';
 import { Provider as AppStateProvider } from 'react-redux';
-
 
 import { ThemeProvider } from '@react-navigation/native';
 import { DarkTheme, DefaultTheme } from '../constants/Theme';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 
+import store from './store';
+import { useColorScheme } from '../hooks/useColorScheme';
 
-import store from './store'; // Asegúrate de que la ruta sea correcta
-import { useColorScheme } from '@/hooks/useColorScheme';
+import '../global.css';
 
-import '../global.css'; 
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -32,23 +32,28 @@ export default function RootLayout() {
   if (!loaded) {
     return null;
   }
+
   return (
     <AppStateProvider store={store}>
-        <ThemeProvider
-          value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      {/* En iOS, el ImageBackground necesita flex: 1 para expandirse */}
+      <ImageBackground
+        source={require('../assets/images/background.jpg')}
+        resizeMode="cover"
+        style={{ flex: 1 }} // Usamos style para asegurar compatibilidad total
+      >
+        <Stack
+          screenOptions={{
+            contentStyle: { backgroundColor: 'transparent' }, 
+            headerShown: false,
+          }}
         >
-          <ImageBackground
-            source={require('../assets/images/background.jpg')}
-            alt="a woman carrying a variety of tropical fruits on her head"
-            resizeMode="cover"
-            className="flex-1"
-          ></ImageBackground>
-      <Stack>
-        {/* Usamos Screen name="(tabs)" porque tus archivos están en esa carpeta */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
-      </Stack>
-      </ThemeProvider>
-    </AppStateProvider>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'}  />
+      </ImageBackground>
+    </ThemeProvider>
+  </AppStateProvider>
   );
 }

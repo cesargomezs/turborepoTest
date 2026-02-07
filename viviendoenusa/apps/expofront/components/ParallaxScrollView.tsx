@@ -1,33 +1,38 @@
 import type { PropsWithChildren, ReactElement } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View, Platform } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedRef,
   useAnimatedStyle,
   useScrollViewOffset,
 } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 
 import { ThemedView } from '../components/ThemedView';
 import { useBottomTabOverflow } from '../components/ui/TabBarBackground';
 import { useColorScheme } from '../hooks/useColorScheme';
-import ThemedContainer from './ThemedContainer';
+import { cn } from '../utils/twcn';
+import React from 'react';
 
 const HEADER_HEIGHT = 250;
 
 type Props = PropsWithChildren<{
   headerImage: ReactElement;
   headerBackgroundColor: { dark: string; light: string };
+  className?: string;
 }>;
 
 export default function ParallaxScrollView({
   children,
   headerImage,
   headerBackgroundColor,
+  className,
 }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollOffset = useScrollViewOffset(scrollRef);
   const bottom = useBottomTabOverflow();
+
   const headerAnimatedStyle = useAnimatedStyle(() => {
     return {
       transform: [
@@ -50,13 +55,16 @@ export default function ParallaxScrollView({
   });
 
   return (
-    <ThemedContainer>
+    <View className="flex-1 bg-transparent">
       <Animated.ScrollView
+        removeClippedSubviews={Platform.OS === 'android'}
         ref={scrollRef}
         scrollEventThrottle={16}
         scrollIndicatorInsets={{ bottom }}
-        contentContainerStyle={{ paddingBottom: bottom }}
+        contentContainerStyle={{ paddingBottom: bottom + 20 }}
+        className="bg-transparent"
       >
+        {/* Contenedor de la imagen con efecto Parallax */}
         <Animated.View
           style={[
             styles.header,
@@ -66,24 +74,50 @@ export default function ParallaxScrollView({
         >
           {headerImage}
         </Animated.View>
-        <ThemedView style={styles.content}>{children}</ThemedView>
+        
+        {/* Capa de contenido con desenfoque real (Glassmorphism) */}
+        <View style={styles.containerRelative}>
+          <BlurView
+            intensity={Platform.OS === 'ios' ? 45 : 80}
+            tint={colorScheme === 'dark' ? 'dark' : 'light'}
+            style={[StyleSheet.absoluteFill, styles.blurRadius]}
+          />
+          
+          <ThemedView 
+            className={cn(
+              "flex-1 p-8 gap-4 bg-transparent", 
+              className
+            )}
+            style={styles.content}
+          >
+            {children}
+          </ThemedView>
+        </View>
       </Animated.ScrollView>
-    </ThemedContainer>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   header: {
     height: HEADER_HEIGHT,
     overflow: 'hidden',
   },
+  containerRelative: {
+    marginTop: -32, // Monta el contenido sobre la imagen
+    flex: 1,
+    // El radio debe aplicarse aquí para que el BlurView se corte correctamente
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+  },
+  blurRadius: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+  },
   content: {
     flex: 1,
-    padding: 32,
-    gap: 16,
-    overflow: 'hidden',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.15)',
   },
 });

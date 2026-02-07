@@ -12,5 +12,21 @@ export const Media: {
       marginHorizontal: 'auto',
       width: '100%',
     },
+    // Estilo para el TabBar (el menú de abajo)
+    tabBar: {
+      maxWidth: 768,
+      alignSelf: 'center',
+      width: '90%', // Un poco más estrecho para que flote como en la imagen
+      bottom: 20,
+      borderRadius: 30,
+      height: 65,
+      elevation: 5,
+      shadowColor: '#000',
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+    }
   }),
 };
+
+
+

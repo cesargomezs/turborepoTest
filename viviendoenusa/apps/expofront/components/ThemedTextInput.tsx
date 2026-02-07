@@ -1,81 +1,82 @@
-import { View, TextInput, Text } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { View, TextInput, Text, Platform, StyleSheet } from 'react-native';
+import { useColorScheme } from '../hooks/useColorScheme';
 import { cn } from '../utils/twcn';
+import { Colors } from '../constants/Colors';
 import React from 'react';
 
 type ThemedTextInputProps = {
   label: string;
   onChangeText: (text: string) => void;
   value: string;
-  isValid: boolean;
-  errorMessage: string;
+  isValid?: boolean;
+  errorMessage?: string;
   placeholder?: string;
   className?: string;
   secureTextEntry?: boolean;
+  autoComplete?: any; // Añadido para mejor UX en Web/Android
 };
 
 export default function ThemedTextInput({
   label,
   onChangeText,
   value,
-  isValid,
-  errorMessage,
+  isValid = true,
+  errorMessage = '',
   placeholder,
   className,
   secureTextEntry,
+  autoComplete,
 }: ThemedTextInputProps) {
-  const { dark } = useTheme();
+  const theme = useColorScheme() ?? 'light';
+  const isDark = theme === 'dark';
+  
   const hasError = value.length > 0 && !isValid;
-  const getErrorColor = (prop: 'text' | 'border') =>
-    `${
-      dark && hasError
-        ? `${prop}-red-400`
-        : !dark && hasError
-        ? `${prop}-red-700`
-        : dark
-        ? `${prop}-gray-300`
-        : `${prop}-gray-700`
-    }`;
 
   return (
-    <View className="w-full">
+    <View className="w-full mb-1">
       <Text
-        className={`mb-2 text-lg ${getErrorColor('text')}`}
-        style={{ fontSize: 20 }}
+        className={cn(
+          "mb-1 font-semibold tracking-tight",
+          hasError 
+            ? (isDark ? "text-red-400" : "text-red-600") 
+            : (isDark ? "text-gray-400" : "text-gray-600")
+        )}
+        style={{ fontSize: 16 }}
       >
         {label}
       </Text>
+      
       <TextInput
         className={cn(
-          className,
-          'border-2 border-l-0 border-t-0',
-          dark
-            ? 'text-gray-300 bg-[#0006]'
-            : 'text-gray-700 bg-[#fffa]',
-          'rounded-lg p-2 mb-4 px-3 h-10 w-full',
-          dark && hasError
-            ? 'border-red-400'
-            : !dark && hasError
-            ? 'border-red-700'
-            : dark && !hasError
-            ? 'border-gray-500'
-            : 'border-gray-400'
+          'border-b bg-transparent', 
+          isDark ? 'text-white' : 'text-black',
+          'py-2 px-0 h-11 w-full',
+          hasError
+            ? (isDark ? 'border-red-400' : 'border-red-600')
+            : (isDark ? 'border-white/20' : 'border-black/10'),
+          className
         )}
-        maxLength={256}
         onChangeText={onChangeText}
         autoCapitalize="none"
         value={value}
         placeholder={placeholder}
-        placeholderTextColor={'#999'}
-        style={{
-          fontSize: 20,
-          height: 40,
-        }}
+        placeholderTextColor={isDark ? '#555' : '#aaa'}
         secureTextEntry={secureTextEntry}
+        autoComplete={autoComplete}
+        // Solución para Web: eliminamos el recuadro azul de enfoque
+        style={[
+          { fontSize: 18 },
+          Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)
+        ]}
       />
-      <View className="flex flex-row h-8 w-full mt-[-10px]">
+      
+      {/* Contenedor de error con altura fija para evitar saltos de layout */}
+      <View className="h-5 mt-1">
         {hasError && (
-          <Text className={`${dark ? 'text-red-400' : 'text-red-700'} text-lg`}>
+          <Text className={cn(
+            "text-xs font-medium",
+            isDark ? "text-red-400" : "text-red-600"
+          )}>
             {errorMessage}
           </Text>
         )}

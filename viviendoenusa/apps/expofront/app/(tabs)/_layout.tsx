@@ -12,11 +12,10 @@ import {
   useMockDispatch,
   useMockSelector,
 } from '../../redux/slices';
-import React from 'react';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const loggedIn = useMockSelector((state: { mockAuth: { loggedIn: any; }; }) => state.mockAuth.loggedIn);
+  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const dispatch = useMockDispatch();
 
   return (
