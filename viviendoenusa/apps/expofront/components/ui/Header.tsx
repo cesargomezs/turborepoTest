@@ -1,74 +1,96 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { StyleSheet, View, Image, Platform } from 'react-native';
+import { View, Image, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { Colors } from '../../constants/Colors';
 import { useColorScheme } from '../../hooks/useColorScheme';
-import { cn } from '../../utils/twcn';
 import { ThemedText } from '../ThemedText';
 import React from 'react';
 
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
-
-  // En Android, el desenfoque a veces necesita un color de fondo semitransparente para verse bien
-  const blurBackgroundColor = theme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)';
+  const isDark = theme === 'dark';
 
   return (
-    <View style={{ height: (Platform.OS === 'ios' ? 130 : 110) + insets.top }}>
+    <View style={{ width: '100%', backgroundColor: 'transparent' }}>
       <BlurView
-        tint={theme === 'dark' ? 'dark' : 'light'}
-        intensity={Platform.OS === 'ios' ? 80 : 100} // Android necesita más intensidad
-        style={[
-          StyleSheet.absoluteFill,
-          Platform.OS === 'android' && { backgroundColor: blurBackgroundColor }
-        ]}
-        className="justify-end pb-4 px-6"
+        tint={isDark ? 'dark' : 'light'}
+        intensity={Platform.OS === 'ios' ? 85 : 100}
+        style={{ paddingTop: insets.top }}
+        className="border-b border-white/10"
       >
-        <View className="flex-row items-center justify-between">
-          <View className='flex-row items-center gap-3'>
-            {/* Avatar con tamaño adaptable */}
-            <View className={cn(
-              "w-12 h-12 rounded-full border",
-              theme === 'dark' ? "border-white/20" : "border-black/10"
-            )}>
+        {/* 1. FILA PRINCIPAL (Avatar, Nombre e Icono) */}
+        <View 
+          style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            width: '100%',
+            paddingHorizontal: 20,
+            paddingTop: 12,
+            paddingBottom: 5, // Reducimos para que el "inicio" no quede muy lejos
+          }}
+        >
+          {/* GRUPO IZQUIERDO */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View 
+              style={{ 
+                width: 55, 
+                height: 55, 
+                borderRadius: 27.5, 
+                overflow: 'hidden',
+                borderWidth: 1.5,
+                borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'
+              }}
+            >
               <Image
                 source={require('../../assets/images/cesar.webp')}
-                className="rounded-full" // Tailwind para otros estilos
-                style={{ 
-                  width: 100, 
-                  height: 100, 
-                  borderRadius: 50 // La mitad del ancho/alto para círculo perfecto
-                }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
               />
             </View>
-            
-            <View>
-              <ThemedText className="text-xl font-bold leading-tight">Hola, Cesar</ThemedText>
-              {title && (
-                <ThemedText 
-                  className="text-xs font-medium uppercase tracking-wider opacity-60"
-                  style={{ color: Colors[theme].tabIconDefault }}
-                >
-                  {title}
-                </ThemedText>
-              )}
+            <View style={{ marginLeft: 12 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: 'bold' }}>
+                Hola, Cesar
+              </ThemedText>
             </View>
           </View>
 
-          {/* Botón de traducción universal */}
-          <View className={cn(
-            "p-2 rounded-xl",
-            theme === 'dark' ? "bg-white/10" : "bg-black/5"
-          )}>
+          {/* GRUPO DERECHO (Botón) */}
+          <TouchableOpacity 
+            activeOpacity={0.7}
+            style={{ 
+              width: 44, 
+              height: 44, 
+              backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+              borderRadius: 12,
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
             <MaterialCommunityIcons
-              size={24}
+              size={22}
               color={Colors[theme].text}
               name="translate"
             />
-          </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* 2. PIE DE PÁGINA DEL HEADER (Texto "inicio" centrado) */}
+        <View 
+          style={{ 
+            width: '100%', 
+            alignItems: 'center', 
+            paddingBottom: 10, // Espacio final antes de la línea divisoria
+          }}
+        >
+          <ThemedText 
+        className="text-center text-2xl"
+        style={{ color: Colors[theme].tabIconDefault }}
+          >
+            {title}
+          </ThemedText>
         </View>
       </BlurView>
     </View>

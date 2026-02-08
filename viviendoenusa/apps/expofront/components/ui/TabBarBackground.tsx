@@ -1,19 +1,53 @@
+import { BlurView } from 'expo-blur';
+import { StyleSheet, Platform, View } from 'react-native';
 import React from 'react';
-import { View, Platform } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
-// El valor por defecto suele ser undefined en web/android, 
-// pero en nuestra app queremos controlarlo.
-export default undefined;
+export default function BlurTabBarBackground() {
+  const theme = useColorScheme() ?? 'light';
+  const isDark = theme === 'dark';
 
-export function useBottomTabOverflow() {
-  const insets = useSafeAreaInsets();
-  
-  // En iOS, el área de "peligro" inferior es más grande por la barra de inicio.
-  // En Android/Web, suele ser más pequeña.
-  if (Platform.OS === 'ios') {
-    return insets.bottom > 0 ? insets.bottom : 20;
-  }
-  
-  return 0;
+  const webStyle = Platform.select({
+    web: {
+      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      width: '100%', // Asegura el ancho en navegadores
+    } as any,
+    default: {},
+  });
+
+  return (
+    <View style={styles.container}>
+      <BlurView
+        tint={isDark ? 'dark' : 'light'}
+        intensity={Platform.OS === 'ios' ? 85 : 95}
+        style={[StyleSheet.absoluteFill, webStyle]}
+      />
+      
+      {/* Línea superior responsiva */}
+      <View 
+        style={[
+          styles.borderTop, 
+          { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
+        ]} 
+      />
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    // absoluteFillObject hace que ocupe todo el espacio que el TabBar le asigne
+    ...StyleSheet.absoluteFillObject,
+    width: '100%', 
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  borderTop: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
+    position: 'absolute',
+    top: 0,
+  }
+});
