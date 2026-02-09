@@ -13,7 +13,7 @@ import { useBottomTabOverflow } from '../components/ui/TabBarBackground';
 
 import { useColorScheme } from '../hooks/useColorScheme';
 import { cn } from '../utils/twcn';
-import React from 'react';
+
 
 const HEADER_HEIGHT = 250;
 
@@ -65,7 +65,6 @@ export default function ParallaxScrollView({
         contentContainerStyle={{ paddingBottom: bottom + 20 }}
         className="bg-transparent"
       >
-        {/* Contenedor de la imagen con efecto Parallax */}
         <Animated.View
           style={[
             styles.header,
@@ -75,8 +74,7 @@ export default function ParallaxScrollView({
         >
           {headerImage}
         </Animated.View>
-        
-        {/* Capa de contenido con desenfoque real (Glassmorphism) */}
+
         <View style={styles.containerRelative}>
           <BlurView
             intensity={Platform.OS === 'ios' ? 45 : 80}
@@ -105,9 +103,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   containerRelative: {
-    marginTop: -32, // Monta el contenido sobre la imagen
+    marginTop: -32, 
     flex: 1,
-    // El radio debe aplicarse aquí para que el BlurView se corte correctamente
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     overflow: 'hidden',

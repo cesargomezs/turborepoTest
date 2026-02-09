@@ -6,7 +6,6 @@ import { IconSymbol } from './ui/IconSymbol';
 import { Colors } from '../constants/Colors';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { cn } from '../utils/twcn';
-import React from 'react';
 
 export function Collapsible({ 
   children, 
@@ -17,7 +16,7 @@ export function Collapsible({
   const theme = useColorScheme() ?? 'light';
 
   return (
-    // Usamos View con bg-transparent para no tapar el fondo del _layout
+
     <View className={cn("mb-4 bg-transparent", className)}>
       <TouchableOpacity
         style={styles.heading}
@@ -30,7 +29,6 @@ export function Collapsible({
           size={18}
           weight="medium"
           color={theme === 'light' ? Colors.light.icon : Colors.dark.icon}
-          // Animación simple del icono
           style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
         />
 
@@ -57,7 +55,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  content: {
-    // Podrías añadir una animación aquí con Reanimated más adelante
-  },
+  content: {},
 });

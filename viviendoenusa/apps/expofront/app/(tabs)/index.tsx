@@ -29,11 +29,10 @@ export default function HomeScreen() {
   const isDark = colorScheme === 'dark';
 
   // --- CONFIGURACIÓN RESPONSIVA DINÁMICA ---
-  // Si está logueado, la tarjeta es más ancha (90%) y más alta (70%)
   const cardWidth = width > 768 ? 500 : (loggedIn ? width * 0.9 : width * 0.85);
-  const cardHeight = loggedIn ? height * 0.7 : height * 0.55;
-  const marginTop = (Platform.OS === 'ios' ? 100 : 90);
-
+  // Ajustamos cardHeight para que el botón de Google tenga espacio (0.65 en vez de 0.55)
+  const cardHeight = loggedIn ? height * 0.69 : height * 0.65;
+  const marginTopValue = (Platform.OS === 'ios' ? 100 : 90);
 
   return (
     <KeyboardAvoidingView 
@@ -43,15 +42,12 @@ export default function HomeScreen() {
       <ScrollView 
         contentContainerStyle={[
           styles.scrollContainer,
-          // Cambiamos la alineación vertical según el estado
           { justifyContent: loggedIn ? 'flex-start' : 'center'}
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Contenedor de la Tarjeta */}
         <View style={[
           styles.centerContainer,
-          // Si está logueado, le damos un margen superior para acercarlo al header
           loggedIn && { marginTop: Platform.OS === 'ios' ? -8 : 10 }
         ]}>
           
@@ -60,30 +56,22 @@ export default function HomeScreen() {
             tint={isDark ? 'dark' : 'light'}
             style={[styles.card, { width: cardWidth, height: cardHeight }]}
           >
-            {/* Contenedor interno con Scroll por si el texto de Misión/Visión es largo */}
             <ScrollView 
               contentContainerStyle={{ 
                 flexGrow: 1, 
                 justifyContent: loggedIn ? 'flex-start' : 'center', 
-                padding: 30,
+                padding: 25,
                 paddingTop: loggedIn ? 40 : 30 
               }}
               showsVerticalScrollIndicator={false}
             >
               
               {loggedIn ? (
-                /* ESTADO: USUARIO LOGUEADO (Visión y Misión arriba) */
-                <View style={{ alignItems: 'flex-start', width: '100%', paddingTop: marginTop }}>
-                  <MaterialCommunityIcons 
-                    name="bullseye-arrow" 
-                    size={40} 
-                    color={Colors[colorScheme].tint} 
-                    style={{ marginBottom: 10 }}
-                  />
-                  <ThemedText className="text-3xl font-bold mb-4">Visión</ThemedText>
+                /* ESTADO: USUARIO LOGUEADO */
+                <View style={{ alignItems: 'flex-start', width: '100%', paddingTop: marginTopValue }}>
+                  <ThemedText type="subtitle" style={{ marginBottom: 10 }}>Visión</ThemedText>
                   <ThemedText className="text-center text-lg italic mb-10 leading-7">
-                    "Crear comunidades más unidas, participativas y solidarias, 
-                    donde cada individuo tenga las herramientas para prosperar."
+                    "Crear comunidades más unidas, participativas y solidarias..."
                   </ThemedText>
                   
                   <View className="w-full h-[1px] bg-white/20" style={{ marginBottom: 20 }}/>
@@ -94,92 +82,104 @@ export default function HomeScreen() {
                     color={Colors[colorScheme].tint} 
                     style={{ marginBottom: 10 }}
                   />
-                  <ThemedText className="text-3xl font-bold mb-4">Misión</ThemedText>
-                  <ThemedText className="text-center text-lg italic leading-7">
-                    "Fortalecer las economías locales conectando a los residentes 
-                    con oportunidades y servicios esenciales en su idioma."
+                  <ThemedText type="subtitle" style={{ marginBottom: 10 }}>Misión</ThemedText>
+                  <ThemedText className="text-center text-lg italic mb-10 leading-7">
+                    "Fortalecer las economías locales conectando a los residentes..."
                   </ThemedText>
                 </View>
               ) : (
-                /* ESTADO: LOGIN (Formulario centrado) */
-                <View style={{ alignItems: 'center', width: '100%' , paddingTop:30}} >
-                  <ThemedText className="text-6xl font-black text-center mb-10 tracking-tight">
+                /* ESTADO: LOGIN */
+                <View style={{ width: '100%' }}>
+                  <ThemedText 
+                    type="header" 
+                    style={{ 
+                      textAlign: 'center', 
+                      alignSelf: 'center', 
+                      marginBottom: 30, 
+                      marginTop: 20,
+                    }}
+                  >
                     Viviendo en USA
                   </ThemedText>
                   
-                  <View className="gap-y-5" style={{ alignItems: 'flex-start' }}>
-                    <ThemedTextInput
-                      label="Usuario:"
-                      value={form?.username ?? ''}
-                      onChangeText={(text) => setForm(f => ({...f, username: text}))}
-                      placeholder="Usuario..."
-                    />
+                  <View className="gap-y-6" style={{ alignItems: 'flex-start', width: '100%' }}>
                     
-                    <ThemedTextInput
-                      label="Contraseña:"
-                      value={form?.password ?? ''}
-                      onChangeText={(text) => setForm(f => ({...f, password: text}))}
-                      placeholder="Contraseña..."
-                      secureTextEntry={true}
-                    />
-                  
+                    <View className="w-full h-[1px] bg-white/20" style={{ marginBottom: 10 }} />
+
+                    <View style={{ width: '100%', gap: 15 }}>
+                      <ThemedTextInput 
+                        label="Usuario:"
+                        value={form?.username ?? ''}
+                        onChangeText={(text: any) => setForm(f => ({...f, username: text}))}
+                        placeholder="Usuario..."
+                      />
+                      
+                      <ThemedTextInput
+                        label="Contraseña:"
+                        value={form?.password ?? ''}
+                        onChangeText={(text: any) => setForm(f => ({...f, password: text}))}
+                        placeholder="Contraseña..."
+                        secureTextEntry={true}
+                      />
+                    </View>
+
+                    {/* BOTÓN INGRESAR (Fusión Imagen/Texto) */}
                     <TouchableOpacity
                       activeOpacity={0.7}
                       onPress={() => dispatch(toggleAuth())}
-                      className="mt-8 shadow-sm"
-                    >
-                    <View 
                       style={{ 
-                        backgroundColor: 'transparent', // Eliminamos el color de fondo
-                        borderRadius: 35,
-                        borderWidth: 2, // Aumentamos un poco el grosor para que destaque sin el fondo
-                        borderColor: 'rgba(255, 255, 255, 0.5)', // Borde blanco cristalino más visible
-                        overflow: 'hidden',
-                        height: 110, 
-                        width: '100%',
-                        justifyContent: 'center',
+                        width: '100%', 
+                        marginTop: 20,
                         alignItems: 'center',
+                        justifyContent: 'center'
                       }}
-                      >
-                      {/* Contenedor de fusión */}
-                      <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                        
-                        {/* Imagen de fondo (Logo) */}
+                    >
+                      <View style={{ height: 100, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
                         <Image
                           source={require('../../assets/images/splash-icon.png')}
                           resizeMode="contain"
-                          style={{ 
-                            width: 90, 
-                            height: 90, 
-                            position: 'absolute',
-                            opacity: 0.8 // Subimos un poco la opacidad para que se vea mejor sin el fondo azul
-                          }} 
+                          style={{ width: 100, height: 100, position: 'absolute' }} 
                         />
-
-                        {/* Texto centrado sobre la imagen */}
-                        <Text 
-                          style={{
-                            color: 'black',
-                            fontSize: 14,
-                            textAlign: 'center',
-                            fontWeight: 'bold',
-                            textTransform: 'uppercase',
-                            fontStyle: 'normal',
-                            shadowColor: 'rgba(0, 0, 0, 0.3)',
-                           
-                          }}
-                        >
+                        <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: 'white' }}>
                           Ingresar
-                        </Text>
+                        </ThemedText>
                       </View>
-                    </View>
                     </TouchableOpacity>
+
+                    {/* SEPARADOR "O" */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 10 }}>
+                      <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                      <ThemedText style={{ marginHorizontal: 15, opacity: 0.6, fontSize: 14 }}>o</ThemedText>
+                      <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                    </View>
+
+                    {/* BOTÓN GMAIL (Google) */}
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => console.log('Login Google')}
+                      style={{
+                        width: '100%',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        borderRadius: 25,
+                        borderWidth: 1,
+                        borderColor: 'rgba(255, 255, 255, 0.3)',
+                        paddingVertical: 14,
+                      }}
+                    >
+                      <MaterialCommunityIcons name="google" size={20} color="orange" style={{ marginRight: 10 }} />
+                      <ThemedText style={{ fontWeight: '600', fontSize: 16 }}>
+                        Continuar con Google
+                      </ThemedText>
+                    </TouchableOpacity>
+
                   </View>
                 </View>
               )}
             </ScrollView>
           </BlurView>
-
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -202,18 +202,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     ...Platform.select({
-      web: {
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-      },
+      web: { boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' },
       ios: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 15 },
         shadowOpacity: 0.4,
         shadowRadius: 20,
       },
-      android: {
-        elevation: 12,
-      }
+      android: { elevation: 12 }
     })
   }
 });

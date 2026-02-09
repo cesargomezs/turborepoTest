@@ -6,6 +6,7 @@ import { useColorScheme } from '../../hooks/useColorScheme.web';
 import ThemedTextInput from '../../components/ThemedTextInput';
 import { useState } from 'react';
 import React from 'react';
+import ThemedContainer from '@/components/ThemedContainer';
 
 type LoginForm = {
   username?: string;
@@ -25,49 +26,15 @@ export default function HomeScreen() {
 
   return (
     <ScrollView contentContainerClassName="flex-1 justify-center">
-      <ThemedView
+      <ThemedContainer
         className={cn(
           'p-8 py-24 justify-center items-center mx-4 rounded-3xl',
           colorScheme === 'dark' ? 'border-zinc-500' : 'border-zinc-400',
           'border-[1px] border-solid shadow gap-8'
-        )}
-        lightColor="#fffc"
-        darkColor="#0009"
+        )} children={undefined}        
       >
-        <ThemedText type="title">Ingreso</ThemedText>
-        <View className='w-full'>
-          <ThemedTextInput
-            label="Usuario o Correo:"
-            errorMessage="Introduzca un nombre de usuario válido."
-            isValid={!!form?.username}
-            value={form?.username ?? ''}
-            onChangeText={handleUsername}
-            placeholder="Usuario..."
-          />
-          <ThemedTextInput
-            label="Contraseña:"
-            errorMessage="Introduzca un nombre de usuario válido."
-            isValid={!!form?.password}
-            value={form?.password ?? ''}
-            onChangeText={handlePassword}
-            placeholder="Contraseña..."
-            secureTextEntry={true}
-          />
-          <TouchableOpacity className="mx-auto" aria-label='Botón de Ingreso'>
-            <Image
-              source={require('../../assets/images/splash-icon.png')}
-              alt="Earth showing the Americas"
-              resizeMode="contain"
-              className="w-36 h-36"
-            />
-            <View className="w-36 h-36 justify-center items-center absolute">
-              <Text className="text-white text-xl font-bold shadow">
-                Ingreso
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </ThemedView>
+        
+      </ThemedContainer>
     </ScrollView>
   );
 }

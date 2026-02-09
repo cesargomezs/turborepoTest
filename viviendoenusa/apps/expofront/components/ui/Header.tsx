@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { useColorScheme } from '../../hooks/useColorScheme';
 import { ThemedText } from '../ThemedText';
-import React from 'react';
+
 
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
@@ -20,7 +20,7 @@ export default function Header({ title }: { title?: string }) {
         style={{ paddingTop: insets.top }}
         className="border-b border-white/10"
       >
-        {/* 1. FILA PRINCIPAL (Avatar, Nombre e Icono) */}
+
         <View 
           style={{ 
             flexDirection: 'row', 
@@ -29,10 +29,10 @@ export default function Header({ title }: { title?: string }) {
             width: '100%',
             paddingHorizontal: 20,
             paddingTop: 12,
-            paddingBottom: 5, // Reducimos para que el "inicio" no quede muy lejos
+            paddingBottom: 5, 
           }}
         >
-          {/* GRUPO IZQUIERDO */}
+
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View 
               style={{ 
@@ -57,7 +57,6 @@ export default function Header({ title }: { title?: string }) {
             </View>
           </View>
 
-          {/* GRUPO DERECHO (Botón) */}
           <TouchableOpacity 
             activeOpacity={0.7}
             style={{ 
@@ -77,12 +76,11 @@ export default function Header({ title }: { title?: string }) {
           </TouchableOpacity>
         </View>
 
-        {/* 2. PIE DE PÁGINA DEL HEADER (Texto "inicio" centrado) */}
         <View 
           style={{ 
             width: '100%', 
             alignItems: 'center', 
-            paddingBottom: 10, // Espacio final antes de la línea divisoria
+            paddingBottom: 10,
           }}
         >
           <ThemedText 

@@ -10,14 +10,11 @@ export default function BlurTabBarBackground() {
   return (
     <View style={styles.container}>
       <BlurView
-        // Usamos tintas consistentes con el Header
         tint={isDark ? 'dark' : 'light'}
-        // La intensidad 85-90 da ese look de cristal moderno
         intensity={Platform.OS === 'ios' ? 85 : 95}
         style={StyleSheet.absoluteFill}
       />
       
-      {/* Línea divisoria superior muy sutil (como la del Header) */}
       <View 
         style={[
           styles.borderTop, 
@@ -31,12 +28,11 @@ export default function BlurTabBarBackground() {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    // En la web y android necesitamos asegurar que el desbordamiento esté oculto
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
   borderTop: {
-    height: StyleSheet.hairlineWidth, // Línea ultra fina profesional
+    height: StyleSheet.hairlineWidth, 
     width: '100%',
     position: 'absolute',
     top: 0,

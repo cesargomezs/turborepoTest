@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { cn } from '../utils/twcn';
-import React from 'react';
 
 type ThemedButtonProps = TouchableOpacityProps & {
   title: string;
@@ -33,7 +32,6 @@ export default function ThemedButton({
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 768;
 
-  // Lógica de estilos por variante
   const getVariantStyles = () => {
     if (disabled || loading) return isDark ? 'bg-white/10' : 'bg-black/10';
     

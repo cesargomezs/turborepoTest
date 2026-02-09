@@ -5,15 +5,10 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
-/**
- * COMPONENTE PRINCIPAL: Fondo con desenfoque (Glassmorphism)
- * Se usa en la propiedad 'tabBarBackground' de <Tabs.Navigator>
- */
+
 export default function BlurTabBarBackground() {
   const theme = useColorScheme() ?? 'light';
   const isDark = theme === 'dark';
-
-  // Estilo específico para Web para soportar backdrop-filter
   const webStyle = Platform.select({
     web: {
       backgroundColor: isDark ? 'rgba(25, 25, 25, 0.7)' : 'rgba(255, 255, 255, 0.7)',
@@ -32,7 +27,6 @@ export default function BlurTabBarBackground() {
         style={[StyleSheet.absoluteFill, webStyle]}
       />
       
-      {/* Línea superior sutil para dar definición */}
       <View 
         style={[
           styles.borderTop, 
@@ -43,23 +37,17 @@ export default function BlurTabBarBackground() {
   );
 }
 
-/**
- * HOOK EXPORTADO: Calcula el espacio del TabBar
- * Úsalo en tus pantallas como: const padding = useBottomTabOverflow();
- */
 export function useBottomTabOverflow() {
   const insets = useSafeAreaInsets();
   
   try {
-    // Intentamos obtener la altura real definida por el Navigator
     const tabHeight = useBottomTabBarHeight();
     return tabHeight;
   } catch (e) {
-    // Si se usa fuera del Tab Navigator (ej. pantallas de login o modales)
     if (Platform.OS === 'ios') {
       return insets.bottom > 0 ? insets.bottom : 20;
     }
-    return 65; // Altura estándar para Web/Android
+    return 65; 
   }
 }
 

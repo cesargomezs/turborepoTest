@@ -4,7 +4,6 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { IconSymbol } from './ui/IconSymbol'; // Ajusta la ruta si es necesario
 import { ThemedText } from './ThemedText';
 import { useColorScheme } from '../hooks/useColorScheme';
-import { cn } from '../utils/twcn';
 
 export default function DataPicker({
   date,
@@ -19,7 +18,7 @@ export default function DataPicker({
   const [showAndroid, setShowAndroid] = useState(false);
 
   const onChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    // En Android, cerramos el modal inmediatamente después de la selección
+
     if (Platform.OS === 'android') {
       setShowAndroid(false);
     }
@@ -34,7 +33,6 @@ export default function DataPicker({
       <ThemedText type="defaultSemiBold">{label}</ThemedText>
       
       <View className="flex-row items-center">
-        {/* Lógica para iOS: El picker puede ser un botón nativo */}
         {Platform.OS === 'ios' && (
           <DateTimePicker
             value={date}
@@ -46,7 +44,6 @@ export default function DataPicker({
           />
         )}
 
-        {/* Lógica para Android: Usamos un icono que dispara el modal */}
         {Platform.OS === 'android' && (
           <>
             <TouchableOpacity 
@@ -68,7 +65,6 @@ export default function DataPicker({
           </>
         )}
 
-        {/* Lógica para Web: Input tipo date estándar */}
         {Platform.OS === 'web' && (
            <input 
             type="date" 
@@ -89,7 +85,7 @@ export default function DataPicker({
 
 const styles = StyleSheet.create({
   iosPicker: {
-    width: 120, // Ajuste para que no ocupe toda la fila
+    width: 120, 
     height: 40,
   }
 });

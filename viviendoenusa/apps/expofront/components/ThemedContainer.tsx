@@ -7,7 +7,6 @@ interface ThemedContainerProps {
   children: React.ReactNode;
   className?: string;
   useScroll?: boolean;
-  /** Permite desactivar el padding del safe area si la pantalla tiene su propio header */
   ignoreInsets?: boolean; 
 }
 
@@ -19,13 +18,13 @@ export default function ThemedContainer({
 }: ThemedContainerProps) {
   const insets = useSafeAreaInsets();
 
-  // Envoltorio para manejar el teclado en formularios (vital para Android/iOS)
+  // Usamos KeyboardAvoidingView para que el teclado no tape los inputs en iOS
   const Wrapper = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
 
   const content = (
     <View 
-      className={cn("w-full max-w-xl self-center px-6", className)} 
-      style={{ flex: 1 }}
+      className={cn("w-full max-w-[500px] self-center px-4", className)} 
+      style={{ flex: useScroll ? 0 : 1, justifyContent: 'center' }}
     >
       {children}
     </View>
@@ -33,14 +32,14 @@ export default function ThemedContainer({
 
   return (
     <Wrapper 
-      behavior="padding" 
-      style={{ flex: 1, backgroundColor: 'transparent' }}
+      behavior={Platform.OS === 'ios' ? "padding" : undefined} 
+      style={{ flex: 1 }}
     >
       <View 
         style={{ 
           flex: 1, 
           paddingTop: ignoreInsets ? 0 : insets.top,
-          paddingBottom: ignoreInsets ? 0 : insets.bottom 
+          paddingBottom: ignoreInsets ? 0 : insets.bottom,
         }}
       >
         {useScroll ? (
@@ -49,13 +48,15 @@ export default function ThemedContainer({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            // Mejora el scroll en Web
-            scrollEventThrottle={16}
+            // Esto ayuda a que el centrado sea real en todas las pantallas
+            centerContent={true} 
           >
             {content}
           </ScrollView>
         ) : (
-          content
+          <View style={styles.nonScrollContent}>
+            {content}
+          </View>
         )}
       </View>
     </Wrapper>
@@ -65,16 +66,16 @@ export default function ThemedContainer({
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    ...Platform.select({
-      web: {
-        overflowY: 'auto' as any,
-      },
-    }),
   },
   scrollContent: {
     flexGrow: 1,
-    // Centra el contenido (como el Login) si no ocupa toda la pantalla
-    justifyContent: 'center', 
-    paddingVertical: 20,
+    justifyContent: 'center', // Centra la tarjeta verticalmente
+    alignItems: 'center',     // Centra la tarjeta horizontalmente
+    paddingVertical: 40,      // Espacio extra para que no toque los bordes
+  },
+  nonScrollContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   }
 });

@@ -21,15 +21,13 @@ const Accordion = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const { dark } = useTheme();
-  
-  // Usamos useRef para que el valor animado persista entre renders
   const animatedController = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(animatedController, {
       toValue: expanded ? 1 : 0,
       duration: 300,
-      useNativeDriver: false, // height no soporta native driver
+      useNativeDriver: false, 
     }).start();
   }, [expanded]);
 
@@ -37,7 +35,6 @@ const Accordion = ({
     setExpanded(!expanded);
   };
 
-  // Interpolación para el giro del icono
   const arrowAngle = animatedController.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '180deg'],
@@ -68,12 +65,11 @@ const Accordion = ({
         </Animated.View>
       </TouchableOpacity>
 
-      {/* Contenedor animado */}
       <Animated.View
         style={{
           maxHeight: animatedController.interpolate({
             inputRange: [0, 1],
-            outputRange: [0, 500], // Ajusta según el contenido máximo esperado
+            outputRange: [0, 500],
           }),
           opacity: animatedController,
           overflow: 'hidden',
