@@ -69,6 +69,12 @@ export default function HomeScreen() {
               {loggedIn ? (
                 /* ESTADO: USUARIO LOGUEADO */
                 <View style={{ alignItems: 'flex-start', width: '100%', paddingTop: marginTopValue }}>
+                  <MaterialCommunityIcons 
+                    name="bullseye-arrow" 
+                    size={40} 
+                    color={Colors[colorScheme].tint} 
+                    style={{ marginBottom: 10 }}
+                  />
                   <ThemedText type="subtitle" style={{ marginBottom: 10 }}>Visión</ThemedText>
                   <ThemedText className="text-center text-lg italic mb-10 leading-7">
                     "Crear comunidades más unidas, participativas y solidarias..."
