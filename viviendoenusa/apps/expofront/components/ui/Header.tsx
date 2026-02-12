@@ -2,27 +2,29 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useState } from 'react';
 import { 
-  View, 
-  Image, 
-  Platform, 
-  TouchableOpacity, 
-  Modal, 
-  StyleSheet, 
-  Pressable 
+  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, Pressable 
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { useColorScheme } from '../../hooks/useColorScheme';
 import { ThemedText } from '../ThemedText';
 
+// --- IMPORTACIONES DE REDUX ---
+import { useMockDispatch, useMockSelector } from '../../redux/slices'; 
+import { setLanguage } from '../../redux/slices';
+import { useTranslation } from '../../hooks/useTranslation'; 
+
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
   const isDark = theme === 'dark';
+  const dispatch = useMockDispatch();
+  
+  // Obtenemos el idioma y las traducciones globales
+  const { t } = useTranslation();
+  const selectedLanguage = useMockSelector((state) => state.language.code);
   
   const [modalVisible, setModalVisible] = useState(false);
-  // Estado para rastrear el idioma seleccionado
-  const [selectedLanguage, setSelectedLanguage] = useState('es');
 
   const languages = [
     { code: 'es', label: 'Español' },
@@ -48,11 +50,23 @@ export default function Header({ title }: { title?: string }) {
             </View>
             <View style={{ marginLeft: 12 }}>
               <ThemedText style={{ fontSize: 18, fontWeight: 'bold' }}>
-                Hola, Cesar
+                {t.welcome} {/* Texto traducido */}
               </ThemedText>
             </View>
           </View>
 
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity 
+            onPress={() => console.log('Acción 4')}// Acción de ejemplo, también traducida
+            activeOpacity={0.7}
+            style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+          >
+            <MaterialCommunityIcons
+              size={22}
+              color={Colors[theme].text}
+              name="bell-ring-outline"
+            />
+          </TouchableOpacity>
           <TouchableOpacity 
             onPress={() => setModalVisible(true)}
             activeOpacity={0.7}
@@ -64,35 +78,20 @@ export default function Header({ title }: { title?: string }) {
               name="translate"
             />
           </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.titleContainer}>
-          <ThemedText className="text-center text-2xl" style={{ color: Colors[theme].tabIconDefault }}>
+          <ThemedText className="text-center text-2xl" style={{ color: Colors[theme].tabIconDefault , fontWeight: 'bold' }}>
             {title}
           </ThemedText>
         </View>
       </BlurView>
 
-      {/* MODAL DE SELECCIÓN DE IDIOMA */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <Pressable 
-          style={styles.modalOverlay} 
-          onPress={() => setModalVisible(false)}
-        >
-          <BlurView 
-            intensity={isDark ? 40 : 60} 
-            tint={isDark ? 'dark' : 'light'} 
-            style={[
-              styles.modalContent,
-              { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }
-            ]}
-          >
-            <ThemedText style={styles.modalTitle}>Idioma</ThemedText>
+      <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
+          <BlurView intensity={isDark ? 40 : 60} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
+            <ThemedText style={styles.modalTitle}>{t.select_lang}</ThemedText>
             
             <View style={styles.optionsWrapper}>
               {languages.map((lang) => {
@@ -100,29 +99,17 @@ export default function Header({ title }: { title?: string }) {
                 return (
                   <TouchableOpacity
                     key={lang.code}
-                    style={[
-                      styles.langOption,
-                      isSelected && { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)' }
-                    ]}
+                    style={[styles.langOption, isSelected && { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)' }]}
                     onPress={() => {
-                      setSelectedLanguage(lang.code);
+                      // ACTUALIZA REDUX GLOBALMENTE
+                      dispatch(setLanguage(lang.code));
                       setModalVisible(false);
                     }}
                   >
-                    <ThemedText style={[
-                      styles.langText, 
-                      isSelected && { color: Colors[theme].tint, fontWeight: 'bold' }
-                    ]}>
+                    <ThemedText style={[styles.langText, isSelected && { color: Colors[theme].tint, fontWeight: 'bold' }]}>
                       {lang.label}
                     </ThemedText>
-                    
-                    {isSelected && (
-                      <MaterialCommunityIcons 
-                        name="check" 
-                        size={22} 
-                        color={Colors[theme].tint} 
-                      />
-                    )}
+                    {isSelected && <MaterialCommunityIcons name="check" size={22} color={Colors[theme].tint} />}
                   </TouchableOpacity>
                 );
               })}
@@ -133,6 +120,8 @@ export default function Header({ title }: { title?: string }) {
     </View>
   );
 }
+
+// ... (estilos se mantienen iguales)
 
 const styles = StyleSheet.create({
   headerRow: {
@@ -201,5 +190,19 @@ const styles = StyleSheet.create({
   },
   langText: {
     fontSize: 16,
+  },
+  gradientButton: {
+    flex: 1,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },shadowWrapper: {
+    width: '47%', // Casi la mitad para que quepan 2 por fila con espacio
+    aspectRatio: 1, // Hace que sean cuadrados perfectos
+    marginBottom: 15,
+    borderRadius: 25,
+    // ... tus otros estilos de sombra
   }
 });

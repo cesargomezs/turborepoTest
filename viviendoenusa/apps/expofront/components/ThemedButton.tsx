@@ -37,7 +37,7 @@ export default function ThemedButton({
     
     switch (variant) {
       case 'primary':
-        return isDark ? 'bg-[#0a7ea4]' : 'bg-[#005a8d]';
+        return isDark ? 'bg-[#fff]' : 'bg-[#005a8d]';
       case 'secondary':
         return isDark ? 'bg-white/20' : 'bg-black/5';
       case 'outline':

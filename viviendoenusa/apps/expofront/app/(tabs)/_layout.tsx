@@ -1,12 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, Tabs } from 'expo-router';
-import { Platform, useColorScheme } from 'react-native';
+import { Platform, useColorScheme, View } from 'react-native';
 
 import { HapticTab } from '../../components/HapticTab';
 import Header from '../../components/ui/Header';
 import TabBarBackground from '../../components/ui/TabBarBackground';
 import { Colors } from '../../constants/Colors';
 import { Media } from '../../constants/Media';
+import { useTranslation } from '../../hooks/useTranslation'; 
 import {
   toggleAuth,
   useMockDispatch,
@@ -14,37 +15,40 @@ import {
 } from '../../redux/slices';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { t } = useTranslation();
+  const colorScheme = useColorScheme() ?? 'light';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const dispatch = useMockDispatch();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Colors[colorScheme].tint,
+        tabBarInactiveTintColor: Colors[colorScheme].tabIconNotSelected,
         header: ({ options }) => <Header title={options.title} />,
         headerShown: loggedIn,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
         tabBarStyle: [
-          Platform.select({
-            ios: {
-              // Use a transparent background on iOS to show the blur effect
-              position: 'absolute',
-            },
-            default: {
-              position: 'absolute',
-            },
-          }),
-          Media.styles.view,
-          { display: loggedIn ? 'flex' : 'none' },
+          {
+            position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    elevation: 0,
+    borderTopWidth: 0,
+    backgroundColor: 'transparent', // MUY IMPORTANTE
+    height: 64,
+  },
+  Media.styles.view, // Si este estilo tiene un "maxWidth", asegúrate de quitarlo para Web
+  { display: loggedIn ? 'flex' : 'none' },
         ],
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Inicio',
+          title: t.tabs.home, 
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons size={28} name="home" color={color} />
           ),
@@ -53,16 +57,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="services"
         options={{
-          title: 'Servicios',
+          title: t.tabs.services,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons size={28} name="cog" color={color} />
+            <MaterialCommunityIcons size={28} name="account-group" color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Configuración',
+          title: t.tabs.settings,
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons size={28} name="toggle-switch" color={color} />
           ),
@@ -71,16 +75,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="logout"
         options={{
-          title: 'Cerrar sesión',
+          title: t.tabs.logout,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons size={28} name="logout" color={color} />
+            <MaterialCommunityIcons size={28} name="logout" color={color}/>
           ),
         }}
         listeners={{
-          tabPress: () => {
-            // `name` of index screen is simply "/" not "/index"
-            router.navigate('/');
+          tabPress: (e) => {
+            e.preventDefault();
             dispatch(toggleAuth());
+            router.replace('/');
           },
         }}
       />

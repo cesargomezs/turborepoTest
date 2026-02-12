@@ -15,34 +15,23 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
-import { ThemedText } from '../../components/ThemedText';
-import { useColorScheme } from '../../hooks/useColorScheme';
-import ThemedTextInput from '../../components/ThemedTextInput';
-import { Colors } from '../../constants/Colors';
-import { toggleAuth, useMockDispatch, useMockSelector } from '../../redux/slices';
-import { useTranslation } from '../../hooks/useTranslation';
+import { ThemedText } from '@/components/ThemedText';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import ThemedTextInput from '@/components/ThemedTextInput';
+import { Colors } from '@/constants/Colors';
+import { toggleAuth, useMockDispatch, useMockSelector } from '@/redux/slices';
+import { useTranslation } from '@/hooks/useTranslation';
 import { LinearGradient } from 'expo-linear-gradient'; // Importación necesaria
-import { useRouter } from 'expo-router'; // Importación necesaria
+import { useRouter } from 'expo-router';
 
 
-interface ButtonConfig {
-  id: number;
-  icon: any;
-  colors: readonly [string, string, ...string[]]; // Esto coincide con lo que pide el error
-}
-// 1. Definimos la configuración de cada botón (Iconos y Colores)
-//{ id: 1, icon: 'scale-balance', colors: ['#20B2AA', '#0080B5'] as const},color azul turquesa, azul intenso
-const BUTTONS_DATA = [
-  { id: 1, icon: 'scale-balance', path: 'services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 2, icon: 'account-group-outline', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 3, icon: 'hand-heart', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 4, icon: 'calendar-clock', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 5, icon: 'store-plus-outline', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 6, icon: 'lightbulb-multiple-outline', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
+// Áreas de práctica basadas en la web
+const PRACTICE_AREAS = [
+  'Todas las áreas', 'Derecho Familiar', 'Derecho Penal', 
+  'Derecho Laboral', 'Inmigración', 'Bienes Raíces', 'Fiscal'
 ];
 
 export default function HomeScreen() {
-  const router = useRouter(); // Inicializamos el router
   const { width, height } = useWindowDimensions();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
@@ -55,6 +44,20 @@ export default function HomeScreen() {
   const cardWidth = width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85);
   const cardHeight = loggedIn ? height * 0.69 : height * 0.65;
   const marginTopValue = Platform.OS === 'ios' ? 5 : 5;
+
+
+  const router = useRouter();
+
+  
+  const [zipCode, setZipCode] = useState('');
+  const [selectedArea, setSelectedArea] = useState('Todas las áreas');
+  const [loading, setLoading] = useState(false);
+
+  const handleSearch = () => {
+    setLoading(true);
+    // Simulación de búsqueda de la API
+    setTimeout(() => setLoading(false), 1500);
+  };
 
   // Renderizamos el contenido principal para poder usarlo con o sin Touchable
   const renderMainContent = () => (
@@ -79,41 +82,15 @@ export default function HomeScreen() {
 
           <View style={styles.cardContent}>
 
-            <MaterialCommunityIcons size={40} name="account-group" style={{ display: 'flex', textAlign: 'right', width: '100%' , opacity:0.4}} color={Colors[colorScheme].tabIconNotSelected} />
+            <MaterialCommunityIcons size={40} name="scale-balance" style={{ display: 'flex', textAlign: 'right', width: '100%' , opacity:0.4}} color={Colors[colorScheme].tabIconNotSelected} />
                 <ScrollView contentContainerStyle={[
                   styles.scrollContainer,
                   { justifyContent: loggedIn ? 'flex-start' : 'center'}
                 ]}>
 
                 <View style={styles.gridContainer}>
-                      {/* 2. Usamos .map para generar los botones sin repetir código */}
-                      {BUTTONS_DATA.map((item) => (
-                        <TouchableOpacity 
-                          key={item.id} // Siempre usa una key única
-                          activeOpacity={0.8} 
-                          onPress={() => router.push(item.path as any)}
-                          style={styles.shadowWrapper}
-                        >
-                          <LinearGradient
-                            colors={item.colors as readonly string[]} 
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.gradientButton}
-                          >
-                            <MaterialCommunityIcons 
-                              name={item.icon as any} 
-                              size={40} 
-                              color="white" 
-                              style={styles.iconShadow} 
-                            />
-                            <ThemedText style={styles.buttonText}>
-                              {/* Acceso dinámico a las traducciones: service1, service2, etc. */}
-                              {t.servicestab[`service${item.id}` as keyof typeof t.servicestab]}
-                            </ThemedText>
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                      
+                </View>
 
               </ScrollView>
 

@@ -1,14 +1,12 @@
 import { ImageBackground } from 'react-native';
 import { useEffect } from 'react';
 import { Provider as AppStateProvider } from 'react-redux';
-
 import { ThemeProvider } from '@react-navigation/native';
 import { DarkTheme, DefaultTheme } from '../constants/Theme';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-
 import store from './store';
 import { useColorScheme } from '../hooks/useColorScheme';
 

@@ -1,9 +1,10 @@
 import { configureStore } from '@reduxjs/toolkit';
-import mockAuthReducer from '../redux/slices';
+import { mockAuthReducer, languageReducer } from '../redux/slices';
 
 const store = configureStore({
   reducer: {
-    mockAuth: mockAuthReducer,
+    mockAuth: mockAuthReducer, // Debe coincidir con 'state.mockAuth'
+    language: languageReducer, // Debe coincidir con 'state.language'
   },
 });
 
