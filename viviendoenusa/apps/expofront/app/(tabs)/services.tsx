@@ -33,7 +33,7 @@ interface ButtonConfig {
 // 1. Definimos la configuración de cada botón (Iconos y Colores)
 //{ id: 1, icon: 'scale-balance', colors: ['#20B2AA', '#0080B5'] as const},color azul turquesa, azul intenso
 const BUTTONS_DATA = [
-  { id: 1, icon: 'scale-balance', path: 'services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
+  { id: 1, icon: 'scale-balance', path: '/tabs/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
   { id: 2, icon: 'account-group-outline', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
   { id: 3, icon: 'hand-heart', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
   { id: 4, icon: 'calendar-clock', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
@@ -59,12 +59,9 @@ export default function HomeScreen() {
   // Renderizamos el contenido principal para poder usarlo con o sin Touchable
   const renderMainContent = () => (
     <ScrollView 
-      contentContainerStyle={[
-        styles.scrollContainer,
-        { justifyContent: loggedIn ? 'flex-start' : 'center'}
-      ]}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
+    contentContainerStyle={[styles.scrollContainer, { justifyContent: 'center' }]}
+    keyboardShouldPersistTaps="handled"
+    showsVerticalScrollIndicator={false}
     >
       <View style={styles.centerContainer}>
         <View style={[styles.cardWrapper, { width: cardWidth, height: cardHeight }]}>

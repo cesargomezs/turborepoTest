@@ -29,19 +29,21 @@ export default function TabLayout() {
         headerShown: loggedIn,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
+        // Animación de deslizamiento lateral al entrar en servicios
+        animation: 'fade', 
         tabBarStyle: [
           {
             position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    elevation: 0,
-    borderTopWidth: 0,
-    backgroundColor: 'transparent', // MUY IMPORTANTE
-    height: 64,
-  },
-  Media.styles.view, // Si este estilo tiene un "maxWidth", asegúrate de quitarlo para Web
-  { display: loggedIn ? 'flex' : 'none' },
+            bottom: 0,
+            left: 0,
+            right: 0,
+            elevation: 0,
+            borderTopWidth: 0,
+            backgroundColor: 'transparent',
+            height: 64,
+          },
+          Media.styles.view,
+          { display: loggedIn ? 'flex' : 'none' },
         ],
       }}
     >
@@ -54,15 +56,20 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* ESTA ES LA CARPETA (tabs)/services 
+          Al poner href: null desaparece del menú inferior, pero sigue existiendo
+      */}
       <Tabs.Screen
         name="services"
         options={{
           title: t.tabs.services,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons size={28} name="account-group" color={color} />
+          <MaterialCommunityIcons size={28} name="account-group" color={color} />
           ),
         }}
       />
+
       <Tabs.Screen
         name="settings"
         options={{
@@ -72,6 +79,7 @@ export default function TabLayout() {
           ),
         }}
       />
+      
       <Tabs.Screen
         name="logout"
         options={{
