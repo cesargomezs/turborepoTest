@@ -96,14 +96,16 @@ export default function TabLayout() {
           },
         }}
       />
-      {/* Pestaña OCULTA del TabBar pero accesible mediante router.push */}
+
       <Tabs.Screen 
         name="lawyers" 
         options={{ 
           title: t.servicestab.service1,
-          href: null, // <--- Esto hace que desaparezca del menú inferior
+          href: null, 
         }} 
       />
+
+
     
     </Tabs>
   );
