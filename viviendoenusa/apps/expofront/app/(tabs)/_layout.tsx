@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, Tabs } from 'expo-router';
+import { router, Tabs, useSegments } from 'expo-router'; 
 import { Platform, useColorScheme, View } from 'react-native';
 
 import { HapticTab } from '../../components/HapticTab';
@@ -20,16 +20,24 @@ export default function TabLayout() {
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const dispatch = useMockDispatch();
 
+  // 1. Detectamos la ruta actual
+  const segments = useSegments();
+  
+  // 2. CORRECCIÓN: Si estamos en 'lawyers' O en 'community', activamos el color
+  const isServiceSubScreen = segments.includes('lawyers') || segments.includes('community') || segments.includes('donations') || segments.includes('events') || segments.includes('stores') || segments.includes('entrepreneurs');
+
+  const activeColor = Colors[colorScheme].tint;
+  const inactiveColor = Colors[colorScheme].tabIconNotSelected;
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        tabBarInactiveTintColor: Colors[colorScheme].tabIconNotSelected,
+        tabBarActiveTintColor: activeColor,
+        tabBarInactiveTintColor: inactiveColor,
         header: ({ options }) => <Header title={options.title} />,
         headerShown: loggedIn,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
-        // Animación de deslizamiento lateral al entrar en servicios
         animation: 'fade', 
         tabBarStyle: [
           {
@@ -57,16 +65,21 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ESTA ES LA CARPETA (tabs)/services 
-          Al poner href: null desaparece del menú inferior, pero sigue existiendo
-      */}
       <Tabs.Screen
         name="services"
         options={{
           title: t.tabs.services,
           tabBarIcon: ({ color }) => (
-          <MaterialCommunityIcons size={28} name="account-group" color={color} />
+            <MaterialCommunityIcons 
+              size={28} 
+              name="account-group" 
+              // 3. Aplicamos la lógica corregida aquí
+              color={isServiceSubScreen ? activeColor : color} 
+            />
           ),
+          tabBarLabelStyle: {
+            color: isServiceSubScreen ? activeColor : inactiveColor
+          }
         }}
       />
 
@@ -97,16 +110,55 @@ export default function TabLayout() {
         }}
       />
 
+      {/* Pantallas ocultas */}
       <Tabs.Screen 
-        name="lawyers" 
+        name="tabservices/lawyers" 
         options={{ 
           title: t.servicestab.service1,
           href: null, 
         }} 
       />
 
+      <Tabs.Screen 
+        name="tabservices/community" 
+        options={{ 
+          title: t.servicestab.service2,
+          href: null, 
+        }} 
+      />
 
-    
+      <Tabs.Screen 
+        name="tabservices/donations" 
+        options={{ 
+          title: t.servicestab.service3,
+          href: null, 
+        }} 
+      />
+
+      <Tabs.Screen 
+        name="tabservices/events" 
+        options={{ 
+          title: t.servicestab.service4,
+          href: null, 
+        }} 
+      />
+
+      <Tabs.Screen 
+        name="tabservices/stores" 
+        options={{ 
+          title: t.servicestab.service5,
+          href: null, 
+        }} 
+      />
+
+      <Tabs.Screen 
+        name="tabservices/entrepreneurs" 
+        options={{ 
+          title: t.servicestab.service6,
+          href: null, 
+        }} 
+      />
+
     </Tabs>
   );
 }

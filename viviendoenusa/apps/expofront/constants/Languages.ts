@@ -31,9 +31,17 @@ export const translations = {
       service5: "Tiendas",
       icon5: "shopping-search",
       service6: "Emprendimientos",
-      icon6: "store-plus-outline"
+      icon6: "lightbulb-multiple-outline"
+    },
+    lawyerstab: {
+      practiceAreas: ['Todas', 'Familia', 'Penal', 'Inmigración', 'Accidentes'], 
+      //practiceAreas: "all",
+      messagezip: "Código Postal",
+      validatezip: "Código Postal no encontrado.",
+      resultone: "resultado encontrado",
+      resultdomore: "resultados encontrados",
+      viewallresults: "Ver todos los resultados"
     }
-
   },
   en: {
     home: "Home",
@@ -66,7 +74,16 @@ export const translations = {
       service5: "Stores",
       icon5: "shopping-search",
       service6: "Entrepreneurs",
-      icon6: "store-plus-outline"
+      icon6: "lightbulb-multiple-outline"
+    },
+    lawyerstab: {
+      practiceAreas: ['All' , 'Family' , 'Criminal', 'Immigration', 'Accidents'],
+      //practiceAreas: "all",
+      messagezip: "ZIP Code",
+      validatezip: "ZIP not found.",
+      resultone: "result found",
+      resultdomore: "results found",
+      viewallresults: "View all results"
     }
   }
 };

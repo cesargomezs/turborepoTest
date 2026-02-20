@@ -33,12 +33,12 @@ interface ButtonConfig {
 // 1. Definimos la configuración de cada botón (Iconos y Colores)
 //{ id: 1, icon: 'scale-balance', colors: ['#20B2AA', '#0080B5'] as const},color azul turquesa, azul intenso
 const BUTTONS_DATA = [
-  { id: 1, icon: 'scale-balance', path: '/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 2, icon: 'account-group-outline', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 3, icon: 'hand-heart', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 4, icon: 'calendar-clock', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 5, icon: 'store-plus-outline', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
-  { id: 6, icon: 'lightbulb-multiple-outline', path: '/services/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
+  { id: 1, icon: 'scale-balance', path: '/tabservices/lawyers' , colors: ['#FF5F6D', '#FFC371'] as const},
+  { id: 2, icon: 'account-group-outline', path: '/tabservices/community' , colors: ['#FF5F6D', '#FFC371'] as const},
+  { id: 3, icon: 'hand-heart', path: '/tabservices/donations' , colors: ['#FF5F6D', '#FFC371'] as const},
+  { id: 4, icon: 'calendar-clock', path: '/tabservices/events' , colors: ['#FF5F6D', '#FFC371'] as const},
+  { id: 5, icon: 'store-plus-outline', path: '/tabservices/stores' , colors: ['#FF5F6D', '#FFC371'] as const},
+  { id: 6, icon: 'lightbulb-multiple-outline', path: '/tabservices/entrepreneurs' , colors: ['#FF5F6D', '#FFC371'] as const},
 ];
 
 export default function HomeScreen() {
