@@ -41,7 +41,16 @@ export const translations = {
       resultone: "resultado encontrado",
       resultdomore: "resultados encontrados",
       viewallresults: "Ver todos los resultados"
+    },
+    communitytab: {
+      typepost : ['Todos', 'Experiencia', 'Pregunta', 'Consejo'],
+      typepostAdd : ['Experiencia', 'Pregunta', 'Consejo'],
+      messagenewpost: "Nueva publicación",
+      closepost: "Cerrar",
+      botonpost: "Publicar",
+      questionnewpost: '¿Qué quieres compartir?'
     }
+    
   },
   en: {
     home: "Home",
@@ -84,6 +93,15 @@ export const translations = {
       resultone: "result found",
       resultdomore: "results found",
       viewallresults: "View all results"
+    },
+    communitytab: {
+      typepost : ['All', 'Experience', 'Question', 'Advice'],
+      typepostAdd : ['Experience', 'Question', 'Advice'],
+      messagenewpost: "New post",
+      closepost: "Close",
+      botonpost: "Post",
+      questionnewpost: 'What do you want to share?'
     }
+  
   }
 };

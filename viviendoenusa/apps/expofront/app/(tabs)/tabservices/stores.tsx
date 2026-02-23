@@ -230,7 +230,7 @@ export default function LawyersScreen() {
                     <TouchableOpacity 
                       key={area} 
                       onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(); }} 
-                      style={[styles.chip, selectedArea === area && { backgroundColor: '#0080B5', borderColor: '#0080B5' }]}
+                      style={[styles.chip, selectedArea === area && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}
                     >
                       <ThemedText style={[styles.chipText, selectedArea === area && { color: '#fff' }]}>{area}</ThemedText>
                     </TouchableOpacity>

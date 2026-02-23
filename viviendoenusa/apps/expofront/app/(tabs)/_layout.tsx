@@ -159,6 +159,14 @@ export default function TabLayout() {
         }} 
       />
 
+      <Tabs.Screen 
+        name="tabservices/post/id" 
+        options={{ 
+          //title: t.servicestab.service6,
+          href: null, 
+        }} 
+      />
+
     </Tabs>
   );
 }
