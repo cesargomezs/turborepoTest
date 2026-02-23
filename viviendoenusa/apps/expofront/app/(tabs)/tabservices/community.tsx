@@ -14,6 +14,7 @@ import {
   Alert,
   Share,
   ColorValue,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -22,6 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
+// ✅ Importamos el selector de Redux para el idioma
 import { useMockSelector } from '@/redux/slices';
 
 import * as ImagePicker from 'expo-image-picker';
@@ -33,9 +35,12 @@ const APP_SCHEME = 'expofront-scheme';
 
 export default function CommunityScreen() {
   const { t } = useTranslation();
+  
+  // ✅ Obtenemos el idioma actual desde tu Redux (languageSlice)
+  const currentLanguageCode = useMockSelector((state) => state.language.code);
+
   const [postText, setPostText] = useState('');
   const [posts, setPosts] = useState<any[]>([]);
-  // Mantenemos el estado inicial como valor técnico
   const [selectedTag, setSelectedTag] = useState('Experience'); 
   const [activeFilter, setActiveFilter] = useState('All');
   const [isRecentFirst, setIsRecentFirst] = useState(true);
@@ -44,6 +49,10 @@ export default function CommunityScreen() {
   
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
+  
+  // ESTADOS TRADUCCIÓN
+  const [translatedPosts, setTranslatedPosts] = useState<Record<number, string>>({});
+  const [translatingId, setTranslatingId] = useState<number | null>(null);
   
   const { width, height } = useWindowDimensions();
   const router = useRouter();
@@ -58,12 +67,37 @@ export default function CommunityScreen() {
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#ddd', '#ccc'] as const;
 
-  // Mapa de normalización fundamental
   const tagMapping: Record<string, string> = {
     'All': 'All', 'Todos': 'All',
     'Experience': 'Experience', 'Experiencia': 'Experience',
     'Question': 'Question', 'Pregunta': 'Question',
     'Advice': 'Advice', 'Consejo': 'Advice'
+  };
+
+  // ✅ FUNCIÓN DE TRADUCCIÓN
+  const handleTranslate = async (postId: number, text: string) => {
+    if (translatedPosts[postId]) {
+      const newTranslations = { ...translatedPosts };
+      delete newTranslations[postId];
+      setTranslatedPosts(newTranslations);
+      return;
+    }
+    setTranslatingId(postId);
+    try {
+      // El destino siempre será el idioma actual de la app según Redux
+      const targetLang = currentLanguageCode; 
+      
+      const response = await fetch(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURI(text)}`
+      );
+      const data = await response.json();
+      const translatedText = data[0].map((item: any) => item[0]).join('');
+      setTranslatedPosts(prev => ({ ...prev, [postId]: translatedText }));
+    } catch (error) {
+      Alert.alert("Error", "Servicio no disponible");
+    } finally {
+      setTranslatingId(null);
+    }
   };
 
   const getTranslatedTag = (tag: string) => {
@@ -79,12 +113,8 @@ export default function CommunityScreen() {
   const filteredPosts = useMemo(() => {
     let result = [...posts];
     const currentFilterBase = tagMapping[activeFilter] || activeFilter;
-
     if (currentFilterBase !== 'All') {
-      result = result.filter(post => {
-        const postTagBase = tagMapping[post.tag] || post.tag;
-        return postTagBase === currentFilterBase;
-      });
+      result = result.filter(post => (tagMapping[post.tag] || post.tag) === currentFilterBase);
     }
     result.sort((a, b) => isRecentFirst ? b.id - a.id : a.id - b.id);
     return result;
@@ -95,9 +125,7 @@ export default function CommunityScreen() {
       const deepLink = `${APP_SCHEME}://community/post/${post.id}`;
       const message = `¡Mira este post en Viviendo en USA!\n\n"${post.text}"`;
       await Share.share({ message: `${message}\n${deepLink}` });
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo compartir');
-    }
+    } catch (error) { Alert.alert('Error', 'No se pudo compartir'); }
   };
 
   const handleVote = (postId: number, type: 'like' | 'dislike') => {
@@ -122,10 +150,7 @@ export default function CommunityScreen() {
 
   const handlePost = () => {
     if (!postText.trim()) return;
-    
-    // Convertimos a técnico antes de guardar
     const technicalTag = tagMapping[selectedTag] || selectedTag;
-
     const newPost = {
       id: Date.now(),
       text: postText,
@@ -133,14 +158,13 @@ export default function CommunityScreen() {
       tag: technicalTag,
       likes: 0,
       dislikes: 0,
-      commentsCount: 0,
       userVote: null,
       displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setPosts(prev => [newPost, ...prev]);
     setPostText('');
     setSelectedImage(null);
-    setSelectedTag('Experience'); // Resetear a base
+    setSelectedTag('Experience');
     setModalVisible(false);
     Keyboard.dismiss();
   };
@@ -181,9 +205,7 @@ export default function CommunityScreen() {
                           onPress={() => setActiveFilter(filter)}
                           style={[styles.chip, isActive && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}
                         >
-                          <ThemedText style={[styles.chipText, isActive && { color: '#fff' }]}>
-                            {filter}
-                          </ThemedText>
+                          <ThemedText style={[styles.chipText, isActive && { color: '#fff' }]}>{filter}</ThemedText>
                         </TouchableOpacity>
                       );
                     })}
@@ -195,12 +217,28 @@ export default function CommunityScreen() {
                     {filteredPosts.map(post => (
                       <View key={post.id} style={localStyles.postCard}>
                         <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                          <ThemedText style={localStyles.tagText}>
-                            #{getTranslatedTag(post.tag)}
-                          </ThemedText>
+                          <ThemedText style={localStyles.tagText}>#{getTranslatedTag(post.tag)}</ThemedText>
                           <ThemedText style={{fontSize: 9, color: isDark ? 'rgba(255,255,255,0.4)' : '#999'}}>{post.displayTime}</ThemedText>
                         </View>
-                        <ThemedText style={[localStyles.bodyText, {color: isDark ? '#fff' : '#333'}]}>{post.text}</ThemedText>
+                        
+                        <ThemedText style={[localStyles.bodyText, {color: isDark ? '#fff' : '#333'}]}>
+                          {translatedPosts[post.id] || post.text}
+                        </ThemedText>
+
+                        {/* ✅ LOGICA DE TRADUCCIÓN: Solo aparece si NO es español, o si ya se tradujo */}
+                        {(currentLanguageCode !== 'es' || translatedPosts[post.id]) && (
+                          <TouchableOpacity onPress={() => handleTranslate(post.id, post.text)} style={{ marginBottom: 10 }}>
+                            {translatingId === post.id ? (
+                              <ActivityIndicator size="small" color="#FF5F6D" />
+                            ) : (
+                              <ThemedText style={{ fontSize: 11, color: '#FF5F6D', fontWeight: 'bold' }}>
+                                {translatedPosts[post.id] 
+                                  ? (currentLanguageCode === 'es' ? "Ver Original" : "Show Original") 
+                                  : "Translate to English"}
+                              </ThemedText>
+                            )}
+                          </TouchableOpacity>
+                        )}
                         
                         {post.image && (
                           <TouchableOpacity activeOpacity={0.9} onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
@@ -214,18 +252,12 @@ export default function CommunityScreen() {
                               <MaterialCommunityIcons name="share-variant" size={16} color={isDark ? "#fff" : "#666"} />
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
-                              style={[localStyles.voteBtn, post.userVote === 'like' && {backgroundColor: '#1976D2'}]} 
-                              onPress={() => handleVote(post.id, 'like')}
-                            >
+                            <TouchableOpacity style={[localStyles.voteBtn, post.userVote === 'like' && {backgroundColor: '#1976D2'}]} onPress={() => handleVote(post.id, 'like')}>
                               <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? "#fff" : "#0080B5"} />
                               <ThemedText style={[localStyles.voteCount, post.userVote === 'like' && {color: '#fff'}]}>{post.likes}</ThemedText>
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
-                              style={[localStyles.voteBtn, post.userVote === 'dislike' && { backgroundColor: '#FF5F6D' }]} 
-                              onPress={() => handleVote(post.id, 'dislike')}
-                            >
+                            <TouchableOpacity style={[localStyles.voteBtn, post.userVote === 'dislike' && { backgroundColor: '#FF5F6D' }]} onPress={() => handleVote(post.id, 'dislike')}>
                               <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ?  "#fff" : "#888" } />
                               <ThemedText style={[localStyles.voteCount, post.userVote === 'dislike' && {color: '#fff'}]}>{post.dislikes}</ThemedText>
                             </TouchableOpacity>
@@ -259,28 +291,29 @@ export default function CommunityScreen() {
                 </View>
                 <View style={localStyles.categoryRow}>
                   {t.communitytab.typepostAdd.map(tag => {
-                    // ✅ Lógica mejorada: Comparar contra el mapa de normalización
                     const isSelected = tagMapping[tag] === tagMapping[selectedTag];
                     return (
-                      <TouchableOpacity 
-                        key={tag} 
-                        onPress={() => setSelectedTag(tag)} 
-                        style={[localStyles.tagChip, isSelected && { backgroundColor: '#FF5F6D' }]}
-                      >
+                      <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={[localStyles.tagChip, isSelected && { backgroundColor: '#FF5F6D' }]}>
                         <ThemedText style={[localStyles.tagChipText, isSelected && { color: '#fff' }]}>{tag}</ThemedText>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
-                <TextInput 
-                  value={postText} 
-                  onChangeText={setPostText} 
-                  placeholder={t.communitytab.questionnewpost} 
-                  placeholderTextColor="#999" 
-                  multiline 
-                  style={[localStyles.input, { color: isDark ? '#fff' : '#000' }]} 
-                />
-                {selectedImage && <Image source={{ uri: selectedImage }} style={{ width: 60, height: 60, borderRadius: 10, marginBottom: 10 }} />}
+                <TextInput value={postText} onChangeText={setPostText} placeholder={t.communitytab.questionnewpost} placeholderTextColor="#999" multiline style={[localStyles.input, { color: isDark ? '#fff' : '#000' }]} />
+                
+                {/* ✅ VISTA PREVIA DE IMAGEN (RESTAURADA) */}
+                {selectedImage && (
+                  <View style={{ position: 'relative', width: 80, height: 80, marginBottom: 15 }}>
+                    <Image source={{ uri: selectedImage }} style={{ width: '100%', height: '100%', borderRadius: 10 }} />
+                    <TouchableOpacity 
+                        onPress={() => setSelectedImage(null)} 
+                        style={{ position: 'absolute', top: -5, right: -5, backgroundColor: '#FF5F6D', borderRadius: 10, padding: 2 }}
+                    >
+                      <MaterialCommunityIcons name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 <View style={localStyles.modalActions}>
                   <TouchableOpacity onPress={pickImage}><MaterialCommunityIcons name="image-plus" size={26} color="#FF5F6D" /></TouchableOpacity>
                   <TouchableOpacity onPress={handlePost} disabled={!postText.trim()}>
@@ -301,7 +334,6 @@ export default function CommunityScreen() {
               {imageToView && <Image source={{ uri: imageToView }} style={{ width: '100%', height: '80%' }} resizeMode="contain" />}
             </View>
           </Modal>
-
         </ScrollView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
@@ -311,7 +343,7 @@ export default function CommunityScreen() {
 const localStyles = StyleSheet.create({
   postCard: { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: 25, padding: 16, marginBottom: 15, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
   tagText: { fontSize: 10, color: '#FF5F6D', fontWeight: '900', marginBottom: 5, textTransform: 'uppercase' },
-  bodyText: { fontSize: 14, fontWeight: '500', marginBottom: 12 },
+  bodyText: { fontSize: 14, fontWeight: '500', marginBottom: 2 },
   postImageLarge: { width: '100%', height: 140, borderRadius: 20, marginBottom: 15 },
   postFooter: { flexDirection: 'row', justifyContent: 'flex-end' },
   voteContainer: { flexDirection: 'row', gap: 10, alignItems: 'center' },
