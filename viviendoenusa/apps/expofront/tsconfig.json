@@ -20,6 +20,8 @@
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "tensorflow-fix.d.ts",
+    "utils/nsfwjs.d.ts"
   ]
 }
