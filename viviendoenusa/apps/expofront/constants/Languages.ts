@@ -48,7 +48,15 @@ export const translations = {
       messagenewpost: "Nueva publicación",
       closepost: "Cerrar",
       botonpost: "Publicar",
-      questionnewpost: '¿Qué quieres compartir?'
+      questionnewpost: '¿Qué quieres compartir?',
+      textInappropriateTittle: "Contenido inapropiado",
+      textInappropriateDescription: "Tu mensaje contiene palabras no permitidas. Por favor, mantén un lenguaje respetuoso.",
+      imageInappropriateTittle: "Imagen rechazada",
+      imageInappropriateDescription: "Nuestra IA detectó contenido sensible. Por favor elige otra imagen.",
+      publishedPostLabel: "¡Éxito!",
+      publishedPostDescription: "Tu post ha sido publicado.",
+      errorServer: "No se pudo conectar con el servidor de moderación."
+
     }
     
   },
@@ -100,7 +108,15 @@ export const translations = {
       messagenewpost: "New post",
       closepost: "Close",
       botonpost: "Post",
-      questionnewpost: 'What do you want to share?'
+      questionnewpost: 'What do you want to share?',
+      textInappropriateTittle: "Inappropriate content",
+      textInappropriateDescription: "Your post contains forbidden words. Please use respectful language.",
+      imageInappropriateTittle: "Image rejected",
+      imageInappropriateDescription: "Our AI detected sensitive content. Please choose another image.",
+      publishedPostLabel: "Success!",
+      publishedPostDescription: "Your post has been published.",
+      errorServer: "Could not connect to the moderation server."
+      
     }
   
   }

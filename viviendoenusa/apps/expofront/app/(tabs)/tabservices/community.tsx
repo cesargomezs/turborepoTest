@@ -36,6 +36,8 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 // ✅ IMPORTACIÓN SEGURA PARA EVITAR 'UNDEFINED'
 import * as BadWordsLib from 'bad-words';
 
+import {badWordsList } from '../../../utils/babwords.json';
+
 export default function CommunityScreen() {
   const { t } = useTranslation();
   const currentLanguageCode = useMockSelector((state) => state.language.code);
@@ -47,7 +49,8 @@ export default function CommunityScreen() {
       const Constructor = Lib.default || Lib.Filter || (typeof Lib === 'function' ? Lib : null);
       if (Constructor) {
         const instance = new Constructor();
-        const badWords = ['pendejo', 'mierda', 'puto', 'verga', 'fuck', 'shit', 'bitch']; 
+        //const badWords = ['pendejo', 'mierda', 'puto', 'verga', 'fuck', 'shit', 'bitch']; 
+        const badWords = Array.isArray(badWordsList) ? badWordsList : [];
         if (instance.addWords) instance.addWords(...badWords);
         return instance;
       }
@@ -100,10 +103,8 @@ export default function CommunityScreen() {
       const sanitized = trimmedText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       if (filter.isProfane(sanitized) || filter.isProfane(trimmedText)) {
         Alert.alert(
-          currentLanguageCode === 'es' ? "Contenido inapropiado" : "Inappropriate content",
-          currentLanguageCode === 'es' 
-            ? "Tu mensaje contiene palabras no permitidas. Por favor, mantén un lenguaje respetuoso." 
-            : "Your post contains forbidden words. Please use respectful language."
+          t.communitytab.textInappropriateTittle,
+          t.communitytab.textInappropriateDescription
         );
         return; 
       }
@@ -118,10 +119,8 @@ export default function CommunityScreen() {
         if (!esSegura) {
           setIsPublishing(false);
           Alert.alert(
-            currentLanguageCode === 'es' ? "Imagen rechazada" : "Image rejected",
-            currentLanguageCode === 'es' 
-              ? "Nuestra IA detectó contenido sensible. Por favor elige otra imagen." 
-              : "Our AI detected sensitive content. Please choose another image."
+            t.communitytab.imageInappropriateTittle,
+            t.communitytab.imageInappropriateDescription
           );
           return;
         }
@@ -147,12 +146,12 @@ export default function CommunityScreen() {
       Keyboard.dismiss();
       
       Alert.alert(
-        currentLanguageCode === 'es' ? "¡Éxito!" : "Success!",
-        currentLanguageCode === 'es' ? "Tu post ha sido publicado." : "Your post has been published."
+        t.communitytab.publishedPostLabel,
+        t.communitytab.publishedPostDescription
       );
 
     } catch (err) {
-      Alert.alert("Error", "No se pudo conectar con el servidor de moderación.");
+      Alert.alert("Error", t.communitytab.errorServer);
     } finally {
       setIsPublishing(false);
     }

@@ -36,9 +36,9 @@ async function loadModel() {
       // Forzamos el backend de CPU para evitar problemas de drivers en el servidor
       await tf.setBackend('cpu');
       model = await nsfwjs.load();
-      console.log("✅ Modelo cargado correctamente");
+      //console.log("✅ Modelo cargado correctamente");
     } catch (error) {
-      console.error("❌ Error cargando modelo:", error);
+      //console.error("❌ Error cargando modelo:", error);
     }
   }
 }
