@@ -14,11 +14,9 @@ import {
   Image,
   Linking,
   Alert,
-  ViewStyle
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-// AJUSTE 1: Se agrega useSegments a las importaciones de expo-router
 import { useRouter, useFocusEffect, useSegments } from 'expo-router'; 
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,10 +27,11 @@ import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { contentCardStyles as styles } from "../../src/styles/contentcard";
 
-// --- CONFIGURACIÓN DE MAPAS ---
+// --- CONFIGURACIÓN DE MAPAS (SOLUCIÓN WEB) ---
 let MapView: any = null;
 let Marker: any = null;
 
+// Solo cargamos la librería si NO estamos en Web para evitar el error de codegen
 if (Platform.OS !== 'web') {
   try {
     const Maps = require('react-native-maps');
@@ -60,7 +59,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   return parseFloat((R * c).toFixed(1));
 };
 
-export default function LawyersScreen() {
+export default function StoresScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
   const mapRef = useRef<any>(null);
@@ -69,17 +68,13 @@ export default function LawyersScreen() {
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
-  // AJUSTE 2: Se define la constante segments para habilitar isCommunityScreen
   const segments = useSegments();
-  const isCommunityScreen = segments.includes('community');
- 
-
-  // 1. ÁREAS DE PRÁCTICA CON FALLBACK SEGURO
+  const isCommunityScreen = segments.includes('stores');
   const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) 
     ? t.lawyerstab.practiceAreas 
-    : t.lawyerstab.practiceAreas;
+    : [];
 
-  const allFilterText = PRACTICE_AREAS[0];
+  const allFilterText = PRACTICE_AREAS[0] || '';
 
   const [isFocused, setIsFocused] = useState(false);
   const [zipCode, setZipCode] = useState('');
@@ -92,7 +87,7 @@ export default function LawyersScreen() {
   const [mapKey, setMapKey] = useState(0);
 
   useEffect(() => {
-    setSelectedArea(allFilterText);
+    if (allFilterText) setSelectedArea(allFilterText);
   }, [allFilterText]);
 
   const isZipValid = zipCode.length === 5;
@@ -117,7 +112,8 @@ export default function LawyersScreen() {
   );
 
   const handleZoom = (type: 'in' | 'out') => {
-    mapRef.current?.getCamera().then((camera: any) => {
+    if (!mapRef.current) return;
+    mapRef.current.getCamera().then((camera: any) => {
       if (Platform.OS === 'ios') {
         camera.altitude *= type === 'in' ? 0.5 : 2;
       } else {
@@ -130,12 +126,14 @@ export default function LawyersScreen() {
   const handleMarkerPress = (lawyer: any) => {
     setResults([lawyer]);
     setIsFilteredByMap(true);
-    mapRef.current?.animateToRegion({
-      latitude: lawyer.lat,
-      longitude: lawyer.lng,
-      latitudeDelta: 0.02,
-      longitudeDelta: 0.02,
-    }, 600);
+    if (Platform.OS !== 'web') {
+      mapRef.current?.animateToRegion({
+        latitude: lawyer.lat,
+        longitude: lawyer.lng,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      }, 600);
+    }
   };
 
   const handleSearch = async () => {
@@ -154,7 +152,7 @@ export default function LawyersScreen() {
         };
         setUserLocation(newCoords);
         setShowMarkers(true);
-        mapRef.current?.animateToRegion(newCoords, 1000);
+        if (Platform.OS !== 'web') mapRef.current?.animateToRegion(newCoords, 1000);
 
         let filtered = (selectedArea === 'Todas' || selectedArea === 'All' || selectedArea === allFilterText)
           ? [...DATA_SOURCE] 
@@ -196,7 +194,7 @@ export default function LawyersScreen() {
                 <TouchableOpacity onPress={() => { setMapKey(k => k + 1); setResults([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); }}>
                   <MaterialCommunityIcons name="refresh" size={24} color={isDark ? '#fff' : '#000'} style={{marginRight: 15}} />
                 </TouchableOpacity>
-                <MaterialCommunityIcons name="store-plus-outline" size={40} color={isDark ? '#fff' : '#000'} style={{opacity: 0.4}} />
+                <MaterialCommunityIcons name="store-plus-outline" size={40} color={isDark ? '#fff' : '#000'} style={{opacity: 0.2}} />
               </View>
             </View>
 
@@ -210,7 +208,7 @@ export default function LawyersScreen() {
                 <View style={styles.searchRow}>
                   <TextInput
                     style={[styles.customInput, { flex: 1, color: isDark ? '#fff' : '#000', borderColor: isDark ? '#444' : '#ddd', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}
-                    placeholder={t.lawyerstab?.messagezip}
+                    placeholder={t.lawyerstab?.messagezip || "ZIP Code"}
                     placeholderTextColor="#888"
                     keyboardType="numeric"
                     maxLength={5}
@@ -264,19 +262,27 @@ export default function LawyersScreen() {
                       </TouchableOpacity>
                     </View>
                   </>
-                ) : <ActivityIndicator style={{flex: 1}} />}
+                ) : (
+                  <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+                    {Platform.OS === 'web' ? (
+                      <ThemedText style={{opacity: 0.5}}>Mapa no disponible en Web</ThemedText>
+                    ) : (
+                      <ActivityIndicator size="large" color="#FF5F6D" />
+                    )}
+                  </View>
+                )}
               </View>
 
               <View style={styles.resultsWrapper}>
                 {results.length > 0 && (
                   <ThemedText style={{ fontSize: 13, marginBottom: 4, opacity: 0.7, fontWeight: '600' }}>
-                    {results.length} {results.length === 1 ? t.lawyerstab.resultone : t.lawyerstab.resultdomore }
+                    {results.length} {results.length === 1 ? (t.lawyerstab?.resultone || "Resultado") : (t.lawyerstab?.resultdomore || "Resultados") }
                   </ThemedText>
                 )}
 
                 {isFilteredByMap && (
                   <TouchableOpacity onPress={() => { setIsFilteredByMap(false); handleSearch(); }} style={{ marginBottom: 10, padding: 8, backgroundColor: 'rgba(0,128,181,0.1)', borderRadius: 10, alignItems: 'center' }}>
-                    <ThemedText style={{ color: '#0080B5', fontWeight: 'bold', fontSize: 12 }}>{t.lawyerstab.viewallresults}</ThemedText>
+                    <ThemedText style={{ color: '#0080B5', fontWeight: 'bold', fontSize: 12 }}>{t.lawyerstab?.viewallresults || "Ver todos"}</ThemedText>
                   </TouchableOpacity>
                 )}
                 {results.map((lawyer) => {
@@ -294,10 +300,24 @@ export default function LawyersScreen() {
                         <ThemedText style={{fontSize: 11, opacity: 0.5}}>{lawyer.area}</ThemedText>
                       </View>
                       <View style={styles.actionGroup}>
-                        <TouchableOpacity onPress={() => Linking.openURL(Platform.OS === 'ios' ? `maps:0,0?q=${lawyer.name}@${lawyer.lat},${lawyer.lng}` : `geo:0,0?q=${lawyer.lat},${lawyer.lng}(${lawyer.name})`)} style={[styles.actionBtn, {backgroundColor: '#E3F2FD'}]}>
+                        <TouchableOpacity onPress={() => {
+                          const url = Platform.OS === 'ios' ? `maps:0,0?q=${lawyer.name}@${lawyer.lat},${lawyer.lng}` : `geo:0,0?q=${lawyer.lat},${lawyer.lng}(${lawyer.name})`;
+                          Linking.openURL(url);
+                        }} style={[styles.actionBtn, {backgroundColor: '#E3F2FD'}]}>
                           <MaterialCommunityIcons name="directions" size={18} color="#1976D2" />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => Linking.openURL(`tel:${lawyer.phone}`)} style={[styles.actionBtn, {backgroundColor: '#FFF3E0'}]}>
+                        <TouchableOpacity 
+                          onPress={async () => {
+                            const telUrl = `tel:${lawyer.phone}`;
+                            const supported = await Linking.canOpenURL(telUrl);
+                            if (supported) {
+                              await Linking.openURL(telUrl);
+                            } else {
+                              Alert.alert("Error", "No se puede realizar la llamada desde este dispositivo.");
+                            }
+                          }} 
+                          style={[styles.actionBtn, {backgroundColor: '#FFF3E0'}]}
+                        >
                           <MaterialCommunityIcons name="phone" size={18} color="#EF6C00" />
                         </TouchableOpacity>
                       </View>

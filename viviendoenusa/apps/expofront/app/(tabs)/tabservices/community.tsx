@@ -216,7 +216,7 @@ export default function CommunityScreen() {
               
               <View style={localStyles.header}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={isDark ? '#fff' : '#000'} /></TouchableOpacity>
-                <MaterialCommunityIcons name="account-group-outline" size={36} color={isDark ? '#fff' : '#000'} style={{opacity: 0.2}}/>
+                <MaterialCommunityIcons name="account-group-outline" size={40} color={isDark ? '#fff' : '#000'} style={{opacity: 0.2}}/>
               </View>
 
               <View style={localStyles.filterBar}>
