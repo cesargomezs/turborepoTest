@@ -7,7 +7,7 @@ export const contentCardStyles = StyleSheet.create({
   scrollContainer: { 
     flexGrow: 1, 
     paddingVertical: 20, 
-    marginTop: Platform.OS === 'ios' ? -19 : 10 
+    marginTop: Platform.OS === 'ios' ? -19 : 20 
   },
   centerContainer: { 
     width: '100%', 

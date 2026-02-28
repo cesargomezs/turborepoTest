@@ -7,13 +7,14 @@ import Animated, {
   useScrollViewOffset,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // Importante para el padding real
 
 import { ThemedView } from '../components/ThemedView';
-import { useBottomTabOverflow } from '../components/ui/TabBarBackground';
+// Eliminamos la importación que causaba el conflicto si era un componente
+// import useBottomTabOverflow from '../components/ui/TabBarBackground'; 
 
 import { useColorScheme } from '../hooks/useColorScheme';
 import { cn } from '../utils/twcn';
-
 
 const HEADER_HEIGHT = 250;
 
@@ -32,7 +33,10 @@ export default function ParallaxScrollView({
   const colorScheme = useColorScheme() ?? 'light';
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollOffset = useScrollViewOffset(scrollRef);
-  const bottom = useBottomTabOverflow();
+  
+  // CORRECCIÓN: Usamos insets para obtener un número real (padding inferior)
+  const insets = useSafeAreaInsets();
+  const bottomPadding = insets.bottom + 20; 
 
   const headerAnimatedStyle = useAnimatedStyle(() => {
     return {
@@ -61,8 +65,9 @@ export default function ParallaxScrollView({
         removeClippedSubviews={Platform.OS === 'android'}
         ref={scrollRef}
         scrollEventThrottle={16}
-        scrollIndicatorInsets={{ bottom }}
-        contentContainerStyle={{ paddingBottom: bottom + 20 }}
+        // CORRECCIÓN: scrollIndicatorInsets espera un objeto { bottom: number }
+        scrollIndicatorInsets={{ bottom: insets.bottom }}
+        contentContainerStyle={{ paddingBottom: bottomPadding }}
         className="bg-transparent"
       >
         <Animated.View
