@@ -53,7 +53,7 @@ export const contentCardStyles = StyleSheet.create({
     zoomControls: { position: 'absolute', right: 10, bottom: 10, gap: 8 },
     zoomBtn: { backgroundColor: 'white', borderRadius: 10, width: 34, height: 34, justifyContent: 'center', alignItems: 'center', elevation: 3 },
     resultsWrapper: { marginTop: 8 },
-    lawyerCard: { flexDirection: 'row', padding: 12, borderRadius: 20, alignItems: 'center', marginBottom: 10 },
+    lawyerCard: { flexDirection: 'row', padding: 2, borderRadius: 20, alignItems: 'center', marginBottom: 10 },
     avatar: { width: 44, height: 44, borderRadius: 22 },
     ratingDistRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
     smallText: { fontSize: 12, marginLeft: 4, fontWeight: '600' },

@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect ,useSegments} from 'expo-router'; 
+import { useRouter, useFocusEffect } from 'expo-router'; 
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -43,11 +43,9 @@ export default function LawyersScreen() {
   const isDark = colorScheme === 'dark';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
-  const segments = useSegments();
-  const isCommunityScreen = segments.includes('lawyers');
 
   const isWeb = Platform.OS === 'web';
-  const isLargeWeb = isWeb && width > 900;
+  const isLargeWeb = isWeb && width > 1000;
 
   const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) ? t.lawyerstab.practiceAreas : [];
   const allFilterText = PRACTICE_AREAS[0] || '';
@@ -55,168 +53,193 @@ export default function LawyersScreen() {
   const [zipCode, setZipCode] = useState('');
   const [selectedArea, setSelectedArea] = useState(allFilterText);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<any[]>([]); 
+  const [results, setResults] = useState<any[]>(isWeb ? DATA_SOURCE : []); 
   const [userLocation, setUserLocation] = useState<any>(null);
-  const [showMarkers, setShowMarkers] = useState(false);
+  const [showMarkers, setShowMarkers] = useState(isWeb);
   const [isFilteredByMap, setIsFilteredByMap] = useState(false); 
   const [mapKey, setMapKey] = useState(0);
 
   useEffect(() => { if (allFilterText) setSelectedArea(allFilterText); }, [allFilterText]);
-
   const isZipValid = zipCode.length === 5;
 
   useFocusEffect(useCallback(() => {
     (async () => {
-      try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          if(isWeb) setUserLocation({ latitude: 34.0522, longitude: -118.2437, latitudeDelta: 0.05, longitudeDelta: 0.05 });
-          return;
-        }
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      let initialCoords = { latitude: 34.0668, longitude: -117.6115, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+      if (status === 'granted') {
         let location = await Location.getCurrentPositionAsync({});
-        setUserLocation({ latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 });
-      } catch (e) {
-        if(isWeb) setUserLocation({ latitude: 34.0522, longitude: -118.2437, latitudeDelta: 0.05, longitudeDelta: 0.05 });
+        initialCoords = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
       }
+      setUserLocation(initialCoords);
     })();
-  }, [isWeb]));
+  }, []));
 
-  const handleSearch = async () => {
-    if (!isZipValid) return;
+  const handleZoom = (type: 'in' | 'out') => {
+    if (isWeb || !mapRef.current) return;
+    mapRef.current.getCamera().then((camera: any) => {
+      if (Platform.OS === 'ios') camera.altitude *= type === 'in' ? 0.5 : 2;
+      else camera.zoom += type === 'in' ? 1 : -1;
+      mapRef.current?.animateCamera(camera, { duration: 400 });
+    });
+  };
+
+  const handleSearch = async (forcedArea?: string) => {
+    const areaToSearch = typeof forcedArea === 'string' ? forcedArea : selectedArea;
     setLoading(true);
     setIsFilteredByMap(false);
-    Keyboard.dismiss();
+    if (!isWeb) Keyboard.dismiss();
+
     try {
-      const geo = await Location.geocodeAsync(zipCode);
-      if (geo.length > 0) {
-        const newCoords = { latitude: geo[0].latitude, longitude: geo[0].longitude, latitudeDelta: 0.06, longitudeDelta: 0.06 };
+      let newCoords = userLocation;
+      if (!isWeb && isZipValid) {
+        const geo = await Location.geocodeAsync(zipCode);
+        if (geo.length > 0) {
+          newCoords = { latitude: geo[0].latitude, longitude: geo[0].longitude, latitudeDelta: 0.06, longitudeDelta: 0.06 };
+        }
+      }
+      if (newCoords) {
         setUserLocation(newCoords);
         setShowMarkers(true);
-        if (!isWeb) mapRef.current?.animateToRegion(newCoords, 1000);
-
-        let filtered = (selectedArea === allFilterText) ? [...DATA_SOURCE] : DATA_SOURCE.filter(l => l.area === selectedArea);
+        if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
+        let filtered = (areaToSearch === allFilterText) ? [...DATA_SOURCE] : DATA_SOURCE.filter(l => l.area === areaToSearch);
         filtered.sort((a, b) => getDistance(newCoords.latitude, newCoords.longitude, a.lat, a.lng) - getDistance(newCoords.latitude, newCoords.longitude, b.lat, b.lng));
         setResults(filtered);
       }
-    } catch (e) { Alert.alert("Error", "ZIP no encontrado."); } finally { setLoading(false); }
+    } catch (e) { 
+      if(!isWeb) Alert.alert("Error", "Búsqueda no disponible."); 
+    } finally { setLoading(false); }
   };
 
-  // RESTAURADO: Tus dimensiones originales
-  const cardWidth = isLargeWeb ? 1100 : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
-  const cardHeight = loggedIn ? height * 0.69 : height * 0.65;
+  const LawyerCard = ({ lawyer }: { lawyer: any }) => {
+    const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
+    return (
+      <View style={[styles.lawyerCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#fff', marginBottom: 10 }]}>
+        <Image source={{ uri: lawyer.image }} style={styles.avatar} />
+        <View style={{flex: 1, marginLeft: 12}}>
+          <ThemedText style={{fontWeight: 'bold', fontSize: 14}}>{lawyer.name}</ThemedText>
+          <View style={styles.ratingDistRow}>
+            <MaterialCommunityIcons name="star" size={14} color="#FFD700" />
+            <ThemedText style={styles.smallText}>{lawyer.rating.toFixed(1)}</ThemedText>
+            {dist !== null && <ThemedText style={[styles.smallText, {color: '#0080B5'}]}> • {dist} mi</ThemedText>}
+          </View>
+          <ThemedText style={{fontSize: 11, opacity: 0.5}}>{lawyer.area}</ThemedText>
+        </View>
+        <View style={styles.actionGroup}>
+          <TouchableOpacity 
+            onPress={() => Linking.openURL(Platform.OS === 'ios' ? `maps://app?daddr=${lawyer.lat},${lawyer.lng}` : `https://www.google.com/maps/dir/?api=1&destination=${lawyer.lat},${lawyer.lng}`)} 
+            style={[styles.actionBtn, {backgroundColor: '#E3F2FD'}]}
+          >
+            <MaterialCommunityIcons name="directions" size={18} color="#1976D2" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL(`tel:${lawyer.phone}`)} style={[styles.actionBtn, {backgroundColor: '#FFF3E0'}]}>
+            <MaterialCommunityIcons name="phone" size={18} color="#EF6C00" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const cardWidth = isLargeWeb ? '90%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
+  const cardHeight = isLargeWeb ? height * 0.73 : (loggedIn ? height * 0.69 : height * 0.65);
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={[styles.scrollContainer, { justifyContent: loggedIn ? 'flex-start' : 'center'}]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        
-        {/* Ajuste Web solo si es Web */}
-        <View style={[styles.centerContainer, isWeb && { marginTop: -80 }]}>
-          <View style={[styles.cardWrapper, { width: cardWidth, height: cardHeight }]}>
+      {/* ScrollView principal ajustado para Web */}
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContainer, 
+          { 
+            // En web grande, alineamos al inicio (arriba) en lugar de centrar
+            justifyContent: isLargeWeb ? 'flex-start' : (loggedIn ? 'flex-start' : 'center'),
+            paddingTop: isLargeWeb ? 5 : 0 // Sube el contenido casi al tope del header
+          }
+        ]} 
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.centerContainer, isLargeWeb && { justifyContent: 'flex-start' }]}>
+          <View style={[styles.cardWrapper, { width: cardWidth, height: cardHeight, marginTop: isLargeWeb ? 5 : 0 }]}>
             <BlurView intensity={90} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
             <View style={styles.cardContent}>
               
               <View style={styles.headerRow}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={isDark ? '#fff' : '#000'} /></TouchableOpacity>
                 <View style={styles.headerIcons}>
-                  <TouchableOpacity onPress={() => { setMapKey(k => k + 1); setResults([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); }}>
+                  <TouchableOpacity onPress={() => { setMapKey(k => k + 1); setResults(isWeb ? DATA_SOURCE : []); setZipCode(''); setShowMarkers(isWeb); setIsFilteredByMap(false); }}>
                     <MaterialCommunityIcons name="refresh" size={24} color={isDark ? '#fff' : '#000'} style={{marginRight: 15}} />
                   </TouchableOpacity>
                   <MaterialCommunityIcons name="scale-balance" size={40} color={isDark ? '#fff' : '#000'} style={{opacity: 0.2}} />
                 </View>
               </View>
 
-              <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
-                
-                {/* MENÚ WEB (Ajustable) */}
-                {isLargeWeb && (
-                  <View style={{ width: 220, borderRightWidth: 1, borderRightColor: 'rgba(150,150,150,0.2)', paddingRight: 15 }}>
-                    <ThemedText style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 15, opacity: 0.5 }}>ESPECIALIDADES</ThemedText>
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                      {PRACTICE_AREAS.map((area) => (
-                        <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(); }} style={[{ padding: 10, borderRadius: 8, marginBottom: 5 }, selectedArea === area && { backgroundColor: '#FF5F6D' }]}>
-                          <ThemedText style={[{ fontSize: 13 }, selectedArea === area && { color: '#fff' }]}>{area}</ThemedText>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingLeft: isLargeWeb ? 20 : 0, paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {!isLargeWeb ? (
+                /* --- IOS: DISEÑO ORIGINAL --- */
+                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                   <View style={styles.formContainer}>
                     <View style={styles.searchRow}>
                       <TextInput
                         style={[styles.customInput, { flex: 1, color: isDark ? '#fff' : '#000', borderColor: isDark ? '#444' : '#ddd', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}
                         placeholder={t.lawyerstab?.messagezip || "ZIP Code"}
-                        keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={handleSearch}
+                        keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()}
                       />
-                      <TouchableOpacity onPress={handleSearch} disabled={loading || !isZipValid} style={[styles.compactSearchBtn, { opacity: isZipValid ? 1 : 0.5 }]}>
+                      <TouchableOpacity onPress={() => handleSearch()} disabled={loading || !isZipValid} style={[styles.compactSearchBtn, { opacity: isZipValid ? 1 : 0.5 }]}>
                         <LinearGradient colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#888', '#555']} style={styles.gradientBtn}>
                           {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
                         </LinearGradient>
                       </TouchableOpacity>
                     </View>
-
-                    {/* Chips originales iOS */}
-                    {!isLargeWeb && (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-                        {PRACTICE_AREAS.map((area) => (
-                          <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(); }} style={[styles.chip, selectedArea === area && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
-                            <ThemedText style={[styles.chipText, selectedArea === area && { color: '#fff' }]}>{area}</ThemedText>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    )}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                      {PRACTICE_AREAS.map((area) => (
+                        <TouchableOpacity key={area} onPress={() => setSelectedArea(area)} style={[styles.chip, selectedArea === area && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
+                          <ThemedText style={[styles.chipText, selectedArea === area && { color: '#fff' }]}>{area}</ThemedText>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
                   </View>
-
                   <View style={styles.mapContainer}>
-                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
+                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={DATA_SOURCE} mapKey={mapKey} onZoom={handleZoom} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
                   </View>
-
                   <View style={styles.resultsWrapper}>
-                    {results.length > 0 && <ThemedText style={{ fontSize: 13, marginBottom: 4, opacity: 0.7, fontWeight: '600' }}>{results.length} {results.length === 1 ? (t.lawyerstab?.resultone || "Resultado") : (t.lawyerstab?.resultdomore || "Resultados") }</ThemedText>}
-                    
+                    {results.length > 0 && <ThemedText style={{ fontSize: 13, marginBottom: 8, opacity: 0.7, fontWeight: '600' }}>{results.length} Resultados</ThemedText>}
                     {isFilteredByMap && (
                       <TouchableOpacity onPress={() => { setIsFilteredByMap(false); handleSearch(); }} style={{ marginBottom: 10, padding: 8, backgroundColor: 'rgba(0,128,181,0.1)', borderRadius: 10, alignItems: 'center' }}>
                         <ThemedText style={{ color: '#0080B5', fontWeight: 'bold', fontSize: 12 }}>{t.lawyerstab?.viewallresults || "Ver todos"}</ThemedText>
                       </TouchableOpacity>
                     )}
-
-                    {results.map((lawyer) => {
-                      const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
-                      return (
-                        <View key={lawyer.id} style={[styles.lawyerCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#fff', marginBottom: 10 }]}>
-                          <Image source={{ uri: lawyer.image }} style={styles.avatar} />
-                          <View style={{flex: 1, marginLeft: 12}}>
-                            <ThemedText style={{fontWeight: 'bold', fontSize: 14}}>{lawyer.name}</ThemedText>
-                            
-                            {/* RESTAURADO: Estilo exacto de rating/distancia */}
-                            <View style={styles.ratingDistRow}>
-                              <MaterialCommunityIcons name="star" size={14} color="#FFD700" />
-                              <ThemedText style={styles.smallText}>{lawyer.rating.toFixed(1)}</ThemedText>
-                              {dist !== null && <ThemedText style={[styles.smallText, {color: '#0080B5'}]}> • {dist} mi</ThemedText>}
-                            </View>
-
-                            <ThemedText style={{fontSize: 11, opacity: 0.5}}>{lawyer.area}</ThemedText>
-                          </View>
-                          <View style={styles.actionGroup}>
-                            <TouchableOpacity onPress={() => Linking.openURL(Platform.OS === 'ios' ? `maps:0,0?q=${lawyer.name}@${lawyer.lat},${lawyer.lng}` : `https://www.google.com/maps/search/?api=1&query=${lawyer.lat},${lawyer.lng}`)} style={[styles.actionBtn, {backgroundColor: '#E3F2FD'}]}><MaterialCommunityIcons name="directions" size={18} color="#1976D2" /></TouchableOpacity>
-                            <TouchableOpacity 
-                               onPress={async () => {
-                                 const telUrl = `tel:${lawyer.phone}`;
-                                 if (await Linking.canOpenURL(telUrl)) await Linking.openURL(telUrl);
-                                 else Alert.alert("Error", "No disponible.");
-                               }} 
-                               style={[styles.actionBtn, {backgroundColor: '#FFF3E0'}]}
-                            >
-                              <MaterialCommunityIcons name="phone" size={18} color="#EF6C00" />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      );
-                    })}
+                    {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
                   </View>
                 </ScrollView>
-              </View>
+              ) : (
+                /* --- WEB: 3 COLUMNAS --- */
+                <View style={{ flex: 1, flexDirection: 'row' }}>
+                  <View style={{ width: 230, borderRightWidth: 1, borderRightColor: 'rgba(150,150,150,0.1)', paddingRight: 15 }}>
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 15, opacity: 0.5 }}>ESPECIALIDADES</ThemedText>
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      {PRACTICE_AREAS.map((area) => (
+                        <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); handleSearch(area); }} style={{ padding: 12, borderRadius: 10, marginBottom: 5, backgroundColor: selectedArea === area ? '#FF5F6D' : 'transparent' }}>
+                          <ThemedText style={{ fontSize: 13, color: selectedArea === area ? '#fff' : (isDark ? '#fff' : '#000') }}>{area}</ThemedText>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  <View style={{ flex: 1, paddingHorizontal: 20 }}>
+                    <View style={[styles.searchRow, { marginBottom: 10 }]}>
+                      <TextInput style={[styles.customInput, { flex: 1, color: isDark ? '#fff' : '#000' }]} placeholder="ZIP Code" value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} />
+                      <TouchableOpacity onPress={() => handleSearch()} style={styles.compactSearchBtn}>
+                        <LinearGradient colors={['#FF5F6D', '#FFC371']} style={styles.gradientBtn}><MaterialCommunityIcons name="magnify" size={22} color="#fff" /></LinearGradient>
+                      </TouchableOpacity>
+                    </View>
+                    <ThemedText style={{ fontSize: 13, marginBottom: 10, opacity: 0.7, fontWeight: '600' }}>{results.length} Resultados</ThemedText>
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
+                    </ScrollView>
+                  </View>
+
+                  <View style={{ flex: 1.5, marginLeft: 20, height: '100%', borderRadius: 15, overflow: 'hidden' }}>
+                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={true} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => setResults([l])} />
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         </View>
