@@ -48,7 +48,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 export default function LawyersScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
-  const mapRef = useRef<any>(null); // REFERENCIA PARA IOS
+  const mapRef = useRef<any>(null); 
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
@@ -81,7 +81,7 @@ export default function LawyersScreen() {
   useEffect(() => { if (allFilterText) setSelectedArea(allFilterText); }, [allFilterText]);
 
   const handleZoom = (type: 'in' | 'out') => {
-    if (Platform.OS === 'web' || !mapRef.current) return;
+    if (isWeb || !mapRef.current) return;
     mapRef.current.getCamera().then((camera: any) => {
       if (Platform.OS === 'ios') camera.altitude *= type === 'in' ? 0.5 : 2;
       else camera.zoom += type === 'in' ? 1 : -1;
@@ -96,11 +96,9 @@ export default function LawyersScreen() {
     const coords = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
     setUserLocation(coords);
 
-    // Mover cámara en iOS físicamente
     if (!isWeb && mapRef.current) {
         mapRef.current.animateToRegion(coords, 1000);
     }
-
     if(isWeb) setMapKey(k => k + 1);
   };
 
@@ -123,7 +121,6 @@ export default function LawyersScreen() {
       setUserLocation(newCoords);
       setShowMarkers(true);
 
-      // Mover cámara en iOS al buscar
       if (!isWeb && mapRef.current) {
         mapRef.current.animateToRegion(newCoords, 1000);
       }
@@ -136,6 +133,21 @@ export default function LawyersScreen() {
     } catch (e) { 
         if(!isWeb) Alert.alert("Error", "ZIP no encontrado."); 
     } finally { setLoading(false); }
+  };
+
+  const openDirections = (lawyer: any) => {
+    const lat = lawyer.lat;
+    const lng = lawyer.lng;
+    const label = encodeURIComponent(lawyer.name);
+    
+    const url = Platform.select({
+      ios: `maps:0,0?q=${label}@${lat},${lng}`, // Apple Maps nativo
+      android: `geo:0,0?q=${lat},${lng}(${label})`, // Google Maps nativo
+      // WEB: Marcamos el recorrido (dir) desde la ubicación actual
+      web: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`
+    });
+
+    if (url) Linking.openURL(url);
   };
 
   const LawyerCard = ({ lawyer }: { lawyer: any }) => {
@@ -155,7 +167,7 @@ export default function LawyersScreen() {
           <ThemedText style={{fontSize: 11, opacity: 0.5}}>{lawyer.area}</ThemedText>
         </View>
         <View style={styles.actionGroup}>
-          <TouchableOpacity onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lawyer.lat},${lawyer.lng}`)} style={[styles.actionBtn, {backgroundColor: '#E3F2FD'}]}>
+          <TouchableOpacity onPress={() => openDirections(lawyer)} style={[styles.actionBtn, {backgroundColor: '#E3F2FD'}]}>
             <MaterialCommunityIcons name="directions" size={18} color="#1976D2" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => Linking.openURL(`tel:${lawyer.phone}`)} style={[styles.actionBtn, {backgroundColor: '#FFF3E0'}]}>
@@ -197,30 +209,26 @@ export default function LawyersScreen() {
                         keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()}
                       />
                       <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={[styles.compactSearchBtn]}>
-                        <LinearGradient 
-                            colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#D3D3D3', '#D3D3D3']}
-                            style={styles.gradientBtn}
-                        >
+                        <LinearGradient colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#D3D3D3', '#D3D3D3']} style={styles.gradientBtn}>
                           {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
                         </LinearGradient>
                       </TouchableOpacity>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
                       {PRACTICE_AREAS.map((area) => (
-                        <TouchableOpacity key={area} onPress={() => setSelectedArea(area)} style={[styles.chip, selectedArea === area && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
+                        <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(area); }} style={[styles.chip, selectedArea === area && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
                           <ThemedText style={[styles.chipText, selectedArea === area && { color: '#fff' }]}>{area}</ThemedText>
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
                   </View>
                   <View style={styles.mapContainer}>
-                    {/* ASIGNAMOS mapRef AQUÍ */}
-                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={results.length > 0 ? results : DATA_SOURCE}  onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); if(mapRef.current) mapRef.current.animateToRegion({ latitude: l.lat, longitude: l.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 800); }} />
+                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={results.length > 0 ? results : DATA_SOURCE} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); if(mapRef.current) mapRef.current.animateToRegion({ latitude: l.lat, longitude: l.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 800); }} />
                   </View>
                   <View style={styles.resultsWrapper}>
-                    {results.length > 0 && <ThemedText style={{ fontSize: 13, marginBottom: 4, opacity: 0.7, fontWeight: '600' }}>{results.length === 1 
-        ? `1 ${t.lawyerstab?.resultone}` 
-        : `${results.length} ${t.lawyerstab?.resultdomore}`} </ThemedText>}
+                    {results.length > 0 && <ThemedText style={{ fontSize: 13, marginBottom: 4, opacity: 0.7, fontWeight: '600' }}>
+                      {results.length === 1 ? `1 ${t.lawyerstab?.resultone}` : `${results.length} ${t.lawyerstab?.resultdomore}`}
+                    </ThemedText>}
                     {isFilteredByMap && (
                       <TouchableOpacity onPress={() => { setIsFilteredByMap(false); handleSearch(); }} style={webStyles.viewAllBtn}>
                         <MaterialCommunityIcons name="filter-remove-outline" size={14} color="#0080B5" />
@@ -238,12 +246,7 @@ export default function LawyersScreen() {
                       {PRACTICE_AREAS.map((area) => (
                         <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(area); }} style={[webStyles.sideMenuItem, selectedArea === area && { backgroundColor: 'rgba(255,95,109,0.1)' }]}>
                           {selectedArea === area && <View style={webStyles.activeIndicator} />}
-                          <MaterialCommunityIcons 
-                            name={AREA_ICONS[area] || AREA_ICONS['Default']} 
-                            size={18} 
-                            color={selectedArea === area ? '#FF5F6D' : (isDark ? '#777' : '#999')} 
-                            style={{ marginRight: 10 }}
-                          />
+                          <MaterialCommunityIcons name={AREA_ICONS[area] || AREA_ICONS['Default']} size={18} color={selectedArea === area ? '#FF5F6D' : (isDark ? '#777' : '#999')} style={{ marginRight: 10 }} />
                           <ThemedText style={{ fontSize: 13, fontWeight: selectedArea === area ? '700' : '400', color: selectedArea === area ? '#FF5F6D' : (isDark ? '#fff' : '#000') }}>{area}</ThemedText>
                         </TouchableOpacity>
                       ))}
@@ -255,7 +258,7 @@ export default function LawyersScreen() {
                         <TextInput style={[styles.customInput, { flex: 1, color: isDark ? '#fff' : '#000' }]} placeholder="Introduce ZIP Code..." value={zipCode} maxLength={5} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} />
                         <TouchableOpacity onPress={() => handleSearch()} style={styles.compactSearchBtn} disabled={!isZipValid}>
                           <LinearGradient colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#D3D3D3', '#D3D3D3']} style={styles.gradientBtn}>
-                            {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
+                            <MaterialCommunityIcons name="magnify" size={22} color="#fff" />
                           </LinearGradient>
                         </TouchableOpacity>
                       </View>
@@ -264,7 +267,7 @@ export default function LawyersScreen() {
                       </ScrollView>
                     </View>
                     <View style={{ flex: 1.5, marginLeft: 20, height: '100%', position: 'relative' }}>
-                      <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
+                      <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
                       <TouchableOpacity onPress={getCurrentLocation} style={webStyles.locationBtn}>
                         <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#0080B5" />
                       </TouchableOpacity>
