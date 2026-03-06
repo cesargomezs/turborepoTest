@@ -34,13 +34,15 @@ export const translations = {
       icon6: "lightbulb-multiple-outline"
     },
     lawyerstab: {
+      label: "Especialidades",
       practiceAreas: ['Todas', 'Familia', 'Penal', 'Inmigración', 'Accidentes'], 
       //practiceAreas: "all",
       messagezip: "Código Postal",
       validatezip: "Código Postal no encontrado.",
-      resultone: "resultado encontrado",
-      resultdomore: "resultados encontrados",
-      viewallresults: "Ver todos los resultados"
+      resultone: "Resultado encontrado",
+      resultdomore: "Resultados encontrados",
+      viewallresults: "Ver todos los resultados",
+      
     },
     communitytab: {
       typepost : ['Todos', 'Experiencia', 'Pregunta', 'Consejo'],
@@ -94,12 +96,13 @@ export const translations = {
       icon6: "lightbulb-multiple-outline"
     },
     lawyerstab: {
+      label: "Specialties",
       practiceAreas: ['All' , 'Family' , 'Criminal', 'Immigration', 'Accidents'],
       //practiceAreas: "all",
       messagezip: "ZIP Code",
       validatezip: "ZIP not found.",
-      resultone: "result found",
-      resultdomore: "results found",
+      resultone: "Result found",
+      resultdomore: "Results found",
       viewallresults: "View all results"
     },
     communitytab: {
