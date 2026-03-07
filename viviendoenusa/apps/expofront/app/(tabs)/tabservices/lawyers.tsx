@@ -50,7 +50,7 @@ export default function LawyersScreen() {
   const router = useRouter();
   const mapRef = useRef<any>(null); 
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === 'light' ? false : true;
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
