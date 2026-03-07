@@ -55,6 +55,7 @@ export default function LawyersScreen() {
   const { t } = useTranslation();
 
   const isWeb = Platform.OS === 'web';
+  const isAndroid = Platform.OS === 'android';
   const isLargeWeb = isWeb && width > 1000;
 
   const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) ? t.lawyerstab.practiceAreas : [];
@@ -63,7 +64,7 @@ export default function LawyersScreen() {
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#546E7A',
-    cardBg: isDark ? 'rgba(20, 20, 20, 0.85)' : 'rgba(255, 255, 255, 0.75)',
+    cardBg: isDark ? '#1E1E1E' : '#FFFFFF',
     accent: isDark ? '#4FC3F7' : '#0080B5',
     border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     inputBg: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.9)'
@@ -167,7 +168,7 @@ export default function LawyersScreen() {
         paddingHorizontal: 12,
         borderBottomWidth: 1,
         borderBottomColor: Colors.border,
-        borderWidth: 0, // Quitamos bordes de los extremos (laterales/arriba)
+        borderWidth: 0,
         shadowOpacity: 0 
       }]}>
         <Image source={{ uri: lawyer.image }} style={styles.avatar} />
@@ -193,14 +194,39 @@ export default function LawyersScreen() {
   };
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
-  const cardHeight = isLargeWeb ? height * 0.70 : (loggedIn ? height * 0.69 : height * 0.65);
+  const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.72 : (loggedIn ? height * 0.69 : height * 0.65));
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={[styles.scrollContainer, { justifyContent: (isLargeWeb || !loggedIn) ? 'center' : 'flex-start'}]} keyboardShouldPersistTaps="handled">
-        <View style={[styles.centerContainer, isLargeWeb && { marginTop: -100 }]}>
-          <View style={[styles.cardWrapper, { width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28 }]}>
-            <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContainer, 
+          { 
+            // CAMBIO: justifyContent a 'flex-start' para que el card suba
+            justifyContent: 'flex-start' 
+          }
+        ]} 
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[
+          styles.centerContainer, 
+          { 
+            // CAMBIO: marginTop ajustado para quedar pegado arriba en Android
+            marginTop: isAndroid ? -65 : (isLargeWeb ? -100 : 0) 
+          }
+        ]}>
+          <View style={[styles.cardWrapper, { 
+            width: cardWidth, 
+            height: cardHeight, 
+            overflow: 'hidden', 
+            borderRadius: 28,
+            // AJUSTE: Transparencia para Android
+            backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255, 255, 255, 0.85)') : 'transparent',
+            borderWidth: isAndroid ? 1 : 0,
+            borderColor: Colors.border,
+            elevation: 0
+           }]}>
+            {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={styles.cardContent}>
               
               <View style={styles.headerRow}>
@@ -219,7 +245,7 @@ export default function LawyersScreen() {
                     <View style={styles.searchRow}>
                       <TextInput
                         style={[styles.customInput, { flex: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, fontWeight: '500' }]}
-                        placeholder={t.lawyerstab?.messagezip || "ZIP Code"}
+                        placeholder={t.lawyerstab?.messagezip}
                         keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()}
                         placeholderTextColor={isDark ? '#78909C' : '#90A4AE'}
                       />
@@ -244,15 +270,7 @@ export default function LawyersScreen() {
 
                   <View style={styles.resultsWrapper}>
                     {results.length > 0 && (
-                      <ThemedText style={{ 
-                        fontSize: 13, 
-                        marginBottom: 10, 
-                        color: Colors.subtext, 
-                        fontWeight: '700',
-                        textAlign: 'left', 
-                        width: '100%',
-                        paddingLeft: 4
-                      }}>
+                      <ThemedText style={{ fontSize: 13, marginBottom: 10, color: Colors.subtext, fontWeight: '700', textAlign: 'left', width: '100%', paddingLeft: 4 }}>
                         {results.length === 1 ? `1 ` + (t.lawyerstab?.resultone) : `${results.length} ` + (t.lawyerstab?.resultdomore )}
                       </ThemedText>
                     )}
@@ -260,22 +278,11 @@ export default function LawyersScreen() {
                     {isFilteredByMap && (
                       <TouchableOpacity 
                         onPress={() => { setIsFilteredByMap(false); handleSearch(); }} 
-                        style={{
-                          flexDirection: 'row', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          backgroundColor: isDark ? 'rgba(79, 195, 247, 0.16)' : 'rgba(0,128,181,0.08)', 
-                          paddingVertical: 12, 
-                          borderRadius: 14, 
-                          marginBottom: 14,
-                          width: '100%',
-                          borderWidth: 1,
-                          borderColor: isDark ? 'rgba(79, 195, 247, 0.8)' : 'transparent'
-                        }}
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, width: '100%', borderWidth: 1, borderColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'transparent' }}
                       >
                         <MaterialCommunityIcons name="filter-remove-outline" size={16} color={Colors.accent} />
-                        <ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 12 }}>
-                          {`  ${t.lawyerstab?.viewallresults}`}
+                        <ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 13 }}>
+                          {`  ${t.lawyerstab?.viewallresults || 'Ver todos los resultados'}`}
                         </ThemedText>
                       </TouchableOpacity>
                     )}
@@ -286,7 +293,7 @@ export default function LawyersScreen() {
                 /* DISEÑO WEB */
                 <View style={{ flex: 1, flexDirection: 'row' }}>
                   <View style={[webStyles.sideMenuContainer, { borderRightColor: Colors.border }]}>
-                    <ThemedText style={[webStyles.sideMenuTitle, {color: Colors.subtext}]}>{t.lawyerstab.label}</ThemedText>
+                    <ThemedText style={[webStyles.sideMenuTitle, {color: Colors.subtext}]}>Especialidades</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {PRACTICE_AREAS.map((area) => (
                         <TouchableOpacity 
@@ -312,7 +319,7 @@ export default function LawyersScreen() {
                       <View style={webStyles.searchRowWeb}>
                         <TextInput 
                           style={[webStyles.customInputWeb, { color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1 }]} 
-                          placeholder={t.lawyerstab?.messagezip}
+                          placeholder="Introduce ZIP Code..." 
                           value={zipCode} 
                           maxLength={5} 
                           onChangeText={setZipCode} 
