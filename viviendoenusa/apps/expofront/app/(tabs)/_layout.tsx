@@ -91,7 +91,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons 
               size={28} 
-              name="account-group" 
+              name="view-list" 
               color={isServiceSubScreen ? activeColor : color} 
             />
           ),

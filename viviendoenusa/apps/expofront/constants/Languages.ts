@@ -42,6 +42,7 @@ export const translations = {
       resultone: "Resultado encontrado",
       resultdomore: "Resultados encontrados",
       viewallresults: "Ver todos los resultados",
+      zipnofound:"ZIP no encontrado."
       
     },
     communitytab: {
@@ -103,7 +104,8 @@ export const translations = {
       validatezip: "ZIP not found.",
       resultone: "Result found",
       resultdomore: "Results found",
-      viewallresults: "View all results"
+      viewallresults: "View all results",
+      zipnofound:"ZIP not found."
     },
     communitytab: {
       typepost : ['All', 'Experience', 'Question', 'Advice'],

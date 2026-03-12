@@ -141,7 +141,7 @@ export default function LawyersScreen() {
       setResults(filtered);
       setMapKey(k => k + 1);
     } catch (e) { 
-        if(!isWeb) Alert.alert("Error", "ZIP no encontrado."); 
+        if(!isWeb) Alert.alert("Error", t.lawyerstab?.zipnofound); 
     } finally { setLoading(false); }
   };
 
@@ -282,7 +282,7 @@ export default function LawyersScreen() {
                       >
                         <MaterialCommunityIcons name="filter-remove-outline" size={16} color={Colors.accent} />
                         <ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 13 }}>
-                          {`  ${t.lawyerstab?.viewallresults || 'Ver todos los resultados'}`}
+                          {`  ${t.lawyerstab?.viewallresults }`}
                         </ThemedText>
                       </TouchableOpacity>
                     )}
@@ -319,7 +319,7 @@ export default function LawyersScreen() {
                       <View style={webStyles.searchRowWeb}>
                         <TextInput 
                           style={[webStyles.customInputWeb, { color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1 }]} 
-                          placeholder="Introduce ZIP Code..." 
+                          placeholder={t.lawyerstab?.messagezip} 
                           value={zipCode} 
                           maxLength={5} 
                           onChangeText={setZipCode} 
