@@ -365,7 +365,7 @@ export default function LawyersScreen() {
 }
 
 const webStyles = StyleSheet.create({
-    sideMenuContainer: { width: 220, borderRightWidth: 1, paddingRight: 10 },
+    sideMenuContainer: { width: 200, borderRightWidth: 1, paddingRight: 10 },
     sideMenuTitle: { fontWeight: '800', fontSize: 11, marginBottom: 24, textTransform: 'uppercase', letterSpacing: 1.2, paddingLeft: 10 },
     sideMenuItem: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
     sideMenuItemText: { fontSize: 14 },
