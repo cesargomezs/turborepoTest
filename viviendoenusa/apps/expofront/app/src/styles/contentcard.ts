@@ -46,7 +46,7 @@ export const contentCardStyles = StyleSheet.create({
     compactSearchBtn: { width: 48, height: 48, borderRadius: 14, overflow: 'hidden' },
     gradientBtn: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     chipsScroll: { flexDirection: 'row', marginBottom: 5 },
-    chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, marginRight: 8, borderColor: 'rgba(0,0,0,0.1)' },
+    chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, marginRight: 8},
     chipText: { fontSize: 12, fontWeight: '600' },
     mapContainer: { height: 180, borderRadius: 15, overflow: 'hidden', marginVertical: 1, backgroundColor: 'rgba(0,0,0,0.03)' },
     map: { ...StyleSheet.absoluteFillObject },

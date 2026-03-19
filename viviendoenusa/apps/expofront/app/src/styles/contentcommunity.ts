@@ -43,10 +43,9 @@ export const getContentCardStyles = (isDark: boolean) => {
       borderRadius: 40,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.cardBg,
+      borderColor: 'rgba(255, 255, 255, 0.2)',
       ...Platform.select({
-        ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 15 }, shadowOpacity: isDark ? 0.5 : 0.1, shadowRadius: 20 },
+        ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 15 }, shadowOpacity: 0.3, shadowRadius: 20 },
         android: { elevation: 12 },
       }),
     } as ViewStyle,
@@ -84,7 +83,7 @@ export const getContentCardStyles = (isDark: boolean) => {
       backgroundColor: theme.chipInactive
     },
     chipText: { 
-      fontSize: 12, 
+      fontSize: 13, 
       fontWeight: '600',
       color: theme.text 
     },

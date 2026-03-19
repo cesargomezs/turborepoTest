@@ -68,7 +68,7 @@ export default function ServicesScreen() {
           <View style={[styles.cardWrapper, { 
             width: cardWidth, 
             height: cardHeight, 
-            backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255, 255, 255, 0.85)') : 'transparent',
+            backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)') : 'transparent',
             borderWidth: isAndroid ? 1 : 0,
             borderColor: Colors.border,
             elevation: 0
