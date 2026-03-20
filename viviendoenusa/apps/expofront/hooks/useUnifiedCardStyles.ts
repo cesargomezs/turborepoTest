@@ -73,6 +73,7 @@ export const useUnifiedCardStyles = () => {
     },
     compactSearchBtn: { width: 48, height: 48, borderRadius: 14, overflow: 'hidden' },
     gradientBtn: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    webCapsuleBtn: { fontSize: 14 ,paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
 
     // --- LISTA DE ABOGADOS (LAW CARDS) TRASLÚCIDAS ---
     lawyerCard: { 
@@ -104,7 +105,8 @@ export const useUnifiedCardStyles = () => {
         width: 240, 
         borderRightWidth: 1, 
         borderColor: glassColors.border, // Línea sutil como en la imagen
-        paddingRight: 20 
+        paddingRight: 20,
+        borderRightColor: 'rgba(128,128,128,0.2)'
     },
     // 2. Mayúsculas y espaciado de 'FILTRAR'
     sideMenuTitle: { 

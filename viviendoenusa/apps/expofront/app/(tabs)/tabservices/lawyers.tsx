@@ -1,12 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+
 import {
   TouchableOpacity, View, ScrollView, KeyboardAvoidingView, Platform,
   StyleSheet, useWindowDimensions, Keyboard,
-  TextInput, ActivityIndicator, Image, Linking, Alert, 
+  TextInput, ActivityIndicator, Image, Linking, Alert,
+  PlatformColor, 
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect } from 'expo-router'; 
+import { useRouter, useFocusEffect,useSegments } from 'expo-router'; 
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -14,8 +16,12 @@ import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
+
 // MANTENEMOS TUS ESTILOS ORIGINALES
 import { contentCardStyles as styles } from "../../src/styles/contentcard";
+
+import { getContentCardStyles } from 'app/src/styles/contentcommunity';
 
 import MapComponent from '@/components/Map';
 
@@ -61,10 +67,16 @@ export default function LawyersScreen() {
   const isAndroid = Platform.OS === 'android';
   const isLargeWeb = isWeb && width > 1000;
 
+  const styles = getContentCardStyles(isDark);
+  const segments = useSegments();
+  const isCommunityScreen = segments.includes('lawyers');
+
   const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) ? t.lawyerstab.practiceAreas : [];
   const allFilterText = PRACTICE_AREAS[0] || '';
 
-  // --- PALETA DE COLORES CENTRALIZADA (MANTENIDO IGUAL) ---
+  const localStyles = useUnifiedCardStyles(); 
+
+  // --- PALETA DE COLORES CENTRALIZADA ---
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#546E7A',
@@ -75,7 +87,7 @@ export default function LawyersScreen() {
     cardBgAndroid: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
   };
 
-  // --- ESTADOS (MANTENIDO IGUAL) ---
+  // --- ESTADOS ---
   const [zipCode, setZipCode] = useState('');
   const [selectedArea, setSelectedArea] = useState(allFilterText);
   const [loading, setLoading] = useState(false);
@@ -87,7 +99,7 @@ export default function LawyersScreen() {
 
   const isZipValid = zipCode.length === 5;
 
-  // --- EFECTOS (MANTENIDO IGUAL) ---
+  // --- EFECTOS ---
   useEffect(() => {
     if (zipCode.length < 5) {
       setResults([]);
@@ -97,7 +109,7 @@ export default function LawyersScreen() {
 
   useEffect(() => { if (allFilterText) setSelectedArea(allFilterText); }, [allFilterText]);
 
-  // --- FUNCIONES DE MAPA Y BÚSQUEDA (MANTENIDO IGUAL) ---
+  // --- FUNCIONES DE MAPA Y BÚSQUEDA ---
   const handleZoom = (type: 'in' | 'out') => {
     if (isWeb || !mapRef.current) return;
     mapRef.current.getCamera().then((camera: any) => {
@@ -165,23 +177,11 @@ export default function LawyersScreen() {
     if (url) Linking.openURL(url);
   };
 
-  // --- UNIFICACIÓN DE ESTILOS Y POSICIONAMIENTO DEL cardWrapper (CON EL ESTILO DE COMMUNITY) ---
+  // --- UNIFICACIÓN DE ESTILOS ---
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.72 : (loggedIn ? height * 0.69 : height * 0.65));
-  const marginTop = isAndroid ? -65 : (isLargeWeb ? -100 : 0);
+  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
 
-  const cardWrapperStyle = {
-    width: cardWidth,
-    height: cardHeight,
-    overflow: 'hidden' as const,
-    borderRadius: 28, // Mantener radius de community
-    backgroundColor: isAndroid ? Colors.cardBgAndroid : 'transparent',
-    borderWidth: isAndroid ? 1 : 0,
-    borderColor: Colors.border,
-    elevation: isAndroid ? 3 : 0,
-  };
-
-  // --- SUB-COMPONENTE LawyerCard (TU ORIGINAL MANTENIDO AL 100%) ---
   const LawyerCard = ({ lawyer }: { lawyer: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     return (
@@ -209,17 +209,20 @@ export default function LawyersScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={[styles.scrollContainer, { justifyContent: 'flex-start' }]} keyboardShouldPersistTaps="handled">
-        <View style={[styles.centerContainer, { marginTop }]}>
-          <View style={cardWrapperStyle}>
+        <View style={[styles.centerContainer, { marginTop: isAndroid ? -55 : (isLargeWeb ? -80 : 0) }]}>
+
+          <View style={[styles.cardWrapper, { 
+            width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28,
+            backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)') : 'transparent',
+            borderWidth: isAndroid ? 1 : 0, borderColor: borderColor, elevation: 0
+          }]}>
             
             {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
             <View style={styles.cardContent}>
-              
-              {/* HEADER (TU ORIGINAL) */}
-              <View style={styles.headerRow}>
+              <View style={localStyles.headerRow}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
                 <View style={{flexDirection: 'row', alignItems: 'center'}}>
                   <TouchableOpacity onPress={() => { setResults([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
@@ -230,9 +233,8 @@ export default function LawyersScreen() {
               </View>
 
               {!isLargeWeb ? (
-                /* DISEÑO MÓVIL/TABLET (TU ORIGINAL) */
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  <View style={styles.formContainer}>
+                  <View >
                     <View style={styles.searchRow}>
                       <TextInput style={[styles.customInput, { flex: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, fontWeight: '500' }]} placeholder={t.lawyerstab?.messagezip} keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} placeholderTextColor={isDark ? '#78909C' : '#90A4AE'} />
                       <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={[styles.compactSearchBtn]}>
@@ -272,11 +274,9 @@ export default function LawyersScreen() {
                   </View>
                 </ScrollView>
               ) : (
-                /* DISEÑO WEB (Sidebar lateral, listado y mapa a la derecha) */
-                <View style={{ flex: 1, flexDirection: 'row' }}>
-                  {/* SIDEBAR WEB (ESTILO CÁPSULA APLICADO) */}
-                  <View style={{ width: 220, borderRightWidth: 0.5, borderRightColor: Colors.border, paddingRight: 15 }}>
-                    <ThemedText style={[{ fontWeight: '800', fontSize: 11, marginBottom: 20, textTransform: 'uppercase',letterSpacing: 1.2 }, { color: isDark ? '#fffafa' : '#000' }]}>Especialidades</ThemedText>
+                <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
+                  <View style={localStyles.webSidebar}>
+                    <ThemedText style={[localStyles.sideMenuTitle , { color: isDark ? '#fffafa' : '#000' }]}>Especialidades</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {PRACTICE_AREAS.map((area) => {
                         const iconData = AREA_ICONS[area] || AREA_ICONS['Default'];
@@ -286,7 +286,7 @@ export default function LawyersScreen() {
                             key={area} 
                             onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(area); }} 
                             style={[
-                                localWebStyles.capsuleMenuItem, 
+                              localStyles.webCapsuleBtn, 
                                 isActive ? { backgroundColor: '#FF5F6D' } : { backgroundColor: isDark ? 'rgba(128,128,128,0.2)' : 'rgba(0, 0, 0, 0.1)',borderWidth: 1, borderColor: Colors.border },
                             ]}
                           >
@@ -310,8 +310,30 @@ export default function LawyersScreen() {
                         {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
                       </ScrollView>
                     </View>
-                    <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border }}>
+                    
+                    {/* SECCIÓN DE MAPA WEB CON BOTÓN DE UBICACIÓN AGREGADO */}
+                    <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, position: 'relative' }}>
                       <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
+                      
+                      {/* ÚNICO CAMBIO: BOTÓN DE UBICACIÓN FLOTANTE PARA WEB */}
+                      <TouchableOpacity 
+                        onPress={getCurrentLocation}
+                        style={{
+                          position: 'absolute',
+                          bottom: 20,
+                          right: 20,
+                          backgroundColor: isDark ? '#333' : '#FFF',
+                          padding: 10,
+                          borderRadius: 30,
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 3.84,
+                          elevation: 5,
+                        }}
+                      >
+                        <MaterialCommunityIcons name="crosshairs-gps" size={24} color={Colors.accent} />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -320,18 +342,6 @@ export default function LawyersScreen() {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
-
-// --- ESTILOS ADICIONALES PARA LA UNIFICACIÓN VISUAL ---
-const localWebStyles = StyleSheet.create({
-    capsuleMenuItem: { 
-        paddingVertical: 8, 
-        paddingHorizontal: 12, 
-        borderRadius: 12, 
-        marginBottom: 10, 
-        flexDirection: 'row', 
-        alignItems: 'center',
-    }
-});
