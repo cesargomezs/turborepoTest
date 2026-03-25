@@ -1,155 +1,173 @@
-import { StyleSheet, Platform, useColorScheme, ViewStyle } from 'react-native';
+import { StyleSheet, Platform, useColorScheme } from 'react-native';
 
 export const useUnifiedCardStyles = () => {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'light';
+  const isDark = colorScheme === 'dark';
 
-  // --- PALETA DE COLORES ESTILO 'COMUNIDAD' ---
+  // --- PALETA DE COLORES DINÁMICA (Glassmorphism) ---
   const glassColors = {
-    // Fondo negro con opacidad como en la imagen
-    cardBg: isDark ? 'rgba(18, 18, 18, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-    // Inputs oscuros con opacidad suave
-    inputBg: isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(255, 255, 255, 0.9)',
-    // Ítems inactivos estilo cápsula de la imagen
-    itemBg: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
-    // Bordes sutiles (el "ojo" de tu prompt)
-    border: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-    
+    cardBg: isDark ? 'rgba(30, 30, 30, 0.94)' : 'rgba(255, 255, 255, 0.94)',
+    inputBg: isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(245, 245, 245, 0.8)',
+    itemBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+    border: isDark ? 'rgba(128, 128, 128, 0.3)' : 'rgba(128, 128, 128, 0.15)',
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#A0A0A0' : '#666',
-    // Rosa Community
-    accent: '#FF5F6D' 
+    accent: '#FF5F6D',
+    accentLight: 'rgba(255, 95, 109, 0.15)',
+    reactionBg: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)'
   };
 
   return StyleSheet.create({
+    // --- 1. LAYOUT Y ESTRUCTURA BASE ---
     container: { flex: 1 },
-    scrollContainer: { 
-      flexGrow: 1, 
-      paddingVertical: 20, 
-      // Ajuste para superponer header en web
-      marginTop: Platform.OS === 'web' ? -100 : (Platform.OS === 'ios' ? -19 : 20) 
-    },
     centerContainer: { 
       width: '100%', 
       alignItems: 'center', 
       justifyContent: 'center', 
       flex: 1 
     },
-
-    // --- EL CONTENEDOR 'GLASS' PRINCIPAL ---
-    cardWrapper: {
-      borderRadius: 40,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: glassColors.border,
-      // Transparente en iOS para el BlurView, sólido con opacidad en Android
-      backgroundColor: Platform.OS === 'android' ? glassColors.cardBg : 'transparent',
-      ...Platform.select({
-        ios: { 
-          shadowColor: "#000", 
-          shadowOffset: { width: 0, height: 15 }, 
-          shadowOpacity: 0.25, 
-          shadowRadius: 20 
-        },
-        android: { elevation: 12 },
-      }),
-    } as ViewStyle,
-
-    cardContent: { flex: 1, padding: 30, zIndex: 10 },
-
-    // --- FORMULARIO Y BUSCADOR WEB ---
-    formContainer: { marginBottom: 15 },
-    searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 },
-    customInput: { 
-      flex: 1, 
-      height: 48, 
-      borderRadius: 14, 
-      paddingHorizontal: 16, 
-      borderWidth: 1,
-      borderColor: glassColors.border,
-      backgroundColor: glassColors.inputBg,
-      color: glassColors.text,
-      fontSize: 14
-    },
-    compactSearchBtn: { width: 48, height: 48, borderRadius: 14, overflow: 'hidden' },
-    gradientBtn: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    webCapsuleBtn: { fontSize: 14 ,paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
-
-    // --- LISTA DE ABOGADOS (LAW CARDS) TRASLÚCIDAS ---
-    lawyerCard: { 
+    headerRow: { 
       flexDirection: 'row', 
-      padding: 15, 
-      borderRadius: 22, 
+      justifyContent: 'space-between', 
       alignItems: 'center', 
-      marginBottom: 12,
-      backgroundColor: glassColors.itemBg, // Fondo sutil
+      marginBottom: 5,
+      width: '100%'
+    },
+    cardContent: { 
+      flex: 1, 
+      padding: Platform.OS === 'web' ? 35 : 25, 
+      zIndex: 10 
+    },
+
+    // --- 2. SECCIÓN: SERVICIOS (GRID Y BIENVENIDA) ---
+    welcomeText: { fontSize: 30, fontWeight: '900', letterSpacing: -1, color: glassColors.text },
+    middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8, color: glassColors.text },
+    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10 },
+    webGridCentering: { justifyContent: 'center', gap: 20 },
+    mobileCard: { width: '47%', height: 110, marginBottom: 16 },
+    webCard: { width: '31%', height: 105, marginBottom: 20, minWidth: 260 },
+    shadowWrapper: {
+      borderRadius: 24,
+      ...Platform.select({ 
+          ios: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }, 
+          android: { elevation: 3 },
+          web: { cursor: 'pointer' } as any
+      })
+    },
+    gradientButton: { flex: 1, borderRadius: 24, padding: 12, justifyContent: 'center' },
+    mobileLayout: { alignItems: 'center', justifyContent: 'center' },
+    webLayout: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 },
+    textContainerMobile: { alignItems: 'center', marginTop: 8 },
+    textContainerWeb: { marginLeft: 15, flex: 1, justifyContent: 'center' },
+    buttonText: { fontSize: 13, color: 'white', fontWeight: '800' },
+    descriptionText: { color: 'white', fontSize: 11, opacity: 0.85, marginTop: 2, fontWeight: '400' },
+    iconContainerWeb: { backgroundColor: 'rgba(255, 255, 255, 0.2)', padding: 8, borderRadius: 12 },
+
+    // --- 3. SECCIÓN: COMUNIDAD (POSTS Y TARJETAS) ---
+    postCard: { 
+      backgroundColor: glassColors.itemBg, 
+      borderRadius: 22, 
+      padding: 18, 
+      marginBottom: 15, 
       borderWidth: 1,
       borderColor: glassColors.border
     },
-    avatar: { width: 44, height: 44, borderRadius: 22 },
-    ratingDistRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
-    smallText: { fontSize: 12, fontWeight: '600', color: glassColors.text },
-    actionGroup: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-    actionBtn: { 
-        width: 38, 
-        height: 38, 
-        borderRadius: 19, 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        borderWidth: 1
-    },
+    postHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+    tagText: { fontSize: 9, color: glassColors.accent, fontWeight: 'bold', textTransform: 'uppercase' },
+    timeText: { fontSize: 9, color: glassColors.subtext, opacity: 0.6 },
+    bodyText: { fontSize: 14, marginBottom: 12, lineHeight: 20, color: glassColors.text },
+    postImage: { width: '100%', height: 180, borderRadius: 18, marginBottom: 12, resizeMode: 'cover' },
+    postFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
 
-    // --- VISTA WEB ESTILO 'COMUNIDAD' (LA IMAGEN) ---
-    // 1. Línea vertical divisoria
-    webSidebar: { 
-        width: 240, 
-        borderRightWidth: 1, 
-        borderColor: glassColors.border, // Línea sutil como en la imagen
-        paddingRight: 20,
-        borderRightColor: 'rgba(128,128,128,0.2)'
+    // --- 4. COMENTARIOS Y REACCIONES ---
+    commentSection: { 
+      marginTop: 10, 
+      borderTopWidth: 0.5, 
+      borderColor: glassColors.border, 
+      paddingTop: 10, 
+      backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', 
+      borderRadius: 10, 
+      padding: 10 
     },
-    // 2. Mayúsculas y espaciado de 'FILTRAR'
-    sideMenuTitle: { 
-      fontSize: 11, 
-      fontWeight: '800', 
-      marginBottom: 25, 
-      letterSpacing: 1.5, // Más espaciado
-      textTransform: 'uppercase', // 'FILTRAR'
-      color: isDark ? 'rgba(255,255,255,0.5)' : '#666'
-    },
-    // 3. Botones estilo cápsula de la imagen
-    sideMenuItem: { 
-      paddingVertical: 14, // Más altos
-      paddingHorizontal: 18, 
-      borderRadius: 20, // Más redondeados (cápsula)
-      marginBottom: 10, 
+    commentBubble: { marginBottom: 6 },
+    commentUser: { fontSize: 11, fontWeight: 'bold', color: glassColors.accent },
+    commentText: { fontWeight: 'normal', fontSize: 11, color: glassColors.text },
+    noCommentsText: { fontSize: 10, color: glassColors.subtext, fontStyle: 'italic', textAlign: 'center', marginVertical: 8 },
+    replyBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    replyBtnText: { color: glassColors.accent, fontSize: 10, marginLeft: 5, fontWeight: 'bold' },
+    reaccionGroup: { flexDirection: 'row', gap: 8 },
+    reaccionBtn: { 
       flexDirection: 'row', 
       alignItems: 'center', 
-      borderWidth: 1,
-      borderColor: 'transparent' // Transparent cuando activo (usamos background rosa)
+      paddingHorizontal: 10, 
+      paddingVertical: 5, 
+      borderRadius: 18,
+      backgroundColor: glassColors.reactionBg
     },
-    sideMenuItemText: { fontSize: 14, letterSpacing: 0.3 },
+    reaccionCount: { fontSize: 11, marginLeft: 5, fontWeight: '700', color: glassColors.text },
 
-    // --- OTROS COMPONENTES ---
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    headerIcons: { flexDirection: 'row', alignItems: 'center' },
-    mapContainer: { height: 180, borderRadius: 20, overflow: 'hidden', marginVertical: 10, borderWidth: 1, borderColor: glassColors.border },
-    mapWrapperWeb: { flex: 1, borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: glassColors.border },
-    locationBtn: { 
-      position: 'absolute', bottom: 20, right: 20, padding: 10, borderRadius: 12, 
-      backgroundColor: isDark ? '#222' : '#FFF', elevation: 5, borderWidth: 1, borderColor: glassColors.border
+    // --- 5. FILTROS Y CHIPS (Solución al error ts2339) ---
+    headerSubChip: { 
+      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, 
+      borderRadius: 20, borderWidth: 1, borderColor: glassColors.border, marginRight: 8 
     },
-    // Chips para móvil
-    chipsScroll: { flexDirection: 'row', marginBottom: 15 },
-    chip: { 
-      paddingHorizontal: 16, 
-      paddingVertical: 8, 
-      borderRadius: 12, 
-      borderWidth: 1, 
-      marginRight: 8,
-      borderColor: glassColors.border,
-      backgroundColor: glassColors.itemBg
+    filterChipBase: { 
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', 
+      paddingHorizontal: 14, height: 32, borderRadius: 16, borderWidth: 1, borderColor: glassColors.border
     },
-    resultsWrapper: { marginTop: 10 }
+    filterChipText: { fontSize: 11, fontWeight: '600', color: glassColors.text },
+    subFilterChip: { 
+      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 32, 
+      borderRadius: 12, borderWidth: 1, borderColor: glassColors.border, marginRight: 8 
+    },
+    subChipText: { fontSize: 11, fontWeight: 'bold', marginLeft: 6, color: glassColors.text },
+    tagChip: { 
+      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 32, 
+      borderRadius: 15, marginRight: 8, backgroundColor: glassColors.itemBg, 
+      borderWidth: 1, borderColor: glassColors.border, justifyContent: 'center' 
+    },
+    subChip: { 
+      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 28, 
+      borderRadius: 14, marginRight: 8, borderWidth: 1, borderColor: 'transparent', 
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' 
+    },
+
+    // --- 6. WEB SIDEBAR ---
+    webSidebar: { width: 240, borderRightWidth: 1, borderColor: glassColors.border, paddingRight: 20 },
+    sideMenuTitle: { 
+      fontSize: 11, fontWeight: '800', marginBottom: 20, letterSpacing: 1.2, 
+      textTransform: 'uppercase', color: glassColors.text
+    },
+    webCapsuleBtn: { 
+      paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, marginBottom: 10, 
+      flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'transparent'
+    },
+    webCapsuleText: { fontSize: 14, fontWeight: '700', color: glassColors.text },
+
+    // --- 7. MODALES Y FORMULARIOS (Solución al error ts2339) ---
+    modalBlur: { borderTopLeftRadius: 35, borderTopRightRadius: 35, overflow: 'hidden' },
+    modalContent: { padding: 25 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', color: glassColors.text },
+    label: { fontSize: 10, fontWeight: 'bold', marginBottom: 8, opacity: 0.6, color: glassColors.text },
+    postInput: { 
+      minHeight: 120, fontSize: 16, textAlignVertical: 'top', 
+      marginVertical: 15, color: glassColors.text 
+    },
+    publishBtn: { paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25 },
+    previewContainer: { width: 80, height: 80, borderRadius: 12, marginBottom: 15, position: 'relative' },
+    previewImg: { width: '100%', height: '100%', borderRadius: 12 },
+    removeImg: { position: 'absolute', top: -5, right: -5, backgroundColor: isDark ? '#333' : '#fff', borderRadius: 10 },
+    actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+
+    // --- 8. ELEMENTOS FLOTANTES Y VISOR ---
+    fab: { 
+      position: 'absolute', bottom: 65, right: 30, width: 64, height: 64, 
+      borderRadius: 32, elevation: 8, zIndex: 10 
+    },
+    closeViewerBtn: { 
+      position: 'absolute', top: 50, right: 20, zIndex: 10, 
+      backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 
+    }
   });
 };

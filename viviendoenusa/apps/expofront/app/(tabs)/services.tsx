@@ -12,7 +12,9 @@ import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
-import { contentCardStyles as styles } from "../src/styles/contentcard";
+import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
+
+import { getContentCardStyles } from 'app/src/styles/contentcommunity';
 
 interface ButtonConfig {
   id: number;
@@ -41,45 +43,70 @@ export default function ServicesScreen() {
 
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
+  const isIOS = Platform.OS === 'ios';
   const isLargeWeb = isWeb && width > 1000;
 
+  const localStyles = useUnifiedCardStyles();
+  const baseStyles = getContentCardStyles(isDark);
+
+  // --- AJUSTE DE COLORES PARA MÁXIMA CONSISTENCIA ---
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
-    border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+    // Borde con más presencia (igual que en Comunidad)
+    border: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.12)',
   };
 
-  // --- DIMENSIONES CLONADAS DE LAWYERS ---
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
-  const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.72 : (loggedIn ? height * 0.69 : height * 0.65));
+  const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
+  const verticalOffset = isWeb ? -120 : (isIOS ? -85 : -100);
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <ScrollView 
-        contentContainerStyle={styles.scrollContainer} 
+        contentContainerStyle={{ 
+            flexGrow: 1, 
+            justifyContent: isWeb ? 'flex-start' : 'center', 
+            paddingTop: isWeb ? 40 : 0 
+        }} 
         keyboardShouldPersistTaps="handled"
       >
-        <View style={[
-          styles.centerContainer, 
-          { 
-            // UBICACIÓN EXACTA: Espejo de Lawyers
-            marginTop: isAndroid ? -65 : (isLargeWeb ? -100 : 0) 
-          }
-        ]}>
-          <View style={[styles.cardWrapper, { 
+        <View style={[baseStyles.centerContainer, { marginTop: verticalOffset }]}>
+          
+          {/* --- FIX: CONTENEDOR DE BORDE MAESTRO --- */}
+          <View style={{
             width: cardWidth, 
             height: cardHeight, 
-            backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)') : 'transparent',
-            borderWidth: isAndroid ? 1 : 0,
+            borderRadius: 28,
+            borderWidth: 1.5, // Borde forzado para que se vea igual que en la imagen 1
             borderColor: Colors.border,
-            elevation: 0
-           }]}>
-            {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            borderStyle: 'solid',
+            overflow: 'hidden',
+            backgroundColor: isAndroid 
+              ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)') 
+              : (isWeb ? (isDark ? '#141414' : '#FFFFFF') : 'transparent'),
             
-            <View style={styles.cardContent}>
+            // Sombras profundas
+            elevation: 10,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: isDark ? 0.4 : 0.1,
+            shadowRadius: 20,
+          }}>
+            
+            {/* BLUR PARA EFECTO CRISTAL EN IOS/WEB */}
+            {!isAndroid && (
+              <BlurView 
+                intensity={isDark ? 90 : 70} 
+                tint={isDark ? 'dark' : 'light'} 
+                style={StyleSheet.absoluteFill} 
+              />
+            )}
+            
+            <View style={baseStyles.cardContent}>
               {/* HEADER ROW */}
-              <View style={styles.headerRow}>
+              <View style={localStyles.headerRow}>
                 <View style={{ flex: 1 }}>
-                    <ThemedText style={webStyles.welcomeText}>
+                    <ThemedText style={localStyles.welcomeText}>
                       {loggedIn ? t.servicestab?.welcome_user : t.servicestab?.welcome_guest}
                     </ThemedText>
                 </View>
@@ -88,39 +115,38 @@ export default function ServicesScreen() {
 
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 
-                {/* ESPACIADOR DE UBICACIÓN: 
-                    Este bloque de 60px simula el buscador de Lawyers para que 
-                    la cuadrícula empiece exactamente a la misma altura. */}
+                {/* ESPACIADOR DE ALINEACIÓN */}
                 <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
-                    <ThemedText style={[webStyles.middleText, { color: isDark ? '#BBB' : '#666' }]}>
-                        ¿En qué podemos ayudarte hoy?
+                    <ThemedText style={localStyles.middleText}>
+                        {t.servicestab?.help_question}
                     </ThemedText>
                 </View>
 
-                <View style={[webStyles.gridContainer, isLargeWeb && webStyles.webGridCentering]}>
+                {/* GRID DE BOTONES */}
+                <View style={[localStyles.gridContainer, isLargeWeb && localStyles.webGridCentering]}>
                   {BUTTONS_DATA.map((item) => (
                     <TouchableOpacity 
                       key={item.id} 
                       activeOpacity={0.8} 
                       onPress={() => router.push(item.path as any)}
-                      style={[webStyles.shadowWrapper, isLargeWeb ? webStyles.webCard : webStyles.mobileCard]}
+                      style={[localStyles.shadowWrapper, isLargeWeb ? localStyles.webCard : localStyles.mobileCard]}
                     >
                       <LinearGradient
                         colors={item.colors as any} 
                         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                        style={webStyles.gradientButton}
+                        style={localStyles.gradientButton}
                       >
-                        <View style={isLargeWeb ? webStyles.webLayout : webStyles.mobileLayout}>
-                          <View style={isLargeWeb ? webStyles.iconContainerWeb : null}>
+                        <View style={isLargeWeb ? localStyles.webLayout : localStyles.mobileLayout}>
+                          <View style={isLargeWeb ? localStyles.iconContainerWeb : null}>
                             <MaterialCommunityIcons name={item.icon} size={isLargeWeb ? 26 : 34} color="white" />
                           </View>
                           
-                          <View style={isLargeWeb ? webStyles.textContainerWeb : webStyles.textContainerMobile}>
-                            <ThemedText numberOfLines={1} style={webStyles.buttonText}>
+                          <View style={isLargeWeb ? localStyles.textContainerWeb : localStyles.textContainerMobile}>
+                            <ThemedText numberOfLines={1} style={localStyles.buttonText}>
                               {t.servicestab[`service${item.id}` as keyof typeof t.servicestab]}
                             </ThemedText>
                             {isLargeWeb && (
-                              <ThemedText numberOfLines={2} style={webStyles.descriptionText}>
+                              <ThemedText numberOfLines={2} style={localStyles.descriptionText}>
                                 {item.description}
                               </ThemedText>
                             )}
@@ -138,41 +164,3 @@ export default function ServicesScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const webStyles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1, paddingVertical: 20 },
-  cardWrapper: { borderRadius: 28, overflow: 'hidden' },
-  cardContent: { flex: 1, padding: 32 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
-  welcomeText: { fontSize: 30, fontWeight: '900', letterSpacing: -1 },
-  
-  middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8 },
-
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10 },
-  
-  // ALTURAS FIJAS PARA EVITAR DESPLAZAMIENTOS
-  mobileCard: { width: '47%', height: 110, marginBottom: 16 },
-  webCard: { width: '31%', height: 105, marginBottom: 20, minWidth: 260 },
-  
-  shadowWrapper: {
-    borderRadius: 24,
-    ...Platform.select({ 
-        ios: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }, 
-        android: { elevation: 3 },
-        web: { cursor: 'pointer' } as any
-    })
-  },
-  gradientButton: { flex: 1, borderRadius: 24, padding: 12, justifyContent: 'center' },
-  
-  mobileLayout: { alignItems: 'center', justifyContent: 'center' },
-  webLayout: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 },
-  
-  textContainerMobile: { alignItems: 'center', marginTop: 8 },
-  textContainerWeb: { marginLeft: 15, flex: 1, justifyContent: 'center' },
-  
-  buttonText: { fontSize: 13, color: 'white', fontWeight: '800' },
-  descriptionText: { color: 'white', fontSize: 11, opacity: 0.85, marginTop: 2, fontWeight: '400' },
-  
-  webGridCentering: { justifyContent: 'center', gap: 20 },
-  iconContainerWeb: { backgroundColor: 'rgba(255, 255, 255, 0.2)', padding: 8, borderRadius: 12 },
-});

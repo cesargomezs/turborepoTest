@@ -31,7 +31,8 @@ export const translations = {
       service5: "Tiendas",
       icon5: "shopping-search",
       service6: "Emprendimientos",
-      icon6: "lightbulb-multiple-outline"
+      icon6: "lightbulb-multiple-outline",
+      help_question: "¿En qué podemos ayudarte hoy?"
     },
     lawyerstab: {
       label: "Especialidades",
@@ -58,7 +59,9 @@ export const translations = {
       imageInappropriateDescription: "Nuestra IA detectó contenido sensible. Por favor elige otra imagen.",
       publishedPostLabel: "¡Éxito!",
       publishedPostDescription: "Tu post ha sido publicado.",
-      errorServer: "No se pudo conectar con el servidor de moderación."
+      errorServer: "No se pudo conectar con el servidor de moderación.",
+      category: "Categoría",
+      subCategories: ['General','Comida','Trabajo','Trámites','Salud','Nuevos'],
 
     }
     
@@ -94,7 +97,8 @@ export const translations = {
       service5: "Stores",
       icon5: "shopping-search",
       service6: "Entrepreneurs",
-      icon6: "lightbulb-multiple-outline"
+      icon6: "lightbulb-multiple-outline",
+      help_question: "How can we help you today?"
     },
     lawyerstab: {
       label: "Specialties",
@@ -120,7 +124,9 @@ export const translations = {
       imageInappropriateDescription: "Our AI detected sensitive content. Please choose another image.",
       publishedPostLabel: "Success!",
       publishedPostDescription: "Your post has been published.",
-      errorServer: "Could not connect to the moderation server."
+      errorServer: "Could not connect to the moderation server.",
+      category: "Category",
+      subCategories: ['General','Food','Work','Procedures','Health','New'],
       
     }
   

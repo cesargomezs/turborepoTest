@@ -104,7 +104,9 @@ export const getContentCardStyles = (isDark: boolean) => {
       color: theme.subtext 
     },
     // Añadimos exportación por defecto para evitar el error de Expo Router
-    formContainer: { marginBottom: 4 },
+    
+    //formContainer: { marginBottom: 4 },
+    
     searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 },
     compactSearchBtn: { width: 48, height: 48, borderRadius: 14, overflow: 'hidden' },
     gradientBtn: { flex: 1, justifyContent: 'center', alignItems: 'center' },
