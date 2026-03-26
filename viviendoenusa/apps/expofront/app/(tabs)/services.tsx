@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  TouchableOpacity, View, ScrollView, KeyboardAvoidingView, Platform,
+  TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -13,8 +13,6 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
-
-import { getContentCardStyles } from 'app/src/styles/contentcommunity';
 
 interface ButtonConfig {
   id: number;
@@ -41,88 +39,73 @@ export default function ServicesScreen() {
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
+  const localStyles = useUnifiedCardStyles();
+
+  // --- LÓGICA DE DIMENSIONES Y COLORES (Sincronizada con LawyersScreen) ---
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
   const isLargeWeb = isWeb && width > 1000;
 
-  const localStyles = useUnifiedCardStyles();
-  const baseStyles = getContentCardStyles(isDark);
-
-  // --- AJUSTE DE COLORES PARA MÁXIMA CONSISTENCIA ---
-  const Colors = {
-    text: isDark ? '#FFFFFF' : '#1A1A1A',
-    // Borde con más presencia (igual que en Comunidad)
-    border: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.12)',
-  };
-
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
-  const verticalOffset = isWeb ? -120 : (isIOS ? -85 : -100);
+  const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
+  
+  // Definimos el color del texto igual que en LawyersScreen para evitar el error de TS
+  const textColor = isDark ? '#FFFFFF' : '#1A1A1A';
+  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <ScrollView 
-        contentContainerStyle={{ 
-            flexGrow: 1, 
-            justifyContent: isWeb ? 'flex-start' : 'center', 
-            paddingTop: isWeb ? 40 : 0 
-        }} 
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start' }} 
         keyboardShouldPersistTaps="handled"
       >
-        <View style={[baseStyles.centerContainer, { marginTop: verticalOffset }]}>
+        <View style={[localStyles.centerContainer, { marginTop: verticalOffset }]}>
           
-          {/* --- FIX: CONTENEDOR DE BORDE MAESTRO --- */}
           <View style={{
             width: cardWidth, 
             height: cardHeight, 
+            overflow: 'hidden', 
             borderRadius: 28,
-            borderWidth: 1.5, // Borde forzado para que se vea igual que en la imagen 1
-            borderColor: Colors.border,
-            borderStyle: 'solid',
-            overflow: 'hidden',
             backgroundColor: isAndroid 
               ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)') 
-              : (isWeb ? (isDark ? '#141414' : '#FFFFFF') : 'transparent'),
-            
-            // Sombras profundas
-            elevation: 10,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: isDark ? 0.4 : 0.1,
-            shadowRadius: 20,
+              : 'transparent',
+            borderWidth: isAndroid ? 1 : 0,
+            borderColor: borderColor,
           }}>
             
-            {/* BLUR PARA EFECTO CRISTAL EN IOS/WEB */}
             {!isAndroid && (
               <BlurView 
-                intensity={isDark ? 90 : 70} 
+                intensity={isDark ? 100 : 75} 
                 tint={isDark ? 'dark' : 'light'} 
                 style={StyleSheet.absoluteFill} 
               />
             )}
             
-            <View style={baseStyles.cardContent}>
-              {/* HEADER ROW */}
+            <View style={localStyles.cardContent}>
               <View style={localStyles.headerRow}>
                 <View style={{ flex: 1 }}>
                     <ThemedText style={localStyles.welcomeText}>
                       {loggedIn ? t.servicestab?.welcome_user : t.servicestab?.welcome_guest}
                     </ThemedText>
                 </View>
-                <MaterialCommunityIcons name="view-list" size={40} color={Colors.text} style={{ opacity: 0.15 }} />
+                {/* SOLUCIÓN: Usamos la constante textColor local */}
+                <MaterialCommunityIcons 
+                  name="view-list" 
+                  size={40} 
+                  color={textColor} 
+                  style={{ opacity: 0.15 }} 
+                />
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                
-                {/* ESPACIADOR DE ALINEACIÓN */}
                 <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
                     <ThemedText style={localStyles.middleText}>
                         {t.servicestab?.help_question}
                     </ThemedText>
                 </View>
 
-                {/* GRID DE BOTONES */}
                 <View style={[localStyles.gridContainer, isLargeWeb && localStyles.webGridCentering]}>
                   {BUTTONS_DATA.map((item) => (
                     <TouchableOpacity 
@@ -133,7 +116,8 @@ export default function ServicesScreen() {
                     >
                       <LinearGradient
                         colors={item.colors as any} 
-                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                        start={{ x: 0, y: 0 }} 
+                        end={{ x: 1, y: 1 }}
                         style={localStyles.gradientButton}
                       >
                         <View style={isLargeWeb ? localStyles.webLayout : localStyles.mobileLayout}>
@@ -161,6 +145,6 @@ export default function ServicesScreen() {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }

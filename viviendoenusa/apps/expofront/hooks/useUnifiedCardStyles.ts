@@ -1,10 +1,23 @@
-import { StyleSheet, Platform, useColorScheme } from 'react-native';
+import { StyleSheet, Platform, useColorScheme, useWindowDimensions } from 'react-native';
+import { useMockSelector } from '@/redux/slices';
 
 export const useUnifiedCardStyles = () => {
+  const { width, height } = useWindowDimensions();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
-  // --- PALETA DE COLORES DINÁMICA (Glassmorphism) ---
+  // --- LÓGICA DE DIMENSIONES Y PLATAFORMA ---
+  const isWeb = Platform.OS === 'web';
+  const isAndroid = Platform.OS === 'android';
+  const isIOS = Platform.OS === 'ios';
+  const isLargeWeb = isWeb && width > 1000;
+
+  const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
+  const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
+  const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
+
+  // --- PALETA DE COLORES DINÁMICA ---
   const glassColors = {
     cardBg: isDark ? 'rgba(30, 30, 30, 0.94)' : 'rgba(255, 255, 255, 0.94)',
     inputBg: isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(245, 245, 245, 0.8)',
@@ -17,14 +30,28 @@ export const useUnifiedCardStyles = () => {
     reactionBg: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)'
   };
 
-  return StyleSheet.create({
-    // --- 1. LAYOUT Y ESTRUCTURA BASE ---
+  const styles = StyleSheet.create({
     container: { flex: 1 },
     centerContainer: { 
       width: '100%', 
       alignItems: 'center', 
       justifyContent: 'center', 
-      flex: 1 
+      flex: 1,
+      marginTop: verticalOffset 
+    },
+    unifiedCardWrapper: {
+      width: cardWidth,
+      height: cardHeight,
+      borderRadius: 28,
+      borderWidth: 1.5,
+      borderColor: glassColors.border,
+      overflow: 'hidden',
+      backgroundColor: isAndroid ? glassColors.cardBg : (isWeb ? (isDark ? '#141414' : '#FFFFFF') : 'transparent'),
+      elevation: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: isDark ? 0.4 : 0.1,
+      shadowRadius: 20,
     },
     headerRow: { 
       flexDirection: 'row', 
@@ -35,11 +62,10 @@ export const useUnifiedCardStyles = () => {
     },
     cardContent: { 
       flex: 1, 
-      padding: Platform.OS === 'web' ? 35 : 25, 
+      padding: isWeb ? 35 : 25, 
       zIndex: 10 
     },
-
-    // --- 2. SECCIÓN: SERVICIOS (GRID Y BIENVENIDA) ---
+    // --- SERVICIOS ---
     welcomeText: { fontSize: 30, fontWeight: '900', letterSpacing: -1, color: glassColors.text },
     middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8, color: glassColors.text },
     gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10 },
@@ -63,7 +89,7 @@ export const useUnifiedCardStyles = () => {
     descriptionText: { color: 'white', fontSize: 11, opacity: 0.85, marginTop: 2, fontWeight: '400' },
     iconContainerWeb: { backgroundColor: 'rgba(255, 255, 255, 0.2)', padding: 8, borderRadius: 12 },
 
-    // --- 3. SECCIÓN: COMUNIDAD (POSTS Y TARJETAS) ---
+    // --- COMUNIDAD ---
     postCard: { 
       backgroundColor: glassColors.itemBg, 
       borderRadius: 22, 
@@ -78,16 +104,10 @@ export const useUnifiedCardStyles = () => {
     bodyText: { fontSize: 14, marginBottom: 12, lineHeight: 20, color: glassColors.text },
     postImage: { width: '100%', height: 180, borderRadius: 18, marginBottom: 12, resizeMode: 'cover' },
     postFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-
-    // --- 4. COMENTARIOS Y REACCIONES ---
     commentSection: { 
-      marginTop: 10, 
-      borderTopWidth: 0.5, 
-      borderColor: glassColors.border, 
-      paddingTop: 10, 
-      backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', 
-      borderRadius: 10, 
-      padding: 10 
+      marginTop: 10, borderTopWidth: 0.5, borderColor: glassColors.border, 
+      paddingTop: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', 
+      borderRadius: 10, padding: 10 
     },
     commentBubble: { marginBottom: 6 },
     commentUser: { fontSize: 11, fontWeight: 'bold', color: glassColors.accent },
@@ -97,16 +117,12 @@ export const useUnifiedCardStyles = () => {
     replyBtnText: { color: glassColors.accent, fontSize: 10, marginLeft: 5, fontWeight: 'bold' },
     reaccionGroup: { flexDirection: 'row', gap: 8 },
     reaccionBtn: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      paddingHorizontal: 10, 
-      paddingVertical: 5, 
-      borderRadius: 18,
-      backgroundColor: glassColors.reactionBg
+      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, 
+      paddingVertical: 5, borderRadius: 18, backgroundColor: glassColors.reactionBg
     },
     reaccionCount: { fontSize: 11, marginLeft: 5, fontWeight: '700', color: glassColors.text },
 
-    // --- 5. FILTROS Y CHIPS (Solución al error ts2339) ---
+    // --- FILTROS Y CHIPS ---
     headerSubChip: { 
       flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, 
       borderRadius: 20, borderWidth: 1, borderColor: glassColors.border, marginRight: 8 
@@ -132,7 +148,7 @@ export const useUnifiedCardStyles = () => {
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' 
     },
 
-    // --- 6. WEB SIDEBAR ---
+    // --- WEB SIDEBAR ---
     webSidebar: { width: 240, borderRightWidth: 1, borderColor: glassColors.border, paddingRight: 20 },
     sideMenuTitle: { 
       fontSize: 11, fontWeight: '800', marginBottom: 20, letterSpacing: 1.2, 
@@ -144,30 +160,28 @@ export const useUnifiedCardStyles = () => {
     },
     webCapsuleText: { fontSize: 14, fontWeight: '700', color: glassColors.text },
 
-    // --- 7. MODALES Y FORMULARIOS (Solución al error ts2339) ---
+    // --- MODALES ---
     modalBlur: { borderTopLeftRadius: 35, borderTopRightRadius: 35, overflow: 'hidden' },
     modalContent: { padding: 25 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', color: glassColors.text },
     label: { fontSize: 10, fontWeight: 'bold', marginBottom: 8, opacity: 0.6, color: glassColors.text },
-    postInput: { 
-      minHeight: 120, fontSize: 16, textAlignVertical: 'top', 
-      marginVertical: 15, color: glassColors.text 
-    },
+    postInput: { minHeight: 120, fontSize: 16, textAlignVertical: 'top', marginVertical: 15, color: glassColors.text },
     publishBtn: { paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25 },
     previewContainer: { width: 80, height: 80, borderRadius: 12, marginBottom: 15, position: 'relative' },
     previewImg: { width: '100%', height: '100%', borderRadius: 12 },
     removeImg: { position: 'absolute', top: -5, right: -5, backgroundColor: isDark ? '#333' : '#fff', borderRadius: 10 },
     actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-
-    // --- 8. ELEMENTOS FLOTANTES Y VISOR ---
-    fab: { 
-      position: 'absolute', bottom: 65, right: 30, width: 64, height: 64, 
-      borderRadius: 32, elevation: 8, zIndex: 10 
-    },
-    closeViewerBtn: { 
-      position: 'absolute', top: 50, right: 20, zIndex: 10, 
-      backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 
-    }
+    fab: { position: 'absolute', bottom: 65, right: 30, width: 64, height: 64, borderRadius: 32, elevation: 8, zIndex: 10 },
+    closeViewerBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 }
   });
+
+  return {
+    ...styles,
+    isLargeWeb,
+    isDark,
+    borderColor: glassColors.border,
+    cardWidth,
+    cardHeight
+  };
 };

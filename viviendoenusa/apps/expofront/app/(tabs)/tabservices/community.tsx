@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ColorValue, ActivityIndicator, Platform,
-  Modal as RNModal, // Usaremos este para todo
+  Modal as RNModal,
   KeyboardAvoidingView
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,7 +16,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 
 import * as ImagePicker from 'expo-image-picker';
-// ELIMINADO: import Modal from 'react-native-modal'; 
+import Modal from 'react-native-modal'; 
 import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
@@ -163,89 +163,84 @@ export default function CommunityScreen() {
     return res.sort((a, b) => isRecentFirst ? b.id - a.id : a.id - b.id);
   }, [posts, activeFilter, activeSubFilter, isRecentFirst]);
 
-  // --- UI COMPONENTS ---
   const renderModalContent = () => (
-    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
-      <KeyboardAvoidingView 
-        behavior={isIOS ? "padding" : "height"} 
-        style={{ width: '100%' }}
-      >
-        <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={styles.modalBlur}>
-          <View style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 40 }]}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setModalVisible(false)}><ThemedText style={{ color: '#FF5F6D' }}>Cerrar</ThemedText></TouchableOpacity>
-              <ThemedText style={styles.modalTitle}>Nueva Publicación</ThemedText>
-              <View style={{ width: 45 }} />
-            </View>
-
-            <ThemedText style={styles.label}>TIPO DE POST</ThemedText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
-              {t.communitytab.typepostAdd.map((tag: string) => {
-                const isActive = selectedTag === tag;
-                return (
-                  <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={[styles.tagChip, isActive && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
-                    <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color={isActive ? '#fff' : (isDark ? '#fff' : '#666')} style={{marginRight: 6}} />
-                    <ThemedText style={{ color: isActive ? '#fff' : (isDark ? '#fff' : '#333'), fontSize: 11, fontWeight: '600' }}>{tag}</ThemedText>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <ThemedText style={styles.label}>{t.communitytab.category}</ThemedText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>
-              {subCategories.map(sub => (
-                <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={[styles.subChip, selectedSubCategory === sub.id && { borderColor: '#FF5F6D' }]}>
-                  <MaterialCommunityIcons name={sub.icon as any} size={14} color={selectedSubCategory === sub.id ? '#FF5F6D' : '#999'} />
-                  <ThemedText style={{ marginLeft: 5, fontSize: 11, color: selectedSubCategory === sub.id ? '#FF5F6D' : '#999' }}>{sub.id}</ThemedText>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <TextInput 
-              value={postText} onChangeText={setPostText} 
-              placeholder="¿Qué estás pensando?" placeholderTextColor="#999" 
-              multiline style={styles.postInput} 
-            />
-
-            {selectedImage && (
-              <View style={styles.previewContainer}>
-                <Image source={{ uri: selectedImage }} style={styles.previewImg} />
-                <TouchableOpacity style={styles.removeImg} onPress={() => setSelectedImage(null)}><MaterialCommunityIcons name="close-circle" size={20} color="#FF5F6D" /></TouchableOpacity>
-              </View>
-            )}
-
-            <View style={styles.actions}>
-              <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }} disabled={isPublishing}>
-                <MaterialCommunityIcons name="image-plus" size={32} color="#FF5F6D" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing}>
-                <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={styles.publishBtn}>
-                  {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Publicar</ThemedText>}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+    <KeyboardAvoidingView 
+      behavior={isIOS ? "padding" : "height"} 
+      style={{ width: '100%' }}
+    >
+      <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={styles.modalBlur}>
+        <View style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 40 }]}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setModalVisible(false)}><ThemedText style={{ color: '#FF5F6D' }}>Cerrar</ThemedText></TouchableOpacity>
+            <ThemedText style={styles.modalTitle}>Nueva Publicación</ThemedText>
+            <View style={{ width: 45 }} />
           </View>
-        </BlurView>
-      </KeyboardAvoidingView>
-    </View>
-  );
 
-  // --- AJUSTES DE LAYOUT ---
+          <ThemedText style={styles.label}>TIPO DE POST</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
+            {t.communitytab.typepostAdd.map((tag: string) => {
+              const isActive = selectedTag === tag;
+              return (
+                <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={[styles.tagChip, isActive && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
+                  <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color={isActive ? '#fff' : (isDark ? '#fff' : '#666')} style={{marginRight: 6}} />
+                  <ThemedText style={{ color: isActive ? '#fff' : (isDark ? '#fff' : '#333'), fontSize: 11, fontWeight: '600' }}>{tag}</ThemedText>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <ThemedText style={styles.label}>{t.communitytab.category}</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>
+            {subCategories.map(sub => (
+              <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={[styles.subChip, selectedSubCategory === sub.id && { borderColor: '#FF5F6D' }]}>
+                <MaterialCommunityIcons name={sub.icon as any} size={14} color={selectedSubCategory === sub.id ? '#FF5F6D' : '#999'} />
+                <ThemedText style={{ marginLeft: 5, fontSize: 11, color: selectedSubCategory === sub.id ? '#FF5F6D' : '#999' }}>{sub.id}</ThemedText>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <TextInput 
+            value={postText} onChangeText={setPostText} 
+            placeholder="¿Qué estás pensando?" placeholderTextColor="#999" 
+            multiline style={styles.postInput} 
+          />
+
+          {selectedImage && (
+            <View style={styles.previewContainer}>
+              <Image source={{ uri: selectedImage }} style={styles.previewImg} />
+              <TouchableOpacity style={styles.removeImg} onPress={() => setSelectedImage(null)}><MaterialCommunityIcons name="close-circle" size={20} color="#FF5F6D" /></TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }} disabled={isPublishing}>
+              <MaterialCommunityIcons name="image-plus" size={32} color="#FF5F6D" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing}>
+              <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={styles.publishBtn}>
+                {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Publicar</ThemedText>}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </BlurView>
+    </KeyboardAvoidingView>
+  );
+/*
+  const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
+  const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.72 : (loggedIn ? height * 0.69 : height * 0.65));
+*/
+
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
-  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
-
-  // AJUSTE WEB: Subimos la tarjeta hacia el header en escritorio
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
+
+  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
 
   return (
     <View style={styles.container}>
-      <ScrollView 
-        contentContainerStyle={{ flexGrow: 1, justifyContent: isWeb ? 'flex-start' : 'center', paddingTop: isWeb ? 20 : 0 }} 
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={[styles.centerContainer, { marginTop: verticalOffset }]}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+        <View style={[styles.centerContainer, , { marginTop: verticalOffset }]}>
           <View style={[stylesOriginal.cardWrapper, { 
             width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28,
             backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)') : 'transparent',
@@ -364,26 +359,15 @@ export default function CommunityScreen() {
       </ScrollView>
 
       {isCommunityScreen && (
-        <TouchableOpacity onPress={() => setModalVisible(true)} style={[styles.fab, { 
-          // Lógica condicional por plataforma:
-          bottom: isWeb 
-            ? 75  // <--- Ajusta este número (menor = más abajo en Web)
-            : (isIOS ? insets.bottom + 50 : 100) 
-        }]}>
-          <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}>
-            <MaterialCommunityIcons name="plus" size={30} color="#fff" /></LinearGradient>
+        <TouchableOpacity onPress={() => setModalVisible(true)} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85 }]}>
+          <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}><MaterialCommunityIcons name="plus" size={30} color="#fff" /></LinearGradient>
         </TouchableOpacity>
       )}
 
-      {/* MODAL NUEVA PUBLICACIÓN (CORREGIDO PARA REACT 19 USANDO RNMODAL) */}
-      <RNModal 
-        visible={isModalVisible} 
-        transparent={true} 
-        animationType="slide" 
-        onRequestClose={() => setModalVisible(false)}
-      >
+      {/* MODAL NUEVA PUBLICACIÓN */}
+      <Modal isVisible={isModalVisible} onBackdropPress={() => setModalVisible(false)} style={{ margin: 0, justifyContent: 'flex-end' }} avoidKeyboard={true} statusBarTranslucent={true} deviceHeight={height} deviceWidth={width} propagateSwipe={true}>
         {renderModalContent()}
-      </RNModal>
+      </Modal>
 
       {/* MODAL COMENTARIOS INTEGRADO */}
       <RNModal transparent visible={showCommentInput} animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
@@ -398,7 +382,7 @@ export default function CommunityScreen() {
          </View>
       </RNModal>
 
-      {/* VISUALIZADOR DE IMAGEN */}
+      {/* VISUALIZADOR DE IMAGEN (RESTAURADO) */}
       <RNModal transparent visible={viewerVisible} onRequestClose={() => setViewerVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' }}>
           <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.closeViewerBtn}><MaterialCommunityIcons name="close" size={28} color="#fff" /></TouchableOpacity>
