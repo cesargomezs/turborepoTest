@@ -3,10 +3,11 @@ import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions, Keyboard,
   TextInput, ActivityIndicator, Image, Linking, Alert,
+  Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect, useSegments } from 'expo-router'; 
+import { useRouter, useFocusEffect } from 'expo-router'; 
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -16,10 +17,68 @@ import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
-// Importación de tus estilos originales
 import { getContentCardStyles } from 'app/src/styles/contentcommunity';
 import MapComponent from '@/components/Map';
 
+// --- REVIEW FORM: DISEÑO ULTRA TRANSPARENTE SUGERIDO ---
+const ReviewForm = ({ onPublish, isDark, t }: any) => {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  
+  const Colors = {
+    inputBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+    border: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+    text: isDark ? '#FFF' : '#1A1A1A'
+  };
+
+  return (
+    <ScrollView 
+      bounces={false} 
+      keyboardShouldPersistTaps="handled" 
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 20 }}
+    >
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 15, marginBottom: 25, paddingVertical: 10 }}>
+        {[1, 2, 3, 4, 5].map(s => (
+          <TouchableOpacity key={s} onPress={() => setRating(s)} activeOpacity={0.6}>
+            <MaterialCommunityIcons 
+              name={s <= rating ? "star" : "star-outline"} 
+              size={42} 
+              color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)")} 
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={{ backgroundColor: Colors.inputBg, borderRadius: 28, borderWidth: 1, borderColor: Colors.border, padding: 5, marginBottom: 30 }}>
+        <TextInput
+          value={comment} 
+          onChangeText={setComment} 
+          placeholder={t?.lawyerstab?.placeholderReview || "Escribe tu experiencia..."}
+          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'} 
+          multiline 
+          disableFullscreenUI={true}
+          autoFocus={Platform.OS !== 'web'}
+          style={{ color: Colors.text, padding: 20, height: 140, textAlignVertical: 'top', fontSize: 16, fontWeight: '500' }}
+        />
+      </View>
+
+      <TouchableOpacity onPress={() => onPublish(rating, comment)} disabled={!comment.trim()} style={{ borderRadius: 22, overflow: 'hidden' }}>
+        <LinearGradient
+          colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : (isDark ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)'] : ['#F0F0F0', '#E0E0E0'])}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={{ padding: 20, alignItems: 'center' }}
+        >
+          <ThemedText style={{ color: comment.trim() ? '#FFF' : 'rgba(128,128,128,0.4)', fontWeight: '800', fontSize: 16 }}>
+            {t?.lawyerstab?.publishBtn || "PUBLICAR AHORA"}
+          </ThemedText>
+        </LinearGradient>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+};
+
+// --- DATA SOURCE & HELPERS ---
 const AREA_ICONS: Record<string, { lib: any, name: string }> = {
   'General': { lib: MaterialCommunityIcons, name: 'gavel' },
   'Inmigración': { lib: MaterialCommunityIcons, name: 'passport' },
@@ -31,18 +90,17 @@ const AREA_ICONS: Record<string, { lib: any, name: string }> = {
 };
 
 const DATA_SOURCE = [
-  { id: 1, name: 'Neil Panchal Law', area: 'General', rating: 5.0, lat: 34.0668, lng: -117.6115, phone: '+19517036499', image: 'https://randomuser.me/api/portraits/men/32.jpg' },
-  { id: 2, name: 'BANDERAS LAW, PC', area: 'Inmigración', rating: 5.0, lat: 34.0668, lng: -117.5783, phone: '+19097070000', image: 'https://randomuser.me/api/portraits/women/44.jpg' },
-  { id: 3, name: 'Law Office of Cierra Esq', area: 'Familia', rating: 4.8, lat: 34.0696, lng: -117.5782, phone: '+18883644444', image: 'https://randomuser.me/api/portraits/women/22.jpg' },
-  { id: 4, name: 'Centro Legal De Accidentes', area: 'Accidentes', rating: 4.9, lat: 34.0652, lng: -117.6509, phone: '+18559126909', image: 'https://randomuser.me/api/portraits/men/45.jpg' }
+  { id: 1, name: 'Neil Panchal Law', area: 'General', rating: 5.0, lat: 34.0668, lng: -117.6115, phone: '+19517036499', image: 'https://randomuser.me/api/portraits/men/32.jpg', reviews: [] },
+  { id: 2, name: 'BANDERAS LAW, PC', area: 'Inmigración', rating: 5.0, lat: 34.0668, lng: -117.5783, phone: '+19097070000', image: 'https://randomuser.me/api/portraits/women/44.jpg', reviews: [] },
+  { id: 3, name: 'Law Office of Cierra Esq', area: 'Familia', rating: 4.8, lat: 34.0696, lng: -117.5782, phone: '+18883644444', image: 'https://randomuser.me/api/portraits/women/22.jpg', reviews: [] },
+  { id: 4, name: 'Centro Legal De Accidentes', area: 'Accidentes', rating: 4.9, lat: 34.0652, lng: -117.6509, phone: '+18559126909', image: 'https://randomuser.me/api/portraits/men/45.jpg', reviews: [] }
 ];
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 3958.8;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return parseFloat((R * c).toFixed(1));
 };
@@ -70,6 +128,7 @@ export default function LawyersScreen() {
     accent: isDark ? '#4FC3F7' : '#0080B5',
     border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     inputBg: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.9)',
+    cardBg: isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.4)',
   };
 
   const [zipCode, setZipCode] = useState('');
@@ -83,17 +142,15 @@ export default function LawyersScreen() {
   const [isFilteredByMap, setIsFilteredByMap] = useState(false); 
   const [mapKey, setMapKey] = useState(0);
 
+  const [selectedLawyer, setSelectedLawyer] = useState<any>(null);
+  const [showReviewInput, setShowReviewInput] = useState(false);
+
   const isZipValid = zipCode.length === 5;
 
-  // REINSTALADO: Efecto para limpiar si el zip es corto
   useEffect(() => {
-    if (zipCode.length < 5) {
-      setResults([]);
-      setShowMarkers(false);
-    }
+    if (zipCode.length < 5) { setResults([]); setShowMarkers(false); }
   }, [zipCode]);
 
-  // REINSTALADO: Manejo de Zoom
   const handleZoom = (type: 'in' | 'out') => {
     if (isWeb || !mapRef.current) return;
     mapRef.current.getCamera().then((camera: any) => {
@@ -135,21 +192,14 @@ export default function LawyersScreen() {
       filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
       setResults(filtered);
       setMapKey(k => k + 1);
-    } catch (e) { 
-        if(!isWeb) Alert.alert("Error", t.lawyerstab?.zipnofound); 
-    } finally { setLoading(false); }
+    } catch (e) { if(!isWeb) Alert.alert("Error", t.lawyerstab?.zipnofound); } finally { setLoading(false); }
   };
 
-  // REINSTALADO: Direcciones externas
   const openDirections = (lawyer: any) => {
     const lat = lawyer.lat;
     const lng = lawyer.lng;
     const label = encodeURIComponent(lawyer.name);
-    const url = Platform.select({
-      ios: `maps:0,0?q=${label}@${lat},${lng}`,
-      android: `geo:0,0?q=${lat},${lng}(${label})`,
-      web: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
-    });
+    const url = Platform.select({ ios: `maps:0,0?q=${label}@${lat},${lng}`, android: `geo:0,0?q=${lat},${lng}(${label})`, web: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` });
     if (url) Linking.openURL(url);
   };
 
@@ -172,6 +222,9 @@ export default function LawyersScreen() {
           <ThemedText style={{fontSize: 12, color: Colors.subtext, fontWeight: '500'}}>{lawyer.area}</ThemedText>
         </View>
         <View style={{flexDirection: 'row', gap: 8}}>
+          <TouchableOpacity onPress={() => setSelectedLawyer(lawyer)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#EEE'}]}>
+            <MaterialCommunityIcons name="comment-text-outline" size={18} color={Colors.text} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => openDirections(lawyer)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'}]}>
             <MaterialCommunityIcons name="directions" size={20} color={isDark ? '#4FC3F7' : '#1976D2'} />
           </TouchableOpacity>
@@ -185,11 +238,62 @@ export default function LawyersScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* MODAL CON FONDO DE VENTANA TRANSPARENTE 0.6 */}
+      <Modal visible={!!selectedLawyer} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ 
+              backgroundColor: isDark ? 'rgba(40, 40, 40, 0.6)' : 'rgba(255, 255, 255, 0.7)', 
+              width: isLargeWeb ? 500 : '92%', maxHeight: '82%', borderRadius: 35, padding: 25, borderWidth: 1.5, borderColor: Colors.border, overflow: 'hidden' 
+            }}>
+              {!isAndroid && <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+              
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <View>
+                  <ThemedText style={{ fontSize: 20, fontWeight: '900' }}>{selectedLawyer?.name}</ThemedText>
+                  <ThemedText style={{ fontSize: 13, opacity: 0.6 }}>{selectedLawyer?.area}</ThemedText>
+                </View>
+                <TouchableOpacity onPress={() => { setSelectedLawyer(null); setShowReviewInput(false); }}>
+                  <MaterialCommunityIcons name="close-circle" size={32} color={Colors.text} style={{ opacity: 0.8 }} />
+                </TouchableOpacity>
+              </View>
+
+              {!showReviewInput ? (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 20 }}>
+                    <LinearGradient colors={['#FF5F6D', '#FFC371']} start={{x:0,y:0}} end={{x:1,y:0}} style={{ padding: 18, alignItems: 'center' }}>
+                      <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>+ {t?.lawyerstab?.addReview || "Danos tu opinión"}</ThemedText>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  {selectedLawyer?.reviews?.length > 0 ? selectedLawyer.reviews.map((r: any) => (
+                    <View key={r.id} style={{ borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 15 }}>
+                      <ThemedText style={{ fontWeight: '800', color: '#FFB300' }}>{'★'.repeat(r.stars)}</ThemedText>
+                      <ThemedText style={{ fontSize: 15, marginTop: 5, lineHeight: 22 }}>{r.comment}</ThemedText>
+                    </View>
+                  )) : (
+                    <View style={{ marginVertical: 40, alignItems: 'center', opacity: 0.3 }}>
+                       <MaterialCommunityIcons name="message-draw" size={40} color={Colors.text} />
+                       <ThemedText style={{ marginTop: 10 }}>{t?.lawyerstab?.noReviews || "Aún no hay reseñas."}</ThemedText>
+                    </View>
+                  )}
+                </ScrollView>
+              ) : (
+                <ReviewForm isDark={isDark} t={t} onPublish={(rating: number, comment: string) => {
+                  const review = { id: Date.now().toString(), stars: rating, comment: comment };
+                  if (selectedLawyer) selectedLawyer.reviews = [review, ...(selectedLawyer.reviews || [])];
+                  setShowReviewInput(false);
+                }} />
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start' }} keyboardShouldPersistTaps="handled">
         <View style={[localStyles.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{
             width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28,
-            backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)') : 'transparent',
+            backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent',
             borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border
           }}>
             {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
@@ -208,7 +312,7 @@ export default function LawyersScreen() {
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                   <View style={styles.searchRow}>
-                    <TextInput style={[styles.customInput, { flex: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, fontWeight: '500' }]} placeholder={t.lawyerstab?.messagezip} keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} placeholderTextColor={isDark ? '#78909C' : '#90A4AE'} />
+                    <TextInput style={[styles.customInput, { flex: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', fontWeight: '500' }]} placeholder={t.lawyerstab?.messagezip} keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} placeholderTextColor={isDark ? '#78909C' : '#90A4AE'} />
                     <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={styles.compactSearchBtn}>
                       <LinearGradient colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#B0BEC5', '#CFD8DC']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
                         {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
@@ -272,14 +376,14 @@ export default function LawyersScreen() {
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, position: 'relative' }}>
                       <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
                       
+                      {/* BOTÓN GPS FLOTANTE SOLO PARA WEB */}
                       <TouchableOpacity 
-                        onPress={getCurrentLocation}
-                        style={{
-                          position: 'absolute', bottom: 20, right: 20,
-                          backgroundColor: isDark ? '#333' : '#FFF',
-                          padding: 12, borderRadius: 30, elevation: 5,
-                          shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.25, shadowRadius: 3.84,
+                        onPress={getCurrentLocation} 
+                        style={{ 
+                          position: 'absolute', bottom: 20, right: 20, 
+                          backgroundColor: isDark ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.85)', 
+                          padding: 12, borderRadius: 30, elevation: 5, 
+                          shadowOpacity: 0.2, shadowRadius: 4, borderWidth: 1, borderColor: Colors.border 
                         }}
                       >
                         <MaterialCommunityIcons name="crosshairs-gps" size={24} color={Colors.accent} />
