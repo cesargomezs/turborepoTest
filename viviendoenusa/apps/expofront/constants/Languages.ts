@@ -43,7 +43,11 @@ export const translations = {
       resultone: "Resultado encontrado",
       resultdomore: "Resultados encontrados",
       viewallresults: "Ver todos los resultados",
-      zipnofound:"ZIP no encontrado."
+      zipnofound:"ZIP no encontrado.",
+      noReviews: "Aún no hay reseñas.", // <--- Agrega esta
+      addReview: "Danos tu opinión",    // <--- Agrega esta
+      placeholderReview: "Escribe tu experiencia...", // <--- Agrega esta
+      publishBtn: "PUBLICAR AHORA"      // <--- Agrega esta
       
     },
     communitytab: {
@@ -109,7 +113,12 @@ export const translations = {
       resultone: "Result found",
       resultdomore: "Results found",
       viewallresults: "View all results",
-      zipnofound:"ZIP not found."
+      zipnofound:"ZIP not found.",
+      noReviews: "There are no reviews yet.", // <--- Agrega esta
+      addReview: "Give us your opinion",    // <--- Agrega esta
+      placeholderReview: "Write about your experience...", // <--- Agrega esta
+      publishBtn:"PUBLISH NOW"      // <--- Agrega esta  
+      
     },
     communitytab: {
       typepost : ['All', 'Experience', 'Question', 'Advice'],
