@@ -1,7 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import {
-  TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
-  TextInput, Image, Alert, Share, ColorValue, ActivityIndicator, Platform,
+  TouchableOpacity,
+  View,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  TextInput,
+  Image,
+  Alert,
+  Share,
+  ColorValue,
+  ActivityIndicator,
+  Platform,
   Modal as RNModal,
   KeyboardAvoidingView
 } from 'react-native';
@@ -16,7 +26,6 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 
 import * as ImagePicker from 'expo-image-picker';
-import Modal from 'react-native-modal'; 
 import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
@@ -47,15 +56,25 @@ export default function CommunityScreen() {
 
   // --- LÓGICA DE ICONOS Y FILTROS ---
   const tagIcons: Record<string, any> = {
-    'All': 'apps', 'Todos': 'apps',
-    'Experience': 'star-outline', 'Experiencia': 'star-outline',
-    'Question': 'help-circle-outline', 'Pregunta': 'help-circle-outline',
-    'Advice': 'lightbulb-on-outline', 'Consejo': 'lightbulb-on-outline'
+    'All': 'apps',
+    'Todos': 'apps',
+    'Experience': 'star-outline',
+    'Experiencia': 'star-outline',
+    'Question': 'help-circle-outline',
+    'Pregunta': 'help-circle-outline',
+    'Advice': 'lightbulb-on-outline',
+    'Consejo': 'lightbulb-on-outline'
   };
 
   const tagMapping: Record<string, string> = {
-    'All': 'All', 'Todos': 'All', 'Experience': 'Experience', 'Experiencia': 'Experience',
-    'Question': 'Question', 'Pregunta': 'Question', 'Advice': 'Advice', 'Consejo': 'Advice'
+    'All': 'All',
+    'Todos': 'All',
+    'Experience': 'Experience',
+    'Experiencia': 'Experience',
+    'Question': 'Question',
+    'Pregunta': 'Question',
+    'Advice': 'Advice',
+    'Consejo': 'Advice'
   };
 
   const subCategories = [
@@ -119,14 +138,26 @@ export default function CommunityScreen() {
         }
       }
       const newPost = {
-        id: Date.now(), text: trimmedText, image: selectedImage, tag: tagMapping[selectedTag] || selectedTag,
-        subCategory: selectedSubCategory, likes: 0, dislikes: 0, userVote: null,
+        id: Date.now(),
+        text: trimmedText,
+        image: selectedImage,
+        tag: tagMapping[selectedTag] || selectedTag,
+        subCategory: selectedSubCategory,
+        likes: 0,
+        dislikes: 0,
+        userVote: null,
         displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         userName: userMetadata?.name || 'User'
       };
       setPosts(prev => [newPost, ...prev]);
-      setPostText(''); setSelectedImage(null); setModalVisible(false);
-    } catch (err) { triggerAlert("Error", t.communitytab.errorServer); } finally { setIsPublishing(false); }
+      setPostText('');
+      setSelectedImage(null);
+      setModalVisible(false);
+    } catch (err) {
+      triggerAlert("Error", t.communitytab.errorServer);
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const triggerAlert = (title: string, message: string) => {
@@ -138,7 +169,8 @@ export default function CommunityScreen() {
     setPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
       const isSelected = p.userVote === type;
-      return { ...p,
+      return {
+        ...p,
         likes: type === 'like' ? (isSelected ? p.likes - 1 : p.likes + 1) : (p.userVote === 'like' ? p.likes - 1 : p.likes),
         dislikes: type === 'dislike' ? (isSelected ? p.dislikes - 1 : p.dislikes + 1) : (p.userVote === 'dislike' ? p.dislikes - 1 : p.dislikes),
         userVote: isSelected ? null : type
@@ -149,9 +181,19 @@ export default function CommunityScreen() {
   const handleAddComment = () => {
     const trimmed = commentText.trim();
     if (!trimmed || !activeCommentId) return;
-    const newComment = { id: Date.now(), text: trimmed, displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), userName: userMetadata?.name || 'User' };
-    setComments(prev => ({ ...prev, [activeCommentId]: [...(prev[activeCommentId] || []), newComment] }));
-    setCommentText(''); setShowCommentInput(false); setVisibleComments(prev => ({ ...prev, [activeCommentId]: true }));
+    const newComment = {
+      id: Date.now(),
+      text: trimmed,
+      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      userName: userMetadata?.name || 'User'
+    };
+    setComments(prev => ({
+      ...prev,
+      [activeCommentId]: [...(prev[activeCommentId] || []), newComment]
+    }));
+    setCommentText('');
+    setShowCommentInput(false);
+    setVisibleComments(prev => ({ ...prev, [activeCommentId]: true }));
   };
 
   const filteredPosts = useMemo(() => {
@@ -163,90 +205,31 @@ export default function CommunityScreen() {
     return res.sort((a, b) => isRecentFirst ? b.id - a.id : a.id - b.id);
   }, [posts, activeFilter, activeSubFilter, isRecentFirst]);
 
-  const renderModalContent = () => (
-    <KeyboardAvoidingView 
-      behavior={isIOS ? "padding" : "height"} 
-      style={{ width: '100%' }}
-    >
-      <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={styles.modalBlur}>
-        <View style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 40 }]}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setModalVisible(false)}><ThemedText style={{ color: '#FF5F6D' }}>Cerrar</ThemedText></TouchableOpacity>
-            <ThemedText style={styles.modalTitle}>Nueva Publicación</ThemedText>
-            <View style={{ width: 45 }} />
-          </View>
-
-          <ThemedText style={styles.label}>TIPO DE POST</ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
-            {t.communitytab.typepostAdd.map((tag: string) => {
-              const isActive = selectedTag === tag;
-              return (
-                <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={[styles.tagChip, isActive && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
-                  <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color={isActive ? '#fff' : (isDark ? '#fff' : '#666')} style={{marginRight: 6}} />
-                  <ThemedText style={{ color: isActive ? '#fff' : (isDark ? '#fff' : '#333'), fontSize: 11, fontWeight: '600' }}>{tag}</ThemedText>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          <ThemedText style={styles.label}>{t.communitytab.category}</ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>
-            {subCategories.map(sub => (
-              <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={[styles.subChip, selectedSubCategory === sub.id && { borderColor: '#FF5F6D' }]}>
-                <MaterialCommunityIcons name={sub.icon as any} size={14} color={selectedSubCategory === sub.id ? '#FF5F6D' : '#999'} />
-                <ThemedText style={{ marginLeft: 5, fontSize: 11, color: selectedSubCategory === sub.id ? '#FF5F6D' : '#999' }}>{sub.id}</ThemedText>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <TextInput 
-            value={postText} onChangeText={setPostText} 
-            placeholder="¿Qué estás pensando?" placeholderTextColor="#999" 
-            multiline style={styles.postInput} 
-          />
-
-          {selectedImage && (
-            <View style={styles.previewContainer}>
-              <Image source={{ uri: selectedImage }} style={styles.previewImg} />
-              <TouchableOpacity style={styles.removeImg} onPress={() => setSelectedImage(null)}><MaterialCommunityIcons name="close-circle" size={20} color="#FF5F6D" /></TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.actions}>
-            <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }} disabled={isPublishing}>
-              <MaterialCommunityIcons name="image-plus" size={32} color="#FF5F6D" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing}>
-              <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={styles.publishBtn}>
-                {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Publicar</ThemedText>}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </BlurView>
-    </KeyboardAvoidingView>
-  );
-/*
-  const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
-  const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.72 : (loggedIn ? height * 0.69 : height * 0.65));
-*/
-
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
-
   const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
-        <View style={[styles.centerContainer, , { marginTop: verticalOffset }]}>
+        <View style={[styles.centerContainer, { marginTop: verticalOffset }]}>
           <View style={[stylesOriginal.cardWrapper, { 
-            width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28,
-            backgroundColor: isAndroid ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)') : 'transparent',
-            borderWidth: isAndroid ? 1 : 0, borderColor: borderColor
+            width: cardWidth,
+            height: cardHeight,
+            overflow: 'hidden',
+            borderRadius: 28,
+            backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent',
+            borderWidth: isAndroid ? 1 : 0,
+            borderColor: borderColor
           }]}>
-            {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            {!isAndroid && (
+              <BlurView
+                intensity={isDark ? 100 : 75}
+                tint={isDark ? 'dark' : 'light'}
+                style={StyleSheet.absoluteFill}
+              />
+            )}
 
             <View style={styles.cardContent}>
               <View style={styles.headerRow}>
@@ -285,11 +268,10 @@ export default function CommunityScreen() {
                     })}  
                   </View>
                 )}
-
                 {!isLargeWeb && (
                   <View style={{marginBottom: 10}}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
-                      <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={[styles.filterChipBase, { marginRight: 8, borderColor: isRecentFirst ? '#FF5F6D' : borderColor, backgroundColor: isRecentFirst ? 'rgba(255,95,109,0.1)' : 'transparent' } ]} >
+                      <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={[styles.filterChipBase, { marginRight: 8, borderColor: isRecentFirst ? '#FF5F6D' : borderColor, backgroundColor: isRecentFirst ? 'rgba(255,95,109,0.1)' : 'transparent' } ]}>
                          <MaterialCommunityIcons name="clock-outline" size={15} color={isRecentFirst ? '#FF5F6D' : (isDark ? '#fff' : '#666')} />
                          <ThemedText style={[styles.filterChipText, {marginLeft: 5, color: isRecentFirst ? '#FF5F6D' : (isDark ? '#fff' : '#666')}]}>{t.communitytab.subCategories[5]}</ThemedText>
                       </TouchableOpacity>
@@ -337,16 +319,30 @@ export default function CommunityScreen() {
                                 </View>
                               ))
                             ) : <ThemedText style={styles.noCommentsText}>Sé el primero en publicar algo.</ThemedText>}
-                            <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={styles.replyBtn}><MaterialCommunityIcons name="pencil-outline" size={12} color="#FF5F6D" /><ThemedText style={styles.replyBtnText}>Responder</ThemedText></TouchableOpacity>
+                            <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={styles.replyBtn}>
+                              <MaterialCommunityIcons name="pencil-outline" size={12} color="#FF5F6D" />
+                              <ThemedText style={styles.replyBtnText}>Responder</ThemedText>
+                            </TouchableOpacity>
                           </View>
                         )}
                         <View style={styles.postFooter}>
                           <View style={styles.reaccionGroup}>
-                            <TouchableOpacity onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}><MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} /><ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes}</ThemedText></TouchableOpacity>
-                            <TouchableOpacity onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}><MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : (isDark ? '#bbb' : '#666')} /><ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : (isDark ? '#bbb' : '#666') }]}>{(comments[post.id] || []).length}</ThemedText></TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}><MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} /><ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes}</ThemedText></TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
+                              <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
+                              <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes}</ThemedText>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
+                              <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : (isDark ? '#bbb' : '#666')} />
+                              <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : (isDark ? '#bbb' : '#666') }]}>{(comments[post.id] || []).length}</ThemedText>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
+                              <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
+                              <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes}</ThemedText>
+                            </TouchableOpacity>
                           </View>
-                          <TouchableOpacity onPress={() => Share.share({ message: post.text })}><MaterialCommunityIcons name="share-variant" size={18} color={isDark ? "#fff" : "#666"} /></TouchableOpacity>
+                          <TouchableOpacity onPress={() => Share.share({ message: post.text })}>
+                            <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? "#fff" : "#666"} />
+                          </TouchableOpacity>
                         </View>
                       </View>
                     ))}
@@ -360,32 +356,105 @@ export default function CommunityScreen() {
 
       {isCommunityScreen && (
         <TouchableOpacity onPress={() => setModalVisible(true)} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85 }]}>
-          <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}><MaterialCommunityIcons name="plus" size={30} color="#fff" /></LinearGradient>
+          <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}>
+            <MaterialCommunityIcons name="plus" size={30} color="#fff" />
+          </LinearGradient>
         </TouchableOpacity>
       )}
 
-      {/* MODAL NUEVA PUBLICACIÓN */}
-      <Modal isVisible={isModalVisible} onBackdropPress={() => setModalVisible(false)} style={{ margin: 0, justifyContent: 'flex-end' }} avoidKeyboard={true} statusBarTranslucent={true} deviceHeight={height} deviceWidth={width} propagateSwipe={true}>
-        {renderModalContent()}
-      </Modal>
+      {/* MODAL NUEVA PUBLICACIÓN - Parche React 19 */}
+      <RNModal visible={isModalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
+          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
+            <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={styles.modalBlur}>
+              <View style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 40 }]}>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                    <ThemedText style={{ color: '#FF5F6D' }}>Cerrar</ThemedText>
+                  </TouchableOpacity>
+                  <ThemedText style={styles.modalTitle}>Nueva Publicación</ThemedText>
+                  <View style={{ width: 45 }} />
+                </View>
 
-      {/* MODAL COMENTARIOS INTEGRADO */}
+                <ThemedText style={styles.label}>TIPO DE POST</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
+                  {t.communitytab.typepostAdd.map((tag: string) => {
+                    const isActive = selectedTag === tag;
+                    return (
+                      <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={[styles.tagChip, isActive && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
+                        <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color={isActive ? '#fff' : (isDark ? '#fff' : '#666')} style={{marginRight: 6}} />
+                        <ThemedText style={{ color: isActive ? '#fff' : (isDark ? '#fff' : '#333'), fontSize: 11, fontWeight: '600' }}>{tag}</ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <ThemedText style={styles.label}>{t.communitytab.category}</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>
+                  {subCategories.map(sub => (
+                    <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={[styles.subChip, selectedSubCategory === sub.id && { borderColor: '#FF5F6D' }]}>
+                      <MaterialCommunityIcons name={sub.icon as any} size={14} color={selectedSubCategory === sub.id ? '#FF5F6D' : '#999'} />
+                      <ThemedText style={{ marginLeft: 5, fontSize: 11, color: selectedSubCategory === sub.id ? '#FF5F6D' : '#999' }}>{sub.id}</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <TextInput 
+                  value={postText}
+                  onChangeText={setPostText} 
+                  placeholder="¿Qué estás pensando?"
+                  placeholderTextColor="#999" 
+                  multiline
+                  style={styles.postInput} 
+                />
+
+                {selectedImage && (
+                  <View style={styles.previewContainer}>
+                    <Image source={{ uri: selectedImage }} style={styles.previewImg} />
+                    <TouchableOpacity style={styles.removeImg} onPress={() => setSelectedImage(null)}>
+                      <MaterialCommunityIcons name="close-circle" size={20} color="#FF5F6D" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <View style={styles.actions}>
+                  <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }} disabled={isPublishing}>
+                    <MaterialCommunityIcons name="image-plus" size={32} color="#FF5F6D" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing}>
+                    <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={styles.publishBtn}>
+                      {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Publicar</ThemedText>}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </BlurView>
+          </KeyboardAvoidingView>
+        </View>
+      </RNModal>
+
+      {/* MODAL COMENTARIOS - Parche React 19 */}
       <RNModal transparent visible={showCommentInput} animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
          <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end'}}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCommentInput(false)} />
-            <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{width: '100%'}}>
+            <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
               <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
                 <TextInput style={[{backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 15, padding: 15, color: isDark ? '#fff' : '#000', minHeight: 80}]} placeholder="Escribe algo..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
-                <TouchableOpacity onPress={handleAddComment} style={[styles.publishBtn, {backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center'}]}><ThemedText style={{color:'#fff', fontWeight:'bold'}}>Enviar</ThemedText></TouchableOpacity>
+                <TouchableOpacity onPress={handleAddComment} style={[styles.publishBtn, {backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center'}]}>
+                  <ThemedText style={{color:'#fff', fontWeight:'bold'}}>Enviar</ThemedText>
+                </TouchableOpacity>
               </BlurView>
             </KeyboardAvoidingView>
          </View>
       </RNModal>
 
-      {/* VISUALIZADOR DE IMAGEN (RESTAURADO) */}
+      {/* VISUALIZADOR DE IMAGEN */}
       <RNModal transparent visible={viewerVisible} onRequestClose={() => setViewerVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' }}>
-          <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.closeViewerBtn}><MaterialCommunityIcons name="close" size={28} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.closeViewerBtn}>
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
           {imageToView && <Image source={{ uri: imageToView }} style={{ width: '100%', height: '80%', resizeMode: 'contain' }} />}
         </View>
       </RNModal>

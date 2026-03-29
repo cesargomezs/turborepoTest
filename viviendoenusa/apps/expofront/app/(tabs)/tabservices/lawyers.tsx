@@ -24,9 +24,13 @@ import MapComponent from '@/components/Map';
 const ReviewForm = ({ onPublish, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+  const isAndroid = Platform.OS === 'android';
   
   const Colors = {
-    inputBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+    // En Android usamos un fondo un poco más opaco para que el input destaque
+    inputBg: isAndroid 
+      ? (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
+      : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)'),
     border: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
     text: isDark ? '#FFF' : '#1A1A1A'
   };
@@ -238,56 +242,66 @@ export default function LawyersScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* MODAL CON FONDO DE VENTANA TRANSPARENTE 0.6 */}
+      {/* MODAL CON LÓGICA DE TRANSPARENCIA DIFERENCIADA */}
       <Modal visible={!!selectedLawyer} transparent animationType="fade">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-            <View style={{ 
-              backgroundColor: isDark ? 'rgba(40, 40, 40, 0.6)' : 'rgba(255, 255, 255, 0.7)', 
-              width: isLargeWeb ? 500 : '92%', maxHeight: '82%', borderRadius: 35, padding: 25, borderWidth: 1.5, borderColor: Colors.border, overflow: 'hidden' 
-            }}>
-              {!isAndroid && <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-              
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <View>
-                  <ThemedText style={{ fontSize: 20, fontWeight: '900' }}>{selectedLawyer?.name}</ThemedText>
-                  <ThemedText style={{ fontSize: 13, opacity: 0.6 }}>{selectedLawyer?.area}</ThemedText>
-                </View>
-                <TouchableOpacity onPress={() => { setSelectedLawyer(null); setShowReviewInput(false); }}>
-                  <MaterialCommunityIcons name="close-circle" size={32} color={Colors.text} style={{ opacity: 0.8 }} />
-                </TouchableOpacity>
-              </View>
-
-              {!showReviewInput ? (
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 20 }}>
-                    <LinearGradient colors={['#FF5F6D', '#FFC371']} start={{x:0,y:0}} end={{x:1,y:0}} style={{ padding: 18, alignItems: 'center' }}>
-                      <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>+ {t?.lawyerstab?.addReview || "Danos tu opinión"}</ThemedText>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                  {selectedLawyer?.reviews?.length > 0 ? selectedLawyer.reviews.map((r: any) => (
-                    <View key={r.id} style={{ borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 15 }}>
-                      <ThemedText style={{ fontWeight: '800', color: '#FFB300' }}>{'★'.repeat(r.stars)}</ThemedText>
-                      <ThemedText style={{ fontSize: 15, marginTop: 5, lineHeight: 22 }}>{r.comment}</ThemedText>
-                    </View>
-                  )) : (
-                    <View style={{ marginVertical: 40, alignItems: 'center', opacity: 0.3 }}>
-                       <MaterialCommunityIcons name="message-draw" size={40} color={Colors.text} />
-                       <ThemedText style={{ marginTop: 10 }}>{t?.lawyerstab?.noReviews || "Aún no hay reseñas."}</ThemedText>
-                    </View>
-                  )}
-                </ScrollView>
-              ) : (
-                <ReviewForm isDark={isDark} t={t} onPublish={(rating: number, comment: string) => {
-                  const review = { id: Date.now().toString(), stars: rating, comment: comment };
-                  if (selectedLawyer) selectedLawyer.reviews = [review, ...(selectedLawyer.reviews || [])];
-                  setShowReviewInput(false);
-                }} />
-              )}
-            </View>
+  <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ 
+        // TRANSPARENCIA AJUSTADA PARA ANDROID (0.85 / 0.88)
+        backgroundColor: isAndroid 
+          ? (isDark ? 'rgba(30, 30, 30, 0.86)' : 'rgba(255, 255, 255, 0.91)') 
+          : (isDark ? 'rgba(40, 40, 40, 0.6)' : 'rgba(255, 255, 255, 0.7)'), 
+        width: isLargeWeb ? 500 : '92%', 
+        maxHeight: '88%', 
+        borderRadius: 35, 
+        padding: 25, 
+        borderWidth: 1.5, 
+        borderColor: Colors.border, 
+        overflow: 'hidden',
+        elevation: 10 // Sombra para separar del fondo en Android
+      }}>
+        {!isAndroid && <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+        
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <View>
+            <ThemedText style={{ fontSize: 20, fontWeight: '900' }}>{selectedLawyer?.name}</ThemedText>
+            <ThemedText style={{ fontSize: 13, opacity: 0.6 }}>{selectedLawyer?.area}</ThemedText>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          <TouchableOpacity onPress={() => { setSelectedLawyer(null); setShowReviewInput(false); }}>
+            <MaterialCommunityIcons name="close-circle" size={32} color={Colors.text} style={{ opacity: 0.8 }} />
+          </TouchableOpacity>
+        </View>
+
+        {!showReviewInput ? (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 20 }}>
+              <LinearGradient colors={['#FF5F6D', '#FFC371']} start={{x:0,y:0}} end={{x:1,y:0}} style={{ padding: 18, alignItems: 'center' }}>
+                <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>+ {t?.lawyerstab?.addReview || "Danos tu opinión"}</ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+            {selectedLawyer?.reviews?.length > 0 ? selectedLawyer.reviews.map((r: any) => (
+              <View key={r.id} style={{ borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 15 }}>
+                <ThemedText style={{ fontWeight: '800', color: '#FFB300' }}>{'★'.repeat(r.stars)}</ThemedText>
+                <ThemedText style={{ fontSize: 15, marginTop: 5, lineHeight: 22 }}>{r.comment}</ThemedText>
+              </View>
+            )) : (
+              <View style={{ marginVertical: 40, alignItems: 'center', opacity: 0.3 }}>
+                 <MaterialCommunityIcons name="message-draw" size={40} color={Colors.text} />
+                 <ThemedText style={{ marginTop: 10 }}>{t?.lawyerstab?.noReviews || "Aún no hay reseñas."}</ThemedText>
+              </View>
+            )}
+          </ScrollView>
+        ) : (
+          <ReviewForm isDark={isDark} t={t} onPublish={(rating: number, comment: string) => {
+            const review = { id: Date.now().toString(), stars: rating, comment: comment };
+            if (selectedLawyer) selectedLawyer.reviews = [review, ...(selectedLawyer.reviews || [])];
+            setShowReviewInput(false);
+          }} />
+        )}
+      </View>
+    </View>
+  </KeyboardAvoidingView>
+</Modal>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start' }} keyboardShouldPersistTaps="handled">
         <View style={[localStyles.centerContainer, { marginTop: verticalOffset }]}>
@@ -376,7 +390,6 @@ export default function LawyersScreen() {
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, position: 'relative' }}>
                       <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
                       
-                      {/* BOTÓN GPS FLOTANTE SOLO PARA WEB */}
                       <TouchableOpacity 
                         onPress={getCurrentLocation} 
                         style={{ 
