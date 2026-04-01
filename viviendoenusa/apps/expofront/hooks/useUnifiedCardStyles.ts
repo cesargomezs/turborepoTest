@@ -4,7 +4,7 @@ import { useMockSelector } from '@/redux/slices';
 export const useUnifiedCardStyles = () => {
   const { width, height } = useWindowDimensions();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === 'light' ? false : true; // Aseguramos que cualquier valor distinto a 'light' se trate como 'dark'
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
   // --- LÓGICA DE DIMENSIONES Y PLATAFORMA ---
@@ -23,7 +23,8 @@ export const useUnifiedCardStyles = () => {
     inputBg: isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(245, 245, 245, 0.8)',
     itemBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
     border: isDark ? 'rgba(128, 128, 128, 0.3)' : 'rgba(128, 128, 128, 0.15)',
-    text: isDark ? '#FFFFFF' : '#1A1A1A',
+    text: isDark ? '#1A1A1A' : '#FFFFFF',
+    textButton: isDark ? '#1A1A1A' : '#FFFFFF',
     subtext: isDark ? '#A0A0A0' : '#666',
     accent: '#FF5F6D',
     accentLight: 'rgba(255, 95, 109, 0.15)',
@@ -151,14 +152,14 @@ export const useUnifiedCardStyles = () => {
     // --- WEB SIDEBAR ---
     webSidebar: { width: 240, borderRightWidth: 1, borderColor: glassColors.border, paddingRight: 20 },
     sideMenuTitle: { 
-      fontSize: 11, fontWeight: '800', marginBottom: 20, letterSpacing: 1.2, 
+      fontSize: 12, fontWeight: '800', marginBottom: 20, letterSpacing: 1.2, 
       textTransform: 'uppercase', color: glassColors.text
     },
     webCapsuleBtn: { 
       paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, marginBottom: 10, 
       flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'transparent'
     },
-    webCapsuleText: { fontSize: 14, fontWeight: '700', color: glassColors.text },
+    webCapsuleText: { fontSize: 14, fontWeight: '700', color: glassColors.textButton },
 
     // --- MODALES ---
     modalBlur: { borderTopLeftRadius: 35, borderTopRightRadius: 35, overflow: 'hidden' },

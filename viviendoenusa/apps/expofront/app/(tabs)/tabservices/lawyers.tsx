@@ -20,35 +20,29 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { getContentCardStyles } from 'app/src/styles/contentcommunity';
 import MapComponent from '@/components/Map';
 
-// --- REVIEW FORM: DISEÑO ULTRA TRANSPARENTE SUGERIDO ---
+// --- REVIEW FORM: ADAPTATIVO CON GRADIENTE ---
 const ReviewForm = ({ onPublish, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
-  const isAndroid = Platform.OS === 'android';
   
+  const orangeGradient: readonly [any, any, ...any[]] = ['#FF5F6D', '#FFC371'];
+  const disabledGradient: readonly [any, any, ...any[]] = isDark ? ['#333', '#444'] : ['#E0E0E0', '#D0D0D0'];
+
   const Colors = {
-    // En Android usamos un fondo un poco más opaco para que el input destaque
-    inputBg: isAndroid 
-      ? (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
-      : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)'),
-    border: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+    inputBg: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.05)',
+    border: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.12)',
     text: isDark ? '#FFF' : '#1A1A1A'
   };
 
   return (
-    <ScrollView 
-      bounces={false} 
-      keyboardShouldPersistTaps="handled" 
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: 20 }}
-    >
+    <ScrollView bounces={false} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 15, marginBottom: 25, paddingVertical: 10 }}>
         {[1, 2, 3, 4, 5].map(s => (
           <TouchableOpacity key={s} onPress={() => setRating(s)} activeOpacity={0.6}>
             <MaterialCommunityIcons 
               name={s <= rating ? "star" : "star-outline"} 
               size={42} 
-              color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)")} 
+              color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.15)")} 
             />
           </TouchableOpacity>
         ))}
@@ -56,24 +50,16 @@ const ReviewForm = ({ onPublish, isDark, t }: any) => {
 
       <View style={{ backgroundColor: Colors.inputBg, borderRadius: 28, borderWidth: 1, borderColor: Colors.border, padding: 5, marginBottom: 30 }}>
         <TextInput
-          value={comment} 
-          onChangeText={setComment} 
+          value={comment} onChangeText={setComment} 
           placeholder={t?.lawyerstab?.placeholderReview || "Escribe tu experiencia..."}
-          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'} 
-          multiline 
-          disableFullscreenUI={true}
-          autoFocus={Platform.OS !== 'web'}
-          style={{ color: Colors.text, padding: 20, height: 140, textAlignVertical: 'top', fontSize: 16, fontWeight: '500' }}
+          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
+          multiline style={{ color: Colors.text, padding: 20, height: 140, textAlignVertical: 'top', fontSize: 16, fontWeight: '500' }}
         />
       </View>
 
       <TouchableOpacity onPress={() => onPublish(rating, comment)} disabled={!comment.trim()} style={{ borderRadius: 22, overflow: 'hidden' }}>
-        <LinearGradient
-          colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : (isDark ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)'] : ['#F0F0F0', '#E0E0E0'])}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={{ padding: 20, alignItems: 'center' }}
-        >
-          <ThemedText style={{ color: comment.trim() ? '#FFF' : 'rgba(128,128,128,0.4)', fontWeight: '800', fontSize: 16 }}>
+        <LinearGradient colors={comment.trim() ? orangeGradient : disabledGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ padding: 20, alignItems: 'center' }}>
+          <ThemedText style={{ color: comment.trim() ? '#FFF' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.3)'), fontWeight: '800', fontSize: 16 }}>
             {t?.lawyerstab?.publishBtn || "PUBLICAR AHORA"}
           </ThemedText>
         </LinearGradient>
@@ -82,7 +68,6 @@ const ReviewForm = ({ onPublish, isDark, t }: any) => {
   );
 };
 
-// --- DATA SOURCE & HELPERS ---
 const AREA_ICONS: Record<string, { lib: any, name: string }> = {
   'General': { lib: MaterialCommunityIcons, name: 'gavel' },
   'Inmigración': { lib: MaterialCommunityIcons, name: 'passport' },
@@ -114,7 +99,8 @@ export default function LawyersScreen() {
   const router = useRouter();
   const mapRef = useRef<any>(null); 
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === 'light';
+  
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
@@ -126,13 +112,17 @@ export default function LawyersScreen() {
   const styles = getContentCardStyles(isDark);
   const localStyles = useUnifiedCardStyles(); 
 
+  const orangeGradient: readonly [any, any, ...any[]] = ['#FF5F6D', '#FFC371'];
+
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
-    subtext: isDark ? '#B0BEC5' : '#546E7A',
-    accent: isDark ? '#4FC3F7' : '#0080B5',
-    border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-    inputBg: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.9)',
-    cardBg: isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.4)',
+    subtext: isDark ? '#B0BEC5' : '#607D8B',
+    accent: isDark ? '#FFFFFF' : '#1A1A1A',
+    accenticon: isDark ? '#607D8B' : '#1A1A1A',
+    border: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+    inputBg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+    iconColor: isDark ? '#FFF' : '#444',
+    cardBg: isDark ? '#1E1E1E' : '#FFFFFF',
   };
 
   const [zipCode, setZipCode] = useState('');
@@ -143,7 +133,6 @@ export default function LawyersScreen() {
   const [results, setResults] = useState<any[]>([]); 
   const [userLocation, setUserLocation] = useState<any>(null);
   const [showMarkers, setShowMarkers] = useState(false);
-  const [isFilteredByMap, setIsFilteredByMap] = useState(false); 
   const [mapKey, setMapKey] = useState(0);
 
   const [selectedLawyer, setSelectedLawyer] = useState<any>(null);
@@ -180,7 +169,6 @@ export default function LawyersScreen() {
     const areaToSearch = typeof forcedArea === 'string' ? forcedArea : selectedArea;
     if (!isZipValid) return;
     setLoading(true);
-    setIsFilteredByMap(false);
     if (!isWeb) Keyboard.dismiss();
 
     try {
@@ -203,7 +191,7 @@ export default function LawyersScreen() {
     const lat = lawyer.lat;
     const lng = lawyer.lng;
     const label = encodeURIComponent(lawyer.name);
-    const url = Platform.select({ ios: `maps:0,0?q=${label}@${lat},${lng}`, android: `geo:0,0?q=${lat},${lng}(${label})`, web: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` });
+    const url = Platform.select({ ios: `maps:0,0?q=${label}@${lat},${lng}`, android: `geo:0,0?q=${lat},${lng}(${label})`, web: `http://google.com/maps?q=${lat},${lng}` });
     if (url) Linking.openURL(url);
   };
 
@@ -214,7 +202,7 @@ export default function LawyersScreen() {
   const LawyerCard = ({ lawyer }: { lawyer: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     return (
-      <View style={[styles.lawyerCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border, shadowOpacity: 0, elevation: 0 }]}>
+      <View style={[styles.lawyerCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.03)', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border }]}>
         <Image source={{ uri: lawyer.image }} style={styles.avatar} />
         <View style={{flex: 1, marginLeft: 12}}>
           <ThemedText style={{fontWeight: '700', fontSize: 15, color: Colors.text}}>{lawyer.name}</ThemedText>
@@ -226,14 +214,14 @@ export default function LawyersScreen() {
           <ThemedText style={{fontSize: 12, color: Colors.subtext, fontWeight: '500'}}>{lawyer.area}</ThemedText>
         </View>
         <View style={{flexDirection: 'row', gap: 8}}>
-          <TouchableOpacity onPress={() => setSelectedLawyer(lawyer)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#EEE'}]}>
-            <MaterialCommunityIcons name="comment-text-outline" size={18} color={Colors.text} />
+          <TouchableOpacity onPress={() => setSelectedLawyer(lawyer)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(255, 255, 255, 0.15)' : '#F5F5F5'}]}>
+            <MaterialCommunityIcons name="comment-text-outline" size={18} color={Colors.iconColor} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => openDirections(lawyer)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'}]}>
-            <MaterialCommunityIcons name="directions" size={20} color={isDark ? '#4FC3F7' : '#1976D2'} />
+          <TouchableOpacity onPress={() => openDirections(lawyer)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : '#E1F5FE'}]}>
+            <MaterialCommunityIcons name="directions" size={20} color={isDark ? '#4FC3F7' : '#0288D1'} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => Linking.openURL(`tel:${lawyer.phone}`)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0'}]}>
-            <MaterialCommunityIcons name="phone" size={20} color={isDark ? '#FFB74D' : '#EF6C00'} />
+          <TouchableOpacity onPress={() => Linking.openURL(`tel:${lawyer.phone}`)} style={[styles.actionBtn, {backgroundColor: isDark ? 'rgba(255, 183, 77, 0.2)' : '#FFF3E0'}]}>
+            <MaterialCommunityIcons name="phone" size={20} color={isDark ? '#FFB74D' : '#E65100'} />
           </TouchableOpacity>
         </View>
       </View>
@@ -242,93 +230,84 @@ export default function LawyersScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* MODAL CON LÓGICA DE TRANSPARENCIA DIFERENCIADA */}
       <Modal visible={!!selectedLawyer} transparent animationType="fade">
-  <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-    <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ 
-        // TRANSPARENCIA AJUSTADA PARA ANDROID (0.85 / 0.88)
-        backgroundColor: isAndroid 
-          ? (isDark ? 'rgba(30, 30, 30, 0.86)' : 'rgba(255, 255, 255, 0.91)') 
-          : (isDark ? 'rgba(40, 40, 40, 0.6)' : 'rgba(255, 255, 255, 0.7)'), 
-        width: isLargeWeb ? 500 : '92%', 
-        maxHeight: '88%', 
-        borderRadius: 35, 
-        padding: 25, 
-        borderWidth: 1.5, 
-        borderColor: Colors.border, 
-        overflow: 'hidden',
-        elevation: 10 // Sombra para separar del fondo en Android
-      }}>
-        {!isAndroid && <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-        
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <View>
-            <ThemedText style={{ fontSize: 20, fontWeight: '900' }}>{selectedLawyer?.name}</ThemedText>
-            <ThemedText style={{ fontSize: 13, opacity: 0.6 }}>{selectedLawyer?.area}</ThemedText>
-          </View>
-          <TouchableOpacity onPress={() => { setSelectedLawyer(null); setShowReviewInput(false); }}>
-            <MaterialCommunityIcons name="close-circle" size={32} color={Colors.text} style={{ opacity: 0.8 }} />
-          </TouchableOpacity>
-        </View>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ 
+              backgroundColor: Colors.cardBg, width: isLargeWeb ? 500 : '92%', maxHeight: '88%', 
+              borderRadius: 35, padding: 25, borderWidth: 1.5, borderColor: Colors.border, 
+              overflow: 'hidden', elevation: 5
+            }}>
+              {!isAndroid && <BlurView intensity={isDark ? 100 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+              
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <View>
+                  <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>{selectedLawyer?.name}</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: Colors.subtext }}>{selectedLawyer?.area}</ThemedText>
+                </View>
+                <TouchableOpacity onPress={() => { setSelectedLawyer(null); setShowReviewInput(false); }}>
+                  <MaterialCommunityIcons name="close-circle" size={32} color={Colors.text} style={{ opacity: 0.6 }} />
+                </TouchableOpacity>
+              </View>
 
-        {!showReviewInput ? (
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 20 }}>
-              <LinearGradient colors={['#FF5F6D', '#FFC371']} start={{x:0,y:0}} end={{x:1,y:0}} style={{ padding: 18, alignItems: 'center' }}>
-                <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>+ {t?.lawyerstab?.addReview || "Danos tu opinión"}</ThemedText>
-              </LinearGradient>
-            </TouchableOpacity>
-            {selectedLawyer?.reviews?.length > 0 ? selectedLawyer.reviews.map((r: any) => (
-              <View key={r.id} style={{ borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 15 }}>
-                <ThemedText style={{ fontWeight: '800', color: '#FFB300' }}>{'★'.repeat(r.stars)}</ThemedText>
-                <ThemedText style={{ fontSize: 15, marginTop: 5, lineHeight: 22 }}>{r.comment}</ThemedText>
-              </View>
-            )) : (
-              <View style={{ marginVertical: 40, alignItems: 'center', opacity: 0.3 }}>
-                 <MaterialCommunityIcons name="message-draw" size={40} color={Colors.text} />
-                 <ThemedText style={{ marginTop: 10 }}>{t?.lawyerstab?.noReviews || "Aún no hay reseñas."}</ThemedText>
-              </View>
-            )}
-          </ScrollView>
-        ) : (
-          <ReviewForm isDark={isDark} t={t} onPublish={(rating: number, comment: string) => {
-            const review = { id: Date.now().toString(), stars: rating, comment: comment };
-            if (selectedLawyer) selectedLawyer.reviews = [review, ...(selectedLawyer.reviews || [])];
-            setShowReviewInput(false);
-          }} />
-        )}
-      </View>
-    </View>
-  </KeyboardAvoidingView>
-</Modal>
+              {!showReviewInput ? (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 20 }}>
+                    <LinearGradient colors={orangeGradient} start={{x:0,y:0}} end={{x:1,y:0}} style={{ padding: 18, alignItems: 'center' }}>
+                      <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>+ {t?.lawyerstab?.addReview || "Danos tu opinión"}</ThemedText>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  
+                  {selectedLawyer?.reviews?.length > 0 ? selectedLawyer.reviews.map((r: any) => (
+                    <View key={r.id} style={{ borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 15 }}>
+                      <ThemedText style={{ fontWeight: '800', color: '#FFB300' }}>{'★'.repeat(r.stars)}</ThemedText>
+                      <ThemedText style={{ fontSize: 15, marginTop: 5, lineHeight: 22, color: Colors.text }}>{r.comment}</ThemedText>
+                    </View>
+                  )) : (
+                    <View style={{ marginVertical: 40, alignItems: 'center', opacity: 0.3 }}>
+                       <MaterialCommunityIcons name="message-draw" size={40} color={Colors.text} />
+                       <ThemedText style={{ marginTop: 10, color: Colors.text }}>{t?.lawyerstab?.noReviews || "Aún no hay reseñas."}</ThemedText>
+                    </View>
+                  )}
+                </ScrollView>
+              ) : (
+                <ReviewForm isDark={isDark} t={t} onPublish={(rating: number, comment: string) => {
+                  const review = { id: Date.now().toString(), stars: rating, comment: comment };
+                  if (selectedLawyer) selectedLawyer.reviews = [review, ...(selectedLawyer.reviews || [])];
+                  setShowReviewInput(false);
+                }} />
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start' }} keyboardShouldPersistTaps="handled">
         <View style={[localStyles.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{
             width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28,
-            backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent',
+            backgroundColor: isAndroid ? Colors.cardBg : 'transparent',
             borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border
           }}>
-            {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            {!isAndroid && <BlurView intensity={isDark ? 100 : 60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
             <View style={localStyles.cardContent}>
               <View style={localStyles.headerRow}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
                 <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <TouchableOpacity onPress={() => { setResults([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
-                    <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{marginRight: 15, opacity: 0.7}} />
+                  <TouchableOpacity onPress={() => { setResults([]); setZipCode(''); setShowMarkers(false); setMapKey(k => k + 1); }}>
+                    <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{marginRight: 15, opacity: 0.6}} />
                   </TouchableOpacity>
-                  <MaterialCommunityIcons name="scale-balance" size={40} color={Colors.text} style={{opacity: 0.15}} />
+                  <MaterialCommunityIcons name="scale-balance" size={40} color={Colors.accenticon} style={{opacity: 0.55}}    />
                 </View>
               </View>
 
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                   <View style={styles.searchRow}>
-                    <TextInput style={[styles.customInput, { flex: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', fontWeight: '500' }]} placeholder={t.lawyerstab?.messagezip} keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} placeholderTextColor={isDark ? '#78909C' : '#90A4AE'} />
+                    <TextInput style={[styles.customInput, { flex: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, fontWeight: '500' }]} placeholder={t.lawyerstab?.messagezip} keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} placeholderTextColor={isDark ? '#78909C' : '#90A4AE'} />
                     <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={styles.compactSearchBtn}>
-                      <LinearGradient colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#B0BEC5', '#CFD8DC']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
+                      <LinearGradient colors={isZipValid ? orangeGradient : ['#BDBDBD', '#9E9E9E']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
                         {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
                       </LinearGradient>
                     </TouchableOpacity>
@@ -337,22 +316,30 @@ export default function LawyersScreen() {
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}>
                     {PRACTICE_AREAS.map((area) => {
                        const iconInfo = AREA_ICONS[area] || AREA_ICONS['Default'];
+                       const isSelected = selectedArea === area;
                        return (
-                        <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(area); }} style={[styles.chip, { borderColor: Colors.border, flexDirection: 'row', alignItems: 'center' }, selectedArea === area && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
-                          <iconInfo.lib name={iconInfo.name} size={14} color={selectedArea === area ? '#fff' : Colors.text} style={{ marginRight: 8 }} />
-                          <ThemedText style={{ color: selectedArea === area ? '#fff' : Colors.text, fontSize: 13, fontWeight: '600'}}>{area}</ThemedText>
+                        <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(area); }} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isSelected ? 0 : 1, borderColor: Colors.border }}>
+                          {isSelected ? (
+                            <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                              <iconInfo.lib name={iconInfo.name} size={14} color="#FFF" style={{ marginRight: 8 }} />
+                              <ThemedText style={{ color: '#FFF', fontSize: 13, fontWeight: '800'}}>{area}</ThemedText>
+                            </LinearGradient>
+                          ) : (
+                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                              <iconInfo.lib name={iconInfo.name} size={14} color={Colors.text} style={{ marginRight: 8 }} />
+                              <ThemedText style={{ color: Colors.text, fontSize: 13, fontWeight: '600'}}>{area}</ThemedText>
+                            </View>
+                          )}
                         </TouchableOpacity>
                        );
                     })}
                   </ScrollView>
 
                   <View style={{ height: 220, borderColor: Colors.border, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }}>
-                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={results.length > 0 ? results : DATA_SOURCE} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); if(mapRef.current) mapRef.current.animateToRegion({ latitude: l.lat, longitude: l.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 800); }} />
+                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={results.length > 0 ? results : DATA_SOURCE} onMarkerPress={(l: any) => { setResults([l]); }} />
                   </View>
 
                   <View style={{ marginTop: 20 }}>
-                    {results.length > 0 && <ThemedText style={{ fontSize: 13, marginBottom: 10, color: Colors.subtext, fontWeight: '700' }}>{results.length} {t.lawyerstab?.resultdomore}</ThemedText>}
-                    {isFilteredByMap && <TouchableOpacity onPress={() => { setIsFilteredByMap(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, width: '100%', borderWidth: 1, borderColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'transparent' }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={Colors.accent} /><ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.lawyerstab?.viewallresults }`}</ThemedText></TouchableOpacity>}
                     {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
                   </View>
                 </ScrollView>
@@ -365,9 +352,18 @@ export default function LawyersScreen() {
                         const iconData = AREA_ICONS[area] || AREA_ICONS['Default'];
                         const isActive = selectedArea === area;
                         return (
-                          <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(area); }} style={[localStyles.webCapsuleBtn, isActive ? { backgroundColor: '#FF5F6D' } : { backgroundColor: isDark ? 'rgba(128,128,128,0.2)' : 'rgba(0, 0, 0, 0.1)', borderWidth: 1, borderColor: Colors.border }]}>
-                            <iconData.lib name={iconData.name} size={18} color={isActive ? '#FFF' : Colors.subtext} style={{ marginRight: 12 }} />
-                            <ThemedText style={{ color: isActive ? '#FFF' : Colors.text, fontWeight: isActive ? '700' : '500' }}>{area}</ThemedText>
+                          <TouchableOpacity key={area} onPress={() => { setSelectedArea(area); if(isZipValid) handleSearch(area); }} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                            {isActive ? (
+                              <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
+                                <iconData.lib name={iconData.name} size={18} color="#FFF" style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{area}</ThemedText>
+                              </LinearGradient>
+                            ) : (
+                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: Colors.inputBg }}>
+                                <iconData.lib name={iconData.name} size={18} color={Colors.text} style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: Colors.text, fontWeight: '600', fontSize: 14 }}>{area}</ThemedText>
+                              </View>
+                            )}
                           </TouchableOpacity>
                         );
                       })}
@@ -377,30 +373,15 @@ export default function LawyersScreen() {
                   <View style={{ flex: 1, flexDirection: 'row', marginLeft: 25 }}>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
-                        <TextInput style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1 }]} placeholder={t.lawyerstab?.messagezip} value={zipCode} maxLength={5} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} />
-                        <TouchableOpacity onPress={() => handleSearch()} style={styles.compactSearchBtn} disabled={!isZipValid}><LinearGradient colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#CFD8DC', '#B0BEC5']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}><MaterialCommunityIcons name="magnify" size={22} color="#fff" /></LinearGradient></TouchableOpacity>
+                        <TextInput style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1 }]} placeholder={t.lawyerstab?.messagezip} value={zipCode} maxLength={5} onChangeText={setZipCode} onSubmitEditing={() => handleSearch()} placeholderTextColor={isDark ? '#78909C' : '#90A4AE'} />
+                        <TouchableOpacity onPress={() => handleSearch()} style={styles.compactSearchBtn} disabled={!isZipValid}><LinearGradient colors={isZipValid ? orangeGradient : ['#BDBDBD', '#9E9E9E']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}><MaterialCommunityIcons name="magnify" size={22} color="#fff" /></LinearGradient></TouchableOpacity>
                       </View>
                       <ScrollView showsVerticalScrollIndicator={false}>
-                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: Colors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.lawyerstab?.resultdomore}</ThemedText>}
-                        {isFilteredByMap && <TouchableOpacity onPress={() => { setIsFilteredByMap(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, width: '100%', borderWidth: 1, borderColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'transparent' }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={Colors.accent} /><ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.lawyerstab?.viewallresults }`}</ThemedText></TouchableOpacity>}
                         {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
                       </ScrollView>
                     </View>
-                    
-                    <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, position: 'relative' }}>
-                      <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); setIsFilteredByMap(true); }} />
-                      
-                      <TouchableOpacity 
-                        onPress={getCurrentLocation} 
-                        style={{ 
-                          position: 'absolute', bottom: 20, right: 20, 
-                          backgroundColor: isDark ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.85)', 
-                          padding: 12, borderRadius: 30, elevation: 5, 
-                          shadowOpacity: 0.2, shadowRadius: 4, borderWidth: 1, borderColor: Colors.border 
-                        }}
-                      >
-                        <MaterialCommunityIcons name="crosshairs-gps" size={24} color={Colors.accent} />
-                      </TouchableOpacity>
+                    <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border }}>
+                      <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={(l: any) => { setResults([l]); }} />
                     </View>
                   </View>
                 </View>

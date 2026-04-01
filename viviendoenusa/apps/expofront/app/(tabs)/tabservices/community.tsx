@@ -1,19 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
-  TouchableOpacity,
-  View,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  TextInput,
-  Image,
-  Alert,
-  Share,
-  ColorValue,
-  ActivityIndicator,
-  Platform,
-  Modal as RNModal,
-  KeyboardAvoidingView
+  TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
+  TextInput, Image, Alert, Share, ColorValue, ActivityIndicator,
+  Platform, Modal as RNModal, KeyboardAvoidingView
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -41,7 +30,7 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark' ;
+  const isDark = colorScheme === 'dark'; // Ajustado para lógica estándar dark/light
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata);
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   
@@ -54,27 +43,32 @@ export default function CommunityScreen() {
   const segments = useSegments();
   const isCommunityScreen = segments.includes('community');
 
-  // --- LÓGICA DE ICONOS Y FILTROS ---
+  const DynamicColors = {
+    text: isDark ? '#FFFFFF' : '#1A1A1A',
+    subtext: isDark ? '#B0BEC5' : '#546E7A',
+    accent: isDark ? '#4FC3F7' : '#0080B5',
+    accenticon: isDark ? '#607D8B' : '#1A1A1A',
+    border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
+    inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+    iconInactive: isDark ? '#E0E0E0' : '#666666',
+    categoryUnselected: isDark ? 'rgba(255,255,255,0.15)' : 'transparent',
+  };
+
+  const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
+  const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'] as const;
+
   const tagIcons: Record<string, any> = {
-    'All': 'apps',
-    'Todos': 'apps',
-    'Experience': 'star-outline',
-    'Experiencia': 'star-outline',
-    'Question': 'help-circle-outline',
-    'Pregunta': 'help-circle-outline',
-    'Advice': 'lightbulb-on-outline',
-    'Consejo': 'lightbulb-on-outline'
+    'All': 'apps', 'Todos': 'apps',
+    'Experience': 'star-outline', 'Experiencia': 'star-outline',
+    'Question': 'help-circle-outline', 'Pregunta': 'help-circle-outline',
+    'Advice': 'lightbulb-on-outline', 'Consejo': 'lightbulb-on-outline'
   };
 
   const tagMapping: Record<string, string> = {
-    'All': 'All',
-    'Todos': 'All',
-    'Experience': 'Experience',
-    'Experiencia': 'Experience',
-    'Question': 'Question',
-    'Pregunta': 'Question',
-    'Advice': 'Advice',
-    'Consejo': 'Advice'
+    'All': 'All', 'Todos': 'All',
+    'Experience': 'Experience', 'Experiencia': 'Experience',
+    'Question': 'Question', 'Pregunta': 'Question',
+    'Advice': 'Advice', 'Consejo': 'Advice'
   };
 
   const subCategories = [
@@ -116,9 +110,6 @@ export default function CommunityScreen() {
   const [visibleComments, setVisibleComments] = useState<Record<number, boolean>>({});
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
-
-  const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
-  const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#ddd', '#ccc'] as const;
 
   const handlePost = async () => {
     const trimmedText = postText.trim();
@@ -208,33 +199,24 @@ export default function CommunityScreen() {
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
-  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+
+  
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[styles.centerContainer, { marginTop: verticalOffset }]}>
           <View style={[stylesOriginal.cardWrapper, { 
-            width: cardWidth,
-            height: cardHeight,
-            overflow: 'hidden',
-            borderRadius: 28,
+            width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28,
             backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent',
-            borderWidth: isAndroid ? 1 : 0,
-            borderColor: borderColor
+            borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border
           }]}>
-            {!isAndroid && (
-              <BlurView
-                intensity={isDark ? 100 : 75}
-                tint={isDark ? 'dark' : 'light'}
-                style={StyleSheet.absoluteFill}
-              />
-            )}
+            {!isAndroid && <BlurView intensity={isDark ? 100 : 60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
 
             <View style={styles.cardContent}>
               <View style={styles.headerRow}>
                 <TouchableOpacity onPress={() => router.push('/services')}>
-                  <MaterialCommunityIcons name="arrow-left" size={26} color={isDark ? '#fff' : '#000'} />
+                  <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
                 </TouchableOpacity>
                 {isLargeWeb && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginLeft: 10}}>
@@ -243,61 +225,102 @@ export default function CommunityScreen() {
                     </TouchableOpacity>
                     {subCategories.map(cat => (
                       <TouchableOpacity key={cat.id} onPress={() => setActiveSubFilter(cat.id)} style={[styles.headerSubChip, activeSubFilter === cat.id && {borderColor: '#FF5F6D', backgroundColor: 'rgba(255,95,109,0.1)'}]}>
-                        <MaterialCommunityIcons name={cat.icon as any} size={14} color={activeSubFilter === cat.id ? '#FF5F6D' : (isDark ? '#fff' : '#666')} />
-                        <ThemedText style={[styles.subChipText, activeSubFilter === cat.id && {color: '#FF5F6D'}]}>{cat.id}</ThemedText>
+                        <MaterialCommunityIcons name={cat.icon as any} size={14} color={activeSubFilter === cat.id ? '#FF5F6D' : DynamicColors.iconInactive} />
+                        <ThemedText style={[styles.subChipText, activeSubFilter === cat.id ? {color: '#FF5F6D'} : {color: DynamicColors.iconInactive}]}>{cat.id}</ThemedText>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
                 )}
                 <View style={{flex:1}} />
-                <MaterialCommunityIcons name="account-group" size={40} color={isDark ? '#fff' : '#000'} style={{opacity: 0.15}}/>
+                <MaterialCommunityIcons name="account-group" size={40} color={DynamicColors.text} style={{opacity: 0.55}} />
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
                 {isLargeWeb && (
                   <View style={styles.webSidebar}>
-                    <ThemedText style={styles.sideMenuTitle}>FILTRAR</ThemedText>
+                    <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>FILTRAR</ThemedText>
                     {t.communitytab.typepost.map((f: string) => {
                       const isActive = tagMapping[f] === tagMapping[activeFilter];
                       return (
-                        <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={[styles.webCapsuleBtn, isActive ? { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' } : { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0, 0, 0, 0.03)', borderColor: borderColor }]}>
-                          <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={18} color={isActive ? '#fff' : (isDark ? '#fff' : '#666')} style={{marginRight: 10}} />
-                          <ThemedText style={[styles.webCapsuleText, isActive && { color: '#fff' }]}>{f}</ThemedText>
+                        <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                          {isActive ? (
+                            <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
+                              <MaterialCommunityIcons name={tagIcons[f]} size={18} color="#FFF" style={{ marginRight: 10 }} />
+                              <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{f}</ThemedText>
+                            </LinearGradient>
+                          ) : (
+                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
+                              <MaterialCommunityIcons name={tagIcons[f]} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} />
+                              <ThemedText style={{ color: DynamicColors.text, fontWeight: '600', fontSize: 14 }}>{f}</ThemedText>
+                            </View>
+                          )}
                         </TouchableOpacity>
                       );
                     })}  
                   </View>
                 )}
+
                 {!isLargeWeb && (
                   <View style={{marginBottom: 10}}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
-                      <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={[styles.filterChipBase, { marginRight: 8, borderColor: isRecentFirst ? '#FF5F6D' : borderColor, backgroundColor: isRecentFirst ? 'rgba(255,95,109,0.1)' : 'transparent' } ]}>
-                         <MaterialCommunityIcons name="clock-outline" size={15} color={isRecentFirst ? '#FF5F6D' : (isDark ? '#fff' : '#666')} />
-                         <ThemedText style={[styles.filterChipText, {marginLeft: 5, color: isRecentFirst ? '#FF5F6D' : (isDark ? '#fff' : '#666')}]}>{t.communitytab.subCategories[5]}</ThemedText>
+                      <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
+                        {isRecentFirst ? (
+                          <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                            <MaterialCommunityIcons name="clock-outline" size={15} color="#FFF" style={{ marginRight: 5 }} />
+                            <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
+                          </LinearGradient>
+                        ) : (
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                            <MaterialCommunityIcons name="clock-outline" size={15} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                            <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
+                          </View>
+                        )}
                       </TouchableOpacity>
+                      
                       {t.communitytab.typepost.map((f: string) => {
-                         const isActive = tagMapping[f] === tagMapping[activeFilter];
-                         return (
-                          <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={[styles.filterChipBase, { marginRight: 8, backgroundColor: isActive ? '#FF5F6D' : 'transparent', borderColor: isActive ? '#FF5F6D' : borderColor }]}>
-                            <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={14} color={isActive ? '#fff' : (isDark ? '#fff' : '#666')} style={{marginRight: 5}} />
-                            <ThemedText style={[styles.filterChipText, { color: isActive ? '#fff' : (isDark ? '#fff' : '#666') }]}>{f}</ThemedText>
+                        const isActive = tagMapping[f] === tagMapping[activeFilter];
+                        return (
+                          <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                            {isActive ? (
+                              <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                                <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{f}</ThemedText>
+                              </LinearGradient>
+                            ) : (
+                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                                <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{f}</ThemedText>
+                              </View>
+                            )}
                           </TouchableOpacity>
                         );
                       })}
                     </ScrollView>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 5}}>
-                      {subCategories.map(cat => (
-                        <TouchableOpacity key={cat.id} onPress={() => setActiveSubFilter(cat.id)} style={[styles.subFilterChip, activeSubFilter === cat.id && {borderColor: '#FF5F6D'}]}>
-                          <MaterialCommunityIcons name={cat.icon as any} size={14} color={activeSubFilter === cat.id ? '#FF5F6D' : (isDark ? '#fff' : '#666')} />
-                          <ThemedText style={[styles.subChipText, activeSubFilter === cat.id && {color: '#FF5F6D'}]}>{cat.id}</ThemedText>
-                        </TouchableOpacity>
-                      ))}
+                      {subCategories.map(cat => {
+                        const isActive = activeSubFilter === cat.id;
+                        return (
+                          <TouchableOpacity key={cat.id} onPress={() => setActiveSubFilter(cat.id)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                             {isActive ? (
+                               <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                 <MaterialCommunityIcons name={cat.icon as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                 <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{cat.id}</ThemedText>
+                               </LinearGradient>
+                             ) : (
+                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                                 <MaterialCommunityIcons name={cat.icon as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                 <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{cat.id}</ThemedText>
+                               </View>
+                             )}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </ScrollView>
                   </View>
                 )}
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isIOS ? 130 : 100 }}>
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {filteredPosts.map(post => (
                       <View key={post.id} style={styles.postCard}>
                         <View style={styles.postHeaderRow}>
@@ -318,10 +341,10 @@ export default function CommunityScreen() {
                                   <ThemedText style={styles.commentUser}>{c.userName}: <ThemedText style={styles.commentText}>{c.text}</ThemedText></ThemedText>
                                 </View>
                               ))
-                            ) : <ThemedText style={styles.noCommentsText}>Sé el primero en publicar algo.</ThemedText>}
+                            ) : <ThemedText style={styles.noCommentsText}>Sé el primero en comentar.</ThemedText>}
                             <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={styles.replyBtn}>
-                              <MaterialCommunityIcons name="pencil-outline" size={12} color="#FF5F6D" />
-                              <ThemedText style={styles.replyBtnText}>Responder</ThemedText>
+                              <MaterialCommunityIcons name="pencil-outline" size={12} color={DynamicColors.accent} />
+                              <ThemedText style={[styles.replyBtnText, { color: DynamicColors.accent }]}>Responder</ThemedText>
                             </TouchableOpacity>
                           </View>
                         )}
@@ -332,8 +355,8 @@ export default function CommunityScreen() {
                               <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes}</ThemedText>
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
-                              <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : (isDark ? '#bbb' : '#666')} />
-                              <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : (isDark ? '#bbb' : '#666') }]}>{(comments[post.id] || []).length}</ThemedText>
+                              <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : DynamicColors.iconInactive} />
+                              <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : DynamicColors.iconInactive }]}>{(comments[post.id] || []).length}</ThemedText>
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
                               <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
@@ -341,7 +364,7 @@ export default function CommunityScreen() {
                             </TouchableOpacity>
                           </View>
                           <TouchableOpacity onPress={() => Share.share({ message: post.text })}>
-                            <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? "#fff" : "#666"} />
+                            <MaterialCommunityIcons name="share-variant" size={18} color={DynamicColors.iconInactive} />
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -362,51 +385,69 @@ export default function CommunityScreen() {
         </TouchableOpacity>
       )}
 
-      {/* MODAL NUEVA PUBLICACIÓN - Parche React 19 */}
+      {/* MODAL NUEVA PUBLICACIÓN */}
       <RNModal visible={isModalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
           <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
             <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={styles.modalBlur}>
               <View style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 40 }]}>
                 <View style={styles.modalHeader}>
                   <TouchableOpacity onPress={() => setModalVisible(false)}>
-                    <ThemedText style={{ color: '#FF5F6D' }}>Cerrar</ThemedText>
+                    <ThemedText style={{ color: '#FF5F6D', fontWeight: 'bold' }}>Cerrar</ThemedText>
                   </TouchableOpacity>
                   <ThemedText style={styles.modalTitle}>Nueva Publicación</ThemedText>
                   <View style={{ width: 45 }} />
                 </View>
 
-                <ThemedText style={styles.label}>TIPO DE POST</ThemedText>
+                <ThemedText style={[styles.label, {color: DynamicColors.text}]}>TIPO DE POST</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
                   {t.communitytab.typepostAdd.map((tag: string) => {
                     const isActive = selectedTag === tag;
                     return (
-                      <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={[styles.tagChip, isActive && { backgroundColor: '#FF5F6D', borderColor: '#FF5F6D' }]}>
-                        <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color={isActive ? '#fff' : (isDark ? '#fff' : '#666')} style={{marginRight: 6}} />
-                        <ThemedText style={{ color: isActive ? '#fff' : (isDark ? '#fff' : '#333'), fontSize: 11, fontWeight: '600' }}>{tag}</ThemedText>
+                      <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                         {isActive ? (
+                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                             <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color="#FFF" style={{ marginRight: 6 }} />
+                             <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{tag}</ThemedText>
+                           </LinearGradient>
+                         ) : (
+                           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                             <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
+                             <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 11, fontWeight: '600' }}>{tag}</ThemedText>
+                           </View>
+                         )}
                       </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
 
-                <ThemedText style={styles.label}>{t.communitytab.category}</ThemedText>
+                <ThemedText style={[styles.label, {color: DynamicColors.text}]}>{t.communitytab.category}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>
-                  {subCategories.map(sub => (
-                    <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={[styles.subChip, selectedSubCategory === sub.id && { borderColor: '#FF5F6D' }]}>
-                      <MaterialCommunityIcons name={sub.icon as any} size={14} color={selectedSubCategory === sub.id ? '#FF5F6D' : '#999'} />
-                      <ThemedText style={{ marginLeft: 5, fontSize: 11, color: selectedSubCategory === sub.id ? '#FF5F6D' : '#999' }}>{sub.id}</ThemedText>
-                    </TouchableOpacity>
-                  ))}
+                  {subCategories.map(sub => {
+                    const isActive = selectedSubCategory === sub.id;
+                    return (
+                      <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                        {isActive ? (
+                          <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                            <MaterialCommunityIcons name={sub.icon as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{sub.id}</ThemedText>
+                          </LinearGradient>
+                        ) : (
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                            <MaterialCommunityIcons name={sub.icon as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                            <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 11, fontWeight: '600' }}>{sub.id}</ThemedText>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </ScrollView>
 
                 <TextInput 
-                  value={postText}
-                  onChangeText={setPostText} 
-                  placeholder="¿Qué estás pensando?"
-                  placeholderTextColor="#999" 
-                  multiline
-                  style={styles.postInput} 
+                  value={postText} onChangeText={setPostText} 
+                  placeholder="¿Qué estás pensando?" placeholderTextColor={isDark ? "#888" : "#999"} 
+                  multiline style={[styles.postInput, { color: DynamicColors.text, backgroundColor: DynamicColors.inputBg }]} 
                 />
 
                 {selectedImage && (
@@ -419,7 +460,7 @@ export default function CommunityScreen() {
                 )}
 
                 <View style={styles.actions}>
-                  <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }} disabled={isPublishing}>
+                  <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }}>
                     <MaterialCommunityIcons name="image-plus" size={32} color="#FF5F6D" />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing}>
@@ -434,13 +475,13 @@ export default function CommunityScreen() {
         </View>
       </RNModal>
 
-      {/* MODAL COMENTARIOS - Parche React 19 */}
+      {/* MODAL COMENTARIOS */}
       <RNModal transparent visible={showCommentInput} animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
          <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end'}}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCommentInput(false)} />
             <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
               <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
-                <TextInput style={[{backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 15, padding: 15, color: isDark ? '#fff' : '#000', minHeight: 80}]} placeholder="Escribe algo..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
+                <TextInput style={[{backgroundColor: DynamicColors.inputBg, borderRadius: 15, padding: 15, color: DynamicColors.text, minHeight: 80}]} placeholder="Escribe algo..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
                 <TouchableOpacity onPress={handleAddComment} style={[styles.publishBtn, {backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center'}]}>
                   <ThemedText style={{color:'#fff', fontWeight:'bold'}}>Enviar</ThemedText>
                 </TouchableOpacity>
