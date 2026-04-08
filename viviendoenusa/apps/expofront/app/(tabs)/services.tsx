@@ -95,7 +95,7 @@ export default function ServicesScreen() {
                   name="view-list" 
                   size={40} 
                   color={textColor} 
-                  style={{ opacity: 0.15 }} 
+                  style={{ opacity: 0.55 }} 
                 />
               </View>
 

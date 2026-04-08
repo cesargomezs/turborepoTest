@@ -19,10 +19,18 @@ import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
-import * as BadWordsLib from 'bad-words';
-import { badWordsList } from '../../../utils/babwords.json';
+// Importación del JSON de malas palabras
+import badWordsData from '../../../utils/babwords.json';
 
 import { contentCardStyles as stylesOriginal } from "app/src/styles/contentcard";
+
+// --- LÓGICA DE VALIDACIÓN SOLICITADA ---
+const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
+
+const validateComment = (text: string): boolean => {
+  const lowerText = text.toLowerCase();
+  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+};
 
 export default function CommunityScreen() {
   const { t } = useTranslation();
@@ -30,7 +38,7 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark'; // Ajustado para lógica estándar dark/light
+  const isDark = colorScheme === 'dark'; 
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata);
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   
@@ -46,7 +54,7 @@ export default function CommunityScreen() {
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#546E7A',
-    accent: isDark ? '#4FC3F7' : '#0080B5',
+    accent: isDark ? '#4FC3F7' : '#2D54B3',
     accenticon: isDark ? '#607D8B' : '#1A1A1A',
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
@@ -79,20 +87,6 @@ export default function CommunityScreen() {
     { id: t.communitytab.subCategories[4], icon: 'heart-pulse' },
   ];
 
-  const filter = useMemo(() => {
-    try {
-      const Lib = BadWordsLib as any;
-      const Constructor = Lib.default || Lib.Filter || (typeof Lib === 'function' ? Lib : null);
-      if (Constructor) {
-        const instance = new Constructor();
-        const badWords = Array.isArray(badWordsList) ? badWordsList : [];
-        if (instance.addWords) instance.addWords(...badWords);
-        return instance;
-      }
-      return null;
-    } catch (e) { return null; }
-  }, []);
-
   const [postText, setPostText] = useState('');
   const [posts, setPosts] = useState<any[]>([]);
   const [selectedTag, setSelectedTag] = useState('Experience'); 
@@ -111,13 +105,21 @@ export default function CommunityScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
 
+  const triggerAlert = (title: string, message: string) => {
+    if (isWeb) { window.alert(`${title}\n${message}`); } 
+    else { Alert.alert(title, message); }
+  };
+
   const handlePost = async () => {
     const trimmedText = postText.trim();
     if (!trimmedText || isPublishing) return;
-    if (filter && (filter.isProfane(trimmedText.toLowerCase()))) {
+
+    // VALIDACIÓN DE PALABRAS PROHIBIDAS EN POST
+    if (!validateComment(trimmedText)) {
       triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
       return; 
     }
+
     setIsPublishing(true);
     try {
       if (selectedImage) {
@@ -151,27 +153,16 @@ export default function CommunityScreen() {
     }
   };
 
-  const triggerAlert = (title: string, message: string) => {
-    if (isWeb) { window.alert(`${title}\n${message}`); } 
-    else { Alert.alert(title, message); }
-  };
-
-  const handleVote = (postId: number, type: 'like' | 'dislike') => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const isSelected = p.userVote === type;
-      return {
-        ...p,
-        likes: type === 'like' ? (isSelected ? p.likes - 1 : p.likes + 1) : (p.userVote === 'like' ? p.likes - 1 : p.likes),
-        dislikes: type === 'dislike' ? (isSelected ? p.dislikes - 1 : p.dislikes + 1) : (p.userVote === 'dislike' ? p.dislikes - 1 : p.dislikes),
-        userVote: isSelected ? null : type
-      };
-    }));
-  };
-
   const handleAddComment = () => {
     const trimmed = commentText.trim();
     if (!trimmed || !activeCommentId) return;
+
+    // VALIDACIÓN DE PALABRAS PROHIBIDAS EN COMENTARIO
+    if (!validateComment(trimmed)) {
+      triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
+      return;
+    }
+
     const newComment = {
       id: Date.now(),
       text: trimmed,
@@ -187,6 +178,19 @@ export default function CommunityScreen() {
     setVisibleComments(prev => ({ ...prev, [activeCommentId]: true }));
   };
 
+  const handleVote = (postId: number, type: 'like' | 'dislike') => {
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      const isSelected = p.userVote === type;
+      return {
+        ...p,
+        likes: type === 'like' ? (isSelected ? p.likes - 1 : p.likes + 1) : (p.userVote === 'like' ? p.likes - 1 : p.likes),
+        dislikes: type === 'dislike' ? (isSelected ? p.dislikes - 1 : p.dislikes + 1) : (p.userVote === 'dislike' ? p.dislikes - 1 : p.dislikes),
+        userVote: isSelected ? null : type
+      };
+    }));
+  };
+
   const filteredPosts = useMemo(() => {
     let res = posts.filter(p => {
       const matchTag = activeFilter === 'All' || tagMapping[p.tag] === tagMapping[activeFilter];
@@ -199,8 +203,6 @@ export default function CommunityScreen() {
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
-
-  
 
   return (
     <View style={styles.container}>
@@ -218,19 +220,6 @@ export default function CommunityScreen() {
                 <TouchableOpacity onPress={() => router.push('/services')}>
                   <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
                 </TouchableOpacity>
-                {isLargeWeb && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginLeft: 10}}>
-                    <TouchableOpacity onPress={() => setActiveSubFilter('All')} style={[styles.headerSubChip, activeSubFilter === 'All' && {borderColor: '#FF5F6D', backgroundColor: 'rgba(255,95,109,0.1)'}]}>
-                       <ThemedText style={[styles.subChipText, activeSubFilter === 'All' && {color: '#FF5F6D'}]}>Todas</ThemedText>
-                    </TouchableOpacity>
-                    {subCategories.map(cat => (
-                      <TouchableOpacity key={cat.id} onPress={() => setActiveSubFilter(cat.id)} style={[styles.headerSubChip, activeSubFilter === cat.id && {borderColor: '#FF5F6D', backgroundColor: 'rgba(255,95,109,0.1)'}]}>
-                        <MaterialCommunityIcons name={cat.icon as any} size={14} color={activeSubFilter === cat.id ? '#FF5F6D' : DynamicColors.iconInactive} />
-                        <ThemedText style={[styles.subChipText, activeSubFilter === cat.id ? {color: '#FF5F6D'} : {color: DynamicColors.iconInactive}]}>{cat.id}</ThemedText>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
                 <View style={{flex:1}} />
                 <MaterialCommunityIcons name="account-group" size={40} color={DynamicColors.text} style={{opacity: 0.55}} />
               </View>
@@ -238,7 +227,7 @@ export default function CommunityScreen() {
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
                 {isLargeWeb && (
                   <View style={styles.webSidebar}>
-                    <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>FILTRAR</ThemedText>
+                    <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>{t.communitytab.filter}</ThemedText>
                     {t.communitytab.typepost.map((f: string) => {
                       const isActive = tagMapping[f] === tagMapping[activeFilter];
                       return (
@@ -341,10 +330,10 @@ export default function CommunityScreen() {
                                   <ThemedText style={styles.commentUser}>{c.userName}: <ThemedText style={styles.commentText}>{c.text}</ThemedText></ThemedText>
                                 </View>
                               ))
-                            ) : <ThemedText style={styles.noCommentsText}>Sé el primero en comentar.</ThemedText>}
+                            ) : <ThemedText style={styles.noCommentsText}>{t.communitytab.firtscomment}</ThemedText>}
                             <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={styles.replyBtn}>
                               <MaterialCommunityIcons name="pencil-outline" size={12} color={DynamicColors.accent} />
-                              <ThemedText style={[styles.replyBtnText, { color: DynamicColors.accent }]}>Responder</ThemedText>
+                              <ThemedText style={[styles.replyBtnText, { color: DynamicColors.accent }]}>{t.communitytab.responsebutton}</ThemedText>
                             </TouchableOpacity>
                           </View>
                         )}
@@ -394,13 +383,13 @@ export default function CommunityScreen() {
               <View style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 40 }]}>
                 <View style={styles.modalHeader}>
                   <TouchableOpacity onPress={() => setModalVisible(false)}>
-                    <ThemedText style={{ color: '#FF5F6D', fontWeight: 'bold' }}>Cerrar</ThemedText>
+                    <ThemedText style={{ color: '#FF5F6D', fontWeight: 'bold' }}>{t.communitytab.closepost}</ThemedText>
                   </TouchableOpacity>
-                  <ThemedText style={styles.modalTitle}>Nueva Publicación</ThemedText>
+                  <ThemedText style={styles.modalTitle}>{t.communitytab.messagenewpost}</ThemedText>
                   <View style={{ width: 45 }} />
                 </View>
 
-                <ThemedText style={[styles.label, {color: DynamicColors.text}]}>TIPO DE POST</ThemedText>
+                <ThemedText style={[styles.label, {color: DynamicColors.text}]}>{t.communitytab.labeltypepost}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
                   {t.communitytab.typepostAdd.map((tag: string) => {
                     const isActive = selectedTag === tag;
@@ -446,7 +435,7 @@ export default function CommunityScreen() {
 
                 <TextInput 
                   value={postText} onChangeText={setPostText} 
-                  placeholder="¿Qué estás pensando?" placeholderTextColor={isDark ? "#888" : "#999"} 
+                  placeholder={t.communitytab.messageNewPost} placeholderTextColor={isDark ? "#888" : "#999"} 
                   multiline style={[styles.postInput, { color: DynamicColors.text, backgroundColor: DynamicColors.inputBg }]} 
                 />
 
@@ -465,7 +454,7 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing}>
                     <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={styles.publishBtn}>
-                      {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Publicar</ThemedText>}
+                      {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>{t.communitytab.botonpost}</ThemedText>}
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
@@ -481,9 +470,9 @@ export default function CommunityScreen() {
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCommentInput(false)} />
             <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
               <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
-                <TextInput style={[{backgroundColor: DynamicColors.inputBg, borderRadius: 15, padding: 15, color: DynamicColors.text, minHeight: 80}]} placeholder="Escribe algo..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
+                <TextInput style={[{backgroundColor: DynamicColors.inputBg, borderRadius: 15, padding: 15, color: DynamicColors.text, minHeight: 80}]} placeholder={t.communitytab.placeHolderModal} placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
                 <TouchableOpacity onPress={handleAddComment} style={[styles.publishBtn, {backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center'}]}>
-                  <ThemedText style={{color:'#fff', fontWeight:'bold'}}>Enviar</ThemedText>
+                  <ThemedText style={{color:'#fff', fontWeight:'bold'}}>{t.communitytab.sendbutton}</ThemedText>
                 </TouchableOpacity>
               </BlurView>
             </KeyboardAvoidingView>

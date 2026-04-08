@@ -1,3 +1,5 @@
+import { Filter } from "bad-words";
+
 // constants/Languages.ts
 export const translations = {
   es: {
@@ -47,15 +49,21 @@ export const translations = {
       noReviews: "Aún no hay reseñas.", // <--- Agrega esta
       addReview: "Danos tu opinión",    // <--- Agrega esta
       placeholderReview: "Escribe tu experiencia...", // <--- Agrega esta
-      publishBtn: "PUBLICAR AHORA"      // <--- Agrega esta
+      publishBtn: "Publicar reseña" ,     // <--- Agrega esta
+      typeReview: "Escribir mi opinión",
+      experience:"¿Cómo fue tu experiencia?",
+      backBtn: "Volver",
+      recent: "Reciente"
       
     },
     communitytab: {
+      labeltypepost: "Tipo de publicación",
       typepost : ['Todos', 'Experiencia', 'Pregunta', 'Consejo'],
       typepostAdd : ['Experiencia', 'Pregunta', 'Consejo'],
       messagenewpost: "Nueva publicación",
       closepost: "Cerrar",
       botonpost: "Publicar",
+      firtscomment: "Sé el primero en comentar",
       questionnewpost: '¿Qué quieres compartir?',
       textInappropriateTittle: "Contenido inapropiado",
       textInappropriateDescription: "Tu mensaje contiene palabras no permitidas. Por favor, mantén un lenguaje respetuoso.",
@@ -66,7 +74,36 @@ export const translations = {
       errorServer: "No se pudo conectar con el servidor de moderación.",
       category: "Categoría",
       subCategories: ['General','Comida','Trabajo','Trámites','Salud','Nuevos'],
-
+      filter:"Filtrar",
+      placeHolderModal: "Escribe algo...",
+      sendbutton: "Enviar",
+      responsebutton: "Responder",
+      messageNewPost:"¿Qué estás pensando?"
+    },
+    donationstab: {
+        category: "CATEGORÍAS",
+        subCategories: ['Todas','Ropa','Alimentos','Muebles','Electrónica','Otros'],
+        messageMessageDonation: "Nueva donación",
+        messageDonation: "¿Qué te gustaría donar o necesitas?",
+        closeDonation: "Cerrar",
+        botonDonation: "Publicar",
+        statusBottonModalDis: "Disponibles",
+        statusBottonModalDel: "Entregados",
+        statusDonatioAct: "Entregado",
+        statusDonatioReact: "Reactiva",
+        newdonnationTittle: "Titulo de la donación",
+        newdonnationdescription: "Describe brevemente el estado",
+        textInappropriateTittle: "Contenido inapropiado",
+        textInappropriateDescription: "Tu mensaje contiene palabras no permitidas. Por favor, mantén un lenguaje respetuoso.",
+        imageInappropriateTittle: "Imagen rechazada",
+        imageInappropriateDescription: "Nuestra IA detectó contenido sensible. Por favor elige otra imagen.",
+        publishedDonationLabel: "¡Éxito!",
+        publishedDonationDescription: "Tu publicación ha sido publicada.",
+        errorServer: "No se pudo conectar con el servidor de moderación.",
+        sendbutton: "Enviar",
+        messagenotdonnations:"No se encontraron donaciones disponibles.",
+        choisephoto:"Seleccionar fotografía",
+        callbton: "Llamada"
     }
     
   },
@@ -117,15 +154,20 @@ export const translations = {
       noReviews: "There are no reviews yet.", // <--- Agrega esta
       addReview: "Give us your opinion",    // <--- Agrega esta
       placeholderReview: "Write about your experience...", // <--- Agrega esta
-      publishBtn:"PUBLISH NOW"      // <--- Agrega esta  
-      
+      publishBtn: "Post review",      // <--- Agrega esta
+      typeReview: "Write my review",
+      experience:"How was your experience?",
+      backBtn: "Go back",
+      recent: "Recent"
     },
     communitytab: {
+      labeltypepost: "Post type",
       typepost : ['All', 'Experience', 'Question', 'Advice'],
       typepostAdd : ['Experience', 'Question', 'Advice'],
       messagenewpost: "New post",
       closepost: "Close",
       botonpost: "Post",
+      firtscomment: "Be the first to comment",
       questionnewpost: 'What do you want to share?',
       textInappropriateTittle: "Inappropriate content",
       textInappropriateDescription: "Your post contains forbidden words. Please use respectful language.",
@@ -136,8 +178,37 @@ export const translations = {
       errorServer: "Could not connect to the moderation server.",
       category: "Category",
       subCategories: ['General','Food','Work','Procedures','Health','New'],
-      
-    }
+      filter:"Filter",
+      placeHolderModal: "Write something...",
+      sendbutton: "Send",
+      responsebutton: "Reply",
+      messageNewPost:"What are you thinking?"
+    },
+    donationstab: {
+        category: "CATEGORYS",
+        subCategories: ['All','Clothing','Food','Furniture','Electronics','Other'],
+        messageMessageDonation: "New donation",
+        messageDonation: "What would you like to donate or need?",
+        closeDonation: "Close",
+        botonDonation: "Post",
+        statusBottonModalDis: "Availables",
+        statusBottonModalDel: "Delivered",
+        statusDonatioAct: "Delivered",
+        statusDonatioReact: "Reactivate",
+        newdonnationTittle: "Donation title",
+        newdonnationdescription: "Briefly describe the condition",
+        textInappropriateTittle: "Inappropriate content",
+        textInappropriateDescription: "Your post contains forbidden words. Please use respectful language.",
+        imageInappropriateTittle: "Image rejected",
+        imageInappropriateDescription: "Our AI detected sensitive content. Please choose another image.",
+        publishedDonationLabel: "Success!",
+        publishedDonationDescription: "Your post has been published.",
+        errorServer: "Could not connect to the moderation server.",
+        sendbutton: "Send",
+        messagenotdonnations:"No available donations found.",
+        choisephoto:"Select photo",
+        callbton: "Call"
+      }
   
   }
 };
