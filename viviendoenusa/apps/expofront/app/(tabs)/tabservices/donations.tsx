@@ -273,7 +273,7 @@ export default function DonationsScreen() {
                   {formImage ? <Image source={{ uri: formImage }} style={{ width: '100%', height: '100%' }} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="image-plus" size={32} color={Colors.accent} /><ThemedText style={{ color: Colors.accent, fontSize: 11, fontWeight: '800', marginTop: 5 }}>{t.donationstab.choisephoto}</ThemedText></View>}
                 </TouchableOpacity>
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Colors.accent, marginBottom: 12, letterSpacing: 0.5 }}>{t.donationstab.category}</ThemedText>
+                <ThemedText style={{ fontSize: 14, fontWeight: '900', color: Colors.accent, marginBottom: 12, letterSpacing: 0.5 }}>{t.donationstab.category}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 5 }}>
                   {CATEGORIES.filter(c => c.id !== 'Todos').map(cat => (
                     <TouchableOpacity key={cat.id} onPress={() => setFormCategory(cat.id)} style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 15, borderWidth: 1.5, borderColor: formCategory === cat.id ? Colors.accent : Colors.border, backgroundColor: formCategory === cat.id ? Colors.accent : 'rgba(128,128,128,0.08)', flexDirection: 'row', alignItems: 'center' }}>
@@ -283,7 +283,7 @@ export default function DonationsScreen() {
                   ))}
                 </ScrollView>
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Colors.accent, marginBottom: 12, marginTop: 25, letterSpacing: 0.5 }}>MÉTODO DE CONTACTO</ThemedText>
+                <ThemedText style={{ fontSize: 14, fontWeight: '900', color: Colors.accent, marginBottom: 12, marginTop: 25, letterSpacing: 0.5 }}>{t.donationstab.typeContact}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1.5, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : Colors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : 'transparent' }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : Colors.subtext} style={{ marginRight: 8 }} />

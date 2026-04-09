@@ -1,4 +1,6 @@
 import { Filter } from "bad-words";
+import { time } from "console";
+import { create } from "domain";
 
 // constants/Languages.ts
 export const translations = {
@@ -81,7 +83,7 @@ export const translations = {
       messageNewPost:"¿Qué estás pensando?"
     },
     donationstab: {
-        category: "CATEGORÍAS",
+        category: "Categorías",
         subCategories: ['Todas','Ropa','Alimentos','Muebles','Electrónica','Otros'],
         messageMessageDonation: "Nueva donación",
         messageDonation: "¿Qué te gustaría donar o necesitas?",
@@ -103,8 +105,25 @@ export const translations = {
         sendbutton: "Enviar",
         messagenotdonnations:"No se encontraron donaciones disponibles.",
         choisephoto:"Seleccionar fotografía",
-        callbton: "Llamada"
+        callbton: "Llamada",
+        typeContact: "Método de contacto"
+    },
+    eventstab: {
+        label: "Eventos",
+        filter: "Filtros",
+        botonEvent: "Publicar evento",
+        photoEvent :"Foto del evento",
+        typeEvent: "Tipo de evento",
+        dateEvent: "Fecha del evento",
+        timeEvent: "Horario (Inicio - Fin)",
+        readyBtn: "Listo",
+        nameEvent: "Nombre del evento",
+        addressEvent: "Dirección del evento",
+        detailsEvent: "Detalles del evento",
+        sharringEvent: "Compartir evento",
+        createEvent: "Crear evento"
     }
+
     
   },
   en: {
@@ -185,7 +204,7 @@ export const translations = {
       messageNewPost:"What are you thinking?"
     },
     donationstab: {
-        category: "CATEGORYS",
+        category: "Categories",
         subCategories: ['All','Clothing','Food','Furniture','Electronics','Other'],
         messageMessageDonation: "New donation",
         messageDonation: "What would you like to donate or need?",
@@ -207,8 +226,23 @@ export const translations = {
         sendbutton: "Send",
         messagenotdonnations:"No available donations found.",
         choisephoto:"Select photo",
-        callbton: "Call"
+        callbton: "Call",
+        typeContact: "Contact method"
+      },
+      eventstab: {
+        label: "Events",
+        filter: "Filters",
+        botonEvent: "Post event",
+        photoEvent :"Event photo",
+        typeEvent: "Event type",
+        dateEvent: "Event date",
+        timeEvent: "Schedule (Start - End)",
+        readyBtn: "Ready",
+        nameEvent: "Event name",
+        addressEvent: "Event address",
+        detailsEvent: "Event details",
+        sharringEvent: "Share event",
+        createEvent: "Create event"
       }
-  
   }
 };
