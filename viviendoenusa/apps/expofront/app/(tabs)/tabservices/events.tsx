@@ -83,11 +83,39 @@ export default function EventsScreen() {
   const [formDate, setFormDate] = useState(new Date());
   const [formTime, setFormTime] = useState(new Date());
   const [formTimeEnd, setFormTimeEnd] = useState(new Date());
+  
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showTimeEndPicker, setShowTimeEndPicker] = useState(false);
+
+  // Auxiliares Web
+  const formatDateForWeb = (date: Date) => date.toISOString().split('T')[0];
+  const formatTimeForWeb = (date: Date) => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const handleWebTimeChange = (val: string, type: 'start' | 'end') => {
+    const [h, m] = val.split(':');
+    const newDate = new Date();
+    newDate.setHours(parseInt(h), parseInt(m));
+    type === 'start' ? setFormTime(newDate) : setFormTimeEnd(newDate);
+  };
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (isAndroid) setShowDatePicker(false);
     if (selectedDate) setFormDate(selectedDate);
+  };
+
+  const onTimeChange = (event: DateTimePickerEvent, selectedTime?: Date) => {
+    if (isAndroid) setShowTimePicker(false);
+    if (selectedTime) setFormTime(selectedTime);
+  };
+
+  const onTimeEndChange = (event: DateTimePickerEvent, selectedTime?: Date) => {
+    if (isAndroid) setShowTimeEndPicker(false);
+    if (selectedTime) setFormTimeEnd(selectedTime);
   };
 
   const handleShare = async (event: any) => {
@@ -191,11 +219,14 @@ export default function EventsScreen() {
 
       <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85 }]}><LinearGradient colors={orangeGradient} style={styles.fabGradient}><MaterialCommunityIcons name="calendar-plus" size={28} color="#fff" /></LinearGradient></TouchableOpacity>
 
-      {/* MODAL CREAR EVENTO */}
+      {/* MODAL CREAR EVENTO - FIXED FOR ANDROID KEYBOARD AND WEB PICKERS */}
       <RNModal visible={isModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
-          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 550 : '100%' }}>
+          <KeyboardAvoidingView 
+             behavior={isIOS ? "padding" : "height"} 
+             style={{ width: isLargeWeb ? 550 : '100%', justifyContent: 'flex-end' }}
+          >
             <View style={[styles.modalContent, { backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: height * 0.9, borderColor: Colors.border }]}>
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               <View style={styles.modalHandle} />
@@ -204,10 +235,17 @@ export default function EventsScreen() {
                 <ThemedText style={{ fontSize: 17, fontWeight: '900', color: Colors.text }}>{t.eventstab.botonEvent}</ThemedText>
                 <View style={{ width: 24 }} />
               </View>
-              <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
-                <TouchableOpacity onPress={pickImage} style={[styles.imageUpload, { borderColor: Colors.border, backgroundColor: Colors.imgPlaceholder }]}>
+              <ScrollView 
+                style={{ paddingHorizontal: 20 }} 
+                showsVerticalScrollIndicator={false} 
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: isAndroid ? 250 : 60 }} 
+              >
+                
+                <TouchableOpacity onPress={pickImage} style={[styles.imageUpload, { borderColor: Colors.border, backgroundColor: 'transparent' }]}>
                   {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={30} color={Colors.accent} /><ThemedText style={{color: Colors.accent, fontWeight:'800', fontSize:13, marginTop:5}}>{t.eventstab.photoEvent}</ThemedText></View>}
                 </TouchableOpacity>
+
                 <ThemedText style={styles.label}>{t.eventstab.typeEvent}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
                   {CATEGORIES.filter(c => c.id !== 'Todos').map(cat => (
@@ -217,29 +255,78 @@ export default function EventsScreen() {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
+                
                 <ThemedText style={styles.label}>{t.eventstab.dateEvent}</ThemedText>
-                <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.input, { borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }]}>
-                    <ThemedText style={{ color: Colors.text, fontWeight: '700' }}>{formDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</ThemedText>
+                {isWeb ? (
+                  <View style={styles.webPickerContainer}>
+                    <MaterialCommunityIcons name="calendar-month" size={20} color={Colors.accent} style={styles.webIcon} />
+                    <View style={[styles.webVisualMock, { backgroundColor: Colors.inputBg, borderColor: Colors.border }]}>
+                      <ThemedText style={{ color: Colors.text, fontWeight: '700' }}>{formDate.toLocaleDateString()}</ThemedText>
+                    </View>
+                    <input type="date" value={formatDateForWeb(formDate)} onChange={(e:any) => setFormDate(new Date(e.target.value))} className="native-web-input" />
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.input, { borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }]}>
+                    <ThemedText style={{ color: Colors.text, fontWeight: '700' }}>{formDate.toLocaleDateString()}</ThemedText>
                     <MaterialCommunityIcons name="calendar-edit" size={20} color={Colors.accent} />
-                </TouchableOpacity>
-                {showDatePicker && (
+                  </TouchableOpacity>
+                )}
+                {showDatePicker && !isWeb && (
                   <View style={isIOS ? styles.pickerBox : null}>
                     <DateTimePicker value={formDate} mode="date" display={isIOS ? "spinner" : "default"} minimumDate={new Date()} onChange={onDateChange} textColor={Colors.text} style={isIOS ? { height: 120 } : null} />
-                    {isIOS && <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.doneBtnIOS}><ThemedText style={{ color: Colors.accent, fontWeight: '800' }}>{t.eventstab.readyBtn}</ThemedText></TouchableOpacity>}
+                    {isIOS && <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.doneBtnIOS}><ThemedText style={{ color: Colors.accent, fontWeight: '800' }}>{t.eventstab.readyBtn || "Hecho"}</ThemedText></TouchableOpacity>}
                   </View>
                 )}
+
                 <ThemedText style={styles.label}>{t.eventstab.timeEvent}</ThemedText>
-                <View style={[styles.timeRowContainer, { borderColor: Colors.border, backgroundColor: 'rgba(128,128,128,0.05)', marginBottom: 15 }]}>
-                  <View style={{ flex: 1, alignItems: 'center' }}><DateTimePicker value={formTime} mode="time" display="default" onChange={(e, d) => d && setFormTime(d)} /></View>
-                  <MaterialCommunityIcons name="arrow-right" size={16} color={Colors.accent} />
-                  <View style={{ flex: 1, alignItems: 'center' }}><DateTimePicker value={formTimeEnd} mode="time" display="default" onChange={(e, d) => d && setFormTimeEnd(d)} /></View>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                  {isWeb ? (
+                    <>
+                      <View style={[styles.webPickerContainer, { flex: 1 }]}>
+                        <View style={[styles.webVisualMock, { backgroundColor: Colors.inputBg, borderColor: Colors.border, paddingLeft: 15 }]}>
+                          <ThemedText style={{ color: Colors.text, fontWeight: '700', fontSize: 12 }}>{formTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</ThemedText>
+                        </View>
+                        <input type="time" value={formatTimeForWeb(formTime)} onChange={(e:any) => handleWebTimeChange(e.target.value, 'start')} className="native-web-input" />
+                      </View>
+                      <View style={[styles.webPickerContainer, { flex: 1 }]}>
+                        <View style={[styles.webVisualMock, { backgroundColor: Colors.inputBg, borderColor: Colors.border, paddingLeft: 15 }]}>
+                          <ThemedText style={{ color: Colors.text, fontWeight: '700', fontSize: 12 }}>{formTimeEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</ThemedText>
+                        </View>
+                        <input type="time" value={formatTimeForWeb(formTimeEnd)} onChange={(e:any) => handleWebTimeChange(e.target.value, 'end')} className="native-web-input" />
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <TouchableOpacity onPress={() => setShowTimePicker(true)} style={[styles.input, { flex:1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                        <ThemedText style={{ color: Colors.text, fontWeight: '700', fontSize:12 }}>{formTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</ThemedText>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color={Colors.accent} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setShowTimeEndPicker(true)} style={[styles.input, { flex:1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                        <ThemedText style={{ color: Colors.text, fontWeight: '700', fontSize:12 }}>{formTimeEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</ThemedText>
+                        <MaterialCommunityIcons name="clock-check" size={16} color={Colors.accent} />
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
+
+                {showTimePicker && !isWeb && (
+                   <View style={isIOS ? styles.pickerBox : null}>
+                    <DateTimePicker value={formTime} mode="time" display={isIOS ? "spinner" : "default"} onChange={onTimeChange} textColor={Colors.text} style={isIOS ? { height: 120 } : null} />
+                    {isIOS && <TouchableOpacity onPress={() => setShowTimePicker(false)} style={styles.doneBtnIOS}><ThemedText style={{ color: Colors.accent, fontWeight: '800' }}>Hecho</ThemedText></TouchableOpacity>}
+                  </View>
+                )}
+                {showTimeEndPicker && !isWeb && (
+                   <View style={isIOS ? styles.pickerBox : null}>
+                    <DateTimePicker value={formTimeEnd} mode="time" display={isIOS ? "spinner" : "default"} onChange={onTimeEndChange} textColor={Colors.text} style={isIOS ? { height: 120 } : null} />
+                    {isIOS && <TouchableOpacity onPress={() => setShowTimeEndPicker(false)} style={styles.doneBtnIOS}><ThemedText style={{ color: Colors.accent, fontWeight: '800' }}>Hecho</ThemedText></TouchableOpacity>}
+                  </View>
+                )}
+
                 <TextInput value={formTitle} onChangeText={setFormTitle} placeholder={t.eventstab.nameEvent} placeholderTextColor={Colors.subtext} style={[styles.input, { color: Colors.text, borderColor: Colors.border, marginBottom: 10 }]} />
                 <TextInput value={formLocation} onChangeText={setFormLocation} placeholder={t.eventstab.addressEvent} placeholderTextColor={Colors.subtext} style={[styles.input, { color: Colors.text, borderColor: Colors.border, marginBottom: 10 }]} />
                 <TextInput value={formDescription} onChangeText={setFormDescription} placeholder={t.eventstab.detailsEvent} multiline style={[styles.input, { color: Colors.text, borderColor: Colors.border, height: 80, textAlignVertical:'top' }]} />
                 
-                {/* BOTÓN DE CREACIÓN CON ANCHO FIJO */}
-                <TouchableOpacity onPress={handlePublishEvent} disabled={isPublishing} style={{ marginTop: 25, marginBottom: 50, alignSelf: 'center' }}>
+                <TouchableOpacity onPress={handlePublishEvent} disabled={isPublishing} style={{ marginTop: 25, marginBottom: 20, alignSelf: 'center' }}>
                   <LinearGradient colors={orangeGradient} style={styles.publishBtnSmall}>
                     {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.publishBtnText}>CREAR EVENTO</ThemedText>}
                   </LinearGradient>
@@ -257,7 +344,7 @@ export default function EventsScreen() {
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setSelectedEventDetails(null)} />
           <View style={[styles.detailContent, { backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: Colors.border }]}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-            <View style={[styles.detailImgContainer, { backgroundColor: Colors.imgPlaceholder }]}>
+            <View style={[styles.detailImgContainer, { backgroundColor: 'transparent' }]}>
                <Image source={{ uri: selectedEventDetails?.image }} style={styles.detailImg} resizeMode="cover" />
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={styles.detailImgOverlay} />
             </View>
@@ -277,6 +364,13 @@ export default function EventsScreen() {
           </View>
         </View>
       </RNModal>
+
+      {isWeb && (
+        <style dangerouslySetInnerHTML={{ __html: `
+          .native-web-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
+          .native-web-input::-webkit-calendar-picker-indicator { position: absolute; width: 100%; height: 100%; cursor: pointer; }
+        `}} />
+      )}
     </View>
   );
 }
@@ -288,7 +382,7 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
       <ThemedText style={[styles.cardDate, { color: Colors.text }]}>{item.date}</ThemedText>
       <View style={styles.cardBadge}><ThemedText style={{ fontSize: 9, color: '#FF5F6D', fontWeight: '900' }}>{item.category.toUpperCase()}</ThemedText></View>
     </View>
-    <View style={[styles.cardImgContainer, { backgroundColor: Colors.imgPlaceholder }]}>
+    <View style={[styles.cardImgContainer, { backgroundColor: 'transparent' }]}>
        <Image source={{ uri: item.image }} style={styles.cardImg} resizeMode="cover" />
     </View>
     <View style={[styles.cardFooter, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.01)' }]}>
@@ -315,10 +409,9 @@ const styles = StyleSheet.create({
   modalHandle: { width: 40, height: 4, backgroundColor: 'rgba(128,128,128,0.2)', alignSelf: 'center', borderRadius: 2, marginTop: 12 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
   imageUpload: { width: '100%', height: 160, borderRadius: 24, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginBottom: 20 },
-  input: { padding: 14, borderRadius: 15, borderWidth: 1, fontSize: 14, fontWeight: '600', backgroundColor: 'rgba(128,128,128,0.05)' },
+  input: { padding: 14, borderRadius: 15, borderWidth: 1, fontSize: 14, fontWeight: '600', backgroundColor: 'rgba(128,128,128,0.05)', marginBottom: 10 },
   label: { fontSize: 14, fontWeight: '900', color: '#FF5F6D', marginBottom: 6, letterSpacing: 1 },
   catPick: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center' },
-  timeRowContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderRadius: 15, borderWidth: 1 },
   pickerBox: { backgroundColor: 'rgba(128,128,128,0.05)', borderRadius: 15, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(128,128,128,0.2)', marginBottom: 10 },
   doneBtnIOS: { padding: 10, alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(128,128,128,0.1)' },
   publishBtnSmall: { height: 55, minWidth: 220, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
@@ -343,5 +436,8 @@ const styles = StyleSheet.create({
   detailBadgeText: { color: '#FFF', fontWeight: '900', fontSize: 12 },
   detailTitle: { fontSize: 26, fontWeight: '900', marginBottom: 15 },
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  detailInfoText: { fontSize: 16, fontWeight: '700', marginLeft: 10 }
+  detailInfoText: { fontSize: 16, fontWeight: '700', marginLeft: 10 },
+  webPickerContainer: { position: 'relative', display: 'flex', alignItems: 'center', marginBottom: 15 },
+  webIcon: { position: 'absolute', left: 15, zIndex: 1 },
+  webVisualMock: { width: '100%', padding: 14, paddingLeft: 45, borderRadius: 16, borderWidth: 1, justifyContent: 'center' },
 });
