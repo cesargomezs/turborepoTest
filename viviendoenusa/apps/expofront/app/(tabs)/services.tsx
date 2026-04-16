@@ -26,7 +26,7 @@ const BUTTONS_DATA: ButtonConfig[] = [
   { id: 1, icon: 'scale-balance', path: '/tabservices/lawyers', colors: ['#4facfe', '#00f2fe'], description: 'Asesoría legal y abogados certificados.' },
   { id: 2, icon: 'account-group-outline', path: '/tabservices/community', colors: ['#FF5F6D', '#FFC371'], description: 'Conecta y participa con tu comunidad.' },
   { id: 3, icon: 'hand-heart', path: '/tabservices/donations', colors: ['#FF416C', '#FF4B2B'], description: 'Apoya causas y organizaciones locales.' },
-  { id: 4, icon: 'calendar-clock', path: '/tabservices/events', colors: ['#f6d365', '#fda085'], description: 'Descubre eventos y actividades próximas.' },
+  { id: 4, icon: 'calendar-star', path: '/tabservices/events', colors: ['#f6d365', '#fda085'], description: 'Descubre eventos y actividades próximas.' },
   { id: 5, icon: 'store-plus-outline', path: '/tabservices/stores', colors: ['#667eea', '#764ba2'], description: 'Explora negocios y servicios cercanos.' },
   { id: 6, icon: 'lightbulb-multiple-outline', path: '/tabservices/entrepreneurs', colors: ['#f093fb', '#f5576c'], description: 'Recursos para impulsar tu emprendimiento.' },
 ];
@@ -95,7 +95,7 @@ export default function ServicesScreen() {
                   name="view-list" 
                   size={40} 
                   color={textColor} 
-                  style={{ opacity: 0.55 }} 
+                  style={{ opacity: 0.2 }} 
                 />
               </View>
 

@@ -1,6 +1,8 @@
 import { Filter } from "bad-words";
 import { time } from "console";
 import { create } from "domain";
+import { register } from "module";
+import { use } from "react";
 
 // constants/Languages.ts
 export const translations = {
@@ -11,6 +13,7 @@ export const translations = {
     mision: "Misión",
     welcome: "Hola, Cesar",
     select_lang: "Seleccionar Idioma",
+    
     tabs: {
       home: "Inicio",
       services: "Servicios",
@@ -18,7 +21,18 @@ export const translations = {
       logout: "Cerrar Sesión"
     },
     hometab: {
-        mission: "Nuestra Misión",   
+        registerhome: "Regístrarme",
+        acces: "Ingresar",
+        login: "Iniciar Sesión",
+        register: "Regístrate aquí",
+        haveaccount: "¿Ya tienes cuenta?  ",
+        nohaveaccount: "¿No tienes cuenta?  ",
+        dateBirthday: "Fecha de nacimiento",
+        username: "Usuario:",
+        password: "Contraseña:",
+        googleacount: "Continuar con Google",
+        mission: "Nuestra Misión",
+        ready: "Listo",   
         missiondesc: "Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.",
         vision: "Nuestra Visión",
         visiondesc: "Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local y facilitando un ecosistema de intercambio y colaboración."
@@ -140,7 +154,18 @@ export const translations = {
       logout: "Close Session"
     },
     hometab: {
-        mission: "Our Mission",   
+        registerhome: "Register",
+        acces: "Access",
+        login: "Login",
+        register: "Register here",
+        haveaccount: "Already have an account?",  
+        nohaveaccount: "Don't have an account?",
+        dateBirthday: "Birthdate",
+        username: "Username:",
+        password: "Password:",
+        googleacount: "Continue with Google",
+        mission: "Our Mission",  
+        ready: "Ready", 
         missiondesc: "Create more united, participative and supportive communities, where every resident feels connected, safe and proud of their neighborhood.",
         vision: "Our Vision",
         visiondesc: "Strengthen local economies by connecting residents with the businesses and services in their neighborhood, promoting local consumption and facilitating an ecosystem of exchange and collaboration."

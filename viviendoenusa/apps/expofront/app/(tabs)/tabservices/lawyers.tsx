@@ -1,15 +1,16 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
-  StyleSheet, useWindowDimensions, Keyboard,
+  StyleSheet, useWindowDimensions,
   TextInput, ActivityIndicator, Image, Linking, Alert,
   Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect } from 'expo-router'; 
+import { useRouter } from 'expo-router'; 
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
+import MapView from 'react-native-maps'; // Importante para el tipado del Ref
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -20,10 +21,8 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { getContentCardStyles } from 'app/src/styles/contentcommunity';
 import MapComponent from '@/components/Map';
 
-// Importación de la lista de palabras prohibidas
 import badWordsData from '../../../utils/babwords.json';
 
-// --- LÓGICA DE VALIDACIÓN (BADWORDS) ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const validateComment = (text: string): boolean => {
@@ -31,7 +30,6 @@ const validateComment = (text: string): boolean => {
   return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
 };
 
-// --- FORMULARIO DE RESEÑAS CON VALIDACIÓN ---
 const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -39,11 +37,8 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const handlePrePublish = () => {
     if (!validateComment(comment)) {
       const errorMsg = t.communitytab.textInappropriateDescription;
-      if (Platform.OS === 'web') {
-        window.alert(errorMsg); 
-      } else {
-        Alert.alert(t.communitytab.textInappropriateTittle, errorMsg);
-      }
+      if (Platform.OS === 'web') { window.alert(errorMsg); } 
+      else { Alert.alert(t.communitytab.textInappropriateTittle, errorMsg); }
       return;
     }
     onPublish(rating, comment);
@@ -104,7 +99,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 export default function LawyersScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
-  const mapRef = useRef<any>(null); 
+  const mapRef = useRef<MapView>(null); // Ref tipada correctamente
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
@@ -126,24 +121,6 @@ export default function LawyersScreen() {
     inputBg: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.9)',
   };
 
-  const ReviewItem = ({ review, isDark, Colors }: any) => (
-    <View style={{
-      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)',
-      borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-    }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-        <View style={{ flexDirection: 'row', gap: 2 }}>
-          {[1, 2, 3, 4, 5].map((s) => (
-            <MaterialCommunityIcons key={s} name="star" size={14} color={s <= review.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
-          ))}
-        </View>
-        <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '700' }}>{t.lawyerstab.recent}</ThemedText>
-      </View>
-      <ThemedText style={{ color: Colors.text, fontSize: 14, lineHeight: 20 }}>{review.comment}</ThemedText>
-    </View>
-  );
-
   const [zipCode, setZipCode] = useState('');
   const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) ? t.lawyerstab.practiceAreas : [];
   const allFilterText = PRACTICE_AREAS[0] || '';
@@ -159,7 +136,6 @@ export default function LawyersScreen() {
   const [showReviewInput, setShowReviewInput] = useState(false);
 
   const isZipValid = zipCode.length === 5;
-
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
@@ -171,23 +147,31 @@ export default function LawyersScreen() {
   const handleZoom = (type: 'in' | 'out') => {
     if (isWeb || !mapRef.current) return;
     mapRef.current.getCamera().then((camera: any) => {
-      if (Platform.OS === 'ios') camera.altitude *= type === 'in' ? 0.5 : 2;
+      if (isIOS) camera.altitude *= type === 'in' ? 0.5 : 2;
       else camera.zoom += type === 'in' ? 1 : -1;
       mapRef.current?.animateCamera(camera, { duration: 400 });
     });
   };
 
-  const getCurrentLocation = async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return;
-    let location = await Location.getCurrentPositionAsync({});
-    const coords = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
-    setUserLocation(coords);
-    setMapKey(prev => prev + 1); 
-    if (!isWeb && mapRef.current) mapRef.current.animateToRegion(coords, 1000);
+  const getCurrentLocation = async (isManual = false) => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const coords = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+      setUserLocation(coords);
+      setMapKey(prev => prev + 1); 
+      if (!isWeb && mapRef.current) mapRef.current.animateToRegion(coords, isManual ? 1000 : 1);
+    } catch (e) { console.log(e); }
   };
 
-  useFocusEffect(useCallback(() => { getCurrentLocation(); }, []));
+  const hasFetchedLocation = useRef(false);
+  useEffect(() => {
+    if (!hasFetchedLocation.current) {
+      getCurrentLocation();
+      hasFetchedLocation.current = true;
+    }
+  }, []);
 
   const handleSearch = async (forcedArea?: string) => {
     const areaToSearch = typeof forcedArea === 'string' ? forcedArea : selectedArea;
@@ -217,13 +201,11 @@ export default function LawyersScreen() {
   };
 
   const openDirections = (lawyer: any) => {
-    const lat = lawyer.lat;
-    const lng = lawyer.lng;
     const label = encodeURIComponent(lawyer.name);
     const url = Platform.select({
-      ios: `maps:0,0?q=${label}@${lat},${lng}`,
-      android: `geo:0,0?q=${lat},${lng}(${label})`,
-      web: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+      ios: `maps:0,0?q=${label}@${lawyer.lat},${lawyer.lng}`,
+      android: `geo:0,0?q=${lawyer.lat},${lawyer.lng}(${label})`,
+      web: `https://www.google.com/maps/search/?api=1&query=${lawyer.lat},${lawyer.lng}`
     });
     if (url) Linking.openURL(url);
   };
@@ -260,7 +242,7 @@ export default function LawyersScreen() {
   return (
     <View style={{ flex: 1 }}>
       <Modal visible={!!selectedLawyer} transparent animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
             <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => { setSelectedLawyer(null); setShowReviewInput(false); }} />
             <View style={{ width: width > 600 ? 500 : '92%', height: height * 0.78, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 32, padding: 25, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border }}>
@@ -283,7 +265,16 @@ export default function LawyersScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
-                    {selectedLawyer?.reviews?.map((r: any) => <ReviewItem key={r.id} review={r} isDark={isDark} Colors={Colors} />)}
+                    {selectedLawyer?.reviews?.map((r: any) => (
+                       <View key={r.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                         <View style={{ flexDirection: 'row', gap: 2, marginBottom: 8 }}>
+                           {[1, 2, 3, 4, 5].map((s) => (
+                             <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
+                           ))}
+                         </View>
+                         <ThemedText style={{ color: Colors.text, fontSize: 14 }}>{r.comment}</ThemedText>
+                       </View>
+                    ))}
                   </ScrollView>
                 </View>
               ) : (
@@ -314,7 +305,7 @@ export default function LawyersScreen() {
                   <TouchableOpacity onPress={() => { setResults([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <MaterialCommunityIcons name="scale-balance" size={40} color={Colors.text} style={{opacity: 0.55}} />
+                  <MaterialCommunityIcons name="scale-balance" size={40} color={Colors.text} style={{opacity: 0.2}} />
                 </View>
               </View>
 
@@ -328,6 +319,7 @@ export default function LawyersScreen() {
                       </LinearGradient>
                     </TouchableOpacity>
                   </View>
+
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}>
                     {PRACTICE_AREAS.map((area) => {
                        const iconInfo = AREA_ICONS[area] || AREA_ICONS['Default'];
@@ -342,12 +334,20 @@ export default function LawyersScreen() {
                        );
                     })}
                   </ScrollView>
+
                   <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border }}>
-                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={handleMarkerSelection} />
-                    <TouchableOpacity onPress={getCurrentLocation} style={{ position: 'absolute', right: 10, bottom: 10, backgroundColor: isDark ? '#333' : '#FFF', padding: 8, borderRadius: 8, elevation: 4 }}>
-                      <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#FF5F6D" />
-                    </TouchableOpacity>
+                    <MapComponent 
+                      mapRef={mapRef} 
+                      userLocation={userLocation} 
+                      showMarkers={showMarkers} 
+                      onZoom={handleZoom} 
+                      dataSource={results.length > 0 ? results : DATA_SOURCE} 
+                      mapKey={mapKey} 
+                      onMarkerPress={handleMarkerSelection} 
+                      showsUserLocation={false}
+                    />
                   </View>
+
                   <View style={{ marginTop: 20 }}>
                     {results.length > 0 && <ThemedText style={{ fontSize: 13, color: Colors.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length} {t.lawyerstab?.resultdomore}</ThemedText>}
                     {isFilteredByMap && (
@@ -396,10 +396,16 @@ export default function LawyersScreen() {
                       </ScrollView>
                     </View>
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border }}>
-                      <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={results.length > 0 ? results : DATA_SOURCE} mapKey={mapKey} onMarkerPress={handleMarkerSelection} />
-                      <TouchableOpacity onPress={getCurrentLocation} style={{ position: 'absolute', right: 20, bottom: 20, backgroundColor: isDark ? '#333' : '#FFF', padding: 12, borderRadius: 12, elevation: 5 }}>
-                        <MaterialCommunityIcons name="crosshairs-gps" size={24} color="#FF5F6D" />
-                      </TouchableOpacity>
+                      <MapComponent 
+                        mapRef={mapRef} 
+                        userLocation={userLocation} 
+                        showMarkers={showMarkers} 
+                        dataSource={results.length > 0 ? results : DATA_SOURCE} 
+                        mapKey={mapKey} 
+                        onMarkerPress={handleMarkerSelection} 
+                        onZoom={handleZoom}
+                        showsUserLocation={false}
+                      />
                     </View>
                   </View>
                 </View>

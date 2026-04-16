@@ -173,7 +173,9 @@ export default function DonationsScreen() {
     <View style={stylesUnified.container}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
-          <View style={[stylesOriginal.cardWrapper, { width: cardWidth, height: cardHeight, borderRadius: 32, overflow: 'hidden', backgroundColor: isAndroid ? Colors.cardBg : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }]}>
+
+          <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }}>
+          
             {!isAndroid && <BlurView intensity={isDark ? 95 : 65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={stylesUnified.cardContent}>
               <View style={[stylesUnified.headerRow, { marginBottom: 20 }]}>
@@ -184,7 +186,7 @@ export default function DonationsScreen() {
                         <TouchableOpacity onPress={() => setViewStatus('delivered')} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: viewStatus === 'delivered' ? Colors.accent : 'transparent' }}><ThemedText style={{ fontSize: 11, fontWeight: '900', color: viewStatus === 'delivered' ? '#FFF' : Colors.subtext }}>{t.donationstab.statusBottonModalDel}</ThemedText></TouchableOpacity>
                     </View>
                 </View>
-                <MaterialCommunityIcons name="hand-heart" size={40} color={Colors.accenticon} style={{opacity: 0.15}}/>
+                <MaterialCommunityIcons name="hand-heart" size={40} color={Colors.accenticon} style={{opacity: 0.2}}/>
               </View>
 
               <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -342,7 +344,7 @@ const PublishButton = memo(({ onPress, isPublishing, isValid, orangeGradient, di
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
-            <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{t.donationstab.statusBottonModalDel}</ThemedText>
+            <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{t.donationstab.botonDonation}</ThemedText>
           </View>
         )}
       </LinearGradient>

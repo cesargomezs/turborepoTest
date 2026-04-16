@@ -61,6 +61,14 @@ export default function CommunityScreen() {
     iconInactive: isDark ? '#E0E0E0' : '#666666',
     categoryUnselected: isDark ? 'rgba(255,255,255,0.15)' : 'transparent',
   };
+/*
+  const Colors = {
+    text: isDark ? '#FFFFFF' : '#1A1A1A',
+    subtext: isDark ? '#B0BEC5' : '#455A64', 
+    accent: isDark ? '#4FC3F7' : '#0080B5',
+    border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+    inputBg: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.9)',
+  };*/
 
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'] as const;
@@ -208,11 +216,7 @@ export default function CommunityScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[styles.centerContainer, { marginTop: verticalOffset }]}>
-          <View style={[stylesOriginal.cardWrapper, { 
-            width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28,
-            backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent',
-            borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border
-          }]}>
+        <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={isDark ? 100 : 60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
 
             <View style={styles.cardContent}>
@@ -221,7 +225,7 @@ export default function CommunityScreen() {
                   <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
                 </TouchableOpacity>
                 <View style={{flex:1}} />
-                <MaterialCommunityIcons name="account-group" size={40} color={DynamicColors.text} style={{opacity: 0.55}} />
+                <MaterialCommunityIcons name="account-group" size={40} color={DynamicColors.text} style={{opacity: 0.2}} />
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>

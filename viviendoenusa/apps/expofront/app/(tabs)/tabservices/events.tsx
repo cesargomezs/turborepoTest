@@ -14,8 +14,24 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
-import { contentCardStyles as stylesOriginal } from "app/src/styles/contentcard";
 import { useTranslation } from '@/hooks/useTranslation';
+
+// --- VALIDACIONES ---
+import { validarImagenEnServidor } from '@/utils/imageValidation'; 
+import badWordsData from '../../../utils/babwords.json';
+
+let BANNED_WORDS: string[] = [];
+try {
+  BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : [];
+} catch (e) {
+  console.error("Error cargando badwords.json:", e);
+}
+
+const isTextInappropriate = (text: string): boolean => {
+  if (!text) return false;
+  const lowerText = text.toLowerCase();
+  return BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+};
 
 const CATEGORIES = [
   { id: 'Todos', icon: 'calendar-range' },
@@ -44,10 +60,9 @@ export default function EventsScreen() {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#607D8B',
     border: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-    cardBg: isDark ? 'rgba(30, 30, 30, 0.75)' : 'rgba(255, 255, 255, 0.82)', 
     inputBg: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
     accent: '#FF5F6D',
-    imgPlaceholder: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+    accenticon: isDark ? '#607D8B' : '#1A1A1A',
   };
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : width * 0.92);
@@ -63,9 +78,10 @@ export default function EventsScreen() {
       date: '15 May', 
       time: '10:00 AM', 
       timeEnd: '02:00 PM', 
-      description: 'Atención médica gratuita, chequeos de presión arterial y vacunas para toda la comunidad local.', 
+      description: 'Atención médica gratuita para toda la comunidad local.', 
       image: 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800', 
-      location: 'Rancho Cucamonga Park' 
+      location: 'Rancho Cucamonga Park',
+      approved: true // Bandera de aprobación para eventos existentes
     }
   ]);
 
@@ -118,6 +134,11 @@ export default function EventsScreen() {
     if (selectedTime) setFormTimeEnd(selectedTime);
   };
 
+  const triggerAlert = (title: string, message: string) => {
+    if (isWeb) window.alert(`${title}\n${message}`); 
+    else Alert.alert(title, message);
+  };
+
   const handleShare = async (event: any) => {
     try {
       await Share.share({
@@ -128,46 +149,82 @@ export default function EventsScreen() {
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return Alert.alert('Error', 'Necesitamos acceso a tu galería.');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false, quality: 1 });
+    if (status !== 'granted') return triggerAlert('Error', 'Necesitamos acceso a tu galería.');
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 });
     if (!result.canceled) setFormImage(result.assets[0].uri);
   };
 
-  const handlePublishEvent = () => {
-    if (!formImage || !formTitle || !formLocation) return Alert.alert("Atención", "Título, ubicación e imagen son obligatorios.");
+  const handlePublishEvent = async () => {
+    const trimmedTitle = formTitle.trim();
+    const trimmedDesc = formDescription.trim();
+    const trimmedLoc = formLocation.trim();
+
+    if (!formImage || !trimmedTitle || !trimmedLoc) {
+        return triggerAlert("Atención", "Título, ubicación e imagen son obligatorios.");
+    }
+
+    if (isTextInappropriate(trimmedTitle) || isTextInappropriate(trimmedDesc) || isTextInappropriate(trimmedLoc)) {
+      triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
+      return; 
+    }
+
     setIsPublishing(true);
-    setTimeout(() => {
+    try {
+      const esSegura = await validarImagenEnServidor(formImage);
+      if (!esSegura) {
+        setIsPublishing(false);
+        triggerAlert(t.communitytab.imageInappropriateTittle, t.communitytab.imageInappropriateDescription);
+        return;
+      }
+
       const newEvent = { 
-        id: Date.now(), title: formTitle, category: formCategory, 
+        id: Date.now(), title: trimmedTitle, category: formCategory, 
         date: formDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
         time: formTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
         timeEnd: formTimeEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
-        description: formDescription, image: formImage, location: formLocation 
+        description: trimmedDesc, image: formImage, location: trimmedLoc,
+        approved: false // El evento se crea como NO APROBADO por defecto
       };
+
       setEvents(prev => [newEvent, ...prev]);
-      setIsPublishing(false);
       setModalVisible(false);
       resetForm();
-    }, 1500);
+      
+      // Mensaje informativo sobre la revisión
+      triggerAlert("¡Recibido!", "Tu evento ha sido enviado. Aparecerá en la lista una vez sea aprobado por el administrador.");
+      
+    } catch (err) {
+      triggerAlert("Error", t.communitytab.errorServer);
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const resetForm = () => {
-    setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
+    setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); 
+    setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
   };
 
-  const filteredEvents = useMemo(() => events.filter(item => (selectedCategory === 'Todos' || item.category === selectedCategory) && item.title.toLowerCase().includes(searchQuery.toLowerCase())), [events, selectedCategory, searchQuery]);
+  // Filtrado: Ahora también validamos que 'approved' sea true
+  const filteredEvents = useMemo(() => 
+    events.filter(item => 
+      item.approved === true && 
+      (selectedCategory === 'Todos' || item.category === selectedCategory) && 
+      item.title.toLowerCase().includes(searchQuery.toLowerCase())
+    ), 
+  [events, selectedCategory, searchQuery]);
 
   return (
     <View style={stylesUnified.container}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
-          <View style={[stylesOriginal.cardWrapper, { width: cardWidth, height: cardHeight, borderRadius: 32, overflow: 'hidden', backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }]}>
+          <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }}>  
             {!isAndroid && <BlurView intensity={isDark ? 95 : 65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
             <View style={stylesUnified.cardContent}>
               <View style={[stylesUnified.headerRow, { marginBottom: 20 }]}>
-                <TouchableOpacity onPress={() => router.back()}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
-                <MaterialCommunityIcons name="calendar-star" size={32} color={Colors.accent} style={{opacity: 0.2}}/>
+                <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
+                <MaterialCommunityIcons name="calendar-star" size={40} color={Colors.accenticon} style={{opacity: 0.2}}/>
               </View>
 
               <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -219,14 +276,11 @@ export default function EventsScreen() {
 
       <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85 }]}><LinearGradient colors={orangeGradient} style={styles.fabGradient}><MaterialCommunityIcons name="calendar-plus" size={28} color="#fff" /></LinearGradient></TouchableOpacity>
 
-      {/* MODAL CREAR EVENTO - FIXED FOR ANDROID KEYBOARD AND WEB PICKERS */}
+      {/* MODAL CREAR EVENTO */}
       <RNModal visible={isModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
-          <KeyboardAvoidingView 
-             behavior={isIOS ? "padding" : "height"} 
-             style={{ width: isLargeWeb ? 550 : '100%', justifyContent: 'flex-end' }}
-          >
+          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 550 : '100%', justifyContent: 'flex-end' }}>
             <View style={[styles.modalContent, { backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: height * 0.9, borderColor: Colors.border }]}>
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               <View style={styles.modalHandle} />
@@ -235,12 +289,7 @@ export default function EventsScreen() {
                 <ThemedText style={{ fontSize: 17, fontWeight: '900', color: Colors.text }}>{t.eventstab.botonEvent}</ThemedText>
                 <View style={{ width: 24 }} />
               </View>
-              <ScrollView 
-                style={{ paddingHorizontal: 20 }} 
-                showsVerticalScrollIndicator={false} 
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: isAndroid ? 250 : 60 }} 
-              >
+              <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: isAndroid ? 250 : 60 }}>
                 
                 <TouchableOpacity onPress={pickImage} style={[styles.imageUpload, { borderColor: Colors.border, backgroundColor: 'transparent' }]}>
                   {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={30} color={Colors.accent} /><ThemedText style={{color: Colors.accent, fontWeight:'800', fontSize:13, marginTop:5}}>{t.eventstab.photoEvent}</ThemedText></View>}
@@ -263,7 +312,7 @@ export default function EventsScreen() {
                     <View style={[styles.webVisualMock, { backgroundColor: Colors.inputBg, borderColor: Colors.border }]}>
                       <ThemedText style={{ color: Colors.text, fontWeight: '700' }}>{formDate.toLocaleDateString()}</ThemedText>
                     </View>
-                    <input type="date" value={formatDateForWeb(formDate)} onChange={(e:any) => setFormDate(new Date(e.target.value))} className="native-web-input" />
+                    <input type="date" value={formatDateForWeb(formDate)} min={formatDateForWeb(new Date())} onChange={(e:any) => setFormDate(new Date(e.target.value))} className="native-web-input" />
                   </View>
                 ) : (
                   <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.input, { borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }]}>
