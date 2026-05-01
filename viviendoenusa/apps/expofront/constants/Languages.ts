@@ -17,7 +17,7 @@ export const translations = {
     tabs: {
       home: "Inicio",
       services: "Servicios",
-      settings: "Configuración",
+      jobs: "Trabajos",
       logout: "Cerrar Sesión"
     },
     hometab: {
@@ -69,7 +69,10 @@ export const translations = {
       typeReview: "Escribir mi opinión",
       experience:"¿Cómo fue tu experiencia?",
       backBtn: "Volver",
-      recent: "Reciente"
+      recent: "Reciente",
+      reviews: "Reseñas",
+      route: "Ruta",
+      call: "Llamar"
       
     },
     communitytab: {
@@ -150,7 +153,7 @@ export const translations = {
     tabs: {
       home: "Home",
       services: "Services",
-      settings: "Settings",
+      jobs: "jobs",
       logout: "Close Session"
     },
     hometab: {
@@ -202,7 +205,11 @@ export const translations = {
       typeReview: "Write my review",
       experience:"How was your experience?",
       backBtn: "Go back",
-      recent: "Recent"
+      recent: "Recent",
+      reviews: "Reviews",
+      route: "Route",
+      call: "Call"
+
     },
     communitytab: {
       labeltypepost: "Post type",

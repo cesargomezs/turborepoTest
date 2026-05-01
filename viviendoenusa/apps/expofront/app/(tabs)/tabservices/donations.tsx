@@ -2,7 +2,7 @@ import React, { useState, useMemo, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ActivityIndicator,
-  Platform, Modal as RNModal, KeyboardAvoidingView, Linking
+  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, ColorValue
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -16,7 +16,6 @@ import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
-import { contentCardStyles as stylesOriginal } from "app/src/styles/contentcard";
 import badWordsData from '../../../utils/babwords.json';
 
 // --- 1. LÓGICA DE VALIDACIÓN GLOBAL ---
@@ -38,12 +37,17 @@ const toSentenceCase = (text: string) => {
   return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 };
 
-const DONATIONS_MOCK = [
-  { id: 1, title: 'Coche de bebé (Stroller)', category: 'Otros', status: 'active', description: 'Marca Graco, excelente estado.', image: 'https://images.unsplash.com/photo-1591084728795-1149f32d9866?w=800', location: 'Rancho Cucamonga', phone: '9090000000', ownerName: 'Admin', contactMethod: 'whatsapp' },
-  { id: 2, title: 'Mesa de comedor', category: 'Muebles', status: 'active', description: 'Madera clara, firme.', image: 'https://images.unsplash.com/photo-1577145946459-39a587ed504e?w=800', location: 'Ontario', phone: '9091112222', ownerName: 'Maria Silva', contactMethod: 'phone' },
+const COUNTRIES = [
+  { code: '+1', flag: '🇺🇸', name: 'USA' },
+  { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
 
-// --- 2. COMPONENTE PRINCIPAL (Export Default) ---
+const DONATIONS_MOCK = [
+  { id: 1, title: 'Coche de bebé (Stroller)', category: 'Otros', status: 'active', description: 'Marca Graco, excelente estado.', image: 'https://images.unsplash.com/photo-1591084728795-1149f32d9866?w=800', location: 'Rancho Cucamonga', phone: '+19090000000', ownerName: 'Admin', contactMethod: 'whatsapp' },
+  { id: 2, title: 'Mesa de comedor', category: 'Muebles', status: 'active', description: 'Madera clara, firme.', image: 'https://images.unsplash.com/photo-1577145946459-39a587ed504e?w=800', location: 'Ontario', phone: '+19091112222', ownerName: 'Maria Silva', contactMethod: 'phone' },
+];
+
+// --- 2. COMPONENTE PRINCIPAL ---
 export default function DonationsScreen() {
   const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
@@ -62,19 +66,22 @@ export default function DonationsScreen() {
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
 
-  const Colors = {
+  const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
+
+  // ESTILOS DINÁMICOS UNIFICADOS
+  const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#607D8B',
-    border: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+    locationtext: isDark ? '#F57F71' : '#731709',
+    border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     cardBg: isDark ? 'rgba(30, 30, 30, 0.75)' : 'rgba(255, 255, 255, 0.82)', 
-    inputBg: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+    inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     accent: '#FF5F6D',
-    accenticon: isDark ? '#607D8B' : '#1A1A1A',
+    accenticon: isDark ? '#4FC3F7' : '#0080B5',
+    iconInactive: isDark ? '#E0E0E0' : '#666666',
+    categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
     success: '#4CAF50'
   };
-
-  const orangeGradient: readonly [string, string, ...string[]] = ['#FF5F6D', '#FFC371'];
-  const disabledGradient: readonly [string, string, ...string[]] = isDark ? ['#333', '#444'] : ['#E0E0E0', '#D0D0D0'];
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
@@ -89,7 +96,10 @@ export default function DonationsScreen() {
   ];
 
   const [donations, setDonations] = useState(DONATIONS_MOCK);
+  
+  // BÚSQUEDA EN VIVO
   const [searchQuery, setSearchQuery] = useState('');
+  
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [viewStatus, setViewStatus] = useState<'active' | 'delivered'>('active');
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -102,11 +112,17 @@ export default function DonationsScreen() {
   const [formCategory, setFormCategory] = useState('Otros');
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formContactMethod, setFormContactMethod] = useState<'whatsapp' | 'phone'>('whatsapp');
-  const [formPhone, setFormPhone] = useState(userMetadata?.phone || '');
+  const [formPhone, setFormPhone] = useState('');
+  const [countryIdx, setCountryIdx] = useState(0); 
 
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) window.alert(`${title}\n${message}`); 
     else Alert.alert(title, message);
+  };
+
+  const handleCategorySelect = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    setSearchQuery('');
   };
 
   const handlePublish = async () => {
@@ -120,8 +136,8 @@ export default function DonationsScreen() {
     }
 
     if (isTextInappropriate(trimmedTitle) || isTextInappropriate(trimmedDesc)) {
-      const errorMsg = t.communitytab.textInappropriateDescription;
-      triggerAlert(t.communitytab.textInappropriateTittle , errorMsg);
+      const errorMsg = t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado.";
+      triggerAlert(t.communitytab?.textInappropriateTittle || "Atención", errorMsg);
       return; 
     }
 
@@ -130,9 +146,11 @@ export default function DonationsScreen() {
       const esSegura = await validarImagenEnServidor(formImage);
       if (!esSegura) {
         setIsPublishing(false);
-        triggerAlert(t.communitytab.imageInappropriateTittle, t.communitytab.imageInappropriateDescription);
+        triggerAlert(t.communitytab?.imageInappropriateTittle || "Imagen bloqueada", t.communitytab?.imageInappropriateDescription || "La imagen no cumple nuestras normas.");
         return;
       }
+
+      const fullPhone = `${COUNTRIES[countryIdx].code}${trimmedPhone}`;
 
       const newEntry = {
         id: Date.now(), 
@@ -142,7 +160,7 @@ export default function DonationsScreen() {
         description: trimmedDesc, 
         image: formImage, 
         location: userMetadata?.city || 'Rancho Cucamonga',
-        phone: trimmedPhone, 
+        phone: fullPhone, 
         ownerName: currentUserName, 
         contactMethod: formContactMethod
       };
@@ -150,15 +168,19 @@ export default function DonationsScreen() {
       setDonations(prev => [newEntry, ...prev]);
       setFormTitle(''); 
       setFormDescription(''); 
+      setFormPhone('');
       setFormImage(null); 
+      setCountryIdx(0);
       setModalVisible(false);
+      Alert.alert("¡Éxito!", "Donación publicada correctamente.");
     } catch (err) {
-      triggerAlert("Error", t.communitytab.errorServer);
+      triggerAlert("Error", t.communitytab?.errorServer || "Ocurrió un error.");
     } finally {
       setIsPublishing(false);
     }
   };
 
+  // FILTRO EN TIEMPO REAL
   const filteredDonations = useMemo(() => {
     return donations.filter(item => 
       item.status === viewStatus && 
@@ -174,50 +196,77 @@ export default function DonationsScreen() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
 
-          <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }}>
+          <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border }}>
           
             {!isAndroid && <BlurView intensity={isDark ? 95 : 65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={stylesUnified.cardContent}>
+              
               <View style={[stylesUnified.headerRow, { marginBottom: 20 }]}>
-                <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} /></TouchableOpacity>
                 <View style={{ flex: 1, alignItems: 'center' }}>
-                    <View style={{ flexDirection: 'row', backgroundColor: Colors.inputBg, borderRadius: 16, padding: 4 }}>
-                        <TouchableOpacity onPress={() => setViewStatus('active')} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: viewStatus === 'active' ? Colors.accent : 'transparent' }}><ThemedText style={{ fontSize: 11, fontWeight: '900', color: viewStatus === 'active' ? '#FFF' : Colors.subtext }}>{t.donationstab.statusBottonModalDis}</ThemedText></TouchableOpacity>
-                        <TouchableOpacity onPress={() => setViewStatus('delivered')} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: viewStatus === 'delivered' ? Colors.accent : 'transparent' }}><ThemedText style={{ fontSize: 11, fontWeight: '900', color: viewStatus === 'delivered' ? '#FFF' : Colors.subtext }}>{t.donationstab.statusBottonModalDel}</ThemedText></TouchableOpacity>
+                    <View style={{ flexDirection: 'row', backgroundColor: DynamicColors.inputBg, borderRadius: 16, padding: 4, borderWidth: 1, borderColor: DynamicColors.border }}>
+                        <TouchableOpacity onPress={() => setViewStatus('active')} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: viewStatus === 'active' ? DynamicColors.accent : 'transparent' }}><ThemedText style={{ fontSize: 11, fontWeight: '900', color: viewStatus === 'active' ? '#FFF' : DynamicColors.subtext }}>{t.donationstab.statusBottonModalDis}</ThemedText></TouchableOpacity>
+                        <TouchableOpacity onPress={() => setViewStatus('delivered')} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: viewStatus === 'delivered' ? DynamicColors.accent : 'transparent' }}><ThemedText style={{ fontSize: 11, fontWeight: '900', color: viewStatus === 'delivered' ? '#FFF' : DynamicColors.subtext }}>{t.donationstab.statusBottonModalDel}</ThemedText></TouchableOpacity>
                     </View>
                 </View>
-                <MaterialCommunityIcons name="hand-heart" size={40} color={Colors.accenticon} style={{opacity: 0.2}}/>
+                <MaterialCommunityIcons name="hand-heart" size={40} color={DynamicColors.text} style={{opacity: 0.2}}/>
               </View>
 
               <View style={{ flex: 1, flexDirection: 'row' }}>
                 {isLargeWeb && (
                   <View style={stylesUnified.webSidebar}>
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: Colors.text }]}>{t.donationstab.category}</ThemedText>
-                    {CATEGORIES.map((cat) => {
-                      const isActive = selectedCategory === cat.id;
-                      return (
-                        <TouchableOpacity key={cat.id} onPress={() => setSelectedCategory(cat.id)} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 18, borderRadius: 16, marginBottom: 8, backgroundColor: isActive ? 'transparent' : Colors.inputBg, borderWidth: isActive ? 0 : 1, borderColor: Colors.border, overflow: 'hidden' }}>
-                          {isActive && <LinearGradient colors={orangeGradient} start={{x:0,y:0}} end={{x:1,y:0}} style={StyleSheet.absoluteFill} />}
-                          <MaterialCommunityIcons name={cat.icon as any} size={18} color={isActive ? '#fff' : Colors.text} style={{ marginRight: 10, zIndex: 1 }} />
-                          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: isActive ? '#fff' : Colors.text, zIndex: 1 }}>{cat.id}</ThemedText>
-                        </TouchableOpacity>
-                      );
-                    })}
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{t.donationstab.category}</ThemedText>
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      {CATEGORIES.map((cat) => {
+                        const isActive = selectedCategory === cat.id;
+                        return (
+                          <TouchableOpacity key={cat.id} onPress={() => handleCategorySelect(cat.id)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                            {isActive ? (
+                              <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
+                                <MaterialCommunityIcons name={cat.icon as any} size={18} color="#FFF" style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{cat.id}</ThemedText>
+                              </LinearGradient>
+                            ) : (
+                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
+                                <MaterialCommunityIcons name={cat.icon as any} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: DynamicColors.text, fontWeight: '600', fontSize: 14 }}>{cat.id}</ThemedText>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
                   </View>
                 )}
+
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
-                  <TextInput style={{ backgroundColor: Colors.inputBg, borderRadius: 18, padding: 16, color: Colors.text, marginBottom: 15, fontWeight: '600', borderWidth: 1, borderColor: Colors.border }} placeholder="¿Qué buscas hoy?" placeholderTextColor={isDark ? '#78909C' : '#90A4AE'} value={searchQuery} onChangeText={setSearchQuery} />
+                  
+                  {/* BUSCADOR INTEGRADO Y ELEGANTE (SIN BOTÓN EXTRA) */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, paddingHorizontal: 16, height: 52 }}>
+                    <MaterialCommunityIcons name="magnify" size={22} color={DynamicColors.subtext} style={{ marginRight: 10 }} />
+                    <TextInput 
+                      style={{ flex: 1, color: DynamicColors.text, fontSize: 15, height: '100%' }} 
+                      placeholder="¿Qué buscas hoy?" value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={DynamicColors.subtext} 
+                    />
+                  </View>
+
                   {!isLargeWeb && (
-                    <View style={{ marginBottom: 20 }}> 
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
+                    <View style={{ height: 50, marginBottom: 15 }}>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 5, paddingHorizontal: 2 }}>
                         {CATEGORIES.map((cat) => {
                           const isActive = selectedCategory === cat.id;
                           return (
-                            <TouchableOpacity key={cat.id} onPress={() => setSelectedCategory(cat.id)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                            <TouchableOpacity key={cat.id} onPress={() => handleCategorySelect(cat.id)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                               {isActive ? (
-                                <LinearGradient colors={orangeGradient} start={{x:0,y:0}} end={{x:1,y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}><MaterialCommunityIcons name={cat.icon as any} size={18} color="#FFF" style={{ marginRight: 8 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{cat.id}</ThemedText></LinearGradient>
+                                <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                  <MaterialCommunityIcons name={cat.icon as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{cat.id}</ThemedText>
+                                </LinearGradient>
                               ) : (
-                                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, backgroundColor: Colors.inputBg }}><MaterialCommunityIcons name={cat.icon as any} size={18} color={Colors.text} style={{ marginRight: 8 }} /><ThemedText style={{ color: Colors.text, fontWeight: '600', fontSize: 13 }}>{cat.id}</ThemedText></View>
+                                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                                  <MaterialCommunityIcons name={cat.icon as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                  <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{cat.id}</ThemedText>
+                                </View>
                               )}
                             </TouchableOpacity>
                           );
@@ -225,7 +274,8 @@ export default function DonationsScreen() {
                       </ScrollView>
                     </View>
                   )}
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                       {filteredDonations.length > 0 ? filteredDonations.map(item => (
                         <DonationCard 
@@ -234,14 +284,17 @@ export default function DonationsScreen() {
                           currentUserName={currentUserName} 
                           isLargeWeb={isLargeWeb} 
                           isDark={isDark} 
-                          Colors={Colors} 
+                          Colors={DynamicColors} 
                           orangeGradient={orangeGradient} 
                           stylesUnified={stylesUnified}
                           onPreview={(img: string) => { setImageToView(img); setViewerVisible(true); }}
                           onToggleStatus={(id: any) => setDonations(prev => prev.map(d => d.id === id ? {...d, status: d.status === 'active' ? 'delivered' : 'active'} : d))}
                         />
                       )) : (
-                        <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}><MaterialCommunityIcons name="package-variant" size={48} color={Colors.text} /><ThemedText style={{ marginTop: 10, color: Colors.text }}>{t.donationstab.messagenotdonnations}</ThemedText></View>
+                        <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
+                          <MaterialCommunityIcons name="package-variant" size={48} color={DynamicColors.text} />
+                          <ThemedText style={{ marginTop: 10, color: DynamicColors.text }}>{t.donationstab.messagenotdonnations}</ThemedText>
+                        </View>
                       )}
                     </View>
                   </ScrollView>
@@ -252,69 +305,105 @@ export default function DonationsScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB: Botón Flotante */}
-      <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85 }]}>
-        <LinearGradient colors={orangeGradient} style={{ flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5 }}><MaterialCommunityIcons name="plus" size={32} color="#fff" /></LinearGradient>
+      {/* FAB: Botón Flotante UNIVERSAL */}
+      <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+        <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="hand-heart" size={32} color="#fff" />
+        </LinearGradient>
       </TouchableOpacity>
 
+      {/* MODAL NUEVA DONACIÓN - CENTRADO EN WEB */}
       <RNModal visible={isModalVisible} transparent animationType="slide">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
-          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 600 : '100%', marginBottom: isLargeWeb ? 40 : 0 }}>
-            <View style={{ backgroundColor: isAndroid ? Colors.cardBg : 'transparent', borderTopLeftRadius: 40, borderTopRightRadius: 40, borderRadius: isLargeWeb ? 40 : undefined, overflow: 'hidden', height: height * 0.85, padding: 24, borderTopWidth: 1, borderTopColor: Colors.border }}>
-              {!isAndroid && <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-              <View style={{ width: 45, height: 5, backgroundColor: 'rgba(128,128,128,0.2)', alignSelf: 'center', borderRadius: 5, marginBottom: 15 }} />
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={26} color={Colors.subtext} /></TouchableOpacity>
-                <ThemedText style={{ fontSize: 18, fontWeight: '900', color: Colors.text }}>{t.donationstab.messageMessageDonation}</ThemedText>
-                <View style={{ width: 26 }} />
+          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 550 : '100%' }}>
+            <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: DynamicColors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
+              {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+              {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
+              
+
+                
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
+                <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
+                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: DynamicColors.text }}>{t.donationstab.messageMessageDonation}</ThemedText>
+                <View style={{ width: 24 }} />
               </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+
+              <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 70 }}>
                 <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 }); if(!r.canceled) setFormImage(r.assets[0].uri); }} 
-                  style={{ width: '100%', height: isWeb ? 200 : 130, backgroundColor: 'rgba(128,128,128,0.06)', borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 1.5, borderColor: Colors.border, overflow: 'hidden', borderStyle: 'dashed' }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={{ width: '100%', height: '100%' }} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="image-plus" size={32} color={Colors.accent} /><ThemedText style={{ color: Colors.accent, fontSize: 11, fontWeight: '800', marginTop: 5 }}>{t.donationstab.choisephoto}</ThemedText></View>}
+                  style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" style={{color: DynamicColors.iconInactive}} size={32}  /><ThemedText style={{ fontSize: 11, fontWeight: '800', marginTop: 5 }}>{t.donationstab.choisephoto}</ThemedText></View>}
                 </TouchableOpacity>
 
-                <ThemedText style={{ fontSize: 14, fontWeight: '900', color: Colors.accent, marginBottom: 12, letterSpacing: 0.5 }}>{t.donationstab.category}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 5 }}>
-                  {CATEGORIES.filter(c => c.id !== 'Todos').map(cat => (
-                    <TouchableOpacity key={cat.id} onPress={() => setFormCategory(cat.id)} style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 15, borderWidth: 1.5, borderColor: formCategory === cat.id ? Colors.accent : Colors.border, backgroundColor: formCategory === cat.id ? Colors.accent : 'rgba(128,128,128,0.08)', flexDirection: 'row', alignItems: 'center' }}>
-                      <MaterialCommunityIcons name={cat.icon as any} size={16} color={formCategory === cat.id ? '#fff' : Colors.text} style={{ marginRight: 6 }} />
-                      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: formCategory === cat.id ? '#fff' : Colors.text }}>{cat.id.toUpperCase()}</ThemedText>
-                    </TouchableOpacity>
-                  ))}
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.donationstab.category}</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
+                  {CATEGORIES.filter(c => c.id !== 'Todos').map(cat => {
+                    const isActive = formCategory === cat.id;
+                    return (
+                      <TouchableOpacity key={cat.id} onPress={() => setFormCategory(cat.id)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                        {isActive ? (
+                          <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                            <MaterialCommunityIcons name={cat.icon as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{cat.id.toUpperCase()}</ThemedText>
+                          </LinearGradient>
+                        ) : (
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                            <MaterialCommunityIcons name={cat.icon as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 11, fontWeight: '600' }}>{cat.id.toUpperCase()}</ThemedText>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </ScrollView>
 
-                <ThemedText style={{ fontSize: 14, fontWeight: '900', color: Colors.accent, marginBottom: 12, marginTop: 25, letterSpacing: 0.5 }}>{t.donationstab.typeContact}</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1.5, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : Colors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : 'transparent' }}>
-                    <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : Colors.subtext} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'whatsapp' ? '#25D366' : Colors.subtext }}>Whatsapp</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.donationstab.typeContact}</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : DynamicColors.inputBg }}>
+                    <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.subtext} style={{ marginRight: 8 }} />
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.subtext }}>WhatsApp</ThemedText>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1.5, borderColor: formContactMethod === 'phone' ? Colors.accent : Colors.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : 'transparent' }}>
-                    <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? Colors.accent : Colors.subtext} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? Colors.accent : Colors.subtext }}>{t.donationstab.callbton}</ThemedText>
+                  <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? DynamicColors.locationtext : DynamicColors.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : DynamicColors.inputBg }}>
+                    <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? DynamicColors.locationtext : DynamicColors.iconInactive} style={{ marginRight: 8 }} />
+                    <ThemedText style={{ fontSize: 12, fontWeight: '900', color: formContactMethod === 'phone' ? DynamicColors.locationtext : DynamicColors.subtext }}>{t.donationstab.callbton || 'Llamada'}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
-                <View style={{ marginTop: 15 }}>
-                  <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="Número de contacto" keyboardType="phone-pad" style={{ backgroundColor: 'rgba(128,128,128,0.05)', borderRadius: 18, padding: 18, color: Colors.text, fontWeight: '700', fontSize: 15, borderWidth: 1, borderColor: Colors.border }} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
+                  <TouchableOpacity 
+                    activeOpacity={0.7}
+                    onPress={() => setCountryIdx(prev => (prev === 0 ? 1 : 0))}
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: DynamicColors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}
+                  >
+                    <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText>
+                    <ThemedText style={{ fontWeight: '800', color: DynamicColors.text, marginRight: 4 }}>{COUNTRIES[countryIdx].code}</ThemedText>
+                    <MaterialCommunityIcons name="chevron-down" size={16} color={DynamicColors.subtext} />
+                  </TouchableOpacity>
+                  <TextInput value={formPhone} onChangeText={setFormPhone}
+                    placeholder="Número de contacto"
+                    placeholderTextColor={DynamicColors.subtext}
+                    keyboardType="phone-pad"
+                    style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600' }} />
                 </View>
 
-                <View style={{ marginTop: 25 }}>
-                  <TextInput value={formTitle} onChangeText={(val) => setFormTitle(toSentenceCase(val))} autoCapitalize="sentences" placeholder={t.donationstab.newdonnationTittle} style={{ backgroundColor: 'rgba(128,128,128,0.05)', borderRadius: 18, padding: 18, marginBottom: 15, color: Colors.text, fontWeight: '700', fontSize: 16, borderWidth: 1, borderColor: Colors.border }} />
-                  <TextInput value={formDescription} onChangeText={(val) => setFormDescription(toSentenceCase(val))} autoCapitalize="sentences" placeholder={t.donationstab.newdonnationdescription} multiline numberOfLines={4} style={{ backgroundColor: 'rgba(128,128,128,0.05)', borderRadius: 18, padding: 18, height: 110, marginBottom: 30, color: Colors.text, textAlignVertical: 'top', fontSize: 15, borderWidth: 1, borderColor: Colors.border }} />
-                </View>
+                <TextInput value={formTitle} onChangeText={(val) => setFormTitle(toSentenceCase(val))} autoCapitalize="sentences" placeholder={t.donationstab.newdonnationTittle} placeholderTextColor={DynamicColors.subtext} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border }} />
+                <TextInput value={formDescription} onChangeText={(val) => setFormDescription(toSentenceCase(val))} autoCapitalize="sentences" placeholder={t.donationstab.newdonnationdescription} multiline numberOfLines={4} placeholderTextColor={DynamicColors.subtext} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, height: 90, marginBottom: 20, color: DynamicColors.text, textAlignVertical: 'top', borderWidth: 1, borderColor: DynamicColors.border }} />
 
-                <View style={{ alignItems: 'center', paddingBottom: 40 }}>
-                  <PublishButton onPress={handlePublish} isPublishing={isPublishing} isValid={isFormValid} orangeGradient={orangeGradient} disabledGradient={disabledGradient} isLargeWeb={isLargeWeb} t={t} />
-                </View>
+                {/* BOTÓN GUARDAR EN UNA LÍNEA */}
+                <TouchableOpacity onPress={handlePublish} disabled={isPublishing || !isFormValid} style={{ alignSelf: 'center' }}>
+                  <LinearGradient colors={isFormValid ? orangeGradient : ['#CFD8DC', '#B0BEC5']} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
+                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Guardar</ThemedText>
+                  </LinearGradient>
+                </TouchableOpacity>
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
         </View>
       </RNModal>
 
+      {/* VISUALIZADOR DE IMÁGENES */}
       <RNModal visible={viewerVisible} transparent animationType="fade" onRequestClose={() => setViewerVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setViewerVisible(false)} />
@@ -328,40 +417,15 @@ export default function DonationsScreen() {
   );
 }
 
-// --- 3. COMPONENTES SECUNDARIOS (Memoizados) ---
-
-const PublishButton = memo(({ onPress, isPublishing, isValid, orangeGradient, disabledGradient, isLargeWeb, t }: any) => {
-  return (
-    <TouchableOpacity 
-      activeOpacity={0.8}
-      onPress={onPress} 
-      disabled={isPublishing || !isValid} 
-      style={{ borderRadius: 30, overflow: 'hidden', width: isLargeWeb ? '50%' : '70%', elevation: 4 }}
-    >
-      <LinearGradient colors={isValid ? orangeGradient : disabledGradient} start={{x:0,y:0}} end={{x:1,y:0}} style={{ height: 54, justifyContent: 'center', alignItems: 'center' }}>
-        {isPublishing ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
-            <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{t.donationstab.botonDonation}</ThemedText>
-          </View>
-        )}
-      </LinearGradient>
-    </TouchableOpacity>
-  );
-});
-
+// --- 3. COMPONENTE DE TARJETA DE DONACIÓN ---
 const DonationCard = memo(({ item, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus }: any) => {
   const isOwner = item.ownerName === currentUserName;
   const isDelivered = item.status === 'delivered';
+  const isWhatsapp = item.contactMethod === 'whatsapp';
 
   const handleContact = () => {
-    if (item.contactMethod === 'whatsapp') {
-      Linking.openURL(`https://wa.me/${item.phone}`);
-    } else {
-      Linking.openURL(`tel:${item.phone}`);
-    }
+    if (isWhatsapp) Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`);
+    else Linking.openURL(`tel:${item.phone}`);
   };
 
   return (
@@ -391,34 +455,35 @@ const DonationCard = memo(({ item, currentUserName, isLargeWeb, isDark, Colors, 
             <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>Entregado</ThemedText>
           </View>
         )}
-        <View style={{ position: 'absolute', bottom: 12, right: 12, flexDirection: 'row', gap: 8 }}>
-           {!isDelivered && (
-              <TouchableOpacity onPress={handleContact} style={{ width: 44, height: 44, borderRadius: 15, backgroundColor: item.contactMethod === 'whatsapp' ? '#25D366' : Colors.accent, justifyContent: 'center', alignItems: 'center', elevation: 4 }}>
-                <MaterialCommunityIcons name={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={24} color="#FFF" />
-              </TouchableOpacity>
-           )}
-           <TouchableOpacity onPress={() => Share.share({ message: item.title })} style={{ width: 44, height: 44, borderRadius: 15, backgroundColor: isDark ? 'rgba(30,30,30,0.9)' : 'rgba(255,255,255,0.9)', justifyContent: 'center', alignItems: 'center', elevation: 4 }}>
-              <MaterialCommunityIcons name="share-variant" size={20} color={Colors.text} />
-           </TouchableOpacity>
-        </View>
       </TouchableOpacity>
 
-      <View style={{ padding: 16 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Colors.text }}>{item.title}</ThemedText>
-            <ThemedText style={{ fontSize: 13, color: Colors.subtext, marginTop: 4, lineHeight: 18, fontWeight: '400' }} numberOfLines={2}>{item.description}</ThemedText>
-          </View>
-          {isOwner && (
-            <TouchableOpacity onPress={() => onToggleStatus(item.id)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1.5, borderColor: isDelivered ? Colors.success : Colors.accent, backgroundColor: isDelivered ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
-              <MaterialCommunityIcons name={isDelivered ? "refresh" : "archive-check"} size={18} color={isDelivered ? Colors.success : Colors.accent} style={{ marginRight: 4 }} />
-              <ThemedText style={{ fontSize: 13, fontWeight: '900', color: isDelivered ? Colors.success : Colors.accent }}>{isDelivered ? "Reactivar" : "Entregado"}</ThemedText>
+      <View style={{ padding: 15 }}>
+        <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>{item.title}</ThemedText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, opacity: 0.6 }}>
+          <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.locationtext} />
+          <ThemedText style={{ fontSize: 14, color: Colors.locationtext, marginLeft: 4 ,fontWeight: '600'}}>{item.location}</ThemedText>
+        </View>
+        <ThemedText style={{ fontSize: 14, color: Colors.text, opacity: 0.7, marginTop: 6 }} numberOfLines={2}>{item.description}</ThemedText>
+        
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 }}>
+          {!isDelivered && (
+            <TouchableOpacity onPress={handleContact} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isWhatsapp ? 'rgba(37,211,102,0.1)' : 'rgba(255, 95, 109, 0.15)' }}>
+               <MaterialCommunityIcons name={isWhatsapp ? 'whatsapp' : 'phone'} size={18} color={isWhatsapp ? '#25D366' : Colors.accent} />
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>Contactar</ThemedText>
             </TouchableOpacity>
           )}
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, opacity: 0.6 }}>
-          <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.subtext} />
-          <ThemedText style={{ fontSize: 11, color: Colors.subtext, marginLeft: 4 }}>{item.location}</ThemedText>
+
+          <TouchableOpacity onPress={() => Share.share({ message: item.title })} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
+            <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
+            <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>Compartir</ThemedText>
+          </TouchableOpacity>
+
+          {isOwner && (
+            <TouchableOpacity onPress={() => onToggleStatus(item.id)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDelivered ? 'rgba(76, 175, 80, 0.1)' : (isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0') }}>
+              <MaterialCommunityIcons name={isDelivered ? "refresh" : "archive-check"} size={18} color={isDelivered ? Colors.success : (isDark ? '#FFF' : '#444')} />
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDelivered ? Colors.success : (isDark ? '#FFF' : '#444') }}>{isDelivered ? "Activar" : "Entregar"}</ThemedText>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>

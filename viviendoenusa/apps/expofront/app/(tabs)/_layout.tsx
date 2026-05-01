@@ -128,11 +128,11 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="settings"
+        name="jobs"
         options={{
-          title: t.tabs.settings,
+          title: t.tabs.jobs,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons size={28} name="toggle-switch" color={color} />
+            <MaterialCommunityIcons size={28} name="briefcase-search" color={color} />
           ),
         }}
       />

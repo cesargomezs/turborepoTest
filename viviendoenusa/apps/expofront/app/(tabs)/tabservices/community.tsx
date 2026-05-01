@@ -61,14 +61,6 @@ export default function CommunityScreen() {
     iconInactive: isDark ? '#E0E0E0' : '#666666',
     categoryUnselected: isDark ? 'rgba(255,255,255,0.15)' : 'transparent',
   };
-/*
-  const Colors = {
-    text: isDark ? '#FFFFFF' : '#1A1A1A',
-    subtext: isDark ? '#B0BEC5' : '#455A64', 
-    accent: isDark ? '#4FC3F7' : '#0080B5',
-    border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-    inputBg: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.9)',
-  };*/
 
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'] as const;
@@ -97,8 +89,12 @@ export default function CommunityScreen() {
 
   const [postText, setPostText] = useState('');
   const [posts, setPosts] = useState<any[]>([]);
-  const [selectedTag, setSelectedTag] = useState('Experience'); 
+
+  // Asignación segura del primer valor (Experiencia) para el modal de nuevo post
+  const defaultTag = (t.communitytab.typepostAdd && t.communitytab.typepostAdd.length > 0) ? t.communitytab.typepostAdd[0] : 'Experience';
+  const [selectedTag, setSelectedTag] = useState(defaultTag); 
   const [selectedSubCategory, setSelectedSubCategory] = useState(subCategories[0].id); 
+  
   const [activeFilter, setActiveFilter] = useState('All');
   const [activeSubFilter, setActiveSubFilter] = useState('All'); 
   const [isRecentFirst, setIsRecentFirst] = useState(true);
@@ -122,7 +118,6 @@ export default function CommunityScreen() {
     const trimmedText = postText.trim();
     if (!trimmedText || isPublishing) return;
 
-    // VALIDACIÓN DE PALABRAS PROHIBIDAS EN POST
     if (!validateComment(trimmedText)) {
       triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
       return; 
@@ -165,7 +160,6 @@ export default function CommunityScreen() {
     const trimmed = commentText.trim();
     if (!trimmed || !activeCommentId) return;
 
-    // VALIDACIÓN DE PALABRAS PROHIBIDAS EN COMENTARIO
     if (!validateComment(trimmed)) {
       triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
       return;
@@ -229,90 +223,134 @@ export default function CommunityScreen() {
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
+                
+                {/* --- MENÚ LATERAL WEB COMPLETO --- */}
                 {isLargeWeb && (
                   <View style={styles.webSidebar}>
-                    <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>{t.communitytab.filter}</ThemedText>
-                    {t.communitytab.typepost.map((f: string) => {
-                      const isActive = tagMapping[f] === tagMapping[activeFilter];
-                      return (
-                        <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
-                          {isActive ? (
-                            <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
-                              <MaterialCommunityIcons name={tagIcons[f]} size={18} color="#FFF" style={{ marginRight: 10 }} />
-                              <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{f}</ThemedText>
-                            </LinearGradient>
-                          ) : (
-                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
-                              <MaterialCommunityIcons name={tagIcons[f]} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} />
-                              <ThemedText style={{ color: DynamicColors.text, fontWeight: '600', fontSize: 14 }}>{f}</ThemedText>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}  
-                  </View>
-                )}
-
-                {!isLargeWeb && (
-                  <View style={{marginBottom: 10}}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
-                      <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
-                        {isRecentFirst ? (
-                          <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
-                            <MaterialCommunityIcons name="clock-outline" size={15} color="#FFF" style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
-                          </LinearGradient>
-                        ) : (
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
-                            <MaterialCommunityIcons name="clock-outline" size={15} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                      
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>{t.communitytab.filter}</ThemedText>
                       {t.communitytab.typepost.map((f: string) => {
                         const isActive = tagMapping[f] === tagMapping[activeFilter];
                         return (
-                          <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                          <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                             {isActive ? (
-                              <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
-                                <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{f}</ThemedText>
+                              <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
+                                <MaterialCommunityIcons name={tagIcons[f]} size={18} color="#FFF" style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{f}</ThemedText>
                               </LinearGradient>
                             ) : (
-                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
-                                <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                                <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{f}</ThemedText>
+                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
+                                <MaterialCommunityIcons name={tagIcons[f]} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: DynamicColors.text, fontWeight: '600', fontSize: 14 }}>{f}</ThemedText>
                               </View>
                             )}
                           </TouchableOpacity>
                         );
-                      })}
-                    </ScrollView>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 5}}>
-                      {subCategories.map(cat => {
-                        const isActive = activeSubFilter === cat.id;
-                        return (
-                          <TouchableOpacity key={cat.id} onPress={() => setActiveSubFilter(cat.id)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
-                             {isActive ? (
-                               <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                                 <MaterialCommunityIcons name={cat.icon as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                                 <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{cat.id}</ThemedText>
-                               </LinearGradient>
-                             ) : (
-                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                                 <MaterialCommunityIcons name={cat.icon as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                                 <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{cat.id}</ThemedText>
-                               </View>
-                             )}
-                          </TouchableOpacity>
-                        );
-                      })}
+                      })}  
                     </ScrollView>
                   </View>
                 )}
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
+                  
+                  {/* --- FILTROS CONDICIONALES ARRIBA DEL FEED --- */}
+                  <View style={{marginBottom: 15}}>
+                    {isLargeWeb ? (
+                      /* WEB: HORIZONTAL ARRIBA SIN LABEL, CON FLEXWRAP PARA QUE NO SE CORTEN */
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 5 }}>
+                        <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
+                          {isRecentFirst ? (
+                            <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                              <MaterialCommunityIcons name="clock-outline" size={15} color="#FFF" style={{ marginRight: 6 }} />
+                              <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
+                            </LinearGradient>
+                          ) : (
+                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, backgroundColor: DynamicColors.categoryUnselected }}>
+                              <MaterialCommunityIcons name="clock-outline" size={15} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
+                              <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                        
+                        {subCategories.map(cat => {
+                          const isActive = activeSubFilter === cat.id;
+                          return (
+                            <TouchableOpacity key={cat.id} onPress={() => setActiveSubFilter(isActive ? 'All' : cat.id)} style={{ borderRadius: 12, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                               {isActive ? (
+                                 <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
+                                   <MaterialCommunityIcons name={cat.icon as any} size={16} color="#FFF" style={{ marginRight: 6 }} />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{cat.id}</ThemedText>
+                                 </LinearGradient>
+                               ) : (
+                                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DynamicColors.categoryUnselected }}>
+                                   <MaterialCommunityIcons name={cat.icon as any} size={16} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
+                                   <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{cat.id}</ThemedText>
+                                 </View>
+                               )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      /* MÓVIL: VERTICAL / MULTIFILA SCROLL */
+                      <View>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}} contentContainerStyle={{ paddingRight: 20 }}>
+                          <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
+                            {isRecentFirst ? (
+                              <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                                <MaterialCommunityIcons name="clock-outline" size={15} color="#FFF" style={{ marginRight: 5 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
+                              </LinearGradient>
+                            ) : (
+                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                                <MaterialCommunityIcons name="clock-outline" size={15} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{t.communitytab.subCategories[5]}</ThemedText>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                          {t.communitytab.typepost.map((f: string) => {
+                            const isActive = tagMapping[f] === tagMapping[activeFilter];
+                            return (
+                              <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                                {isActive ? (
+                                  <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                                    <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{f}</ThemedText>
+                                  </LinearGradient>
+                                ) : (
+                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
+                                    <MaterialCommunityIcons name={tagIcons[f] || 'tag-outline'} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                    <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{f}</ThemedText>
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
+                          {subCategories.map(cat => {
+                            const isActive = activeSubFilter === cat.id;
+                            return (
+                              <TouchableOpacity key={cat.id} onPress={() => setActiveSubFilter(isActive ? 'All' : cat.id)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                                 {isActive ? (
+                                   <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
+                                     <MaterialCommunityIcons name={cat.icon as any} size={16} color="#FFF" style={{ marginRight: 6 }} />
+                                     <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{cat.id}</ThemedText>
+                                   </LinearGradient>
+                                 ) : (
+                                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DynamicColors.categoryUnselected }}>
+                                     <MaterialCommunityIcons name={cat.icon as any} size={16} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
+                                     <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 13 }}>{cat.id}</ThemedText>
+                                   </View>
+                                 )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {filteredPosts.map(post => (
                       <View key={post.id} style={styles.postCard}>
@@ -370,77 +408,86 @@ export default function CommunityScreen() {
         </View>
       </ScrollView>
 
+      {/* FAB - BOTÓN FLOTANTE UNIVERSAL */}
       {isCommunityScreen && (
-        <TouchableOpacity onPress={() => setModalVisible(true)} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85 }]}>
+        <TouchableOpacity onPress={() => setModalVisible(true)} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
           <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}>
-            <MaterialCommunityIcons name="plus" size={30} color="#fff" />
+            <MaterialCommunityIcons name="account-group-outline" size={30} color="#fff" />
           </LinearGradient>
         </TouchableOpacity>
       )}
 
-      {/* MODAL NUEVA PUBLICACIÓN */}
+      {/* MODAL NUEVA PUBLICACIÓN CON ANCHO AJUSTADO Y FLEXWRAP */}
       <RNModal visible={isModalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
-          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
-            <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={styles.modalBlur}>
-              <View style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 40 }]}>
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity onPress={() => setModalVisible(false)}>
-                    <ThemedText style={{ color: '#FF5F6D', fontWeight: 'bold' }}>{t.communitytab.closepost}</ThemedText>
-                  </TouchableOpacity>
-                  <ThemedText style={styles.modalTitle}>{t.communitytab.messagenewpost}</ThemedText>
-                  <View style={{ width: 45 }} />
-                </View>
+          {/* Ancho en Web ajustado a 600 para dar más espacio a los botones */}
+          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 600 : '100%' }}>
+            
+            <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: DynamicColors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
+              {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+              {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
 
-                <ThemedText style={[styles.label, {color: DynamicColors.text}]}>{t.communitytab.labeltypepost}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} />
+                </TouchableOpacity>
+                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: DynamicColors.text }}>{t.communitytab.messagenewpost}</ThemedText>
+                <View style={{ width: 24 }} />
+              </View>
+
+              <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
+                
+                <ThemedText style={[styles.label, {fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.labeltypepost}</ThemedText>
+                {/* Contenedor de tipos de post con FlexWrap para evitar cortes */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                   {t.communitytab.typepostAdd.map((tag: string) => {
                     const isActive = selectedTag === tag;
                     return (
-                      <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                      <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={{ borderRadius: 12, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                          {isActive ? (
                            <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                             <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color="#FFF" style={{ marginRight: 6 }} />
-                             <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{tag}</ThemedText>
+                             <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={16} color="#FFF" style={{ marginRight: 6 }} />
+                             <ThemedText style={{ color: '#FFF', fontSize: 13, fontWeight: '800' }}>{tag}</ThemedText>
                            </LinearGradient>
                          ) : (
                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                             <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
-                             <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 11, fontWeight: '600' }}>{tag}</ThemedText>
+                             <MaterialCommunityIcons name={tagIcons[tag] || 'tag-outline'} size={16} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
+                             <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 13, fontWeight: '600' }}>{tag}</ThemedText>
                            </View>
                          )}
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
-                <ThemedText style={[styles.label, {color: DynamicColors.text}]}>{t.communitytab.category}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>
+                <ThemedText style={[styles.label, { fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.category}</ThemedText>
+                {/* Contenedor de categorías con FlexWrap para evitar cortes */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}>
                   {subCategories.map(sub => {
                     const isActive = selectedSubCategory === sub.id;
                     return (
-                      <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                      <TouchableOpacity key={sub.id} onPress={() => setSelectedSubCategory(sub.id)} style={{ borderRadius: 12, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                         {isActive ? (
                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                            <MaterialCommunityIcons name={sub.icon as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{sub.id}</ThemedText>
+                            <MaterialCommunityIcons name={sub.icon as any} size={16} color="#FFF" style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: '#FFF', fontSize: 13, fontWeight: '800' }}>{sub.id}</ThemedText>
                           </LinearGradient>
                         ) : (
                           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                            <MaterialCommunityIcons name={sub.icon as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 11, fontWeight: '600' }}>{sub.id}</ThemedText>
+                            <MaterialCommunityIcons name={sub.icon as any} size={16} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 13, fontWeight: '600' }}>{sub.id}</ThemedText>
                           </View>
                         )}
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
                 <TextInput 
                   value={postText} onChangeText={setPostText} 
                   placeholder={t.communitytab.messageNewPost} placeholderTextColor={isDark ? "#888" : "#999"} 
-                  multiline style={[styles.postInput, { color: DynamicColors.text, backgroundColor: DynamicColors.inputBg }]} 
+                  multiline style={{ color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, fontSize: 15, fontWeight: '600', borderColor: DynamicColors.border, borderWidth: 1, height: 120, textAlignVertical: 'top', marginBottom: 15 }} 
                 />
 
                 {selectedImage && (
@@ -452,18 +499,23 @@ export default function CommunityScreen() {
                   </View>
                 )}
 
-                <View style={styles.actions}>
-                  <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }}>
-                    <MaterialCommunityIcons name="image-plus" size={32} color="#FF5F6D" />
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
+                  <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }}
+                    style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: DynamicColors.inputBg, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="camera-plus" size={32} color="#FF5F6D" />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing}>
-                    <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={styles.publishBtn}>
-                      {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>{t.communitytab.botonpost}</ThemedText>}
+                  <TouchableOpacity onPress={handlePost} disabled={!postText.trim() || isPublishing} style={{ flex: 1 }}>
+                    <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={{ height: 54, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                      {isPublishing ? <ActivityIndicator color="#fff" /> : <>
+                        <MaterialCommunityIcons name="send" size={18} color="#fff" style={{ marginRight: 8 }} />
+                        <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>{t.communitytab.botonpost}</ThemedText>
+                      </>}
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
-              </View>
-            </BlurView>
+
+              </ScrollView>
+            </View>
           </KeyboardAvoidingView>
         </View>
       </RNModal>
@@ -476,6 +528,7 @@ export default function CommunityScreen() {
               <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
                 <TextInput style={[{backgroundColor: DynamicColors.inputBg, borderRadius: 15, padding: 15, color: DynamicColors.text, minHeight: 80}]} placeholder={t.communitytab.placeHolderModal} placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
                 <TouchableOpacity onPress={handleAddComment} style={[styles.publishBtn, {backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center'}]}>
+                <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
                   <ThemedText style={{color:'#fff', fontWeight:'bold'}}>{t.communitytab.sendbutton}</ThemedText>
                 </TouchableOpacity>
               </BlurView>

@@ -25,7 +25,7 @@ export const useUnifiedCardStyles = () => {
     border: isDark ? 'rgba(128, 128, 128, 0.3)' : 'rgba(128, 128, 128, 0.15)',
     text: isDark ? '#FFF' : '#1A1A1A',
     textButton: isDark ? '#1A1A1A' : '#FFFFFF',
-    subtext: isDark ? '#A0A0A0' : '#666',
+    subtext: isDark ? '#A0A0A0' : '#1A1A1A',
     accent: '#FF5F6D',
     accentLight: 'rgba(255, 95, 109, 0.15)',
     reactionBg: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)'
@@ -174,7 +174,8 @@ export const useUnifiedCardStyles = () => {
     removeImg: { position: 'absolute', top: -5, right: -5, backgroundColor: isDark ? '#333' : '#fff', borderRadius: 10 },
     actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     fab: { position: 'absolute', bottom: 65, right: 30, width: 64, height: 64, borderRadius: 32, elevation: 8, zIndex: 10 },
-    closeViewerBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 }
+    closeViewerBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 },
+    closeViewerBtnright: { position: 'absolute', top: -15, left: 90, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: 8 }
   });
 
   return {
