@@ -121,67 +121,7 @@ const DATA_SOURCE: Emprendimiento[] = [
   },
 ];
 
-// --- ReviewForm ---
-const ReviewForm = ({
-  onPublish, onCancel, isDark,
-}: {
-  onPublish: (rating: number, comment: string) => void;
-  onCancel: () => void;
-  isDark: boolean;
-}) => {
-  const [rating,  setRating]  = useState(5);
-  const [comment, setComment] = useState('');
 
-  const handlePrePublish = () => {
-    if (!validateComment(comment)) {
-      const msg = 'Tu reseña contiene contenido inapropiado.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Contenido no permitido', msg);
-      return;
-    }
-    onPublish(rating, comment);
-  };
-
-  return (
-    <View style={{ flex: 1, paddingVertical: 10 }}>
-      <TouchableOpacity onPress={onCancel}
-        style={{ marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>Volver</ThemedText>
-      </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20,
-        color: isDark ? '#FFF' : '#1A1A1A' }}>
-        Tu experiencia
-      </ThemedText>
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 }}>
-        {[1, 2, 3, 4, 5].map(s => (
-          <TouchableOpacity key={s} onPress={() => setRating(s)}>
-            <MaterialCommunityIcons
-              name={s <= rating ? 'star' : 'star-outline'} size={40}
-              color={s <= rating ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)')} />
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-        borderRadius: 20, padding: 15, height: 150,
-        borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment}
-          placeholder="Escribe tu opinión..."
-          placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
-          multiline
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-      </View>
-      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()}
-        style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-        <LinearGradient
-          colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']}
-          style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-          <MaterialCommunityIcons name="send" size={18} color="#FFF" />
-          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>Publicar reseña</ThemedText>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  );
-};
 
 // --- COMPONENTE PRINCIPAL ---
 export default function EntrepreneurshipScreen() {
@@ -377,6 +317,68 @@ export default function EntrepreneurshipScreen() {
     </TouchableOpacity>
   );
 
+// --- ReviewForm ---
+const ReviewForm = ({
+  onPublish, onCancel, isDark,
+}: {
+  onPublish: (rating: number, comment: string) => void;
+  onCancel: () => void;
+  isDark: boolean;
+}) => {
+  const [rating,  setRating]  = useState(5);
+  const [comment, setComment] = useState('');
+
+  const handlePrePublish = () => {
+    if (!validateComment(comment)) {
+      const msg = 'Tu reseña contiene contenido inapropiado.';
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Contenido no permitido', msg);
+      return;
+    }
+    onPublish(rating, comment);
+  };
+
+  return (
+    <View style={{ flex: 1, paddingVertical: 10 }}>
+      <TouchableOpacity onPress={onCancel}
+        style={{ marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>Volver</ThemedText>
+      </TouchableOpacity>
+      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20,
+        color: isDark ? '#FFF' : '#1A1A1A' }}>
+        Tu experiencia
+      </ThemedText>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 }}>
+        {[1, 2, 3, 4, 5].map(s => (
+          <TouchableOpacity key={s} onPress={() => setRating(s)}>
+            <MaterialCommunityIcons
+              name={s <= rating ? 'star' : 'star-outline'} size={40}
+              color={s <= rating ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)')} />
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+        borderRadius: 20, padding: 15, height: 150,
+        borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+        <TextInput value={comment} onChangeText={setComment}
+          placeholder="Escribe tu opinión..."
+          placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
+          multiline
+          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+      </View>
+      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()}
+        style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+        <LinearGradient
+          colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']}
+          style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+          <MaterialCommunityIcons name="send" size={18} color="#FFF" />
+          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>{t.entrepreneurshiptab.publishReviews}</ThemedText>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
   // --- Pill de filtro (Mobile) ---
   const FilterPill = ({ label, iconName, isActive, onPress }: {
     label: string; iconName: string; isActive: boolean; onPress: () => void;
@@ -409,7 +411,7 @@ export default function EntrepreneurshipScreen() {
       {item.image && <Image source={{ uri: item.image }} style={S.cardImage} resizeMode="cover" />}
       <View style={S.verMasBadge}>
         <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-        <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>Ver detalle</ThemedText>
+        <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{t.entrepreneurshiptab.viewdetail}</ThemedText>
       </View>
 
       <View style={{ padding: 14 }}>
@@ -454,7 +456,7 @@ export default function EntrepreneurshipScreen() {
            <ActionBtnLine 
              onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} 
              icon="comment-text-outline" 
-             text={`Reseñas (${item.reviews.length})`} 
+             text={t.entrepreneurshiptab.reviews+` (${item.reviews.length})`} 
              color={isDark ? '#FFF' : '#444'} 
              bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} 
            />
@@ -466,7 +468,7 @@ export default function EntrepreneurshipScreen() {
                else { Linking.openURL(`tel:${item.phone}`); }
              }} 
              icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} 
-             text={item.contactMethod === 'whatsapp' ? "WhatsApp" : "Llamar"} 
+             text={item.contactMethod === 'whatsapp' ? "WhatsApp" : t.entrepreneurshiptab.call} 
              color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} 
              bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
            />
@@ -484,7 +486,7 @@ export default function EntrepreneurshipScreen() {
     }}>
       <MaterialCommunityIcons name="magnify" size={22} color={DC.iconInactive} style={{ marginRight: 10 }} />
       <TextInput value={searchText} onChangeText={setSearchText}
-        placeholder="Buscar emprendimientos..."
+        placeholder={t.entrepreneurshiptab.searchentrepre}
         placeholderTextColor={DC.iconInactive}
         style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '600', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       {searchText.length > 0 && (

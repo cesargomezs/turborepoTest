@@ -142,6 +142,7 @@ export const translations = {
         createEvent: "Crear evento",
     },
     entrepreneurshiptab:{
+        searchentrepre:"Buscar emprendimientos...",
         viewdetail: "Ver detalle",
         viewcategory: "Categorías",
         nofoundresults: "No hay resultados",
@@ -159,6 +160,7 @@ export const translations = {
         call : "Llamada",
         promotion: "Promoción (opcional)",
         publishEntrepre: "Publicar Emprendimiento",
+        publishReviews:"Publicar reseña",
         exampleoffet: "Ej: 10% OFF en primera consulta",
         descripservicesplace: "Descripción de tus servicios...",
         namebussinesplac: "Nombre del negocio"
@@ -300,6 +302,7 @@ export const translations = {
         createEvent: "Create event"
       },
     entrepreneurshiptab:{
+        searchentrepre:"Search for ventures...",
         viewdetail: "View detail",
         viewcategory: "Category",
         nofoundresults: "No found results",
@@ -317,9 +320,11 @@ export const translations = {
         call: "Call",
         promotion: "Promotion (optional)",
         publishEntrepre: "Publish Entrepreneurship",
+        publishReviews:"Publish review",
         exampleoffet: "Ex: 10% OFF on the first consultation",
         descripservicesplace: "Description of your services...",
         namebussinesplac: "Business Name"
+        
     }
     
   }
