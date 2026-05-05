@@ -22,13 +22,13 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 
 import badWordsData from '../../../utils/babwords.json';
 
-// ─── VALIDACIÓN ───────────────────────────────────────────────────────────────
+// --- VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray((badWordsData as any).badWordsList)
   ? (badWordsData as any).badWordsList : [];
 const validateComment = (text: string): boolean =>
   !BANNED_WORDS.some((w: string) => text.toLowerCase().includes(w.toLowerCase()));
 
-// ─── TIPOS ────────────────────────────────────────────────────────────────────
+// --- TIPOS ---
 type Review = {
   id: string;
   stars: number;
@@ -52,10 +52,10 @@ type Emprendimiento = {
   userVote: 'like' | 'dislike' | null;
   saved: boolean;
   reviews: Review[];
-  contactMethod: 'whatsapp' | 'phone'; // NUEVO TIPO
+  contactMethod: 'whatsapp' | 'phone'; 
 };
 
-// ─── DATA SOURCE ──────────────────────────────────────────────────────────────
+// --- DATA SOURCE ---
 const CATEGORIES = ['Todas', 'Venta de garaje', 'Reparaciones', 'Comida', 'Salud', 'Tecnología'];
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -121,7 +121,7 @@ const DATA_SOURCE: Emprendimiento[] = [
   },
 ];
 
-// ─── ReviewForm ───────────────────────────────────────────────────────────────
+// --- ReviewForm ---
 const ReviewForm = ({
   onPublish, onCancel, isDark,
 }: {
@@ -168,7 +168,7 @@ const ReviewForm = ({
           placeholder="Escribe tu opinión..."
           placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
           multiline
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 15 }} />
+          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()}
         style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
@@ -183,7 +183,7 @@ const ReviewForm = ({
   );
 };
 
-// ─── COMPONENT PRINCIPAL ──────────────────────────────────────────────────────
+// --- COMPONENTE PRINCIPAL ---
 export default function EntrepreneurshipScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -201,6 +201,7 @@ export default function EntrepreneurshipScreen() {
 
   const DC = {
     text:               isDark ? '#FFFFFF'                  : '#1A1A1A',
+    textmes:            isDark ? '#FFFFFF'                  : '#1A1A1A',
     subtext:            isDark ? '#B0BEC5'                  : '#546E7A',
     accent:             isDark ? '#FF5F6D'                  : '#FF5F6D',
     border:             isDark ? 'rgba(255,255,255,0.22)'   : 'rgba(0,0,0,0.1)',
@@ -215,7 +216,7 @@ export default function EntrepreneurshipScreen() {
   const OG: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'];
   const DG: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
-  // ─── State ────────────────────────────────────────────────────────────────
+  // --- State ---
   const [selectedArea,    setSelectedArea]    = useState('Todas');
   const [searchText,      setSearchText]      = useState('');
   const [localData,       setLocalData]       = useState<Emprendimiento[]>(DATA_SOURCE);
@@ -238,7 +239,7 @@ export default function EntrepreneurshipScreen() {
   const triggerAlert = (title: string, msg: string) =>
     isWeb ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
 
-  // ─── Image picker ─────────────────────────────────────────────────────────
+  // --- Image picker ---
   const pickImage = async () => {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -251,7 +252,7 @@ export default function EntrepreneurshipScreen() {
     if (!r.canceled) setFormImage(r.assets[0].uri);
   };
 
-  // ─── Filtros ──────────────────────────────────────────────────────────────
+  // --- Filtros ---
   const handleFilterPress = (area: string) =>
     setSelectedArea(selectedArea === area && area !== 'Todas' ? 'Todas' : area);
 
@@ -264,7 +265,7 @@ export default function EntrepreneurshipScreen() {
     return list;
   }, [localData, selectedArea, searchText]);
 
-  // ─── Votos ────────────────────────────────────────────────────────────────
+  // --- Votos ---
   const applyVote = (item: Emprendimiento, type: 'like' | 'dislike'): Emprendimiento => {
     const isSel = item.userVote === type;
     return {
@@ -289,7 +290,7 @@ export default function EntrepreneurshipScreen() {
   const handleShare = (item: Emprendimiento) =>
     Share.share({ message: `${item.name}\n${item.description}\nTel: ${item.phone}` });
 
-  // ─── Reseñas ──────────────────────────────────────────────────────────────
+  // --- Reseñas ---
   const handleAddReview = (targetId: number, stars: number, comment: string) => {
     const newReview: Review = {
       id: Date.now().toString(), stars, comment,
@@ -304,12 +305,22 @@ export default function EntrepreneurshipScreen() {
     setShowReviewInput(false);
   };
 
-  const openReviews = (item: Emprendimiento) => {
-    setReviewTarget(item);
-    setShowReviewInput(false);
+  // Esta función previene el "Modal over Modal" en iOS/Android
+  const openReviews = (item: Emprendimiento, focusInput: boolean = false) => {
+    if (detailItem) {
+      setDetailItem(null); 
+      // Esperamos a que cierre el modal actual para abrir el nuevo y evitar que se congele
+      setTimeout(() => {
+        setReviewTarget(item);
+        setShowReviewInput(focusInput);
+      }, Platform.OS === 'ios' ? 350 : 50); 
+    } else {
+      setReviewTarget(item);
+      setShowReviewInput(focusInput);
+    }
   };
 
-  // ─── Publicar emprendimiento ──────────────────────────────────────────────
+  // --- Publicar emprendimiento ---
   const handlePublish = async () => {
     if (!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage) {
       triggerAlert('Campos incompletos', 'Completa nombre, descripción, teléfono e imagen.'); return;
@@ -345,20 +356,28 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // ─── Dimensiones ──────────────────────────────────────────────────────────
+  // --- Dimensiones ---
   const cardWidth      = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight     = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // ─── Botón Individual Autoajustable (Reutilizable) ───────────────────────
-  const ActionBtn = ({ icon, text, color, bgColor, onPress }: any) => (
-    <TouchableOpacity onPress={onPress} style={{ flexGrow: 1, flexBasis: 100, height: 42, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8, marginRight: 8 }}>
+  // --- Botón de Acción Dinámico (Grid System 2x2 para Modal de Detalle) ---
+  const ActionGridBtn = ({ icon, text, color, bgColor, onPress }: any) => (
+    <TouchableOpacity onPress={onPress} style={{ flexBasis: '48%', height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8 }}>
        <MaterialCommunityIcons name={icon} size={16} color={color} />
-       <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: color }}>{text}</ThemedText>
+       <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: color }}>{text}</ThemedText>
     </TouchableOpacity>
   );
 
-  // ─── Pill de filtro (Mobile) ──────────────────────────────────────────────
+  // --- Botón de Acción Lineal (Para las tarjetas de la lista principal) ---
+  const ActionBtnLine = ({ icon, text, color, bgColor, onPress }: any) => (
+    <TouchableOpacity onPress={onPress} style={{ flexGrow: 1, flexBasis: 80, height: 40, paddingHorizontal: 8, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8, marginRight: 6 }}>
+       <MaterialCommunityIcons name={icon} size={16} color={color} />
+       <ThemedText numberOfLines={1} style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: color }}>{text}</ThemedText>
+    </TouchableOpacity>
+  );
+
+  // --- Pill de filtro (Mobile) ---
   const FilterPill = ({ label, iconName, isActive, onPress }: {
     label: string; iconName: string; isActive: boolean; onPress: () => void;
   }) => (
@@ -381,7 +400,7 @@ export default function EntrepreneurshipScreen() {
     </TouchableOpacity>
   );
 
-  // ─── Tarjeta de emprendimiento ────────────────────────────────────────────
+  // --- Tarjeta de emprendimiento (Feed Principal - Versión Resumida) ---
   const EmprendimientoCard = ({ item }: { item: Emprendimiento }) => (
     <TouchableOpacity activeOpacity={0.93}
       onPress={() => setDetailItem(item)}
@@ -430,13 +449,19 @@ export default function EntrepreneurshipScreen() {
           </View>
         )}
 
-        {/* ── BOTONES ENVOLVENTES (No se cortan en web ni móvil) ── */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: DC.divider }}>
-           <ActionBtn onPress={(e: any) => { e.stopPropagation?.(); openReviews(item); }} icon="comment-text-outline" text={`Reseñas (${item.reviews.length})`} color={isDark ? '#FFF' : '#444'} bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} />
+        {/* --- BOTONES DE ACCIÓN (SOLO RESEÑAS Y CONTACTO EN EL FEED) --- */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: DC.divider }}>
+           <ActionBtnLine 
+             onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} 
+             icon="comment-text-outline" 
+             text={`Reseñas (${item.reviews.length})`} 
+             color={isDark ? '#FFF' : '#444'} 
+             bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} 
+           />
            
-           {/* Botón de contacto DINÁMICO */}
-           <ActionBtn 
-             onPress={() => {
+           <ActionBtnLine 
+             onPress={(e: any) => {
+               e.stopPropagation?.();
                if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
                else { Linking.openURL(`tel:${item.phone}`); }
              }} 
@@ -445,28 +470,23 @@ export default function EntrepreneurshipScreen() {
              color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} 
              bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
            />
-
-           <ActionBtn onPress={() => handleVote(item.id, 'like')} icon="thumb-up" text={item.likes} color={item.userVote === 'like' ? '#fff' : '#1976D2'} bgColor={item.userVote === 'like' ? '#1976D2' : 'rgba(25,118,210,0.1)'} />
-           <ActionBtn onPress={() => handleVote(item.id, 'dislike')} icon="thumb-down" text={item.dislikes} color={item.userVote === 'dislike' ? '#fff' : '#FA8072'} bgColor={item.userVote === 'dislike' ? '#FA8072' : 'rgba(250,128,114,0.1)'} />
-           <ActionBtn onPress={() => handleSave(item.id)} icon={item.saved ? 'bookmark' : 'bookmark-outline'} text={item.saved ? 'Guardado' : 'Guardar'} color={item.saved ? (isDark ? '#111' : '#FFF') : DC.iconInactive} bgColor={item.saved ? (isDark ? '#FFF' : '#111') : 'rgba(128,128,128,0.1)'} />
-           <ActionBtn onPress={() => handleShare(item)} icon="share-variant" text="Compartir" color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  // ─── Buscador ──────────────────────────────────────────────
+  // --- Buscador ---
   const SearchBar = () => (
     <View style={{
       flexDirection: 'row', alignItems: 'center',
       backgroundColor: DC.inputBg, borderRadius: 16, paddingHorizontal: 14, height: 48,
-      borderWidth: 1, borderColor: DC.border, marginBottom: 15,
+      borderWidth: 1, borderColor: DC.border, marginBottom: 8, // <--- MARGEN REDUCIDO
     }}>
       <MaterialCommunityIcons name="magnify" size={22} color={DC.iconInactive} style={{ marginRight: 10 }} />
       <TextInput value={searchText} onChangeText={setSearchText}
         placeholder="Buscar emprendimientos..."
         placeholderTextColor={DC.iconInactive}
-        style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '600', height: '100%' }} />
+        style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '600', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       {searchText.length > 0 && (
         <TouchableOpacity onPress={() => setSearchText('')} style={{ padding: 4 }}>
           <MaterialCommunityIcons name="close-circle" size={20} color={DC.iconInactive} />
@@ -502,7 +522,7 @@ export default function EntrepreneurshipScreen() {
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
 
-                {/* ── SIDEBAR IZQUIERDO (solo isLargeWeb) ── */}
+                {/* --- SIDEBAR IZQUIERDO (solo isLargeWeb) --- */}
                 {isLargeWeb && (
                   <View style={stylesUnified.webSidebar}>
                     <ThemedText style={[stylesUnified.sideMenuTitle, { color: DC.text }]}>Categorías</ThemedText>
@@ -538,13 +558,13 @@ export default function EntrepreneurshipScreen() {
                   </View>
                 )}
 
-                {/* ── CONTENIDO PRINCIPAL ── */}
+                {/* --- CONTENIDO PRINCIPAL --- */}
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
 
                   <SearchBar />
 
                   {!isLargeWeb && (
-                    <View style={{ marginBottom: 12 }}>
+                    <View style={{ marginBottom: 8 }}> 
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}
                         contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
                         {CATEGORIES.map(area => (
@@ -554,17 +574,19 @@ export default function EntrepreneurshipScreen() {
                       </ScrollView>
                     </View>
                   )}
-
+                  {/*
                   <ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '700', marginBottom: 10 }}>
                     {results.length} resultado{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}
-                  </ThemedText>
+                  </ThemedText>*/}
+
+                  {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length} {t.lawyerstab?.resultdomore}</ThemedText>}
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {results.length === 0 && (
                       <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                         <MaterialCommunityIcons name="store-off-outline" size={56} color={DC.subtext} />
                         <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14 }}>
-                          No hay resultados
+                          {t.entrepreneurshiptab.nofoundresults}
                         </ThemedText>
                       </View>
                     )}
@@ -587,7 +609,7 @@ export default function EntrepreneurshipScreen() {
       </TouchableOpacity>
 
       {/* ══════════════════════════════════════════════════════════
-          MODAL DETALLE
+          MODAL DETALLE DE EMPRENDIMIENTO
       ══════════════════════════════════════════════════════════ */}
       <RNModal visible={!!detailItem} transparent animationType="slide"
         statusBarTranslucent onRequestClose={() => setDetailItem(null)}>
@@ -643,7 +665,7 @@ export default function EntrepreneurshipScreen() {
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                     <MaterialCommunityIcons name="text-box-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>Sobre el negocio</ThemedText>
+                    <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab.aboutBussines}</ThemedText>
                   </View>
                   <ThemedText style={{ color: DC.subtext, fontSize: 14, lineHeight: 22 }}>
                     {detailItem.description}
@@ -671,15 +693,16 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                 </View>
 
+                {/* --- SECCIÓN DE VOTOS (GRID REPARADO 2x2 SOLO EN DETALLE) --- */}
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg, marginBottom: 20 }]}>
                   <ThemedText style={{ fontWeight: '800', fontSize: 13, color: DC.subtext, marginBottom: 12 }}>
-                    ¿Te fue útil este negocio?
+                   {t.entrepreneurshiptab.businesshelpful}
                   </ThemedText>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                    <ActionBtn onPress={() => handleVote(detailItem.id, 'like')} icon="thumb-up" text={`Me gusta ${detailItem.likes}`} color={detailItem.userVote === 'like' ? '#fff' : '#1976D2'} bgColor={detailItem.userVote === 'like' ? '#1976D2' : 'rgba(25,118,210,0.1)'} />
-                    <ActionBtn onPress={() => handleVote(detailItem.id, 'dislike')} icon="thumb-down" text={`No me gusta ${detailItem.dislikes}`} color={detailItem.userVote === 'dislike' ? '#fff' : '#FA8072'} bgColor={detailItem.userVote === 'dislike' ? '#FA8072' : 'rgba(250,128,114,0.1)'} />
-                    <ActionBtn onPress={() => handleSave(detailItem.id)} icon={detailItem.saved ? 'bookmark' : 'bookmark-outline'} text={detailItem.saved ? 'Guardado' : 'Guardar'} color={detailItem.saved ? (isDark ? '#111' : '#FFF') : DC.iconInactive} bgColor={detailItem.saved ? (isDark ? '#FFF' : '#111') : 'rgba(128,128,128,0.1)'} />
-                    <ActionBtn onPress={() => handleShare(detailItem)} icon="share-variant" text="Compartir" color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                    <ActionGridBtn onPress={() => handleVote(detailItem.id, 'like')} icon="thumb-up" text={`Me gusta (${detailItem.likes})`} color={detailItem.userVote === 'like' ? '#fff' : '#1976D2'} bgColor={detailItem.userVote === 'like' ? '#1976D2' : 'rgba(25,118,210,0.1)'} />
+                    <ActionGridBtn onPress={() => handleVote(detailItem.id, 'dislike')} icon="thumb-down" text={`No me gusta (${detailItem.dislikes})`} color={detailItem.userVote === 'dislike' ? '#fff' : '#FA8072'} bgColor={detailItem.userVote === 'dislike' ? '#FA8072' : 'rgba(250,128,114,0.1)'} />
+                    <ActionGridBtn onPress={() => handleSave(detailItem.id)} icon={detailItem.saved ? 'bookmark' : 'bookmark-outline'} text={detailItem.saved ? 'Guardado' : 'Guardar'} color={detailItem.saved ? (isDark ? '#111' : '#FFF') : DC.iconInactive} bgColor={detailItem.saved ? (isDark ? '#FFF' : '#111') : 'rgba(128,128,128,0.1)'} />
+                    <ActionGridBtn onPress={() => handleShare(detailItem)} icon="share-variant" text="Compartir" color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
                   </View>
                 </View>
 
@@ -687,7 +710,7 @@ export default function EntrepreneurshipScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="comment-text-multiple-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} />
-                      <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>Reseñas</ThemedText>
+                      <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab.reviews}</ThemedText>
                       {detailItem.reviews.length > 0 && (
                         <View style={[S.reviewCountBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}>
                           <ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '800' }}>
@@ -696,39 +719,50 @@ export default function EntrepreneurshipScreen() {
                         </View>
                       )}
                     </View>
-                    <TouchableOpacity onPress={() => openReviews(detailItem)}
+                    
+                    {/* Botón que Cierra el detalle y Abre el modal independiente de reseñas */}
+                    <TouchableOpacity onPress={() => openReviews(detailItem, true)}
                       style={{ borderRadius: 12, overflow: 'hidden' }}>
                       <LinearGradient colors={OG}
                         style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" />
-                        <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>Escribir</ThemedText>
+                        <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t.entrepreneurshiptab.writing}</ThemedText>
                       </LinearGradient>
                     </TouchableOpacity>
                   </View>
 
                   {detailItem.reviews.length === 0 ? (
                     <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}>
-                      <MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.subtext} />
-                      <ThemedText style={{ color: DC.subtext, marginTop: 10, fontWeight: '600', fontSize: 13 }}>
-                        Aún no hay reseñas. ¡Sé el primero!
+                      <MaterialCommunityIcons name="comment-off-outline" size={40} />
+                      <ThemedText style={{ marginTop: 10, fontSize: 13 }}>
+                        {t.entrepreneurshiptab.whitoutReviews}
                       </ThemedText>
                     </View>
                   ) : (
-                    detailItem.reviews.map(r => (
-                      <View key={r.id}
-                        style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <View style={{ flexDirection: 'row', gap: 3 }}>
-                            {[1, 2, 3, 4, 5].map(s => (
-                              <MaterialCommunityIcons key={s} name="star" size={14}
-                                color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} />
-                            ))}
+                    <>
+                        {detailItem.reviews.slice(0, 2).map(r => (
+                          <View key={r.id}
+                            style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <View style={{ flexDirection: 'row', gap: 3 }}>
+                                {[1, 2, 3, 4, 5].map(s => (
+                                  <MaterialCommunityIcons key={s} name="star" size={14}
+                                    color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} />
+                                ))}
+                              </View>
+                              <ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime}</ThemedText>
+                            </View>
+                            <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
                           </View>
-                          <ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime}</ThemedText>
-                        </View>
-                        <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
-                      </View>
-                    ))
+                        ))}
+                        
+                        {/* Botón Ver Más Reseñas */}
+                        {detailItem.reviews.length > 2 && (
+                            <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}>
+                                <ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t.entrepreneurshiptab.viewAllreviews}</ThemedText>
+                            </TouchableOpacity>
+                        )}
+                    </>
                   )}
                 </View>
 
@@ -739,7 +773,7 @@ export default function EntrepreneurshipScreen() {
       </RNModal>
 
       {/* ══════════════════════════════════════════════════════════
-          MODAL RESEÑAS
+          MODAL RESEÑAS INDEPENDIENTE (RESTABLECIDO)
       ══════════════════════════════════════════════════════════ */}
       <RNModal visible={!!reviewTarget} transparent animationType="slide"
         statusBarTranslucent
@@ -763,8 +797,8 @@ export default function EntrepreneurshipScreen() {
                     <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DC.text }}>
                       {reviewTarget?.name}
                     </ThemedText>
-                    <ThemedText style={{ color: DC.subtext, fontWeight: '700' }}>
-                      Opiniones de la comunidad
+                    <ThemedText style={{ color: DC.text, fontWeight: '700' }}>
+                      {t.entrepreneurshiptab.communityopinions}
                     </ThemedText>
                   </View>
                   <TouchableOpacity onPress={() => { setReviewTarget(null); setShowReviewInput(false); }}>
@@ -779,7 +813,7 @@ export default function EntrepreneurshipScreen() {
                       <LinearGradient colors={OG} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                         style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                         <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{ marginRight: 10 }} />
-                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>Escribir reseña</ThemedText>
+                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.entrepreneurshiptab.writingReviews}</ThemedText>
                       </LinearGradient>
                     </TouchableOpacity>
 
@@ -807,9 +841,9 @@ export default function EntrepreneurshipScreen() {
                           ))
                         : (
                           <View style={{ alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
-                            <MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.subtext} />
-                            <ThemedText style={{ color: DC.subtext, marginTop: 10 }}>
-                              Aún no hay reseñas. ¡Sé el primero!
+                            <MaterialCommunityIcons name="comment-off-outline" size={40} />
+                            <ThemedText style={{  marginTop: 10 }}>
+                              {t.entrepreneurshiptab.whitoutReviews}
                             </ThemedText>
                           </View>
                         )
@@ -846,7 +880,7 @@ export default function EntrepreneurshipScreen() {
                 <TouchableOpacity onPress={() => setFormVisible(false)} disabled={isSubmitting}>
                   <MaterialCommunityIcons name="close" size={24} color={DC.text} />
                 </TouchableOpacity>
-                <ThemedText style={[S.modalTitle, { color: DC.text }]}>Nuevo Emprendimiento</ThemedText>
+                <ThemedText style={[S.modalTitle, { color: DC.text }]}>{t.entrepreneurshiptab.newentrepreneurship}</ThemedText>
                 <View style={{ width: 24 }} />
               </View>
 
@@ -857,12 +891,12 @@ export default function EntrepreneurshipScreen() {
                     ? <Image source={{ uri: formImage }} style={S.formImagePreview} />
                     : <View style={{ alignItems: 'center' }}>
                         <MaterialCommunityIcons name="camera-plus" size={32} style={{color: DC.iconInactive}} />
-                        <ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'capitalize' }}>FOTO DEL NEGOCIO</ThemedText>
+                        <ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'capitalize' }}>{t.entrepreneurshiptab.businessphoto}</ThemedText>
                       </View>
                   }
                 </TouchableOpacity>
 
-                <ThemedText style={[S.label, { color: DC.accent }]}>CATEGORÍA</ThemedText>
+                <ThemedText style={[S.label, { color: DC.accent }]}>{t.entrepreneurshiptab.viewcategory}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}
                   style={{ marginBottom: 20 }} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
                   {CATEGORIES.filter(c => c !== 'Todas').map(cat => {
@@ -890,18 +924,18 @@ export default function EntrepreneurshipScreen() {
                 </ScrollView>
 
                 <TextInput value={formName} onChangeText={setFormName}
-                  placeholder="Nombre del negocio"
+                  placeholder={t.entrepreneurshiptab.namebussinesplac}
                   placeholderTextColor={DC.subtext}
                   style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border }]} />
 
                 <TextInput value={formDesc} onChangeText={setFormDesc}
-                  placeholder="Descripción de tus servicios..."
+                  placeholder={t.entrepreneurshiptab.descripservicesplace}
                   placeholderTextColor={DC.subtext}
                   multiline numberOfLines={3}
                   style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border,
                     minHeight: 80, textAlignVertical: 'top', paddingTop: 14 }]} />
 
-                <ThemedText style={[S.label, { color: DC.text }]}>Método de contacto principal</ThemedText>
+                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab.contactMethod}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : DC.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : DC.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : DC.subtext} style={{ marginRight: 8 }} />
@@ -909,7 +943,7 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? '#FF5F6D' : DC.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : DC.inputBg }}>
                     <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext }}>Llamada</ThemedText>
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext }}>{t.entrepreneurshiptab.call}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -930,9 +964,9 @@ export default function EntrepreneurshipScreen() {
                     style={{ flex: 1, color: DC.text, padding: 15, fontSize: 14, fontWeight: '600' }} />
                 </View>
 
-                <ThemedText style={[S.label, { color: DC.text }]}>Promoción (opcional)</ThemedText>
+                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab.promotion}</ThemedText>
                 <TextInput value={formPromo} onChangeText={setFormPromo}
-                  placeholder="Ej: 10% OFF en primera consulta"
+                  placeholder={t.entrepreneurshiptab.exampleoffet}
                   placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : '#999'}
                   style={[S.input, { color: DC.text, backgroundColor: DC.inputBg,
                     borderColor: DC.border, marginBottom: 20 }]} />
@@ -949,7 +983,7 @@ export default function EntrepreneurshipScreen() {
                       : <>
                           <MaterialCommunityIcons name="store-plus-outline" size={20} color="#fff" style={{ marginRight: 10 }} />
                           <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>
-                            Publicar Emprendimiento
+                            {t.entrepreneurshiptab.publishEntrepre}
                           </ThemedText>
                         </>
                     }
@@ -964,7 +998,7 @@ export default function EntrepreneurshipScreen() {
   );
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────
+// --- STYLES ---
 const S = StyleSheet.create({
   card:         { borderRadius: 28, marginBottom: 20, borderWidth: 1, overflow: 'hidden' },
   cardImage:    { width: '100%', height: 140 },

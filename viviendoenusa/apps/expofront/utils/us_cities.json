@@ -1,0 +1,43 @@
+{
+    "California": [
+      "Anaheim",
+      "Bakersfield",
+      "Chino",
+      "Chino Hills",
+      "Corona",
+      "Eastvale",
+      "El Monte",
+      "Fontana",
+      "Fullerton",
+      "Hesperia",
+      "Irvine",
+      "Jurupa Valley",
+      "Long Beach",
+      "Los Angeles",
+      "Moreno Valley",
+      "Ontario",
+      "Pomona",
+      "Rancho Cucamonga",
+      "Rialto",
+      "Riverside",
+      "San Bernardino",
+      "San Diego",
+      "Santa Ana",
+      "Upland",
+      "Victorville"
+    ],
+    "Texas": [
+      "Austin",
+      "Dallas",
+      "El Paso",
+      "Fort Worth",
+      "Houston",
+      "San Antonio"
+    ],
+    "Florida": [
+      "Jacksonville",
+      "Miami",
+      "Orlando",
+      "Tampa"
+    ]
+  }

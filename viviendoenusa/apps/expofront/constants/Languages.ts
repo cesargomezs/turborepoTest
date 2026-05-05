@@ -72,7 +72,8 @@ export const translations = {
       recent: "Reciente",
       reviews: "Reseñas",
       route: "Ruta",
-      call: "Llamar"
+      call: "Llamar",
+
       
     },
     communitytab: {
@@ -138,7 +139,29 @@ export const translations = {
         addressEvent: "Dirección del evento",
         detailsEvent: "Detalles del evento",
         sharringEvent: "Compartir evento",
-        createEvent: "Crear evento"
+        createEvent: "Crear evento",
+    },
+    entrepreneurshiptab:{
+        viewdetail: "Ver detalle",
+        viewcategory: "Categorías",
+        nofoundresults: "No hay resultados",
+        aboutBussines: "Sobre el negocio",
+        businesshelpful: "¿Te fue útil este negocio?",
+        reviews: "Reseñas",
+        writing : "Escribir", 
+        viewAllreviews: "Ver todas las reseñas...",
+        communityopinions: "Opiniones de la comunidad",
+        writingReviews: "Escribir reseña",
+        whitoutReviews: "Aún no hay reseñas. ¡Sé el primero!",
+        newentrepreneurship: "Nuevo emprendimiento",
+        businessphoto: "Foto del negocio",
+        contactMethod: "Método de contacto principal",
+        call : "Llamada",
+        promotion: "Promoción (opcional)",
+        publishEntrepre: "Publicar Emprendimiento",
+        exampleoffet: "Ej: 10% OFF en primera consulta",
+        descripservicesplace: "Descripción de tus servicios...",
+        namebussinesplac: "Nombre del negocio"
     }
 
     
@@ -275,6 +298,29 @@ export const translations = {
         detailsEvent: "Event details",
         sharringEvent: "Share event",
         createEvent: "Create event"
-      }
+      },
+    entrepreneurshiptab:{
+        viewdetail: "View detail",
+        viewcategory: "Category",
+        nofoundresults: "No found results",
+        aboutBussines: "About the business",
+        businesshelpful: "Did you find this business helpful?",
+        reviews: "Reviews",
+        writing : "Writing",
+        viewAllreviews: "See all reviews...",
+        communityopinions: "Community opinions",
+        writingReviews: "Write a review",
+        whitoutReviews: "There are no reviews yet. Be the first!",
+        newentrepreneurship: "New Entrepreneurship",
+        businessphoto: "Business photo",
+        contactMethod: "Primary contact method",
+        call: "Call",
+        promotion: "Promotion (optional)",
+        publishEntrepre: "Publish Entrepreneurship",
+        exampleoffet: "Ex: 10% OFF on the first consultation",
+        descripservicesplace: "Description of your services...",
+        namebussinesplac: "Business Name"
+    }
+    
   }
 };
