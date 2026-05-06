@@ -102,6 +102,7 @@ export const translations = {
     },
     donationstab: {
         category: "Categorías",
+        placeholInput: "¿Qué buscas hoy?",
         subCategories: ['Todas','Ropa','Alimentos','Muebles','Electrónica','Otros'],
         messageMessageDonation: "Nueva donación",
         messageDonation: "¿Qué te gustaría donar o necesitas?",
@@ -124,7 +125,9 @@ export const translations = {
         messagenotdonnations:"No se encontraron donaciones disponibles.",
         choisephoto:"Seleccionar fotografía",
         callbton: "Llamada",
-        typeContact: "Método de contacto"
+        typeContact: "Método de contacto",
+        numberContact: "Número de contacto",
+        savebutton: "Guardar"
     },
     eventstab: {
         label: "Eventos",
@@ -140,10 +143,36 @@ export const translations = {
         detailsEvent: "Detalles del evento",
         sharringEvent: "Compartir evento",
         createEvent: "Crear evento",
+        call : "Llamada",
+        informationevent: "Información del evento",
+        typeContact: "Método de contacto"
+    },
+    storestab:{
+      categoriesList: ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'],
+      sharemessage: "Mira este establecimiento en ViviendoEnUSA",
+      alertmessage: "Atención, Todos los campos son obligatorios.",
+      sendnewsug: "¡Enviado!, Tu sugerencia será revisada.",
+      reviews: "Reseñas",
+      route: "Ruta",
+      callbton: "Llamada",
+      commutnityopini:"Opiniones de la Comunidad",
+      writingreview:"Escribir reseña",
+      textphoto:"Foto del local",
+      category: "Categoría",
+      placeHoldname:"Nombre comercial",
+      placeHoldAddress: "Dirección física",
+      messagezip: "Código Postal",
+      description: "Descripción",
+      phoneContacto: "Teléfono de contacto",
+      sendbutton: "Guardar",
+      verify: "Revisión"
+
     },
     entrepreneurshiptab:{
         searchentrepre:"Buscar emprendimientos...",
+        backBtn: "Volver",
         viewdetail: "Ver detalle",
+        viewExpe:"Tu experiencia",
         viewcategory: "Categorías",
         nofoundresults: "No hay resultados",
         aboutBussines: "Sobre el negocio",
@@ -163,7 +192,17 @@ export const translations = {
         publishReviews:"Publicar reseña",
         exampleoffet: "Ej: 10% OFF en primera consulta",
         descripservicesplace: "Descripción de tus servicios...",
-        namebussinesplac: "Nombre del negocio"
+        namebussinesplac: "Nombre del negocio",
+        categoryentre: ['Todas', 'Venta de garaje', 'Reparaciones', 'Comida', 'Salud', 'Tecnología'],
+        viewopinion: "Escribe tu opinión...",
+        categoryentreicon: {
+          'Todas':'apps',
+          'Venta de garaje':'sale',
+          'Reparaciones':'wrench-outline',
+          'Comida':'silverware-fork-knife', 
+          'Salud':'heart-pulse', 
+          'Tecnología':'laptop'
+          }
     }
 
     
@@ -262,6 +301,7 @@ export const translations = {
     },
     donationstab: {
         category: "Categories",
+        placeholInput: "What are you looking for today?",
         subCategories: ['All','Clothing','Food','Furniture','Electronics','Other'],
         messageMessageDonation: "New donation",
         messageDonation: "What would you like to donate or need?",
@@ -284,7 +324,9 @@ export const translations = {
         messagenotdonnations:"No available donations found.",
         choisephoto:"Select photo",
         callbton: "Call",
-        typeContact: "Contact method"
+        typeContact: "Contact method",
+        numberContact: "Contact number",
+        savebutton: "Save"
       },
       eventstab: {
         label: "Events",
@@ -299,11 +341,38 @@ export const translations = {
         addressEvent: "Event address",
         detailsEvent: "Event details",
         sharringEvent: "Share event",
-        createEvent: "Create event"
+        createEvent: "Create event",
+        call : "Call",
+        informationevent: "Event Information",
+        typeContact: "Contact method"
+      },
+      storestab:{
+        categoriesList: ['All', 'Supermarket', 'Bakery', 'Electronics', 'Other'],
+        sharemessage: "Check out this establishment on LivingInUSA",
+        alertmessage: "Attention, all fields are required.",
+        sendnewsug: "Sent! Your suggestion will be reviewed.",
+        reviews: "Reviews",
+        route: "Route",
+        callbton: "Call",
+        commutnityopini:"Community Opinions",
+        writingreview:"Write review",
+        textphoto:"Photo of the premises",
+        category: "Category",
+        placeHoldname: "Business Name",
+        placeHoldAddress: "Physical Address",
+        messagezip: "Postal Code",
+        description: "Descripción",
+        phoneContacto: "Contact phone number",
+        sendbutton: "Save",
+        verify: "verify"
+
+
       },
     entrepreneurshiptab:{
         searchentrepre:"Search for ventures...",
+        backBtn: "Go back",
         viewdetail: "View detail",
+        viewExpe:"Your experience",
         viewcategory: "Category",
         nofoundresults: "No found results",
         aboutBussines: "About the business",
@@ -323,7 +392,17 @@ export const translations = {
         publishReviews:"Publish review",
         exampleoffet: "Ex: 10% OFF on the first consultation",
         descripservicesplace: "Description of your services...",
-        namebussinesplac: "Business Name"
+        namebussinesplac: "Business Name",
+        categoryentre: ['All', 'Garage Sale', 'Repairs', 'Food', 'Health', 'Technology'],
+        viewopinion: "Write your opinion...",
+        categoryentreicon: {
+          'All':'apps',
+          'Garage Sale':'sale',
+          'Repairs':'wrench-outline',
+          'Food':'silverware-fork-knife', 
+          'Health':'heart-pulse', 
+          'Technology':'laptop'
+          }
         
     }
     

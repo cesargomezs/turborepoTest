@@ -39,14 +39,13 @@ type Review = {
 type Emprendimiento = {
   id: number;
   name: string;
-  area: string;
+  categoryId: number; 
   description: string;
   rating: number;
   phone: string;
   verified: boolean;
   promo: string | null;
   image: string;
-  icon: string;
   likes: number;
   dislikes: number;
   userVote: 'like' | 'dislike' | null;
@@ -55,73 +54,61 @@ type Emprendimiento = {
   contactMethod: 'whatsapp' | 'phone'; 
 };
 
-// --- DATA SOURCE ---
-const CATEGORIES = ['Todas', 'Venta de garaje', 'Reparaciones', 'Comida', 'Salud', 'Tecnología'];
-
-const CATEGORY_ICONS: Record<string, string> = {
-  'Todas':             'apps',
-  'Venta de garaje':   'sale',
-  'Reparaciones':      'wrench-outline', 
-  'Comida':            'silverware-fork-knife',
-  'Salud':             'heart-pulse',
-  'Tecnología':        'laptop',
-};
-
 const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' },
-  { code: '+1', flag: '🇺🇸', name: 'USA' }
+  { code: '+52', flag: '🇲🇽', name: 'Mexico' }
 ];
+
+// Íconos seguros por índice (0: Todas, 1: Garaje, 2: Reparaciones, 3: Comida, 4: Salud, 5: Tecnología)
+const ICONS_ARRAY = ['apps', 'sale', 'wrench-outline', 'silverware-fork-knife', 'heart-pulse', 'laptop'];
 
 const DATA_SOURCE: Emprendimiento[] = [
   {
-    id: 1, name: 'Asesoría Legal Gómez', area: 'Servicios Legales',
-    description: 'Expertos en trámites migratorios y civiles. Más de 10 años de experiencia ayudando a familias latinas a regularizar su situación migratoria, tramitar visas, permisos de trabajo y procesos de ciudadanía. Atención personalizada y precios accesibles.',
+    id: 1, name: 'Gran Venta de Garaje', categoryId: 1, 
+    description: 'Ropa de segunda mano en excelente estado, muebles vintage, juguetes y herramientas. Precios negociables, ¡todo debe irse este fin de semana! Ven y encuentra tesoros a precios de locura.',
     rating: 5.0, phone: '+1909000000', verified: true,
-    promo: '10% OFF en primera consulta',
-    image: 'https://images.unsplash.com/photo-1589829545856-d44a2c354e3d?w=800',
-    icon: 'briefcase-outline', likes: 12, dislikes: 1, userVote: null, saved: false,
+    promo: '2x1 en toda la ropa',
+    image: 'https://images.unsplash.com/photo-1555529771-835f59fc5efe?w=800',
+    likes: 12, dislikes: 1, userVote: null, saved: false,
     contactMethod: 'whatsapp',
     reviews: [
-      { id: 'r1', stars: 5, comment: 'Excelente servicio, resolvieron mi caso muy rápido.', displayTime: '10:30 AM' },
-      { id: 'r2', stars: 4, comment: 'Muy profesionales y atentos. Lo recomiendo.', displayTime: '09:15 AM' },
+      { id: 'r1', stars: 5, comment: 'Encontré cosas muy buenas y baratas.', displayTime: '10:30 AM' },
     ],
   },
   {
-    id: 2, name: 'Tech Repair', area: 'Reparaciones',
-    description: 'Reparación de equipos electrónicos y computación. Servicio a domicilio disponible en toda el área de Inland Empire. Reparamos laptops, celulares, tablets y consolas. Diagnóstico gratuito y garantía en todas las reparaciones.',
+    id: 2, name: 'Tech Repair', categoryId: 2, 
+    description: 'Reparación de equipos electrónicos y computación. Servicio a domicilio disponible en toda el área de Inland Empire. Reparamos laptops, celulares, tablets y consolas. Diagnóstico gratuito y garantía.',
     rating: 4.8, phone: '+1909111111', verified: true, promo: null,
     image: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=800',
-    icon: 'wrench-outline', likes: 8, dislikes: 0, userVote: null, saved: false, contactMethod: 'phone', reviews: [],
+    likes: 8, dislikes: 0, userVote: null, saved: false, contactMethod: 'phone', reviews: [],
   },
   {
-    id: 3, name: 'Comida Típica Mamá Rosa', area: 'Comida',
-    description: 'Platillos caseros y auténticos de la cocina mexicana y latinoamericana. Pedidos a domicilio y catering para eventos especiales. Especialidad en tamales, pozole, birria y enchiladas. Ingredientes frescos todos los días.',
+    id: 3, name: 'Comida Típica Mamá Rosa', categoryId: 3, 
+    description: 'Platillos caseros y auténticos de la cocina mexicana y latinoamericana. Pedidos a domicilio y catering para eventos especiales. Especialidad en tamales, pozole, birria y enchiladas.',
     rating: 4.9, phone: '+1909222222', verified: false,
     promo: 'Envío gratis en tu primer pedido',
     image: 'https://images.unsplash.com/photo-1555126634-323283e090fa?w=800',
-    icon: 'silverware-fork-knife', likes: 24, dislikes: 2, userVote: null, saved: false, contactMethod: 'whatsapp',
+    likes: 24, dislikes: 2, userVote: null, saved: false, contactMethod: 'whatsapp',
     reviews: [
       { id: 'r3', stars: 5, comment: '¡La mejor birria que he probado fuera de México!', displayTime: '12:00 PM' },
     ],
   },
   {
-    id: 4, name: 'Clínica Salud Latina', area: 'Salud',
-    description: 'Consultas médicas generales, vacunas y chequeos preventivos. Atención completamente en español. Contamos con médicos bilingües, nutricionistas y servicio de laboratorio. Aceptamos Medi-Cal y planes de pago accesibles.',
+    id: 4, name: 'Clínica Salud Latina', categoryId: 4, 
+    description: 'Consultas médicas generales, vacunas y chequeos preventivos. Atención completamente en español. Contamos con médicos bilingües, nutricionistas y servicio de laboratorio.',
     rating: 4.7, phone: '+1909333333', verified: true, promo: null,
     image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800',
-    icon: 'heart-pulse', likes: 17, dislikes: 1, userVote: null, saved: false, contactMethod: 'phone', reviews: [],
+    likes: 17, dislikes: 1, userVote: null, saved: false, contactMethod: 'phone', reviews: [],
   },
   {
-    id: 5, name: 'WebSol Digital', area: 'Tecnología',
-    description: 'Desarrollo de páginas web profesionales, tiendas online y marketing digital para tu negocio. Ayudamos a pequeñas empresas latinas a crecer en internet con presupuestos accesibles. Incluye dominio, hosting y soporte técnico.',
+    id: 5, name: 'WebSol Digital', categoryId: 5, 
+    description: 'Desarrollo de páginas web profesionales, tiendas online y marketing digital para tu negocio. Ayudamos a pequeñas empresas latinas a crecer en internet con presupuestos accesibles.',
     rating: 4.6, phone: '+1909444444', verified: true,
     promo: '1 mes gratis de mantenimiento',
     image: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800',
-    icon: 'laptop', likes: 6, dislikes: 0, userVote: null, saved: false, contactMethod: 'whatsapp', reviews: [],
+    likes: 6, dislikes: 0, userVote: null, saved: false, contactMethod: 'whatsapp', reviews: [],
   },
 ];
-
-
 
 // --- COMPONENTE PRINCIPAL ---
 export default function EntrepreneurshipScreen() {
@@ -138,6 +125,21 @@ export default function EntrepreneurshipScreen() {
   const isLargeWeb = isWeb && width > 1000;
   const isAndroid  = Platform.OS === 'android';
   const isIOS      = Platform.OS === 'ios';
+
+  // --- EXTRACCIÓN SEGURA DE TRADUCCIONES ---
+  const rawCategories = t.entrepreneurshiptab?.categoryentre;
+  const CATEGORIES = Array.isArray(rawCategories) && rawCategories.length > 0 
+      ? rawCategories 
+      : ['Todas', 'Venta de garaje', 'Reparaciones', 'Comida', 'Salud', 'Tecnología'];
+  
+  const CATEGORY_ICONS_DICT: Record<string, string> = t.entrepreneurshiptab?.categoryentreicon || {
+      'Todas':             'apps',
+      'Venta de garaje':   'sale',
+      'Reparaciones':      'wrench-outline', 
+      'Comida':            'silverware-fork-knife',
+      'Salud':             'heart-pulse',
+      'Tecnología':        'laptop',
+  };
 
   const DC = {
     text:               isDark ? '#FFFFFF'                  : '#1A1A1A',
@@ -157,24 +159,24 @@ export default function EntrepreneurshipScreen() {
   const DG: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
   // --- State ---
-  const [selectedArea,    setSelectedArea]    = useState('Todas');
-  const [searchText,      setSearchText]      = useState('');
-  const [localData,       setLocalData]       = useState<Emprendimiento[]>(DATA_SOURCE);
-  const [isFormVisible,   setFormVisible]     = useState(false);
-  const [detailItem,      setDetailItem]      = useState<Emprendimiento | null>(null);
-  const [reviewTarget,    setReviewTarget]    = useState<Emprendimiento | null>(null);
-  const [showReviewInput, setShowReviewInput] = useState(false);
+  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
+  const [searchText,          setSearchText]          = useState('');
+  const [localData,           setLocalData]           = useState<Emprendimiento[]>(DATA_SOURCE);
+  const [isFormVisible,       setFormVisible]         = useState(false);
+  const [detailItem,          setDetailItem]          = useState<Emprendimiento | null>(null);
+  const [reviewTarget,        setReviewTarget]        = useState<Emprendimiento | null>(null);
+  const [showReviewInput,     setShowReviewInput]     = useState(false);
 
   // Formulario nuevo emprendimiento
-  const [formName,     setFormName]     = useState('');
-  const [formDesc,     setFormDesc]     = useState('');
-  const [formPhone,    setFormPhone]    = useState('');
-  const [formContactMethod, setFormContactMethod] = useState<'whatsapp' | 'phone'>('whatsapp');
-  const [countryIdx,   setCountryIdx]   = useState(0); 
-  const [formArea,     setFormArea]     = useState(CATEGORIES[1]);
-  const [formPromo,    setFormPromo]    = useState('');
-  const [formImage,    setFormImage]    = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formName,           setFormName]           = useState('');
+  const [formDesc,           setFormDesc]           = useState('');
+  const [formPhone,          setFormPhone]          = useState('');
+  const [formContactMethod,  setFormContactMethod]  = useState<'whatsapp' | 'phone'>('whatsapp');
+  const [countryIdx,         setCountryIdx]         = useState(0); 
+  const [formCategoryIdx,    setFormCategoryIdx]    = useState(1); 
+  const [formPromo,          setFormPromo]          = useState('');
+  const [formImage,          setFormImage]          = useState<string | null>(null);
+  const [isSubmitting,       setIsSubmitting]       = useState(false);
 
   const triggerAlert = (title: string, msg: string) =>
     isWeb ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
@@ -193,17 +195,14 @@ export default function EntrepreneurshipScreen() {
   };
 
   // --- Filtros ---
-  const handleFilterPress = (area: string) =>
-    setSelectedArea(selectedArea === area && area !== 'Todas' ? 'Todas' : area);
-
   const results = useMemo(() => {
-    let list = selectedArea === 'Todas' ? localData : localData.filter(l => l.area === selectedArea);
+    let list = selectedCategoryIdx === 0 ? localData : localData.filter(l => l.categoryId === selectedCategoryIdx);
     if (searchText.trim()) {
       const q = searchText.toLowerCase();
       list = list.filter(l => l.name.toLowerCase().includes(q) || l.description.toLowerCase().includes(q));
     }
     return list;
-  }, [localData, selectedArea, searchText]);
+  }, [localData, selectedCategoryIdx, searchText]);
 
   // --- Votos ---
   const applyVote = (item: Emprendimiento, type: 'like' | 'dislike'): Emprendimiento => {
@@ -236,20 +235,45 @@ export default function EntrepreneurshipScreen() {
       id: Date.now().toString(), stars, comment,
       displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
-    setLocalData(prev => prev.map(it =>
-      it.id === targetId ? { ...it, reviews: [newReview, ...it.reviews] } : it
-    ));
-    setReviewTarget(prev =>
-      prev?.id === targetId ? { ...prev, reviews: [newReview, ...prev.reviews] } : prev
-    );
+    
+    let newAverage = 0;
+
+    // Actualiza la lista principal
+    setLocalData(prev => prev.map(it => {
+        if (it.id === targetId) {
+            const updatedReviews = [newReview, ...it.reviews];
+            newAverage = updatedReviews.reduce((acc, r) => acc + r.stars, 0) / updatedReviews.length;
+            return { ...it, reviews: updatedReviews, rating: newAverage };
+        }
+        return it;
+    }));
+
+    // Actualiza el modal de detalle
+    setDetailItem(prev => {
+        if (prev?.id === targetId) {
+           const updatedReviews = [newReview, ...prev.reviews];
+           return { ...prev, reviews: updatedReviews, rating: newAverage };
+        }
+        return prev;
+    });
+
+    // Actualiza el modal de reseñas independiente
+    setReviewTarget(prev => {
+        if (prev?.id === targetId) {
+           const updatedReviews = [newReview, ...prev.reviews];
+           return { ...prev, reviews: updatedReviews, rating: newAverage };
+        }
+        return prev;
+    });
+
     setShowReviewInput(false);
+    triggerAlert('¡Gracias!', 'Tu reseña ha sido publicada exitosamente.');
   };
 
   // Esta función previene el "Modal over Modal" en iOS/Android
   const openReviews = (item: Emprendimiento, focusInput: boolean = false) => {
     if (detailItem) {
       setDetailItem(null); 
-      // Esperamos a que cierre el modal actual para abrir el nuevo y evitar que se congele
       setTimeout(() => {
         setReviewTarget(item);
         setShowReviewInput(focusInput);
@@ -277,16 +301,25 @@ export default function EntrepreneurshipScreen() {
       }
 
       setLocalData(prev => [{
-        id: Date.now(), name: formName.trim(), area: formArea,
-        description: formDesc.trim(), rating: 0, phone: `${COUNTRIES[countryIdx].code}${formPhone.trim()}`,
-        verified: false, promo: formPromo.trim() || null, image: formImage,
-        icon: CATEGORY_ICONS[formArea] || 'store-outline',
-        likes: 0, dislikes: 0, userVote: null, saved: false, reviews: [],
+        id: Date.now(), 
+        name: formName.trim(), 
+        categoryId: formCategoryIdx, 
+        description: formDesc.trim(), 
+        rating: 0, 
+        phone: `${COUNTRIES[countryIdx].code}${formPhone.trim()}`,
+        verified: false, 
+        promo: formPromo.trim() || null, 
+        image: formImage,
+        likes: 0, 
+        dislikes: 0, 
+        userVote: null, 
+        saved: false, 
+        reviews: [],
         contactMethod: formContactMethod,
       }, ...prev]);
       
       setFormName(''); setFormDesc(''); setFormPhone('');
-      setFormPromo(''); setFormImage(null); setFormArea(CATEGORIES[1]); setCountryIdx(0); setFormContactMethod('whatsapp');
+      setFormPromo(''); setFormImage(null); setFormCategoryIdx(1); setCountryIdx(0); setFormContactMethod('whatsapp');
       setIsSubmitting(false); setFormVisible(false);
       triggerAlert('¡Éxito!', 'Tu emprendimiento fue publicado.');
 
@@ -317,185 +350,137 @@ export default function EntrepreneurshipScreen() {
     </TouchableOpacity>
   );
 
-// --- ReviewForm ---
-const ReviewForm = ({
-  onPublish, onCancel, isDark,
-}: {
-  onPublish: (rating: number, comment: string) => void;
-  onCancel: () => void;
-  isDark: boolean;
-}) => {
-  const [rating,  setRating]  = useState(5);
-  const [comment, setComment] = useState('');
+  // --- ReviewForm Tipado ---
+  const ReviewForm = ({
+    onPublish, 
+    onCancel, 
+    isDark
+  }: {
+    onPublish: (stars: number, comment: string) => void;
+    onCancel: () => void;
+    isDark: boolean;
+  }) => {
+    const [rating,  setRating]  = useState(5);
+    const [comment, setComment] = useState('');
 
-  const handlePrePublish = () => {
-    if (!validateComment(comment)) {
-      const msg = 'Tu reseña contiene contenido inapropiado.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Contenido no permitido', msg);
-      return;
-    }
-    onPublish(rating, comment);
+    const handlePrePublish = () => {
+      if (!validateComment(comment)) {
+        const msg = 'Tu reseña contiene contenido inapropiado.';
+        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Contenido no permitido', msg);
+        return;
+      }
+      onPublish(rating, comment);
+    };
+
+    return (
+      <View style={{ flex: 1, paddingVertical: 10 }}>
+        <TouchableOpacity onPress={onCancel} style={{ marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+          <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.entrepreneurshiptab?.backBtn || 'Volver'}</ThemedText>
+        </TouchableOpacity>
+        <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>
+          {t.entrepreneurshiptab.viewExpe }
+        </ThemedText>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 }}>
+          {[1, 2, 3, 4, 5].map(s => (
+            <TouchableOpacity key={s} onPress={() => setRating(s)}>
+              <MaterialCommunityIcons
+                name={s <= rating ? 'star' : 'star-outline'} size={40}
+                color={s <= rating ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)')} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+          <TextInput value={comment} onChangeText={setComment}
+            placeholder={t.entrepreneurshiptab.viewopinion}
+            placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
+            multiline
+            style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+        </View>
+        <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+          <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+            <MaterialCommunityIcons name="send" size={18} color="#FFF" />
+            <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>{t.entrepreneurshiptab?.publishReviews || 'Publicar reseña'}</ThemedText>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
-  return (
-    <View style={{ flex: 1, paddingVertical: 10 }}>
-      <TouchableOpacity onPress={onCancel}
-        style={{ marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>Volver</ThemedText>
-      </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20,
-        color: isDark ? '#FFF' : '#1A1A1A' }}>
-        Tu experiencia
-      </ThemedText>
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 }}>
-        {[1, 2, 3, 4, 5].map(s => (
-          <TouchableOpacity key={s} onPress={() => setRating(s)}>
-            <MaterialCommunityIcons
-              name={s <= rating ? 'star' : 'star-outline'} size={40}
-              color={s <= rating ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)')} />
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-        borderRadius: 20, padding: 15, height: 150,
-        borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment}
-          placeholder="Escribe tu opinión..."
-          placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
-          multiline
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-      </View>
-      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()}
-        style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-        <LinearGradient
-          colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']}
-          style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-          <MaterialCommunityIcons name="send" size={18} color="#FFF" />
-          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>{t.entrepreneurshiptab.publishReviews}</ThemedText>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  );
-};
-
-  // --- Pill de filtro (Mobile) ---
-  const FilterPill = ({ label, iconName, isActive, onPress }: {
-    label: string; iconName: string; isActive: boolean; onPress: () => void;
-  }) => (
-    <TouchableOpacity onPress={onPress}
-      style={{ borderRadius: 14, overflow: 'hidden', height: 42,
-        borderWidth: isActive ? 0 : 1, borderColor: DC.border }}>
-      {isActive ? (
-        <LinearGradient colors={OG} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
-          <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
-          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{label}</ThemedText>
-        </LinearGradient>
-      ) : (
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
-          <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
-          <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{label}</ThemedText>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-
   // --- Tarjeta de emprendimiento (Feed Principal - Versión Resumida) ---
-  const EmprendimientoCard = ({ item }: { item: Emprendimiento }) => (
-    <TouchableOpacity activeOpacity={0.93}
-      onPress={() => setDetailItem(item)}
-      style={[S.card, { backgroundColor: DC.cardBg, borderColor: DC.border }]}>
+  const EmprendimientoCard = ({ item }: { item: Emprendimiento }) => {
+    const categoryName = CATEGORIES[item.categoryId] || 'Categoría';
+    const categoryIcon = CATEGORY_ICONS_DICT[categoryName] || ICONS_ARRAY[item.categoryId] || 'store';
 
-      {item.image && <Image source={{ uri: item.image }} style={S.cardImage} resizeMode="cover" />}
-      <View style={S.verMasBadge}>
-        <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-        <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{t.entrepreneurshiptab.viewdetail}</ThemedText>
-      </View>
+    return (
+      <TouchableOpacity activeOpacity={0.93}
+        onPress={() => { setDetailItem(item); setShowReviewInput(false); }}
+        style={[S.card, { backgroundColor: DC.cardBg, borderColor: DC.border }]}>
 
-      <View style={{ padding: 14 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <LinearGradient colors={OG} style={S.cardIconWrap}>
-            <MaterialCommunityIcons name={item.icon as any} size={18} color="#FFF" />
-          </LinearGradient>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <ThemedText style={{ fontWeight: '900', fontSize: 15, color: DC.text, flexShrink: 1 }}>
-                {item.name}
-              </ThemedText>
-              {item.verified && <MaterialCommunityIcons name="check-decagram" size={15} color="#4FC3F7" />}
+        {item.image && <Image source={{ uri: item.image }} style={S.cardImage} resizeMode="cover" />}
+        <View style={S.verMasBadge}>
+          <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
+          <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{t.entrepreneurshiptab?.viewdetail || 'Ver detalle'}</ThemedText>
+        </View>
+
+        <View style={{ padding: 14 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <LinearGradient colors={OG} style={S.cardIconWrap}>
+              <MaterialCommunityIcons name={categoryIcon as any} size={18} color="#FFF" />
+            </LinearGradient>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <ThemedText style={{ fontWeight: '900', fontSize: 15, color: DC.text, flexShrink: 1 }}>
+                  {item.name}
+                </ThemedText>
+                {item.verified && <MaterialCommunityIcons name="check-decagram" size={15} color="#4FC3F7" />}
+              </View>
+              <ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '600' }}>{categoryName}</ThemedText>
             </View>
-            <ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '600' }}>{item.area}</ThemedText>
+            {item.rating > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,195,113,0.12)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 }}>
+                <MaterialCommunityIcons name="star" size={12} color="#FFC371" />
+                <ThemedText style={{ color: DC.text, fontWeight: '800', fontSize: 12 }}>{item.rating.toFixed(1)}</ThemedText>
+              </View>
+            )}
           </View>
-          {item.rating > 0 && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3,
-              backgroundColor: 'rgba(255,195,113,0.12)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 }}>
-              <MaterialCommunityIcons name="star" size={12} color="#FFC371" />
-              <ThemedText style={{ color: DC.text, fontWeight: '800', fontSize: 12 }}>
-                {item.rating.toFixed(1)}
-              </ThemedText>
+
+          <ThemedText numberOfLines={2} style={{ color: DC.subtext, marginBottom: 10, fontSize: 13, lineHeight: 18 }}>
+            {item.description}
+          </ThemedText>
+
+          {item.promo && (
+            <View style={[S.promoBadge, { marginBottom: 12 }]}>
+              <MaterialCommunityIcons name="tag-outline" size={11} color="#FFF" style={{ marginRight: 4 }} />
+              <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{item.promo}</ThemedText>
             </View>
           )}
-        </View>
 
-        <ThemedText numberOfLines={2}
-          style={{ color: DC.subtext, marginBottom: 10, fontSize: 13, lineHeight: 18 }}>
-          {item.description}
-        </ThemedText>
-
-        {item.promo && (
-          <View style={[S.promoBadge, { marginBottom: 12 }]}>
-            <MaterialCommunityIcons name="tag-outline" size={11} color="#FFF" style={{ marginRight: 4 }} />
-            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{item.promo}</ThemedText>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: DC.divider }}>
+             <ActionBtnLine 
+               onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} 
+               icon="comment-text-outline" 
+               text={(t.entrepreneurshiptab?.reviews || 'Reseñas') + ` (${item.reviews.length})`} 
+               color={isDark ? '#FFF' : '#444'} 
+               bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} 
+             />
+             
+             <ActionBtnLine 
+               onPress={(e: any) => {
+                 e.stopPropagation?.();
+                 if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
+                 else { Linking.openURL(`tel:${item.phone}`); }
+               }} 
+               icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} 
+               text={item.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || 'Llamar')} 
+               color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} 
+               bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
+             />
           </View>
-        )}
-
-        {/* --- BOTONES DE ACCIÓN (SOLO RESEÑAS Y CONTACTO EN EL FEED) --- */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: DC.divider }}>
-           <ActionBtnLine 
-             onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} 
-             icon="comment-text-outline" 
-             text={t.entrepreneurshiptab.reviews+` (${item.reviews.length})`} 
-             color={isDark ? '#FFF' : '#444'} 
-             bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} 
-           />
-           
-           <ActionBtnLine 
-             onPress={(e: any) => {
-               e.stopPropagation?.();
-               if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
-               else { Linking.openURL(`tel:${item.phone}`); }
-             }} 
-             icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} 
-             text={item.contactMethod === 'whatsapp' ? "WhatsApp" : t.entrepreneurshiptab.call} 
-             color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} 
-             bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
-           />
         </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  // --- Buscador ---
-  const SearchBar = () => (
-    <View style={{
-      flexDirection: 'row', alignItems: 'center',
-      backgroundColor: DC.inputBg, borderRadius: 16, paddingHorizontal: 14, height: 48,
-      borderWidth: 1, borderColor: DC.border, marginBottom: 8, // <--- MARGEN REDUCIDO
-    }}>
-      <MaterialCommunityIcons name="magnify" size={22} color={DC.iconInactive} style={{ marginRight: 10 }} />
-      <TextInput value={searchText} onChangeText={setSearchText}
-        placeholder={t.entrepreneurshiptab.searchentrepre}
-        placeholderTextColor={DC.iconInactive}
-        style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '600', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-      {searchText.length > 0 && (
-        <TouchableOpacity onPress={() => setSearchText('')} style={{ padding: 4 }}>
-          <MaterialCommunityIcons name="close-circle" size={20} color={DC.iconInactive} />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={stylesUnified.container}>
@@ -527,14 +512,16 @@ const ReviewForm = ({
                 {/* --- SIDEBAR IZQUIERDO (solo isLargeWeb) --- */}
                 {isLargeWeb && (
                   <View style={stylesUnified.webSidebar}>
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DC.text }]}>Categorías</ThemedText>
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DC.text }]}>{t.entrepreneurshiptab.viewcategory}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
-                      {CATEGORIES.map((area) => {
-                        const isActive = selectedArea === area;
+                      {CATEGORIES.map((areaName, index) => {
+                        const isActive = selectedCategoryIdx === index;
+                        const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
+                        
                         return (
                           <TouchableOpacity
-                            key={area}
-                            onPress={() => handleFilterPress(area)}
+                            key={index}
+                            onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)}
                             style={{
                               marginBottom: 8, borderRadius: 16, overflow: 'hidden', height: 48,
                               borderWidth: isActive ? 0 : 1, borderColor: DC.border,
@@ -544,13 +531,13 @@ const ReviewForm = ({
                                 colors={OG}
                                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                                 style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
-                                <MaterialCommunityIcons name={CATEGORY_ICONS[area] as any} size={18} color="#FFF" style={{ marginRight: 12 }} />
-                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{area}</ThemedText>
+                                <MaterialCommunityIcons name={iconName as any} size={18} color="#FFF" style={{ marginRight: 12 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{areaName}</ThemedText>
                               </LinearGradient>
                             ) : (
                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DC.inputBg }}>
-                                <MaterialCommunityIcons name={CATEGORY_ICONS[area] as any} size={18} color={DC.text} style={{ marginRight: 12 }} />
-                                <ThemedText style={{ color: DC.text, fontWeight: '600', fontSize: 14 }}>{area}</ThemedText>
+                                <MaterialCommunityIcons name={iconName as any} size={18} color={DC.text} style={{ marginRight: 12 }} />
+                                <ThemedText style={{ color: DC.text, fontWeight: '600', fontSize: 14 }}>{areaName}</ThemedText>
                               </View>
                             )}
                           </TouchableOpacity>
@@ -563,32 +550,57 @@ const ReviewForm = ({
                 {/* --- CONTENIDO PRINCIPAL --- */}
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
 
-                  <SearchBar />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DC.inputBg, borderRadius: 16, paddingHorizontal: 14, height: 48, borderWidth: 1, borderColor: DC.border, marginBottom: 8 }}>
+                    <MaterialCommunityIcons name="magnify" size={22} color={DC.iconInactive} style={{ marginRight: 10 }} />
+                    <TextInput value={searchText} onChangeText={setSearchText}
+                      placeholder={t.entrepreneurshiptab?.searchentrepre}
+                      placeholderTextColor={DC.iconInactive}
+                      style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '600', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                    {searchText.length > 0 && (
+                      <TouchableOpacity onPress={() => setSearchText('')} style={{ padding: 4 }}>
+                        <MaterialCommunityIcons name="close-circle" size={20} color={DC.iconInactive} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
 
                   {!isLargeWeb && (
-                    <View style={{ marginBottom: 8 }}> 
+                    <View style={{ marginBottom: 12 }}> 
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}
                         contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                        {CATEGORIES.map(area => (
-                          <FilterPill key={area} label={area} iconName={CATEGORY_ICONS[area]}
-                            isActive={selectedArea === area} onPress={() => handleFilterPress(area)} />
-                        ))}
+                        {CATEGORIES.map((areaName, index) => {
+                            const isActive = selectedCategoryIdx === index;
+                            const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
+                            
+                            return (
+                                <TouchableOpacity key={index} onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)}
+                                  style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}>
+                                  {isActive ? (
+                                    <LinearGradient colors={OG} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
+                                      <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
+                                      <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{areaName}</ThemedText>
+                                    </LinearGradient>
+                                  ) : (
+                                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
+                                      <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
+                                      <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{areaName}</ThemedText>
+                                    </View>
+                                  )}
+                                </TouchableOpacity>
+                            );
+                        })}
                       </ScrollView>
                     </View>
                   )}
-                  {/*
-                  <ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '700', marginBottom: 10 }}>
-                    {results.length} resultado{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}
-                  </ThemedText>*/}
 
-                  {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length} {t.lawyerstab?.resultdomore}</ThemedText>}
+                  {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length} {t.lawyerstab?.resultdomore || 'resultados'}</ThemedText>}
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {results.length === 0 && (
                       <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                         <MaterialCommunityIcons name="store-off-outline" size={56} color={DC.subtext} />
                         <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14 }}>
-                          {t.entrepreneurshiptab.nofoundresults}
+                          {t.entrepreneurshiptab?.nofoundresults || 'No hay resultados'}
                         </ThemedText>
                       </View>
                     )}
@@ -644,7 +656,7 @@ const ReviewForm = ({
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 }}>
                   <LinearGradient colors={OG}
                     style={[S.cardIconWrap, { width: 48, height: 48, borderRadius: 15, marginRight: 14 }]}>
-                    <MaterialCommunityIcons name={detailItem.icon as any} size={24} color="#FFF" />
+                    <MaterialCommunityIcons name={CATEGORY_ICONS_DICT[CATEGORIES[detailItem.categoryId]] || ICONS_ARRAY[detailItem.categoryId] || 'store' as any} size={24} color="#FFF" />
                   </LinearGradient>
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -652,7 +664,7 @@ const ReviewForm = ({
                       {detailItem.verified && <MaterialCommunityIcons name="check-decagram" size={20} color="#4FC3F7" />}
                     </View>
                     <ThemedText style={{ color: DC.subtext, fontSize: 13, fontWeight: '600', marginTop: 2 }}>
-                      {detailItem.area}
+                      {CATEGORIES[detailItem.categoryId]}
                     </ThemedText>
                   </View>
                 </View>
@@ -667,22 +679,19 @@ const ReviewForm = ({
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                     <MaterialCommunityIcons name="text-box-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab.aboutBussines}</ThemedText>
+                    <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.aboutBussines || 'Sobre el negocio'}</ThemedText>
                   </View>
                   <ThemedText style={{ color: DC.subtext, fontSize: 14, lineHeight: 22 }}>
                     {detailItem.description}
                   </ThemedText>
                 </View>
 
-                {/* Botón único de contacto en Detalle (Dinámico) */}
+                {/* Botón de contacto en Detalle */}
                 <View style={[S.contactRow, { marginBottom: 16, flexWrap: 'wrap' }]}>
                   <TouchableOpacity
                     onPress={() => {
-                      if(detailItem.contactMethod === 'whatsapp') {
-                         Linking.openURL(`https://wa.me/${detailItem.phone.replace(/\D/g, '')}`);
-                      } else {
-                         Linking.openURL(`tel:${detailItem.phone}`);
-                      }
+                      if(detailItem.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${detailItem.phone.replace(/\D/g, '')}`); } 
+                      else { Linking.openURL(`tel:${detailItem.phone}`); }
                     }}
                     style={[S.contactBtn, { 
                       backgroundColor: detailItem.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)'), 
@@ -690,15 +699,15 @@ const ReviewForm = ({
                     }]}>
                     <MaterialCommunityIcons name={detailItem.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={18} color={detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} />
                     <ThemedText style={[S.contactBtnText, { color: detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D", fontSize: 14 }]}>
-                      {detailItem.contactMethod === 'whatsapp' ? "WhatsApp" : "Llamar"}
+                      {detailItem.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || "Llamar")}
                     </ThemedText>
                   </TouchableOpacity>
                 </View>
 
-                {/* --- SECCIÓN DE VOTOS (GRID REPARADO 2x2 SOLO EN DETALLE) --- */}
+                {/* --- SECCIÓN DE VOTOS (GRID 2x2 SOLO EN DETALLE) --- */}
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg, marginBottom: 20 }]}>
                   <ThemedText style={{ fontWeight: '800', fontSize: 13, color: DC.subtext, marginBottom: 12 }}>
-                   {t.entrepreneurshiptab.businesshelpful}
+                   {t.entrepreneurshiptab?.businesshelpful || '¿Te fue útil este negocio?'}
                   </ThemedText>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                     <ActionGridBtn onPress={() => handleVote(detailItem.id, 'like')} icon="thumb-up" text={`Me gusta (${detailItem.likes})`} color={detailItem.userVote === 'like' ? '#fff' : '#1976D2'} bgColor={detailItem.userVote === 'like' ? '#1976D2' : 'rgba(25,118,210,0.1)'} />
@@ -708,11 +717,12 @@ const ReviewForm = ({
                   </View>
                 </View>
 
+                {/* SECCIÓN RESEÑAS INTEGRADAS AL DETALLE */}
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="comment-text-multiple-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} />
-                      <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab.reviews}</ThemedText>
+                      <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.reviews || 'Reseñas'}</ThemedText>
                       {detailItem.reviews.length > 0 && (
                         <View style={[S.reviewCountBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}>
                           <ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '800' }}>
@@ -722,49 +732,57 @@ const ReviewForm = ({
                       )}
                     </View>
                     
-                    {/* Botón que Cierra el detalle y Abre el modal independiente de reseñas */}
-                    <TouchableOpacity onPress={() => openReviews(detailItem, true)}
-                      style={{ borderRadius: 12, overflow: 'hidden' }}>
-                      <LinearGradient colors={OG}
-                        style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" />
-                        <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t.entrepreneurshiptab.writing}</ThemedText>
-                      </LinearGradient>
-                    </TouchableOpacity>
+                    {!showReviewInput && (
+                        <TouchableOpacity onPress={() => setShowReviewInput(true)}
+                          style={{ borderRadius: 12, overflow: 'hidden' }}>
+                          <LinearGradient colors={OG}
+                            style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" />
+                            <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t.entrepreneurshiptab?.writing || 'Escribir'}</ThemedText>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                    )}
                   </View>
 
-                  {detailItem.reviews.length === 0 ? (
-                    <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}>
-                      <MaterialCommunityIcons name="comment-off-outline" size={40} />
-                      <ThemedText style={{ marginTop: 10, fontSize: 13 }}>
-                        {t.entrepreneurshiptab.whitoutReviews}
-                      </ThemedText>
-                    </View>
+                  {showReviewInput ? (
+                     <ReviewForm
+                        isDark={isDark}
+                        onCancel={() => setShowReviewInput(false)}
+                        onPublish={(stars: number, comment: string) => handleAddReview(detailItem.id, stars, comment)}
+                      />
                   ) : (
-                    <>
-                        {detailItem.reviews.slice(0, 2).map(r => (
-                          <View key={r.id}
-                            style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                              <View style={{ flexDirection: 'row', gap: 3 }}>
-                                {[1, 2, 3, 4, 5].map(s => (
-                                  <MaterialCommunityIcons key={s} name="star" size={14}
-                                    color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} />
-                                ))}
+                      detailItem.reviews.length === 0 ? (
+                        <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}>
+                          <MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.subtext} />
+                          <ThemedText style={{ color: DC.subtext, marginTop: 10, fontSize: 13 }}>
+                            {t.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}
+                          </ThemedText>
+                        </View>
+                      ) : (
+                        <>
+                            {detailItem.reviews.slice(0, 2).map(r => (
+                              <View key={r.id}
+                                style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <View style={{ flexDirection: 'row', gap: 3 }}>
+                                    {[1, 2, 3, 4, 5].map(s => (
+                                      <MaterialCommunityIcons key={s} name="star" size={14}
+                                        color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} />
+                                    ))}
+                                  </View>
+                                  <ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime}</ThemedText>
+                                </View>
+                                <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
                               </View>
-                              <ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime}</ThemedText>
-                            </View>
-                            <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
-                          </View>
-                        ))}
-                        
-                        {/* Botón Ver Más Reseñas */}
-                        {detailItem.reviews.length > 2 && (
-                            <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}>
-                                <ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t.entrepreneurshiptab.viewAllreviews}</ThemedText>
-                            </TouchableOpacity>
-                        )}
-                    </>
+                            ))}
+                            
+                            {detailItem.reviews.length > 2 && (
+                                <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}>
+                                    <ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t.entrepreneurshiptab?.viewAllreviews || 'Ver todas las reseñas'}</ThemedText>
+                                </TouchableOpacity>
+                            )}
+                        </>
+                      )
                   )}
                 </View>
 
@@ -775,7 +793,7 @@ const ReviewForm = ({
       </RNModal>
 
       {/* ══════════════════════════════════════════════════════════
-          MODAL RESEÑAS INDEPENDIENTE (RESTABLECIDO)
+          MODAL RESEÑAS INDEPENDIENTE (CUANDO SE QUIEREN VER TODAS)
       ══════════════════════════════════════════════════════════ */}
       <RNModal visible={!!reviewTarget} transparent animationType="slide"
         statusBarTranslucent
@@ -800,7 +818,7 @@ const ReviewForm = ({
                       {reviewTarget?.name}
                     </ThemedText>
                     <ThemedText style={{ color: DC.text, fontWeight: '700' }}>
-                      {t.entrepreneurshiptab.communityopinions}
+                      {t.entrepreneurshiptab?.communityopinions || 'Opiniones de la comunidad'}
                     </ThemedText>
                   </View>
                   <TouchableOpacity onPress={() => { setReviewTarget(null); setShowReviewInput(false); }}>
@@ -815,7 +833,7 @@ const ReviewForm = ({
                       <LinearGradient colors={OG} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                         style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                         <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{ marginRight: 10 }} />
-                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.entrepreneurshiptab.writingReviews}</ThemedText>
+                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.entrepreneurshiptab?.writingReviews || 'Escribir reseña'}</ThemedText>
                       </LinearGradient>
                     </TouchableOpacity>
 
@@ -843,9 +861,9 @@ const ReviewForm = ({
                           ))
                         : (
                           <View style={{ alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
-                            <MaterialCommunityIcons name="comment-off-outline" size={40} />
-                            <ThemedText style={{  marginTop: 10 }}>
-                              {t.entrepreneurshiptab.whitoutReviews}
+                            <MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.subtext} />
+                            <ThemedText style={{ color: DC.subtext, marginTop: 10 }}>
+                              {t.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}
                             </ThemedText>
                           </View>
                         )
@@ -856,7 +874,7 @@ const ReviewForm = ({
                   <ReviewForm
                     isDark={isDark}
                     onCancel={() => setShowReviewInput(false)}
-                    onPublish={(stars, comment) => handleAddReview(reviewTarget!.id, stars, comment)}
+                    onPublish={(stars: number, comment: string) => handleAddReview(reviewTarget!.id, stars, comment)}
                   />
                 )}
               </View>
@@ -882,7 +900,7 @@ const ReviewForm = ({
                 <TouchableOpacity onPress={() => setFormVisible(false)} disabled={isSubmitting}>
                   <MaterialCommunityIcons name="close" size={24} color={DC.text} />
                 </TouchableOpacity>
-                <ThemedText style={[S.modalTitle, { color: DC.text }]}>{t.entrepreneurshiptab.newentrepreneurship}</ThemedText>
+                <ThemedText style={[S.modalTitle, { color: DC.text }]}>{t.entrepreneurshiptab?.newentrepreneurship || 'Nuevo Emprendimiento'}</ThemedText>
                 <View style={{ width: 24 }} />
               </View>
 
@@ -892,32 +910,38 @@ const ReviewForm = ({
                   {formImage
                     ? <Image source={{ uri: formImage }} style={S.formImagePreview} />
                     : <View style={{ alignItems: 'center' }}>
-                        <MaterialCommunityIcons name="camera-plus" size={32} style={{color: DC.iconInactive}} />
-                        <ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'capitalize' }}>{t.entrepreneurshiptab.businessphoto}</ThemedText>
+                        <MaterialCommunityIcons name="camera-plus" size={32} />
+                        <ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'capitalize' }}>{t.entrepreneurshiptab?.businessphoto || 'FOTO'}</ThemedText>
                       </View>
                   }
                 </TouchableOpacity>
 
-                <ThemedText style={[S.label, { color: DC.accent }]}>{t.entrepreneurshiptab.viewcategory}</ThemedText>
+                <ThemedText style={[S.label, { color: DC.accent }]}>{t.entrepreneurshiptab?.viewcategory || 'CATEGORÍA'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}
                   style={{ marginBottom: 20 }} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                  {CATEGORIES.filter(c => c !== 'Todas').map(cat => {
-                    const isActive = formArea === cat;
+                  
+                  {/* SE OCULTA LA CATEGORÍA "TODAS" POR MEDIO DEL ÍNDICE (index !== 0) */}
+                  {CATEGORIES.map((catName, index) => {
+                    if (index === 0) return null; // <--- ESTO PROTEGE EL CÓDIGO EN CUALQUIER IDIOMA
+                    
+                    const isActive = formCategoryIdx === index;
+                    const iconName = CATEGORY_ICONS_DICT[catName] || ICONS_ARRAY[index] || 'store';
+                    
                     return (
-                      <TouchableOpacity key={cat} onPress={() => setFormArea(cat)}
+                      <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)}
                         style={{ borderRadius: 12, overflow: 'hidden', height: 36,
                           borderWidth: isActive ? 0 : 1, borderColor: DC.border }}>
                         {isActive ? (
                           <LinearGradient colors={OG} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                            <MaterialCommunityIcons name={CATEGORY_ICONS[cat] as any} size={13} color="#FFF" style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: '#FFF', fontSize: 12, fontWeight: '900' ,textTransform:'capitalize'}}>{cat}</ThemedText>
+                            <MaterialCommunityIcons name={iconName as any} size={13} color="#FFF" style={{ marginRight: 5 }} />
+                            <ThemedText style={{ color: '#FFF', fontSize: 12, fontWeight: '900' ,textTransform:'capitalize'}}>{catName}</ThemedText>
                           </LinearGradient>
                         ) : (
                           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center',
                             paddingHorizontal: 14, backgroundColor: DC.categoryUnselected }}>
-                            <MaterialCommunityIcons name={CATEGORY_ICONS[cat] as any} size={13} color={DC.iconInactive} style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: DC.iconInactive, fontSize: 12, fontWeight: '700'  ,textTransform:'capitalize'}}>{cat}</ThemedText>
+                            <MaterialCommunityIcons name={iconName as any} size={13} color={DC.iconInactive} style={{ marginRight: 5 }} />
+                            <ThemedText style={{ color: DC.iconInactive, fontSize: 12, fontWeight: '700'  ,textTransform:'capitalize'}}>{catName}</ThemedText>
                           </View>
                         )}
                       </TouchableOpacity>
@@ -926,18 +950,16 @@ const ReviewForm = ({
                 </ScrollView>
 
                 <TextInput value={formName} onChangeText={setFormName}
-                  placeholder={t.entrepreneurshiptab.namebussinesplac}
-                  placeholderTextColor={DC.subtext}
-                  style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border }]} />
+                  placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'}
+                  style={[S.input, { backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TextInput value={formDesc} onChangeText={setFormDesc}
-                  placeholder={t.entrepreneurshiptab.descripservicesplace}
-                  placeholderTextColor={DC.subtext}
+                  placeholder={t.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'}
                   multiline numberOfLines={3}
                   style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border,
-                    minHeight: 80, textAlignVertical: 'top', paddingTop: 14 }]} />
+                    minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
-                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab.contactMethod}</ThemedText>
+                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.contactMethod || 'Método de contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : DC.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : DC.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : DC.subtext} style={{ marginRight: 8 }} />
@@ -945,7 +967,7 @@ const ReviewForm = ({
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? '#FF5F6D' : DC.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : DC.inputBg }}>
                     <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext }}>{t.entrepreneurshiptab.call}</ThemedText>
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext }}>{t.entrepreneurshiptab?.call || 'Llamar'}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -963,15 +985,15 @@ const ReviewForm = ({
                     placeholder="(909) 000-0000"
                     placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : '#999'}
                     keyboardType="phone-pad"
-                    style={{ flex: 1, color: DC.text, padding: 15, fontSize: 14, fontWeight: '600' }} />
+                    style={{ flex: 1, color: DC.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab.promotion}</ThemedText>
+                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.promotion || 'Promoción'}</ThemedText>
                 <TextInput value={formPromo} onChangeText={setFormPromo}
-                  placeholder={t.entrepreneurshiptab.exampleoffet}
+                  placeholder={t.entrepreneurshiptab?.exampleoffet || 'Ej: 10% de descuento'}
                   placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : '#999'}
                   style={[S.input, { color: DC.text, backgroundColor: DC.inputBg,
-                    borderColor: DC.border, marginBottom: 20 }]} />
+                    borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TouchableOpacity onPress={handlePublish}
                   disabled={!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || isSubmitting}>
@@ -985,7 +1007,7 @@ const ReviewForm = ({
                       : <>
                           <MaterialCommunityIcons name="store-plus-outline" size={20} color="#fff" style={{ marginRight: 10 }} />
                           <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>
-                            {t.entrepreneurshiptab.publishEntrepre}
+                            {t.entrepreneurshiptab?.publishEntrepre || 'Publicar'}
                           </ThemedText>
                         </>
                     }

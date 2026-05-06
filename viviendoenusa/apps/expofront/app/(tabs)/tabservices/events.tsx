@@ -399,7 +399,7 @@ export default function EventsScreen() {
                 
                 {/* IMAGEN */}
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border, backgroundColor: Colors.inputBg }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={32} style={{color: Colors.iconInactive}}/><ThemedText style={{ fontWeight:'800', fontSize:11, marginTop:8}}>{t.eventstab.photoEvent}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight:'800', fontSize:11, marginTop:8}}>{t.eventstab.photoEvent}</ThemedText></View>}
                 </TouchableOpacity>
 
                 {/* CATEGORÍA */}
@@ -494,14 +494,14 @@ export default function EventsScreen() {
                 )}
 
                 {/* TEXTOS Y LOCALIZACIÓN */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'capitalize' }}>INFORMACIÓN DEL EVENTO</ThemedText>
-                <TextInput value={formTitle} onChangeText={setFormTitle} placeholder={t.eventstab.nameEvent} placeholderTextColor={Colors.subtext} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
-                <TextInput value={formLocation} onChangeText={setFormLocation} placeholder={t.eventstab.addressEvent} placeholderTextColor={Colors.subtext} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
-                <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" placeholderTextColor={Colors.subtext} keyboardType="numeric" maxLength={5} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
+                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'capitalize' }}>{t.eventstab.informationevent}</ThemedText>
+                <TextInput value={formTitle} onChangeText={setFormTitle} placeholder={t.eventstab.nameEvent} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
+                <TextInput value={formLocation} onChangeText={setFormLocation} placeholder={t.eventstab.addressEvent}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
+                <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
                 <TextInput value={formDescription} onChangeText={setFormDescription} placeholder={t.eventstab.detailsEvent} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15 }} />
                 
                 {/* MÉTODO DE CONTACTO Y PREFIJO UNIFICADO */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'capitalize'}}>MÉTODO DE CONTACTO</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'capitalize'}}>{t.eventstab.typeContact}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : Colors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : Colors.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : Colors.subtext} style={{ marginRight: 8 }} />
@@ -509,7 +509,7 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? '#FF5F6D' : Colors.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : Colors.inputBg }}>
                     <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? '#FF5F6D' : Colors.subtext} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : Colors.subtext }}>Llamada</ThemedText>
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : Colors.subtext }}>{t.eventstab.call}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -525,7 +525,7 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                   <TextInput value={formPhone} onChangeText={setFormPhone}
                     placeholder="(909) 000-0000"
-                    placeholderTextColor={Colors.subtext}
+                    
                     keyboardType="phone-pad"
                     style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600' }} />
                 </View>
@@ -535,7 +535,7 @@ export default function EventsScreen() {
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <>
                       <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />
-                      <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>Crear Evento</ThemedText>
+                      <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.eventstab.createEvent}</ThemedText>
                     </>}
                   </LinearGradient>
                 </TouchableOpacity>

@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, ActivityIndicator, Image, Linking, Alert,
   Modal, KeyboardAvoidingView, Share, ColorValue
 } from 'react-native';
-import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router'; 
 import * as Location from 'expo-location';
@@ -27,13 +27,8 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
-const CATEGORY_ICONS: Record<string, string> = {
-  'Todas': 'apps',
-  'Supermercado': 'cart',
-  'Panadería': 'baguette',
-  'Electrónica': 'laptop',
-  'Otros': 'storefront'
-};
+// Iconos asignados por posición (Índice): 0: Todas, 1: Supermercado, 2: Panadería, 3: Electrónica, 4: Otros
+const ICONS_ARRAY = ['apps', 'cart', 'baguette', 'laptop', 'storefront'];
 
 const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' },
@@ -65,7 +60,17 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 };
 
 // --- COMPONENTE: FORMULARIO DE RESEÑA ---
-const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
+const ReviewForm = ({ 
+  onPublish, 
+  onCancel, 
+  isDark, 
+  t 
+}: {
+  onPublish: (stars: number, comment: string) => void;
+  onCancel: () => void;
+  isDark: boolean;
+  t: any;
+}) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 
@@ -94,7 +99,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         ))}
       </View>
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment} placeholder="Escribe tu opinión..." placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16 }} />
+        <TextInput value={comment} onChangeText={setComment} placeholder="Escribe tu opinión..." placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
@@ -106,8 +111,9 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 };
 
 const DATA_SOURCE = [
-  { id: 1, name: 'Cardenas Markets', area: 'Supermercado', description: 'Productos frescos y auténtica comida mexicana preparada directamente en la tienda.', rating: 4.5, lat: 34.0934, lng: -117.5847, phone: '+19099451100', image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800', reviews: [] },
-  { id: 2, name: 'El Super', area: 'Supermercado', description: 'Gran variedad de productos importados con los mejores precios de la zona.', rating: 4.3, lat: 34.0775, lng: -117.6050, phone: '+19099843665', image: 'https://images.unsplash.com/photo-1601599963565-b7ba29c8e3ff?w=800', reviews: [] }
+  // Nota: categoryId 1 corresponde a la segunda opción de la lista (ej. "Supermercado")
+  { id: 1, name: 'Cardenas Markets', categoryId: 1, description: 'Productos frescos y auténtica comida mexicana preparada directamente en la tienda.', rating: 4.5, lat: 34.0934, lng: -117.5847, phone: '+19099451100', image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800', reviews: [] },
+  { id: 2, name: 'El Super', categoryId: 1, description: 'Gran variedad de productos importados con los mejores precios de la zona.', rating: 4.3, lat: 34.0775, lng: -117.6050, phone: '+19099843665', image: 'https://images.unsplash.com/photo-1601599963565-b7ba29c8e3ff?w=800', reviews: [] }
 ];
 
 export default function StoresScreen() {
@@ -139,10 +145,15 @@ export default function StoresScreen() {
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
 
+  // --- TRADUCCIONES SEGURAS DE CATEGORÍAS ---
+  const rawCategories = t.storestab?.categoriesList;
+  const CATEGORIES_LIST = Array.isArray(rawCategories) && rawCategories.length > 0
+    ? rawCategories
+    : ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'];
+
   // --- ESTADOS ---
   const [zipCode, setZipCode] = useState('');
-  const CATEGORIES_LIST = ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'];
-  const [selectedArea, setSelectedArea] = useState('Todas');
+  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); // 0 = 'Todas'
   const [loading, setLoading] = useState(false);
   
   const [localData, setLocalData] = useState<any[]>(DATA_SOURCE);
@@ -163,7 +174,7 @@ export default function StoresScreen() {
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formAddress, setFormAddress] = useState(''); 
-  const [formCategory, setFormCategory] = useState('Supermercado');
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); // Default a la primera opción que NO sea "Todas"
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
@@ -216,10 +227,10 @@ export default function StoresScreen() {
     });
   };
 
-  const handleSearch = async (forcedArea?: string) => {
+  const handleSearch = async (forcedCategoryIdx?: number) => {
     if (!isZipValid) return;
 
-    const areaToSearch = typeof forcedArea === 'string' ? forcedArea : selectedArea;
+    const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
     setLoading(true);
     setIsFilteredByMap(false);
 
@@ -242,7 +253,7 @@ export default function StoresScreen() {
     
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
-    let filtered = (areaToSearch === 'Todas') ? [...localData] : localData.filter(l => l.area === areaToSearch);
+    let filtered = (categoryToSearch === 0) ? [...localData] : localData.filter(l => l.categoryId === categoryToSearch);
     filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
     
     setResults(filtered);
@@ -250,10 +261,10 @@ export default function StoresScreen() {
     setLoading(false);
   };
 
-  const handleCategorySelect = (area: string) => {
-    setSelectedArea(area);
+  const handleCategorySelect = (index: number) => {
+    setSelectedCategoryIdx(index);
     if (isZipValid) {
-      handleSearch(area); 
+      handleSearch(index); 
     }
   };
 
@@ -267,7 +278,7 @@ export default function StoresScreen() {
   const handleShare = async (store: any) => {
     if (!store) return;
     try {
-      await Share.share({ message: `Mira este establecimiento en ViviendoEnUSA: ${store.name}\n${store.description}` });
+      await Share.share({ message: t.storestab.sharemessage+` ${store.name}\n${store.description}` });
     } catch (error) { console.log(error); }
   };
 
@@ -281,7 +292,7 @@ export default function StoresScreen() {
 
   const handlePublishStore = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5) {
-      return Alert.alert("Atención", "Todos los campos son obligatorios.");
+      return Alert.alert(t.storestab.alertmessage);
     }
     
     setIsPublishing(true);
@@ -290,8 +301,8 @@ export default function StoresScreen() {
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
           setIsPublishing(false);
-          const title = t.communitytab?.imageInappropriateTittle || "Contenido Inapropiado";
-          const desc = t.communitytab?.imageInappropriateDescription || "La imagen no cumple con las normas de la comunidad.";
+          const title = t.communitytab?.imageInappropriateTittle || "Error";
+          const desc = t.communitytab?.imageInappropriateDescription || "Imagen inválida";
           if (isWeb) { window.alert(`${title}\n${desc}`); } 
           else { Alert.alert(title, desc); }
           return;
@@ -300,19 +311,28 @@ export default function StoresScreen() {
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '+1000000000';
       const newEntry = {
-        id: Date.now(), name: formName, description: formDesc, address: formAddress,
-        area: formCategory, zip: formZip, image: formImage || 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=800',
-        rating: 5.0, lat: 34.0934, lng: -117.5847, phone: fullPhone, reviews: []
+        id: Date.now(), 
+        name: formName, 
+        description: formDesc, 
+        address: formAddress,
+        categoryId: formCategoryIdx, // Guardar el índice en lugar del texto
+        zip: formZip, 
+        image: formImage || 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=800',
+        rating: 5.0, 
+        lat: 34.0934, 
+        lng: -117.5847, 
+        phone: fullPhone, 
+        reviews: []
       };
       
       setPendingStores([newEntry, ...pendingStores]);
       setModalVisible(false);
-      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setCountryIdx(0); setFormImage(null);
-      Alert.alert("¡Enviado!", "Tu sugerencia será revisada.");
+      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1);
+      Alert.alert(t.storestab.sendnewsug);
 
     } catch (err) {
       const errorTitle = "Error de red";
-      const errorDesc = t.communitytab?.errorServer || "Error conectando con el servidor. Revisa tu conexión.";
+      const errorDesc = t.communitytab?.errorServer || "Error";
       if (isWeb) { window.alert(`${errorTitle}\n${errorDesc}`); } 
       else { Alert.alert(errorTitle, errorDesc); }
     } finally {
@@ -331,11 +351,13 @@ export default function StoresScreen() {
 
   const StoreCard = ({ store }: { store: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
+    const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
+
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: DynamicColors.border }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
           <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-            <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{store.area.toUpperCase()}</ThemedText>
+            <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
             <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
@@ -354,15 +376,15 @@ export default function StoresScreen() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 }}>
             <TouchableOpacity onPress={() => setSelectedStore(store)} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>Reseñas</ThemedText>
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.storestab.reviews}</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => openDirections(store)} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
               <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>Ruta</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.storestab.route}</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => Linking.openURL(`tel:${store.phone}`)} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
               <MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>Llamada</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.storestab.callbton}</ThemedText>
             </TouchableOpacity>
           </View>
         </View>
@@ -389,7 +411,11 @@ export default function StoresScreen() {
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ padding: 25 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-                  <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}><ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '900' }}>{selectedDetail?.area?.toUpperCase()}</ThemedText></LinearGradient>
+                  <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+                      <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '900' }}>
+                          {selectedDetail ? CATEGORIES_LIST[selectedDetail.categoryId]?.toUpperCase() : ''}
+                      </ThemedText>
+                  </LinearGradient>
                   <View style={{ flexDirection: 'row', marginLeft: 15, alignItems: 'center' }}>
                     <MaterialCommunityIcons name="star" size={18} color="#FFB300" />
                     <ThemedText style={{ marginLeft: 5, fontWeight: '900', color: DynamicColors.text, fontSize: 16 }}>{selectedDetail?.rating}</ThemedText>
@@ -415,7 +441,7 @@ export default function StoresScreen() {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
                 <View style={{ flex: 1 }}>
                     <ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name}</ThemedText>
-                    <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>Opiniones Comunidad</ThemedText>
+                    <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>{t.storestab.commutnityopini}</ThemedText>
                 </View>
                 <TouchableOpacity onPress={() => { setSelectedStore(null); setShowReviewInput(false); }}>
                   <MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} />
@@ -426,7 +452,7 @@ export default function StoresScreen() {
                   <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
-                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>Escribir reseña</ThemedText>
+                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab.writingreview}</ThemedText>
                     </LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
@@ -473,16 +499,17 @@ export default function StoresScreen() {
               </View>
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} color={'#FF5F6D'} /><ThemedText style={{ color: '#FF5F6D', fontWeight: '800', fontSize: 11, marginTop: 8 }}>FOTO DEL LOCAL</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{t.storestab.textphoto}</ThemedText></View>}
                 </TouchableOpacity>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>CATEGORÍA</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>{t.storestab.category}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
-                  {CATEGORIES_LIST.filter(c => c !== 'Todas').map(cat => {
-                    const isActive = formCategory === cat;
-                    const iconName = CATEGORY_ICONS[cat] || 'storefront'; 
+                  {CATEGORIES_LIST.map((cat, index) => {
+                    if (index === 0) return null; // Filtramos la opción "Todas" usando su índice
+                    const isActive = formCategoryIdx === index;
+                    const iconName = ICONS_ARRAY[index] || 'storefront'; 
                     return (
-                      <TouchableOpacity key={cat} onPress={() => setFormCategory(cat)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                      <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                         {isActive ? (
                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                             <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
@@ -499,12 +526,12 @@ export default function StoresScreen() {
                   })}
                 </ScrollView>
 
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border }} placeholder="Nombre comercial" value={formName} onChangeText={setFormName} placeholderTextColor={DynamicColors.subtext} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border }} placeholder="Dirección física" value={formAddress} onChangeText={setFormAddress} placeholderTextColor={DynamicColors.subtext} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border }} placeholder="ZIP Code" value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} placeholderTextColor={DynamicColors.subtext} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, height: 90, textAlignVertical: 'top' }} placeholder="Descripción" value={formDesc} onChangeText={setFormDesc} multiline placeholderTextColor={DynamicColors.subtext} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab.placeHoldname} value={formName} onChangeText={setFormName} placeholderTextColor={DynamicColors.subtext} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab.placeHoldAddress} value={formAddress} onChangeText={setFormAddress} placeholderTextColor={DynamicColors.subtext} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab.messagezip} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} placeholderTextColor={DynamicColors.subtext} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab.description} value={formDesc} onChangeText={setFormDesc} multiline placeholderTextColor={DynamicColors.subtext} />
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform: 'capitalize'  }}>TELÉFONO DE CONTACTO</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform: 'capitalize'  }}>{t.storestab.phoneContacto}</ThemedText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
                   <TouchableOpacity 
                     activeOpacity={0.7}
@@ -519,13 +546,13 @@ export default function StoresScreen() {
                     placeholder="(909) 000-0000"
                     placeholderTextColor={DynamicColors.subtext}
                     keyboardType="phone-pad"
-                    style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600' }} />
+                    style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
                 <TouchableOpacity onPress={handlePublishStore} disabled={isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
                   <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
-                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Guardar</ThemedText>
+                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{t.storestab.sendbutton}</ThemedText>
                   </LinearGradient>
                 </TouchableOpacity>
               </ScrollView>
@@ -557,7 +584,7 @@ export default function StoresScreen() {
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   {isAdminMode && pendingStores.length > 0 && (
                     <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingStores.length})</ThemedText>
+                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.storestab.verify} ({pendingStores.length})</ThemedText>
                       {pendingStores.map(store => (
                         <View key={store.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
                           <View style={{flex:1}}><ThemedText style={{ fontSize: 13, fontWeight:'bold' }}>{store.name}</ThemedText></View>
@@ -569,8 +596,8 @@ export default function StoresScreen() {
 
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
                     <TextInput 
-                      style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1 }]} 
-                      placeholder={t.lawyerstab?.messagezip || 'Busca por ZIP'} 
+                      style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                      placeholder={t.lawyerstab?.messagezip} 
                       keyboardType="numeric" maxLength={5} value={zipCode} 
                       onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
                       placeholderTextColor={DynamicColors.subtext} 
@@ -584,11 +611,11 @@ export default function StoresScreen() {
 
                   <View style={{ marginBottom: 15 }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                      {CATEGORIES_LIST.map((area) => {
-                         const iconName = CATEGORY_ICONS[area] || 'storefront';
-                         const isActive = selectedArea === area;
+                      {CATEGORIES_LIST.map((area, index) => {
+                         const iconName = ICONS_ARRAY[index] || 'storefront';
+                         const isActive = selectedCategoryIdx === index;
                          return (
-                          <TouchableOpacity key={area} onPress={() => handleCategorySelect(area)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                          <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                             {isActive ? (
                                <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                                  <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
@@ -640,13 +667,13 @@ export default function StoresScreen() {
                 <View style={{ flex: 1, flexDirection: 'row' }}>
                   
                   <View style={stylesUnified.webSidebar}>
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>Categorías</ThemedText>
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{t.storestab.category+'s'}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
-                      {CATEGORIES_LIST.map((area) => {
-                        const iconName = CATEGORY_ICONS[area] || 'storefront';
-                        const isActive = selectedArea === area;
+                      {CATEGORIES_LIST.map((area, index) => {
+                        const iconName = ICONS_ARRAY[index] || 'storefront';
+                        const isActive = selectedCategoryIdx === index;
                         return (
-                          <TouchableOpacity key={area} onPress={() => handleCategorySelect(area)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                          <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                             {isActive ? (
                               <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
                                 <MaterialCommunityIcons name={iconName as any} size={18} color="#FFF" style={{ marginRight: 10 }} />
@@ -669,7 +696,7 @@ export default function StoresScreen() {
                       
                       {isAdminMode && pendingStores.length > 0 && (
                         <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingStores.length})</ThemedText>
+                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.storestab.verify} ({pendingStores.length})</ThemedText>
                           {pendingStores.map(store => (
                             <View key={store.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
                               <View style={{flex:1}}><ThemedText style={{ fontSize: 13, fontWeight:'bold' }}>{store.name}</ThemedText></View>
@@ -681,8 +708,8 @@ export default function StoresScreen() {
 
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
                         <TextInput 
-                          style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1 }]} 
-                          placeholder={t.lawyerstab?.messagezip || 'Busca por ZIP'} value={zipCode} maxLength={5} 
+                          style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                          placeholder={t.lawyerstab?.messagezip } value={zipCode} maxLength={5} 
                           onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={DynamicColors.subtext} 
                         />
                         <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 48, height: 48 }}>
