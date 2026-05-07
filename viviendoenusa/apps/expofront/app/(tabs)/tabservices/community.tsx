@@ -24,7 +24,7 @@ import badWordsData from '../../../utils/babwords.json';
 
 import { contentCardStyles as stylesOriginal } from "app/src/styles/contentcard";
 
-// --- LÓGICA DE VALIDACIÓN SOLICITADA ---
+// --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const validateComment = (text: string): boolean => {
@@ -90,7 +90,6 @@ export default function CommunityScreen() {
   const [postText, setPostText] = useState('');
   const [posts, setPosts] = useState<any[]>([]);
 
-  // Asignación segura del primer valor (Experiencia) para el modal de nuevo post
   const defaultTag = (t.communitytab.typepostAdd && t.communitytab.typepostAdd.length > 0) ? t.communitytab.typepostAdd[0] : 'Experience';
   const [selectedTag, setSelectedTag] = useState(defaultTag); 
   const [selectedSubCategory, setSelectedSubCategory] = useState(subCategories[0].id); 
@@ -224,7 +223,6 @@ export default function CommunityScreen() {
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
                 
-                {/* --- MENÚ LATERAL WEB COMPLETO --- */}
                 {isLargeWeb && (
                   <View style={styles.webSidebar}>
                     <ScrollView showsVerticalScrollIndicator={false}>
@@ -252,11 +250,8 @@ export default function CommunityScreen() {
                 )}
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
-                  
-                  {/* --- FILTROS CONDICIONALES ARRIBA DEL FEED --- */}
                   <View style={{marginBottom: 15}}>
                     {isLargeWeb ? (
-                      /* WEB: HORIZONTAL ARRIBA SIN LABEL, CON FLEXWRAP PARA QUE NO SE CORTEN */
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 5 }}>
                         <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
                           {isRecentFirst ? (
@@ -292,7 +287,6 @@ export default function CommunityScreen() {
                         })}
                       </View>
                     ) : (
-                      /* MÓVIL: VERTICAL / MULTIFILA SCROLL */
                       <View>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}} contentContainerStyle={{ paddingRight: 20 }}>
                           <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -362,6 +356,13 @@ export default function CommunityScreen() {
                         {post.image && (
                           <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
                             <Image source={{ uri: post.image }} style={styles.postImage} />
+                            {/* --- ETIQUETA "VER DETALLE" --- */}
+                            <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
+                              <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
+                              <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
+                                {(t as any)?.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
+                              </ThemedText>
+                            </View>
                           </TouchableOpacity>
                         )}
                         {visibleComments[post.id] && (
@@ -408,7 +409,6 @@ export default function CommunityScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB - BOTÓN FLOTANTE UNIVERSAL */}
       {isCommunityScreen && (
         <TouchableOpacity onPress={() => setModalVisible(true)} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
           <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}>
@@ -417,13 +417,10 @@ export default function CommunityScreen() {
         </TouchableOpacity>
       )}
 
-      {/* MODAL NUEVA PUBLICACIÓN CON ANCHO AJUSTADO Y FLEXWRAP */}
       <RNModal visible={isModalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
-          {/* Ancho en Web ajustado a 600 para dar más espacio a los botones */}
           <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 600 : '100%' }}>
-            
             <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: DynamicColors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
@@ -437,9 +434,7 @@ export default function CommunityScreen() {
               </View>
 
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
-                
                 <ThemedText style={[styles.label, {fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.labeltypepost}</ThemedText>
-                {/* Contenedor de tipos de post con FlexWrap para evitar cortes */}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                   {t.communitytab.typepostAdd.map((tag: string) => {
                     const isActive = selectedTag === tag;
@@ -462,7 +457,6 @@ export default function CommunityScreen() {
                 </View>
 
                 <ThemedText style={[styles.label, { fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.category}</ThemedText>
-                {/* Contenedor de categorías con FlexWrap para evitar cortes */}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}>
                   {subCategories.map(sub => {
                     const isActive = selectedSubCategory === sub.id;
@@ -487,7 +481,7 @@ export default function CommunityScreen() {
                 <TextInput 
                   value={postText} onChangeText={setPostText} 
                   placeholder={t.communitytab.messageNewPost} placeholderTextColor={isDark ? "#888" : "#999"} 
-                  multiline style={{ color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, fontSize: 15, fontWeight: '600', borderColor: DynamicColors.border, borderWidth: 1, height: 120, textAlignVertical: 'top', marginBottom: 15 }} 
+                  multiline style={{ color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, fontSize: 15, fontWeight: '600', borderColor: DynamicColors.border, borderWidth: 1, height: 120, textAlignVertical: 'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                 />
 
                 {selectedImage && (
@@ -513,30 +507,41 @@ export default function CommunityScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
-
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
         </View>
       </RNModal>
 
-      {/* MODAL COMENTARIOS */}
       <RNModal transparent visible={showCommentInput} animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
          <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end'}}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCommentInput(false)} />
             <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
               <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
-                <TextInput style={[{backgroundColor: DynamicColors.inputBg, borderRadius: 15, padding: 15, color: DynamicColors.text, minHeight: 80}]} placeholder={t.communitytab.placeHolderModal} placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
-                <TouchableOpacity onPress={handleAddComment} style={[styles.publishBtn, {backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center'}]}>
-                <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
-                  <ThemedText style={{color:'#fff', fontWeight:'bold'}}>{t.communitytab.sendbutton}</ThemedText>
+                <TextInput style={[{backgroundColor: DynamicColors.inputBg, borderRadius: 15, padding: 15, color: DynamicColors.text, minHeight: 80, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {})}]} placeholder={t.communitytab.placeHolderModal} placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
+                
+                {/* BOTÓN ENVIAR COMENTARIO ARREGLADO (Píldora centrada) */}
+                <TouchableOpacity 
+                  onPress={handleAddComment} 
+                  style={{
+                    backgroundColor: '#FF5F6D', 
+                    marginTop: 15, 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    flexDirection: 'row', 
+                    alignSelf: 'center', 
+                    paddingHorizontal: 30, 
+                    paddingVertical: 12,   
+                    borderRadius: 20
+                  }}>
+                  <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <ThemedText style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>{t.communitytab.sendbutton}</ThemedText>
                 </TouchableOpacity>
               </BlurView>
             </KeyboardAvoidingView>
          </View>
       </RNModal>
 
-      {/* VISUALIZADOR DE IMAGEN */}
       <RNModal transparent visible={viewerVisible} onRequestClose={() => setViewerVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' }}>
           <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.closeViewerBtn}>

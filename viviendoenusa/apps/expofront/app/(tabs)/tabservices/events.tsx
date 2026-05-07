@@ -34,14 +34,9 @@ const isTextInappropriate = (text: string): boolean => {
   return BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
 };
 
-const CATEGORIES = [
-  { id: 'Todos', icon: 'calendar-range' },
-  { id: 'Social', icon: 'account-group' },
-  { id: 'Salud', icon: 'heart-pulse' },
-  { id: 'Educación', icon: 'school' },
-  { id: 'Deportes', icon: 'basketball' },
-  
-];
+// IDs neutrales e iconos internos
+const INTERNAL_CATEGORIES = ['Todos', 'Social', 'Salud', 'Educación', 'Deportes'];
+const ICONS_ARRAY = ['calendar-range', 'account-group', 'heart-pulse', 'school', 'basketball'];
 
 const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' },
@@ -82,12 +77,20 @@ export default function EventsScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : height * 0.69);
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
+  // --- TRADUCCIÓN DE CATEGORÍAS ---
+  // Tomamos el arreglo de tu JSON, si no existe o es incorrecto, usamos el interno como fallback.
+  // Nota: Asegúrate de tener "categoriesList": ["All", "Social", "Health", "Education", "Sports"] en en.json
+  const rawCategories = t.eventstab?.categoriesList;
+  const CATEGORIES_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_CATEGORIES.length
+      ? rawCategories 
+      : INTERNAL_CATEGORIES;
+
   // --- ESTADOS ---
   const [events, setEvents] = useState([
     { 
       id: 1, 
       title: 'Feria de Salud Rancho', 
-      category: 'Salud', 
+      category: 'Salud', // Guarda el valor interno (en español) para consistencia
       date: '15 May', 
       time: '10:00 AM', 
       timeEnd: '02:00 PM', 
@@ -102,7 +105,7 @@ export default function EventsScreen() {
   ]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Todos');
+  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); // 0 = 'Todos'
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
@@ -110,7 +113,7 @@ export default function EventsScreen() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formCategory, setFormCategory] = useState('Social');
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); // 1 = 'Social'
   const [formLocation, setFormLocation] = useState('');
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState('');
@@ -201,7 +204,7 @@ export default function EventsScreen() {
     }
 
     if (isTextInappropriate(trimmedTitle) || isTextInappropriate(trimmedDesc) || isTextInappropriate(trimmedLoc)) {
-      triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
+      triggerAlert(t.communitytab?.textInappropriateTittle || "Error", t.communitytab?.textInappropriateDescription || "Contenido inapropiado.");
       return; 
     }
 
@@ -210,19 +213,25 @@ export default function EventsScreen() {
       const esSegura = await validarImagenEnServidor(formImage);
       if (!esSegura) {
         setIsPublishing(false);
-        triggerAlert(t.communitytab.imageInappropriateTittle, t.communitytab.imageInappropriateDescription);
+        triggerAlert(t.communitytab?.imageInappropriateTittle || "Bloqueada", t.communitytab?.imageInappropriateDescription || "Imagen inválida");
         return;
       }
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
 
       const newEvent = { 
-        id: Date.now(), title: trimmedTitle, category: formCategory, 
+        id: Date.now(), 
+        title: trimmedTitle, 
+        category: INTERNAL_CATEGORIES[formCategoryIdx] || 'Social', // Guarda el neutro para la BD
         date: formDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
         time: formTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
         timeEnd: formTimeEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
-        description: trimmedDesc, image: formImage, location: trimmedLoc,
-        zip: trimmedZip, phone: fullPhone, contactMethod: formContactMethod,
+        description: trimmedDesc, 
+        image: formImage, 
+        location: trimmedLoc,
+        zip: trimmedZip, 
+        phone: fullPhone, 
+        contactMethod: formContactMethod,
         approved: false 
       };
 
@@ -233,7 +242,7 @@ export default function EventsScreen() {
       triggerAlert("¡Recibido!", "Tu evento ha sido enviado. Aparecerá en la lista una vez sea aprobado por el administrador.");
       
     } catch (err) {
-      triggerAlert("Error", t.communitytab.errorServer);
+      triggerAlert("Error", t.communitytab?.errorServer || "Error");
     } finally {
       setIsPublishing(false);
     }
@@ -248,17 +257,17 @@ export default function EventsScreen() {
 
   const resetForm = () => {
     setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormZip('');
-    setFormPhone(''); setCountryIdx(0); setFormContactMethod('whatsapp');
+    setFormPhone(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
     setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
   };
 
   const filteredEvents = useMemo(() => 
     events.filter(item => 
       item.approved === true && 
-      (selectedCategory === 'Todos' || item.category === selectedCategory) && 
+      (selectedCategoryIdx === 0 || item.category === INTERNAL_CATEGORIES[selectedCategoryIdx]) && 
       item.title.toLowerCase().includes(searchQuery.toLowerCase())
     ), 
-  [events, selectedCategory, searchQuery]);
+  [events, selectedCategoryIdx, searchQuery]);
 
   return (
     <View style={stylesUnified.container}>
@@ -281,21 +290,22 @@ export default function EventsScreen() {
                 {/* SIDEBAR WEB */}
                 {isLargeWeb && (
                   <View style={stylesUnified.webSidebar}>
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: Colors.text }]}>{t.eventstab.filter}</ThemedText>
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: Colors.text }]}>{t.eventstab?.filter || "Filtros"}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
-                      {CATEGORIES.map(cat => {
-                        const isActive = selectedCategory === cat.id;
+                      {CATEGORIES_LABELS.map((catLabel: string, index: number) => {
+                        const isActive = selectedCategoryIdx === index;
+                        const iconName = ICONS_ARRAY[index] || 'tag';
                         return (
-                          <TouchableOpacity key={cat.id} onPress={() => setSelectedCategory(cat.id)} style={{ marginBottom: 8, borderRadius: 16, overflow: 'hidden', height: 48, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                          <TouchableOpacity key={index} onPress={() => setSelectedCategoryIdx(index)} style={{ marginBottom: 8, borderRadius: 16, overflow: 'hidden', height: 48, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
                             {isActive ? (
                               <LinearGradient colors={orangeGradient} start={{x:0,y:0}} end={{x:1,y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
-                                <MaterialCommunityIcons name={cat.icon as any} size={18} color="#FFF" style={{ marginRight: 10 }} />
-                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{cat.id}</ThemedText>
+                                <MaterialCommunityIcons name={iconName as any} size={18} color="#FFF" style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{catLabel}</ThemedText>
                               </LinearGradient>
                             ) : (
                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: Colors.inputBg }}>
-                                <MaterialCommunityIcons name={cat.icon as any} size={18} color={Colors.text} style={{ marginRight: 10 }} />
-                                <ThemedText style={{ color: Colors.text, fontWeight: '600', fontSize: 14 }}>{cat.id}</ThemedText>
+                                <MaterialCommunityIcons name={iconName as any} size={18} color={Colors.text} style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: Colors.text, fontWeight: '600', fontSize: 14 }}>{catLabel}</ThemedText>
                               </View>
                             )}
                           </TouchableOpacity>
@@ -323,7 +333,7 @@ export default function EventsScreen() {
 
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, paddingHorizontal: 16, height: 48 }}>
                     <MaterialCommunityIcons name="magnify" size={22} color={Colors.iconInactive} style={{ marginRight: 10 }} />
-                    <TextInput style={{ flex: 1, color: Colors.text, fontSize: 15, height: '100%', fontWeight: '600' }} placeholder="Buscar eventos..." placeholderTextColor={Colors.iconInactive} value={searchQuery} onChangeText={setSearchQuery} />
+                    <TextInput style={{ flex: 1, color: Colors.text, fontSize: 15, height: '100%', fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.eventstab.inputEvents} placeholderTextColor={Colors.iconInactive} value={searchQuery} onChangeText={setSearchQuery} />
                     {searchQuery.length > 0 && (
                       <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}><MaterialCommunityIcons name="close-circle" size={20} color={Colors.iconInactive} /></TouchableOpacity>
                     )}
@@ -333,19 +343,20 @@ export default function EventsScreen() {
                   {!isLargeWeb && (
                     <View style={{ marginBottom: 15 }}> 
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                        {CATEGORIES.map((cat) => {
-                          const isActive = selectedCategory === cat.id;
+                        {CATEGORIES_LABELS.map((catLabel: string, index: number) => {
+                          const isActive = selectedCategoryIdx === index;
+                          const iconName = ICONS_ARRAY[index] || 'tag';
                           return (
-                            <TouchableOpacity key={cat.id} onPress={() => setSelectedCategory(cat.id)} style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                            <TouchableOpacity key={index} onPress={() => setSelectedCategoryIdx(index)} style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
                               {isActive ? (
                                 <LinearGradient colors={orangeGradient} start={{x:0,y:0}} end={{x:1,y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
-                                  <MaterialCommunityIcons name={cat.icon as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
-                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{cat.id}</ThemedText>
+                                  <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
+                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{catLabel}</ThemedText>
                                 </LinearGradient>
                               ) : (
                                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: Colors.categoryUnselected }}>
-                                  <MaterialCommunityIcons name={cat.icon as any} size={15} color={Colors.iconInactive} style={{ marginRight: 6 }} />
-                                  <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 13 }}>{cat.id}</ThemedText>
+                                  <MaterialCommunityIcons name={iconName as any} size={15} color={Colors.iconInactive} style={{ marginRight: 6 }} />
+                                  <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 13 }}>{catLabel}</ThemedText>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -364,7 +375,19 @@ export default function EventsScreen() {
                         </View>
                       ) : (
                         filteredEvents.map(item => (
-                          <EventCard key={item.id} item={item} isLargeWeb={isLargeWeb} isDark={isDark} Colors={Colors} orangeGradient={orangeGradient} onOpen={(it: any) => setSelectedEventDetails(it)} ActionBtn={ActionBtn} />
+                          <EventCard 
+                            key={item.id} 
+                            item={item} 
+                            isLargeWeb={isLargeWeb} 
+                            isDark={isDark} 
+                            Colors={Colors} 
+                            orangeGradient={orangeGradient} 
+                            onOpen={(it: any) => setSelectedEventDetails(it)} 
+                            ActionBtn={ActionBtn}
+                            t={t} 
+                            categoryLabels={CATEGORIES_LABELS} // Pasamos los labels
+                            internalCategories={INTERNAL_CATEGORIES} // Pasamos los internos para el mapeo
+                          />
                         ))
                       )}
                     </View>
@@ -391,7 +414,7 @@ export default function EventsScreen() {
               
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
                 <TouchableOpacity onPress={() => setModalVisible(false)} disabled={isPublishing}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
-                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: Colors.text }}>{t.eventstab.botonEvent}</ThemedText>
+                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: Colors.text }}>{t.eventstab?.botonEvent || 'Nuevo Evento'}</ThemedText>
                 <View style={{ width: 24 }} />
               </View>
               
@@ -399,25 +422,27 @@ export default function EventsScreen() {
                 
                 {/* IMAGEN */}
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border, backgroundColor: Colors.inputBg }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight:'800', fontSize:11, marginTop:8}}>{t.eventstab.photoEvent}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight:'800', fontSize:11, marginTop:8}}>{t.eventstab?.photoEvent || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
 
                 {/* CATEGORÍA */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab.typeEvent}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.typeEvent || 'TIPO'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20, paddingBottom: 6 }}>
-                  {CATEGORIES.filter(c => c.id !== 'Todos').map(cat => {
-                    const isActive = formCategory === cat.id;
+                  {CATEGORIES_LABELS.map((catLabel: string, index: number) => {
+                    if (index === 0) return null; // Filtramos la primera (Todos)
+                    const isActive = formCategoryIdx === index;
+                    const iconName = ICONS_ARRAY[index] || 'tag';
                     return (
-                      <TouchableOpacity key={cat.id} onPress={() => setFormCategory(cat.id)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                      <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
                         {isActive ? (
                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                            <MaterialCommunityIcons name={cat.icon as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
-                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'capitalize' }}>{cat.id}</ThemedText>
+                            <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'capitalize' }}>{catLabel}</ThemedText>
                           </LinearGradient>
                         ) : (
                           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
-                            <MaterialCommunityIcons name={cat.icon as any} size={14} color={Colors.iconInactive} style={{ marginRight: 6 }} />
-                            <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600' }}>{cat.id.toUpperCase()}</ThemedText>
+                            <MaterialCommunityIcons name={iconName as any} size={14} color={Colors.iconInactive} style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600',textTransform:'capitalize' }}>{catLabel}</ThemedText>
                           </View>
                         )}
                       </TouchableOpacity>
@@ -426,7 +451,7 @@ export default function EventsScreen() {
                 </ScrollView>
                 
                 {/* FECHA */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab.dateEvent}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.dateEvent || 'FECHA'}</ThemedText>
                 {isWeb ? (
                   <View style={{ position: 'relative', display: 'flex', alignItems: 'center', marginBottom: 15 }}>
                     <MaterialCommunityIcons name="calendar-month" size={20} color={Colors.accent} style={{ position: 'absolute', left: 15, zIndex: 1 }} />
@@ -444,12 +469,12 @@ export default function EventsScreen() {
                 {showDatePicker && !isWeb && (
                   <View style={isIOS ? { backgroundColor: Colors.inputBg, borderRadius: 15, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, marginBottom: 15 } : null}>
                     <DateTimePicker value={formDate} mode="date" display={isIOS ? "spinner" : "default"} minimumDate={new Date()} onChange={onDateChange} textColor={Colors.text} style={isIOS ? { height: 120 } : null} />
-                    {isIOS && <TouchableOpacity onPress={() => setShowDatePicker(false)} style={{ padding: 10, alignItems: 'center', borderTopWidth: 1, borderTopColor: Colors.border }}><ThemedText style={{ color: Colors.accent, fontWeight: '800' }}>{t.eventstab.readyBtn || "Hecho"}</ThemedText></TouchableOpacity>}
+                    {isIOS && <TouchableOpacity onPress={() => setShowDatePicker(false)} style={{ padding: 10, alignItems: 'center', borderTopWidth: 1, borderTopColor: Colors.border }}><ThemedText style={{ color: Colors.accent, fontWeight: '800' }}>{t.eventstab?.readyBtn || "Hecho"}</ThemedText></TouchableOpacity>}
                   </View>
                 )}
 
                 {/* TIEMPO (HORAS) */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab.timeEvent}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.timeEvent || 'HORA'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   {isWeb ? (
                     <>
@@ -494,14 +519,14 @@ export default function EventsScreen() {
                 )}
 
                 {/* TEXTOS Y LOCALIZACIÓN */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'capitalize' }}>{t.eventstab.informationevent}</ThemedText>
-                <TextInput value={formTitle} onChangeText={setFormTitle} placeholder={t.eventstab.nameEvent} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
-                <TextInput value={formLocation} onChangeText={setFormLocation} placeholder={t.eventstab.addressEvent}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
-                <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15 }} />
-                <TextInput value={formDescription} onChangeText={setFormDescription} placeholder={t.eventstab.detailsEvent} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15 }} />
+                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'capitalize' }}>{t.eventstab?.informationevent || 'Información'}</ThemedText>
+                <TextInput value={formTitle} onChangeText={setFormTitle} placeholder={t.eventstab?.nameEvent || 'Nombre'}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formLocation} onChangeText={setFormLocation} placeholder={t.eventstab?.addressEvent || 'Dirección'} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formDescription} onChangeText={setFormDescription} placeholder={t.eventstab?.detailsEvent || 'Detalles'} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 
                 {/* MÉTODO DE CONTACTO Y PREFIJO UNIFICADO */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'capitalize'}}>{t.eventstab.typeContact}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'capitalize'}}>{t.eventstab?.typeContact || 'Contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : Colors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : Colors.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : Colors.subtext} style={{ marginRight: 8 }} />
@@ -509,7 +534,7 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? '#FF5F6D' : Colors.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : Colors.inputBg }}>
                     <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? '#FF5F6D' : Colors.subtext} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : Colors.subtext }}>{t.eventstab.call}</ThemedText>
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : Colors.subtext }}>{t.eventstab?.call || 'Llamada'}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -525,9 +550,8 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                   <TextInput value={formPhone} onChangeText={setFormPhone}
                     placeholder="(909) 000-0000"
-                    
                     keyboardType="phone-pad"
-                    style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600' }} />
+                    style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
                 {/* BOTÓN GUARDAR DINÁMICO */}
@@ -535,7 +559,7 @@ export default function EventsScreen() {
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <>
                       <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />
-                      <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.eventstab.createEvent}</ThemedText>
+                      <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.eventstab?.createEvent || 'Crear'}</ThemedText>
                     </>}
                   </LinearGradient>
                 </TouchableOpacity>
@@ -561,8 +585,12 @@ export default function EventsScreen() {
             
             <ScrollView style={{ padding: 25 }}>
               <View style={{flexDirection:'row', alignItems:'center', marginBottom:10}}>
-                <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 15, paddingVertical: 6, borderRadius: 12 }}><ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>{selectedEventDetails?.category}</ThemedText></LinearGradient>
-                <ThemedText style={{marginLeft:10, fontWeight:'700', color:Colors.subtext}}>{selectedEventDetails?.date}</ThemedText>
+                <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 15, paddingVertical: 6, borderRadius: 12 }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>
+                    {CATEGORIES_LABELS[INTERNAL_CATEGORIES.indexOf(selectedEventDetails?.category)] || selectedEventDetails?.category}
+                  </ThemedText>
+                </LinearGradient>
+                <ThemedText style={{marginLeft:10, fontWeight:'700'}}>{selectedEventDetails?.date}</ThemedText>
               </View>
               <ThemedText style={{ fontSize: 26, fontWeight: '900', marginBottom: 15, color: Colors.text }}>{selectedEventDetails?.title}</ThemedText>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}><MaterialCommunityIcons name="clock-outline" size={20} color={Colors.accent} /><ThemedText style={{ fontSize: 15, fontWeight: '700', marginLeft: 10, color: Colors.text }}>{selectedEventDetails?.time} - {selectedEventDetails?.timeEnd}</ThemedText></View>
@@ -585,7 +613,7 @@ export default function EventsScreen() {
                     bgColor={selectedEventDetails.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
                   />
                 )}
-                <ActionBtn minWidth={130} onPress={() => handleShare(selectedEventDetails)} icon="share-variant" text="Compartir" color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+                <ActionBtn minWidth={130} onPress={() => handleShare(selectedEventDetails)} icon="share-variant" text={t.genericbtn.sharingbtn} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
               </View>
 
             </ScrollView>
@@ -603,43 +631,60 @@ export default function EventsScreen() {
   );
 }
 
-const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn }: any) => (
-  <TouchableOpacity activeOpacity={0.9} onPress={() => onOpen(item)} style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderColor: Colors.border, borderRadius: 28 }}>
-    <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center' }}>
-      <LinearGradient colors={orangeGradient} style={{ width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-check" size={14} color="#FFF" /></LinearGradient>
-      <ThemedText style={{ marginLeft: 10, fontSize: 13, fontWeight: '800', flex: 1, color: Colors.text }}>{item.date}</ThemedText>
-      <View style={{ backgroundColor: 'rgba(255,95,109,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}><ThemedText style={{ fontSize: 9, color: '#FF5F6D', fontWeight: '900' }}>{item.category.toUpperCase()}</ThemedText></View>
-    </View>
-    <View style={{ width: '100%', height: 180, backgroundColor: 'transparent' }}>
-       <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-    </View>
-    <View style={{ padding: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.01)' }}>
-      <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Colors.text }} numberOfLines={1}>{item.title}</ThemedText>
-      <ThemedText style={{ color: Colors.subtext, fontSize: 13, marginTop: 4, marginBottom: 8 }} numberOfLines={2}>{item.description}</ThemedText>
-      <View style={{ marginTop: 4 }}>
-        <View style={{flexDirection:'row', alignItems:'center', marginBottom:4}}><MaterialCommunityIcons name="clock-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.text }}>{item.time} - {item.timeEnd}</ThemedText></View>
-        <View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText></View>
-      </View>
+const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories }: any) => {
+  const catIndex = internalCategories.indexOf(item.category);
+  const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
 
-      {/* BOTONES DE CONTACTO EN LA TARJETA */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
-        {item.phone && (
-          <ActionBtn 
-            minWidth={100}
-            onPress={(e: any) => {
-              e.stopPropagation?.();
-              if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
-              else { Linking.openURL(`tel:${item.phone}`); }
-            }} 
-            icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} 
-            text={item.contactMethod === 'whatsapp' ? "WhatsApp" : "Llamar"} 
-            color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} 
-            bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
-          />
-        )}
-        <ActionBtn minWidth={100} onPress={(e: any) => { e.stopPropagation?.(); Share.share({ message: item.title }) }} icon="share-variant" text="Compartir" color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={() => onOpen(item)} style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderColor: Colors.border, borderRadius: 28 }}>
+      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center' }}>
+        <LinearGradient colors={orangeGradient} style={{ width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-check" size={14} color="#FFF" /></LinearGradient>
+        <ThemedText style={{ marginLeft: 10, fontSize: 13, fontWeight: '800', flex: 1, color: Colors.text }}>{item.date}</ThemedText>
+        <View style={{ backgroundColor: 'rgba(255,95,109,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
+          <ThemedText style={{ fontSize: 9, color: '#FF5F6D', fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
+        </View>
       </View>
+      
+      <View style={{ width: '100%', height: 180, backgroundColor: 'transparent' }}>
+         <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+         
+         <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
+           <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
+           <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
+             {t.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
+           </ThemedText>
+         </View>
 
-    </View>
-  </TouchableOpacity>
-));
+      </View>
+      
+      <View style={{ padding: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.01)' }}>
+        <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Colors.text }} numberOfLines={1}>{item.title}</ThemedText>
+        <ThemedText style={{ color: Colors.subtext, fontSize: 13, marginTop: 4, marginBottom: 8 }} numberOfLines={2}>{item.description}</ThemedText>
+        <View style={{ marginTop: 4 }}>
+          <View style={{flexDirection:'row', alignItems:'center', marginBottom:4}}><MaterialCommunityIcons name="clock-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.text }}>{item.time} - {item.timeEnd}</ThemedText></View>
+          <View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText></View>
+        </View>
+
+        {/* BOTONES DE CONTACTO EN LA TARJETA */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
+          {item.phone && (
+            <ActionBtn 
+              minWidth={100}
+              onPress={(e: any) => {
+                e.stopPropagation?.();
+                if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
+                else { Linking.openURL(`tel:${item.phone}`); }
+              }} 
+              icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} 
+              text={item.contactMethod === 'whatsapp' ? "WhatsApp" : "Llamar"} 
+              color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} 
+              bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
+            />
+          )}
+          <ActionBtn minWidth={100} onPress={(e: any) => { e.stopPropagation?.(); Share.share({ message: item.title }) }} icon="share-variant" text={t.genericbtn?.sharingbtn || 'Compartir'} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+        </View>
+
+      </View>
+    </TouchableOpacity>
+  );
+});

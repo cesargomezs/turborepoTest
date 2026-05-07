@@ -39,7 +39,7 @@ const toSentenceCase = (text: string) => {
 
 const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' },
-  { code: '+52', flag: '🇲🇽', name: 'México' }
+  { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
 
 // --- IDs e ICONOS INTERNOS FIJOS (Independientes del idioma) ---
@@ -81,6 +81,7 @@ export default function DonationsScreen() {
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     cardBg: isDark ? 'rgba(30, 30, 30, 0.75)' : 'rgba(255, 255, 255, 0.82)', 
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+    inputBgRed: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
     accent: '#FF5F6D',
     accenticon: isDark ? '#4FC3F7' : '#0080B5',
     iconInactive: isDark ? '#E0E0E0' : '#666666',
@@ -336,7 +337,7 @@ export default function DonationsScreen() {
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 70 }}>
                 <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 }); if(!r.canceled) setFormImage(r.assets[0].uri); }} 
                   style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus"  size={32} color={DynamicColors.iconInactive} /><ThemedText style={{ fontSize: 11, fontWeight: '800', marginTop: 5 }}>{(t.donationstab as any)?.choisephoto || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus"  size={32} /><ThemedText style={{ fontSize: 11, fontWeight: '800', marginTop: 5 }}>{(t.donationstab as any)?.choisephoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{(t.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
@@ -353,12 +354,12 @@ export default function DonationsScreen() {
                         {isActive ? (
                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                             <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
-                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{catLabel}</ThemedText>
+                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>{catLabel.toUpperCase()}</ThemedText>
                           </LinearGradient>
                         ) : (
                           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
                             <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
-                            <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 11, fontWeight: '600' }}>{catLabel}</ThemedText>
+                            <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 11, fontWeight: '600' }}>{catLabel.toUpperCase()}</ThemedText>
                           </View>
                         )}
                       </TouchableOpacity>
@@ -372,9 +373,9 @@ export default function DonationsScreen() {
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.subtext} style={{ marginRight: 8 }} />
                     <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.subtext }}>WhatsApp</ThemedText>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? DynamicColors.locationtext : DynamicColors.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : DynamicColors.inputBg }}>
-                    <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? DynamicColors.locationtext : DynamicColors.iconInactive} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '900', color: formContactMethod === 'phone' ? DynamicColors.locationtext : DynamicColors.subtext }}>{(t.donationstab as any)?.callbton || 'Llamada'}</ThemedText>
+                  <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? '#FF5F6D' : DynamicColors.border,backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : DynamicColors.inputBg }}>
+                    <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? '#FF5F6D' : DynamicColors.iconInactive} style={{ marginRight: 8 }} />
+                    <ThemedText style={{ fontSize: 12, fontWeight: '900', color: formContactMethod === 'phone' ? '#FF5F6D' : DynamicColors.subtext }}>{(t.donationstab as any)?.callbton || 'Llamada'}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -389,7 +390,7 @@ export default function DonationsScreen() {
                     <MaterialCommunityIcons name="chevron-down" size={16} color={DynamicColors.subtext} />
                   </TouchableOpacity>
                   <TextInput value={formPhone} onChangeText={setFormPhone}
-                    placeholder="Número de contacto"
+                    placeholder="(909) 000-0000"
                     keyboardType="phone-pad"
                     style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
@@ -457,6 +458,15 @@ const DonationCard = memo(({ item, currentUserName, isLargeWeb, isDark, Colors, 
 
       <TouchableOpacity activeOpacity={0.9} onPress={() => onPreview(item.image)}>
         <Image source={{ uri: item.image }} style={{ width: '100%', aspectRatio: 16 / 10, opacity: isDelivered ? 0.6 : 1 }} resizeMode="cover" />
+        
+        {/* --- ETIQUETA "VER DETALLE" AÑADIDA AQUÍ SOBRE LA IMAGEN --- */}
+        <View style={{ position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
+          <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
+          <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
+            {(t.entrepreneurshiptab as any)?.viewdetail || 'Ver detalle'}
+          </ThemedText>
+        </View>
+
         {isDelivered && (
           <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: Colors.success, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="check-circle" size={14} color="#FFF" style={{ marginRight: 4 }} />
@@ -467,23 +477,23 @@ const DonationCard = memo(({ item, currentUserName, isLargeWeb, isDark, Colors, 
 
       <View style={{ padding: 15 }}>
         <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>{item.title}</ThemedText>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, opacity: 0.6 }}>
-          <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.locationtext} />
-          <ThemedText style={{ fontSize: 14, color: Colors.locationtext, marginLeft: 4 ,fontWeight: '600'}}>{item.location}</ThemedText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+          <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} />
+          <ThemedText style={{ fontSize: 12, color: Colors.subtext, marginLeft: 8 ,fontWeight: '700'}}>{item.location}</ThemedText>
         </View>
-        <ThemedText style={{ fontSize: 14, color: Colors.text, opacity: 0.7, marginTop: 6 }} numberOfLines={2}>{item.description}</ThemedText>
+        <ThemedText style={{ fontSize: 12, color: Colors.text, opacity: 0.7, marginTop: 6 }} numberOfLines={2}>{item.description}</ThemedText>
         
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 }}>
           {!isDelivered && (
             <TouchableOpacity onPress={handleContact} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isWhatsapp ? 'rgba(37,211,102,0.1)' : 'rgba(255, 95, 109, 0.15)' }}>
                <MaterialCommunityIcons name={isWhatsapp ? 'whatsapp' : 'phone'} size={18} color={isWhatsapp ? '#25D366' : Colors.accent} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>{(t.donationstab as any)?.contactBtn || 'Contactar'}</ThemedText>
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>{t.genericbtn.contactme}</ThemedText>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity onPress={() => Share.share({ message: item.title })} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
             <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-            <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.donationstab as any)?.shareBtn || 'Compartir'}</ThemedText>
+            <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.genericbtn.sharingbtn}</ThemedText>
           </TouchableOpacity>
 
           {isOwner && (

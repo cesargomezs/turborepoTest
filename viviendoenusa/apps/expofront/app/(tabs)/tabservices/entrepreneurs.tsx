@@ -710,10 +710,10 @@ export default function EntrepreneurshipScreen() {
                    {t.entrepreneurshiptab?.businesshelpful || '¿Te fue útil este negocio?'}
                   </ThemedText>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                    <ActionGridBtn onPress={() => handleVote(detailItem.id, 'like')} icon="thumb-up" text={`Me gusta (${detailItem.likes})`} color={detailItem.userVote === 'like' ? '#fff' : '#1976D2'} bgColor={detailItem.userVote === 'like' ? '#1976D2' : 'rgba(25,118,210,0.1)'} />
-                    <ActionGridBtn onPress={() => handleVote(detailItem.id, 'dislike')} icon="thumb-down" text={`No me gusta (${detailItem.dislikes})`} color={detailItem.userVote === 'dislike' ? '#fff' : '#FA8072'} bgColor={detailItem.userVote === 'dislike' ? '#FA8072' : 'rgba(250,128,114,0.1)'} />
-                    <ActionGridBtn onPress={() => handleSave(detailItem.id)} icon={detailItem.saved ? 'bookmark' : 'bookmark-outline'} text={detailItem.saved ? 'Guardado' : 'Guardar'} color={detailItem.saved ? (isDark ? '#111' : '#FFF') : DC.iconInactive} bgColor={detailItem.saved ? (isDark ? '#FFF' : '#111') : 'rgba(128,128,128,0.1)'} />
-                    <ActionGridBtn onPress={() => handleShare(detailItem)} icon="share-variant" text="Compartir" color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+                    <ActionGridBtn onPress={() => handleVote(detailItem.id, 'like')} icon="thumb-up" text={t.genericbtn.likebtn+` (${detailItem.likes})`} color={detailItem.userVote === 'like' ? '#fff' : '#1976D2'} bgColor={detailItem.userVote === 'like' ? '#1976D2' : 'rgba(25,118,210,0.1)'} />
+                    <ActionGridBtn onPress={() => handleVote(detailItem.id, 'dislike')} icon="thumb-down" text={t.genericbtn.dislikebtn+ ` (${detailItem.dislikes})`} color={detailItem.userVote === 'dislike' ? '#fff' : '#FA8072'} bgColor={detailItem.userVote === 'dislike' ? '#FA8072' : 'rgba(250,128,114,0.1)'} />
+                    <ActionGridBtn onPress={() => handleSave(detailItem.id)} icon={detailItem.saved ? 'bookmark' : 'bookmark-outline'} text={t.genericbtn.savebtn} color={detailItem.saved ? (isDark ? '#111' : '#FFF') : DC.iconInactive} bgColor={detailItem.saved ? (isDark ? '#FFF' : '#111') : 'rgba(128,128,128,0.1)'} />
+                    <ActionGridBtn onPress={() => handleShare(detailItem)} icon="share-variant" text={t.genericbtn.sharingbtn} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
                   </View>
                 </View>
 

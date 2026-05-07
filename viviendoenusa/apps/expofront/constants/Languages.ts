@@ -20,6 +20,17 @@ export const translations = {
       jobs: "Trabajos",
       logout: "Cerrar Sesión"
     },
+    genericbtn: {
+      likebtn: "Me gusta",
+      dislikebtn: "No me gusta",
+      savebtn: "Guardar",
+      sharingbtn: "Compartir",
+      viewdetail: "Ver detalle",
+      contactme: "Contactar"
+    },
+    genericlabel:{
+      labelopinion:"Escribe tu opinión..."
+    },
     hometab: {
         registerhome: "Regístrarme",
         acces: "Ingresar",
@@ -132,6 +143,7 @@ export const translations = {
     eventstab: {
         label: "Eventos",
         filter: "Filtros",
+        inputEvents:"Buscar eventos...",
         botonEvent: "Publicar evento",
         photoEvent :"Foto del evento",
         typeEvent: "Tipo de evento",
@@ -145,7 +157,8 @@ export const translations = {
         createEvent: "Crear evento",
         call : "Llamada",
         informationevent: "Información del evento",
-        typeContact: "Método de contacto"
+        typeContact: "Método de contacto",
+        categoriesList: ["Todos", "Social", "Salud", "Educación", "Deportes"] 
     },
     storestab:{
       categoriesList: ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'],
@@ -219,6 +232,17 @@ export const translations = {
       services: "Services",
       jobs: "jobs",
       logout: "Close Session"
+    },
+    genericbtn: {
+      likebtn: "I like it",
+      dislikebtn: "Not for me",
+      savebtn: "Save",
+      sharingbtn: "Share",
+      viewdetail: "View details",
+      contactme: "Contact"
+    },
+    genericlabel:{
+      labelopinion:"Write your opinion..."
     },
     hometab: {
         registerhome: "Register",
@@ -331,6 +355,7 @@ export const translations = {
       eventstab: {
         label: "Events",
         filter: "Filters",
+        inputEvents:"Search for events...",
         botonEvent: "Post event",
         photoEvent :"Event photo",
         typeEvent: "Event type",
@@ -344,7 +369,8 @@ export const translations = {
         createEvent: "Create event",
         call : "Call",
         informationevent: "Event Information",
-        typeContact: "Contact method"
+        typeContact: "Contact method",
+        categoriesList: ["All", "Social", "Health", "Education", "Sports"] 
       },
       storestab:{
         categoriesList: ['All', 'Supermarket', 'Bakery', 'Electronics', 'Other'],
