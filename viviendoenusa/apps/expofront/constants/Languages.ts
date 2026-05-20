@@ -1,6 +1,7 @@
 import { Filter } from "bad-words";
 import { time } from "console";
 import { create } from "domain";
+import { icon } from "leaflet";
 import { register } from "module";
 import { use } from "react";
 
@@ -26,7 +27,10 @@ export const translations = {
       savebtn: "Guardar",
       sharingbtn: "Compartir",
       viewdetail: "Ver detalle",
-      contactme: "Contactar"
+      contactme: "Contactar",
+      resultone: "Resultado encontrado",
+      resultdomore: "Resultados encontrados",
+      viewallresults: "Ver todos los resultados",
     },
     genericlabel:{
       labelopinion:"Escribe tu opinión..."
@@ -61,7 +65,10 @@ export const translations = {
       icon5: "shopping-search",
       service6: "Emprendimientos",
       icon6: "lightbulb-multiple-outline",
-      help_question: "¿En qué podemos ayudarte hoy?"
+      help_question: "¿En qué podemos ayudarte hoy?",
+      service_support: "Red de Apoyo",
+      service7: "Red de Apoyo",
+      icon7: "heart-pulse"
     },
     lawyerstab: {
       label: "Especialidades",
@@ -69,8 +76,6 @@ export const translations = {
       //practiceAreas: "all",
       messagezip: "Código Postal",
       validatezip: "Código Postal no encontrado.",
-      resultone: "Resultado encontrado",
-      resultdomore: "Resultados encontrados",
       viewallresults: "Ver todos los resultados",
       zipnofound:"ZIP no encontrado.",
       noReviews: "Aún no hay reseñas.", // <--- Agrega esta
@@ -109,7 +114,8 @@ export const translations = {
       placeHolderModal: "Escribe algo...",
       sendbutton: "Enviar",
       responsebutton: "Responder",
-      messageNewPost:"¿Qué estás pensando?"
+      messageNewPost:"¿Qué estás pensando?",
+
     },
     donationstab: {
         category: "Categorías",
@@ -138,7 +144,9 @@ export const translations = {
         callbton: "Llamada",
         typeContact: "Método de contacto",
         numberContact: "Número de contacto",
-        savebutton: "Guardar"
+        savebutton: "Guardar",
+        deliverBtn: "Entregar",
+        activateBtn: "Activar"
     },
     eventstab: {
         label: "Eventos",
@@ -216,6 +224,36 @@ export const translations = {
           'Salud':'heart-pulse', 
           'Tecnología':'laptop'
           }
+    },jobstab:{
+      labeljobs: "Publicar Empleo",
+      labeladmin: "* Requiere revisión de administrador",
+      statusBottonModalDis: "Disponibles",
+      statusBottonModalNoDis: "No disponibles",
+      filter: "Filtros",
+      jobtitles:{
+        'Bodega': ['Forklift Operator', 'Empacador (Packer)', 'Recibidor', 'Material Handler', 'Lider de Bodega'], 
+        'Construcción': ['Carpintero', 'Electricista', 'Plomero', 'Ayudante'],
+        'Limpieza': ['Housekeeper', 'Limpieza Comercial', 'Janitor'],
+        'Restaurantes': ['Cocinero', 'Mesero/a', 'Dishwasher', 'Bartender'],
+        'Transporte': ['Chofer CDL', 'Repartidor', 'Mecánico'],
+        'Tecnología': ['Desarrollador', 'Soporte Técnico', 'Diseñador'],
+        'Todos': ['Asistente', 'Servicio al Cliente', 'Ventas']
+      },
+      jobCategories:[
+        { id: 'Todos', icon: 'apps' },
+        { id: 'Bodega', icon: 'warehouse' }, 
+        { id: 'Construcción', icon: 'hammer-wrench' },
+        { id: 'Limpieza', icon: 'broom' },
+        { id: 'Restaurantes', icon: 'silverware-fork-knife' },
+        { id: 'Transporte', icon: 'truck-fast' },
+        { id: 'Tecnología', icon: 'laptop' }
+      ]
+    },supporttab:{
+      label: "Red de Apoyo",
+      description: "Encuentra recursos y ayuda en tu comunidad.",
+      category: "Categoría",
+      subCategories: ['Salud', 'Alimentos', 'Asesoría Legal', 'Apoyo Emocional', 'Otros'],
+      contactSupport: "Contactar Red de Apoyo"
     }
 
     
@@ -239,7 +277,10 @@ export const translations = {
       savebtn: "Save",
       sharingbtn: "Share",
       viewdetail: "View details",
-      contactme: "Contact"
+      contactme: "Contact",
+      resultone: "Result found",
+      resultdomore: "Results found",
+      viewallresults: "View all results",
     },
     genericlabel:{
       labelopinion:"Write your opinion..."
@@ -274,7 +315,9 @@ export const translations = {
       icon5: "shopping-search",
       service6: "Entrepreneurs",
       icon6: "lightbulb-multiple-outline",
-      help_question: "How can we help you today?"
+      help_question: "How can we help you today?",
+      service_support: "Support Net",
+      service7: "Support Net",
     },
     lawyerstab: {
       label: "Specialties",
@@ -282,9 +325,6 @@ export const translations = {
       //practiceAreas: "all",
       messagezip: "ZIP Code",
       validatezip: "ZIP not found.",
-      resultone: "Result found",
-      resultdomore: "Results found",
-      viewallresults: "View all results",
       zipnofound:"ZIP not found.",
       noReviews: "There are no reviews yet.", // <--- Agrega esta
       addReview: "Give us your opinion",    // <--- Agrega esta
@@ -350,7 +390,9 @@ export const translations = {
         callbton: "Call",
         typeContact: "Contact method",
         numberContact: "Contact number",
-        savebutton: "Save"
+        savebutton: "Save",      
+        deliverBtn: "Delivered",
+        activateBtn: "Activate"
       },
       eventstab: {
         label: "Events",
@@ -391,8 +433,6 @@ export const translations = {
         phoneContacto: "Contact phone number",
         sendbutton: "Save",
         verify: "verify"
-
-
       },
     entrepreneurshiptab:{
         searchentrepre:"Search for ventures...",
@@ -430,7 +470,36 @@ export const translations = {
           'Technology':'laptop'
           }
         
+    },jobstab:{
+        labeljobs: "Post a Job",
+        labeladmin: "* Requires administrator review",
+        statusBottonModalDis: "Available",
+        statusBottonModalNoDis: "Not available",
+        filter: "filters",
+        jobtitles: {
+          'Warehouse': ['Forklift Operator', 'Packer', 'Receiver', 'Material Handler', 'Warehouse Leader'],
+          'Construction': ['Carpenter', 'Electrician', 'Plumber', 'Helper'],
+          'Cleaning': ['Housekeeper', 'Commercial Cleaner', 'Janitor'],
+          'Restaurants': ['Cook', 'Waiter/Waitress', 'Dishwasher', 'Bartender'],
+          'Transportation': ['CDL Driver', 'Delivery Driver', 'Mechanic'],
+          'Technology': ['Developer', 'Tech Support', 'Designer'],
+          'All': ['Assistant', 'Customer Service', 'Sales']
+        },
+        jobCategories:[
+          {id: 'All', icon: 'apps' },
+          {id: 'Warehouse', icon: 'warehouse' },
+          {id: 'Construction', icon: 'hammer-wrench' },
+          {id: 'Cleaning', icon: 'broom' },
+          {id: 'Restaurants', icon: 'silverware-fork-knife' },
+          {id: 'Transportation', icon: 'truck-fast' },
+          {id: 'Technology', icon: 'laptop' }
+          ]
+    },supporttab:{  
+      label: "Support Network",
+      description: "Find resources and help in your community.",
+      category: "Category",
+      subCategories: ['Health', 'Food', 'Legal Advice', 'Emotional Support', 'Other'],
+      contactSupport: "Contact Support Network"
     }
-    
   }
 };

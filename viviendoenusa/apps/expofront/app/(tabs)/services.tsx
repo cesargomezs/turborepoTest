@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
-  StyleSheet, useWindowDimensions
+  StyleSheet, useWindowDimensions, Animated
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -25,7 +25,8 @@ interface ButtonConfig {
 const BUTTONS_DATA: ButtonConfig[] = [
   { id: 1, icon: 'scale-balance', path: '/tabservices/lawyers', colors: ['#4facfe', '#00f2fe'], description: 'Asesoría legal y abogados certificados.' },
   { id: 2, icon: 'account-group-outline', path: '/tabservices/community', colors: ['#FF5F6D', '#FFC371'], description: 'Conecta y participa con tu comunidad.' },
-  { id: 3, icon: 'hand-heart', path: '/tabservices/donations', colors: ['#FF416C', '#FF4B2B'], description: 'Apoya causas y organizaciones locales.' },
+  // NUEVO COLOR CIAN PARA DONACIONES: Transmite confianza y ayuda desinteresada
+  { id: 3, icon: 'hand-heart', path: '/tabservices/donations', colors: ['#00c6fb', '#005bea'], description: 'Apoya causas y organizaciones locales.' },
   { id: 4, icon: 'calendar-star', path: '/tabservices/events', colors: ['#f6d365', '#fda085'], description: 'Descubre eventos y actividades próximas.' },
   { id: 5, icon: 'store-plus-outline', path: '/tabservices/stores', colors: ['#667eea', '#764ba2'], description: 'Explora negocios y servicios cercanos.' },
   { id: 6, icon: 'lightbulb-multiple-outline', path: '/tabservices/entrepreneurs', colors: ['#f093fb', '#f5576c'], description: 'Recursos para impulsar tu emprendimiento.' },
@@ -41,7 +42,19 @@ export default function ServicesScreen() {
 
   const localStyles = useUnifiedCardStyles();
 
-  // --- LÓGICA DE DIMENSIONES Y COLORES (Sincronizada con LawyersScreen) ---
+  // --- ANIMACIÓN: CORAZÓN LATIENDO ---
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.25, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true })
+      ])
+    ).start();
+  }, [pulseAnim]);
+
+  // --- LÓGICA DE DIMENSIONES Y COLORES ---
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
@@ -51,7 +64,6 @@ export default function ServicesScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
   
-  // Definimos el color del texto igual que en LawyersScreen para evitar el error de TS
   const textColor = isDark ? '#FFFFFF' : '#1A1A1A';
   const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
 
@@ -60,6 +72,8 @@ export default function ServicesScreen() {
       <ScrollView 
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start' }} 
         keyboardShouldPersistTaps="handled"
+        // BLOQUEO DE SCROLL EXTERIOR: Solo habilitado en Web
+        scrollEnabled={isWeb}
       >
         <View style={[localStyles.centerContainer, { marginTop: verticalOffset }]}>
           
@@ -90,7 +104,6 @@ export default function ServicesScreen() {
                       {loggedIn ? t.servicestab?.welcome_user : t.servicestab?.welcome_guest}
                     </ThemedText>
                 </View>
-                {/* SOLUCIÓN: Usamos la constante textColor local */}
                 <MaterialCommunityIcons 
                   name="view-list" 
                   size={40} 
@@ -99,13 +112,53 @@ export default function ServicesScreen() {
                 />
               </View>
 
+              {/* --- ZONA: RED DE APOYO (BOTÓN ROJO SOS DESTACADO) --- */}
+              <View style={{ paddingHorizontal: isLargeWeb ? 0 : 5, marginTop: 5, marginBottom: 15 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                  
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => router.push('/tabservices/support' as any)}
+                    style={{
+                      shadowColor: '#FF416C',
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.4,
+                      shadowRadius: 8,
+                      elevation: 6,
+                    }}
+                  >
+                    <LinearGradient
+                      colors={['#FF416C', '#FF4B2B']} 
+                      start={{ x: 0, y: 0 }} 
+                      end={{ x: 1, y: 1 }}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingHorizontal: 26,
+                        paddingVertical: 14,
+                        borderRadius: 24,
+                      }}
+                    >
+                      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                        <MaterialCommunityIcons name="heart-pulse" size={24} color="#FFFFFF" />
+                      </Animated.View>
+                      <ThemedText style={{ marginLeft: 10, fontWeight: '900', fontSize: 16, color: '#FFFFFF', letterSpacing: 0.5 }}>
+                        {t.servicestab?.support_btn_title || 'Red de Apoyo'}
+                      </ThemedText>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                </View>
+              </View>
+
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ height: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
                     <ThemedText style={localStyles.middleText}>
                         {t.servicestab?.help_question}
                     </ThemedText>
                 </View>
 
+                {/* CUADRÍCULA DE 6 BOTONES */}
                 <View style={[localStyles.gridContainer, isLargeWeb && localStyles.webGridCentering]}>
                   {BUTTONS_DATA.map((item) => (
                     <TouchableOpacity 

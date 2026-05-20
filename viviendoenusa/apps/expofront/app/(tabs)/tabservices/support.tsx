@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
-  StyleSheet, useWindowDimensions,
+  StyleSheet, useWindowDimensions, Animated, Easing,
   TextInput, ActivityIndicator, Image, Linking, Alert,
   Modal, KeyboardAvoidingView, Share, ColorValue
 } from 'react-native';
-import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router'; 
 import * as Location from 'expo-location';
@@ -27,13 +27,9 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
-// Iconos asignados por posición (Índice): 0: Todas, 1: Supermercado, 2: Panadería, 3: Electrónica, 4: Otros
-const ICONS_ARRAY = ['apps', 'cart', 'baguette', 'laptop', 'storefront'];
-
-const COUNTRIES = [
-  { code: '+1', flag: '🇺🇸', name: 'USA' },
-  { code: '+1', flag: '🇺🇸', name: 'USA' }
-];
+const ICONS_ARRAY = ['heart-pulse', 'brain', 'hand-heart', 'account-group', 'dots-horizontal'];
+const CATEGORIES_LIST = ['Todos', 'Psicólogos Pro-Bono', 'Mentores Locales', 'Grupos de Apoyo', 'Otros'];
+const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
@@ -60,25 +56,14 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 };
 
 // --- COMPONENTE: FORMULARIO DE RESEÑA ---
-const ReviewForm = ({ 
-  onPublish, 
-  onCancel, 
-  isDark, 
-  t 
-}: {
-  onPublish: (stars: number, comment: string) => void;
-  onCancel: () => void;
-  isDark: boolean;
-  t: any;
-}) => {
+const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 
   const handlePrePublish = () => {
     if (!validateComment(comment)) {
-      const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
-      if (Platform.OS === 'web') { window.alert(errorMsg); } 
-      else { Alert.alert("Error", errorMsg); }
+      const msg = "Comentario inapropiado";
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert("Error", msg);
       return;
     }
     onPublish(rating, comment);
@@ -88,9 +73,9 @@ const ReviewForm = ({
     <View style={{ flex: 1, paddingVertical: 10 }}>
       <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
         <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.lawyerstab?.backBtn || 'Volver'}</ThemedText>
+        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>Volver</ThemedText>
       </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>{t.lawyerstab?.experience || 'Tu Experiencia'}</ThemedText>
+      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>Tu Experiencia</ThemedText>
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
         {[1, 2, 3, 4, 5].map(s => (
           <TouchableOpacity key={s} onPress={() => setRating(s)}>
@@ -99,11 +84,11 @@ const ReviewForm = ({
         ))}
       </View>
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment} placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+        <TextInput value={comment} onChangeText={setComment} placeholder={"Escribe tu opinión..."} placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
-          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.lawyerstab?.publishBtn || 'Publicar'}</ThemedText>
+          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>Publicar</ThemedText>
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -111,12 +96,11 @@ const ReviewForm = ({
 };
 
 const DATA_SOURCE = [
-  // Nota: categoryId 1 corresponde a la segunda opción de la lista (ej. "Supermercado")
-  { id: 1, name: 'Cardenas Markets', categoryId: 1, description: 'Productos frescos y auténtica comida mexicana preparada directamente en la tienda.', rating: 4.5, lat: 34.0934, lng: -117.5847, phone: '+19099451100', image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800', reviews: [], status: 'approved' },
-  { id: 2, name: 'El Super', categoryId: 1, description: 'Gran variedad de productos importados con los mejores precios de la zona.', rating: 4.3, lat: 34.0775, lng: -117.6050, phone: '+19099843665', image: 'https://images.unsplash.com/photo-1601599963565-b7ba29c8e3ff?w=800', reviews: [], status: 'approved' }
+  { id: 1, name: 'Dra. Elena Ríos', categoryId: 1, description: 'Psicología Clínica. Especialista en adaptación migratoria. Ofrezco 2 sesiones sin costo al mes.', rating: 5.0, lat: 34.1064, lng: -117.5700, phone: '+19091234567', image: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800', reviews: [], status: 'approved' },
+  { id: 2, name: 'Carlos M. (Mentor)', categoryId: 2, description: 'Llevo 10 años en California. Ayudo a recién llegados a entender el sistema escolar y DMV.', rating: 4.8, lat: 34.0900, lng: -117.5900, phone: '+19098765432', image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800', reviews: [], status: 'approved' }
 ];
 
-export default function StoresScreen() {
+export default function SupportScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -145,20 +129,12 @@ export default function StoresScreen() {
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
 
-  // --- TRADUCCIONES SEGURAS DE CATEGORÍAS ---
-  const rawCategories = t.storestab?.categoriesList;
-  const CATEGORIES_LIST = Array.isArray(rawCategories) && rawCategories.length > 0
-    ? rawCategories
-    : ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'];
-
   // --- ESTADOS ---
   const [zipCode, setZipCode] = useState('');
-  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); // 0 = 'Todas'
+  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [loading, setLoading] = useState(false);
-  
   const [localData, setLocalData] = useState<any[]>(DATA_SOURCE);
   const [results, setResults] = useState<any[]>([]); 
-  
   const [userLocation, setUserLocation] = useState<any>(null);
   const [showMarkers, setShowMarkers] = useState(false);
   const [isFilteredByMap, setIsFilteredByMap] = useState(false); 
@@ -168,17 +144,19 @@ export default function StoresScreen() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
 
-  // --- ESTADOS SUGERIR NEGOCIO ---
+  // --- ESTADOS SUGERIR APOYO ---
   const [isModalVisible, setModalVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formAddress, setFormAddress] = useState(''); 
-  const [formCategoryIdx, setFormCategoryIdx] = useState(1); // Default a la primera opción que NO sea "Todas"
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
+  
+  // --- ESTADOS ADMIN ---
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
@@ -187,7 +165,36 @@ export default function StoresScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // --- OBTENER UBICACIÓN INICIAL ---
+  // --- ANIMACIONES DEL BOTÓN 988 ---
+  const ringAnim = useRef(new Animated.Value(0)).current;
+  const pulseRingAnim = useRef(new Animated.Value(1)).current;
+  const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringAnim, { toValue: 1, duration: 50, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: -1, duration: 100, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: 1, duration: 100, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: -1, duration: 100, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: 0, duration: 50, easing: Easing.linear, useNativeDriver: true }),
+        Animated.delay(1000) 
+      ])
+    ).start();
+
+    Animated.loop(
+        Animated.parallel([
+            Animated.timing(pulseRingAnim, { toValue: 1.5, duration: 1500, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            Animated.timing(pulseOpacityAnim, { toValue: 0, duration: 1500, easing: Easing.out(Easing.ease), useNativeDriver: true })
+        ])
+    ).start();
+  }, [ringAnim, pulseRingAnim, pulseOpacityAnim]);
+
+  const spin = ringAnim.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-10deg', '10deg']
+  });
+
   const getCurrentLocation = async (isManual = false) => {
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -208,14 +215,9 @@ export default function StoresScreen() {
     }
   }, []);
 
-  // --- FUNCIONES ---
   const handleZipChange = (text: string) => {
     setZipCode(text);
-    if (text.length < 5) {
-      setResults([]);
-      setShowMarkers(false);
-      setIsFilteredByMap(false);
-    }
+    if (text.length < 5) { setResults([]); setShowMarkers(false); setIsFilteredByMap(false); }
   };
 
   const handleZoom = (type: 'in' | 'out') => {
@@ -229,80 +231,63 @@ export default function StoresScreen() {
 
   const handleSearch = async (forcedCategoryIdx?: number) => {
     if (!isZipValid) return;
-
     const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
-    setLoading(true);
-    setIsFilteredByMap(false);
+    setLoading(true); setIsFilteredByMap(false);
 
     let lat = userLocation ? userLocation.latitude : 34.0934; 
     let lng = userLocation ? userLocation.longitude : -117.5847;
 
     try {
       const geo = await Location.geocodeAsync(zipCode);
-      if (geo.length > 0) {
-        lat = geo[0].latitude;
-        lng = geo[0].longitude;
-      }
-    } catch (e) {
-      if(!isWeb) Alert.alert("Error", "No se encontró el ZIP");
-    }
+      if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; }
+    } catch (e) { if(!isWeb) Alert.alert("Error", "No se encontró el ZIP"); }
 
     const newCoords = { latitude: lat, longitude: lng, latitudeDelta: 0.06, longitudeDelta: 0.06 };
-    setUserLocation(newCoords);
-    setShowMarkers(true); 
-    
+    setUserLocation(newCoords); setShowMarkers(true); 
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
     let filtered = (categoryToSearch === 0) ? [...localData] : localData.filter(l => l.categoryId === categoryToSearch);
     filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
     
-    setResults(filtered);
-    setMapKey(k => k + 1);
-    setLoading(false);
+    setResults(filtered); setMapKey(k => k + 1); setLoading(false);
   };
 
   const handleCategorySelect = (index: number) => {
     setSelectedCategoryIdx(index);
-    if (isZipValid) {
-      handleSearch(index); 
-    }
+    if (isZipValid) handleSearch(index); 
   };
 
   const handleMarkerSelection = (store: any) => {
-    setResults([store]);
-    setIsFilteredByMap(true);
+    setResults([store]); setIsFilteredByMap(true);
     const region = { latitude: store.lat, longitude: store.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 };
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800);
   };
 
   const handleShare = async (store: any) => {
     if (!store) return;
-    try {
-      await Share.share({ message: t.storestab?.sharemessage + ` ${store.name}\n${store.description}` });
-    } catch (error) { console.log(error); }
+    try { await Share.share({ message: `Te recomiendo este contacto de apoyo: ${store.name}\n${store.description}` }); } 
+    catch (error) { console.log(error); }
   };
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [16, 9], quality: 0.7,
-    });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.7 });
     if (!result.canceled) setFormImage(result.assets[0].uri);
   };
 
   const handlePublishStore = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5) {
-      return Alert.alert(t.storestab?.alertmessage || "Completar campos");
+      const msg = "Debes completar todos los campos obligatorios.";
+      return isWeb ? window.alert(msg) : Alert.alert("Atención", msg);
     }
-    
     setIsPublishing(true);
+
     try {
       if (formImage) {
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
           setIsPublishing(false);
-          const title = t.communitytab?.imageInappropriateTittle || "Error";
-          const desc = t.communitytab?.imageInappropriateDescription || "Imagen inválida";
+          const title = "Error";
+          const desc = "Imagen inválida o inapropiada";
           if (isWeb) { window.alert(`${title}\n${desc}`); } 
           else { Alert.alert(title, desc); }
           return;
@@ -310,6 +295,10 @@ export default function StoresScreen() {
       }
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '+1000000000';
+      
+      const mockLat = userLocation ? userLocation.latitude + (Math.random() * 0.01 - 0.005) : 34.0934;
+      const mockLng = userLocation ? userLocation.longitude + (Math.random() * 0.01 - 0.005) : -117.5847;
+
       const newEntry = {
         id: Date.now(), 
         name: formName, 
@@ -317,23 +306,26 @@ export default function StoresScreen() {
         address: formAddress,
         categoryId: formCategoryIdx, 
         zip: formZip, 
-        image: formImage || 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=800',
+        image: formImage || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
         rating: 5.0, 
-        lat: 34.0934, 
-        lng: -117.5847, 
+        lat: mockLat, 
+        lng: mockLng, 
         phone: fullPhone, 
         reviews: [],
-        status: 'pending'
+        status: 'pending' // Agregamos estado "Pendiente"
       };
-      
+
       setPendingStores([newEntry, ...pendingStores]);
+      
+      const success = "Revisaremos la información para agregarla a la Red de Apoyo.";
+      isWeb ? window.alert(success) : Alert.alert("Solicitud Enviada", success);
+      
       setModalVisible(false);
-      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1);
-      Alert.alert(t.storestab?.sendnewsug || "Enviado con éxito");
+      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setFormImage(null); setFormCategoryIdx(1);
 
     } catch (err) {
       const errorTitle = "Error de red";
-      const errorDesc = t.communitytab?.errorServer || "Error";
+      const errorDesc = "No se pudo enviar la solicitud.";
       if (isWeb) { window.alert(`${errorTitle}\n${errorDesc}`); } 
       else { Alert.alert(errorTitle, errorDesc); }
     } finally {
@@ -344,20 +336,30 @@ export default function StoresScreen() {
   const approveStore = (store: any) => {
     const approvedStore = { ...store, status: 'approved' };
     setLocalData(prev => [approvedStore, ...prev]); 
-    if (showMarkers) {
-      setResults(prev => [approvedStore, ...prev]); 
-    }
+    setResults(prev => [approvedStore, ...prev]); 
+    setShowMarkers(true); 
     setPendingStores(pendingStores.filter(s => s.id !== store.id));
-    setMapKey(k => k + 1);
+    setMapKey(k => k + 1); 
+    
+    if (!isWeb && mapRef.current) {
+        mapRef.current.animateToRegion({
+            latitude: store.lat,
+            longitude: store.lng,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02
+        }, 1000);
+    }
   };
 
-  const StoreCard = ({ store }: { store: any }) => {
+  // --- MODIFICACIÓN DE TARJETA: MUESTRA ESTADO PENDIENTE CON INFO COMPLETA ---
+  const SupportCard = ({ store }: { store: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
     const isPending = store.status === 'pending';
 
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: isPending ? '#FFB74D' : DynamicColors.border }}>
+        
         {/* Banner de Pendiente de Revisión */}
         {isPending && (
           <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
@@ -365,6 +367,7 @@ export default function StoresScreen() {
               <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
           </View>
         )}
+
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
           <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
             <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
@@ -374,40 +377,43 @@ export default function StoresScreen() {
             <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{store.rating.toFixed(1)}</ThemedText>
           </View>
         </View>
+        
         <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140 }}>
           <Image source={{ uri: store.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-          
           <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
             <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
-              {t.genericbtn?.viewdetail || 'Ver detalle'}
-            </ThemedText>
+            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>Ver detalle</ThemedText>
           </View>
-
         </TouchableOpacity>
+        
         <View style={{ padding: 15 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{store.name}</ThemedText>
             {dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist} mi</ThemedText>}
           </View>
+
+          {/* Dirección adicional (Muy útil durante revisión) */}
           {store.address && (
              <ThemedText style={{ fontSize: 13, color: '#FF5F6D', fontWeight: 'bold', marginTop: 4 }}>
                  <MaterialCommunityIcons name="map-marker-outline" size={12}/> {store.address}
              </ThemedText>
           )}
+
           <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6 }} numberOfLines={isPending ? undefined : 2}>{store.description}</ThemedText>
+          
+          {/* Opciones de contacto con opacidad si está pendiente */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
             <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.storestab?.reviews || 'Reseñas'}</ThemedText>
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>Opiniones</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
               <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.storestab?.route || 'Cómo llegar'}</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>Ruta</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${store.phone}`)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
               <MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.storestab?.callbton || 'Llamar'}</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>Llamar</ThemedText>
             </TouchableOpacity>
           </View>
         </View>
@@ -464,7 +470,7 @@ export default function StoresScreen() {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
                 <View style={{ flex: 1 }}>
                     <ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name}</ThemedText>
-                    <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>{t.storestab?.commutnityopini || 'Opiniones'}</ThemedText>
+                    <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>Experiencias y Opiniones</ThemedText>
                 </View>
                 <TouchableOpacity onPress={() => { setSelectedStore(null); setShowReviewInput(false); }}>
                   <MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} />
@@ -475,7 +481,7 @@ export default function StoresScreen() {
                   <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
-                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>
+                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>Compartir experiencia</ThemedText>
                     </LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
@@ -492,23 +498,18 @@ export default function StoresScreen() {
                   </ScrollView>
                 </View>
               ) : (
-                <ReviewForm 
-                    isDark={isDark} 
-                    t={t} 
-                    onCancel={() => setShowReviewInput(false)} 
-                    onPublish={(rating: number, comment: string) => { 
+                <ReviewForm isDark={isDark} onCancel={() => setShowReviewInput(false)} onPublish={(rating: number, comment: string) => { 
                         const review = { id: Date.now().toString(), stars: rating, comment: comment }; 
                         selectedStore.reviews = [review, ...(selectedStore.reviews || [])]; 
                         setShowReviewInput(false); 
-                    }} 
-                />
+                    }} />
               )}
             </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL SUGERIR NEGOCIO */}
+      {/* MODAL SUGERIR APOYO */}
       <Modal visible={isModalVisible} animationType="slide" transparent statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
@@ -517,20 +518,20 @@ export default function StoresScreen() {
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
+                <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>Unirse a la Red</ThemedText>
                 <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
-                <View style={{ width: 24 }} />
               </View>
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>FOTO</ThemedText></View>}
                 </TouchableOpacity>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>{t.storestab?.category || 'Categoría'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>Categoría</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {CATEGORIES_LIST.map((cat, index) => {
                     if (index === 0) return null; 
                     const isActive = formCategoryIdx === index;
-                    const iconName = ICONS_ARRAY[index] || 'storefront'; 
+                    const iconName = ICONS_ARRAY[index] || 'heart'; 
                     return (
                       <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
                         {isActive ? (
@@ -549,21 +550,20 @@ export default function StoresScreen() {
                   })}
                 </ScrollView>
 
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.placeHoldname || 'Nombre'} value={formName} onChangeText={setFormName} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.placeHoldAddress || 'Dirección'} value={formAddress} onChangeText={setFormAddress} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.messagezip || 'Código Postal'} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.description || 'Descripción'} value={formDesc} onChangeText={setFormDesc} multiline />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder="Nombre del Profesional / Mentor" value={formName} onChangeText={setFormName} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder="Ciudad o Dirección" value={formAddress} onChangeText={setFormAddress} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder="Código Postal" value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder="Especialidad o cómo ayudas..." value={formDesc} onChangeText={setFormDesc} multiline />
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform: 'capitalize'  }}>{t.storestab?.phoneContacto || 'Teléfono'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform: 'capitalize' }}>Teléfono de Contacto</ThemedText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
                   <TouchableOpacity 
                     activeOpacity={0.7}
-                    onPress={() => setCountryIdx(prev => (prev === 0 ? 1 : 0))}
+                    onPress={() => setCountryIdx(prev => (prev === 0 ? 0 : 0))}
                     style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: DynamicColors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}
                   >
                     <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText>
                     <ThemedText style={{ fontWeight: '800', color: DynamicColors.text, marginRight: 4 }}>{COUNTRIES[countryIdx].code}</ThemedText>
-                    <MaterialCommunityIcons name="chevron-down" size={16} color={DynamicColors.subtext} />
                   </TouchableOpacity>
                   <TextInput value={formPhone} onChangeText={setFormPhone}
                     placeholder="(909) 000-0000"
@@ -574,7 +574,7 @@ export default function StoresScreen() {
                 <TouchableOpacity onPress={handlePublishStore} disabled={isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
                   <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
-                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{t.storestab?.sendbutton || 'Enviar'}</ThemedText>
+                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Enviar Solicitud</ThemedText>
                   </LinearGradient>
                 </TouchableOpacity>
               </ScrollView>
@@ -597,21 +597,22 @@ export default function StoresScreen() {
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
                   <TouchableOpacity onLongPress={() => { setIsAdminMode(!isAdminMode); }}>
-                    <MaterialCommunityIcons name="store-plus-outline" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
+                    <MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
                   </TouchableOpacity>
                 </View>
               </View>
 
+              {/* LÓGICA DE PANTALLA DIVIDIDA (MÓVIL VS WEB) */}
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   
                   {/* ADMIN VERIFICACIÓN MÓVIL */}
                   {isAdminMode && pendingStores.length > 0 && (
                     <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.storestab?.verify || 'Verificar'} ({pendingStores.length})</ThemedText>
+                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Verificar ({pendingStores.length})</ThemedText>
                       {pendingStores.map(store => (
                         <View key={store.id} style={{ marginBottom: 15 }}>
-                           <StoreCard store={store} />
+                           <SupportCard store={store} />
                            <TouchableOpacity onPress={() => approveStore(store)} style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
                              <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar Contacto</ThemedText>
@@ -621,13 +622,35 @@ export default function StoresScreen() {
                     </View>
                   )}
 
+                  {/* BOTÓN EMERGENCIA SOS MÓVIL CON ANIMACIÓN */}
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => Linking.openURL('tel:988')} style={{ marginBottom: 15 }}>
+                    <LinearGradient colors={['#FF416C', '#FF4B2B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{ position: 'relative', width: 48, height: 48, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                        {/* Anillo que palpita */}
+                        <Animated.View style={{
+                            position: 'absolute', width: 48, height: 48, borderRadius: 24,
+                            borderWidth: 2, borderColor: '#FFFFFF',
+                            transform: [{ scale: pulseRingAnim }], opacity: pulseOpacityAnim
+                        }} />
+                        {/* Fondo del ícono y el ícono vibrando */}
+                        <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' }}>
+                            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                              <MaterialCommunityIcons name="phone-alert" size={26} color="#FFF" />
+                            </Animated.View>
+                        </View>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Línea de Crisis 988</ThemedText>
+                        <ThemedText style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>Atención en español 24/7</ThemedText>
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
                     <TextInput 
                       style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                      placeholder={t.lawyerstab?.messagezip || "Código postal"} 
-                      keyboardType="numeric" maxLength={5} value={zipCode} 
-                      onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
-                      placeholderTextColor={DynamicColors.subtext} 
+                      placeholder="Código postal" keyboardType="numeric" maxLength={5} value={zipCode} 
+                      onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={DynamicColors.subtext} 
                     />
                     <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 48, height: 48 }}>
                       <LinearGradient colors={isZipValid ? orangeGradient : ['#CFD8DC', '#B0BEC5']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
@@ -639,7 +662,7 @@ export default function StoresScreen() {
                   <View style={{ marginBottom: 15 }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
                       {CATEGORIES_LIST.map((area, index) => {
-                         const iconName = ICONS_ARRAY[index] || 'storefront';
+                         const iconName = ICONS_ARRAY[index] || 'heart';
                          const isActive = selectedCategoryIdx === index;
                          return (
                           <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -662,16 +685,10 @@ export default function StoresScreen() {
 
                   <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
                     <MapComponent 
-                      mapRef={mapRef} 
-                      userLocation={userLocation} 
-                      showMarkers={showMarkers} 
-                      onZoom={handleZoom} 
-                      dataSource={showMarkers ? results : []} 
-                      mapKey={mapKey} 
-                      onMarkerPress={handleMarkerSelection} 
-                      showsUserLocation={true}
+                      mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} 
+                      onZoom={handleZoom} dataSource={showMarkers ? results : []} 
+                      mapKey={mapKey} onMarkerPress={handleMarkerSelection} showsUserLocation={true}
                     />
-                    
                     {isWeb && (
                       <TouchableOpacity onPress={() => getCurrentLocation(true)} style={{ position: 'absolute', bottom: 15, right: 15, backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 25, borderWidth: 1, borderColor: DynamicColors.border, zIndex: 99, elevation: 99 }}>
                         <MaterialCommunityIcons name="crosshairs-gps" size={22} color={DynamicColors.text} />
@@ -682,22 +699,40 @@ export default function StoresScreen() {
                   <View style={{ marginTop: 20 }}>
                     {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore : t.genericbtn?.resultone)}</ThemedText>}
                     {isFilteredByMap && (
-                      <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accenticon }}>
+                      <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accenticon }}>
                         <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accenticon} />
-                        <ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
+                        <ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>{t.genericbtn.viewallresults}</ThemedText>
                       </TouchableOpacity>
                     )}
-                    {results.map((store) => <StoreCard key={store.id} store={store} />)}
+                    {results.map((store) => <SupportCard key={store.id} store={store} />)}
                   </View>
                 </ScrollView>
               ) : (
+                /* --- VISTA WEB (DOS COLUMNAS) --- */
                 <View style={{ flex: 1, flexDirection: 'row' }}>
                   
+                  {/* SIDEBAR IZQUIERDA */}
                   <View style={stylesUnified.webSidebar}>
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{(t.storestab?.category || 'Categoría') + 's'}</ThemedText>
+                    
+                    {/* BOTÓN EMERGENCIA SOS WEB CON ANIMACIÓN */}
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => Linking.openURL('tel:988')} style={{ marginBottom: 20 }}>
+                      <LinearGradient colors={['#FF416C', '#FF4B2B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 16, padding: 15, flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ position: 'relative', width: 40, height: 40, justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+                           <Animated.View style={{ position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#FFFFFF', transform: [{ scale: pulseRingAnim }], opacity: pulseOpacityAnim }} />
+                           <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+                               <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                                 <MaterialCommunityIcons name="phone-alert" size={20} color="#FFF" />
+                               </Animated.View>
+                           </View>
+                        </View>
+                        <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 14 }}>SOS 988</ThemedText>
+                      </LinearGradient>
+                    </TouchableOpacity>
+
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>Categorías</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {CATEGORIES_LIST.map((area, index) => {
-                        const iconName = ICONS_ARRAY[index] || 'storefront';
+                        const iconName = ICONS_ARRAY[index] || 'heart';
                         const isActive = selectedCategoryIdx === index;
                         return (
                           <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -718,15 +753,17 @@ export default function StoresScreen() {
                     </ScrollView>
                   </View>
 
+                  {/* CONTENIDO DERECHO (Mapa y Resultados) */}
                   <View style={{ flex: 1, flexDirection: 'row', marginLeft: 25 }}>
                     <View style={{ flex: 1 }}>
                       
+                      {/* ADMIN VERIFICACIÓN WEB */}
                       {isAdminMode && pendingStores.length > 0 && (
                         <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.storestab?.verify || 'Verificar'} ({pendingStores.length})</ThemedText>
+                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Verificar ({pendingStores.length})</ThemedText>
                           {pendingStores.map(store => (
                             <View key={store.id} style={{ marginBottom: 15 }}>
-                               <StoreCard store={store} />
+                               <SupportCard store={store} />
                                <TouchableOpacity onPress={() => approveStore(store)} style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
                                  <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
                                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar Contacto</ThemedText>
@@ -739,7 +776,7 @@ export default function StoresScreen() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
                         <TextInput 
                           style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                          placeholder={t.lawyerstab?.messagezip || "Código postal"} value={zipCode} maxLength={5} 
+                          placeholder="Código postal" value={zipCode} maxLength={5} 
                           onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={DynamicColors.subtext} 
                         />
                         <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 48, height: 48 }}>
@@ -750,26 +787,23 @@ export default function StoresScreen() {
                       </View>
 
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.genericbtn?.resultdomore || 'resultados'}</ThemedText>}
+                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} resultados</ThemedText>}
                         {isFilteredByMap && (
-                          <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}>
+                          <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}>
                             <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} />
-                            <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
+                            <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  Ver todos`}</ThemedText>
                           </TouchableOpacity>
                         )}
-                        {results.map((store) => <StoreCard key={store.id} store={store} />)}
+                        {results.map((store) => <SupportCard key={store.id} store={store} />)}
                       </ScrollView>
                     </View>
+                    
+                    {/* MAPA GRANDE (WEB) */}
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
                       <MapComponent 
-                        mapRef={mapRef} 
-                        userLocation={userLocation} 
-                        showMarkers={showMarkers} 
-                        dataSource={showMarkers ? results : []} 
-                        mapKey={mapKey} 
-                        onMarkerPress={handleMarkerSelection} 
-                        onZoom={handleZoom}
-                        showsUserLocation={true}
+                        mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} 
+                        dataSource={showMarkers ? results : []} mapKey={mapKey} 
+                        onMarkerPress={handleMarkerSelection} onZoom={handleZoom} showsUserLocation={true}
                       />
                       {isWeb && (
                         <TouchableOpacity onPress={() => getCurrentLocation(true)} style={{ position: 'absolute', bottom: 20, right: 20, backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)', padding: 12, borderRadius: 30, borderWidth: 1, borderColor: DynamicColors.border, zIndex: 99, elevation: 99 }}>
@@ -785,10 +819,10 @@ export default function StoresScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB para Sugerir Negocio (UNIVERSAL) */}
+      {/* FAB para Sugerir/Postularse (UNIVERSAL) */}
       <TouchableOpacity style={{ position: 'absolute', right: 20, bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }} onPress={() => setModalVisible(true)}>
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
-          <MaterialCommunityIcons name="store-plus-outline" size={32} color="#FFF" />
+          <MaterialCommunityIcons name="handshake" size={32} color="#FFF" />
         </LinearGradient>
       </TouchableOpacity>
     </View>

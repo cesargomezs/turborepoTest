@@ -160,6 +160,7 @@ export default function TabLayout() {
       <Tabs.Screen name="tabservices/events" options={{ title: t.servicestab.service4, href: null }} />
       <Tabs.Screen name="tabservices/stores" options={{ title: t.servicestab.service5, href: null }} />
       <Tabs.Screen name="tabservices/entrepreneurs" options={{ title: t.servicestab.service6, href: null }} />
+      <Tabs.Screen name="tabservices/support" options={{ title: t.servicestab.service7, href: null }} />
       <Tabs.Screen name="tabservices/post/id" options={{ href: null }} />
 
     </Tabs>

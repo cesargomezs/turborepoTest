@@ -78,8 +78,6 @@ export default function EventsScreen() {
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
   // --- TRADUCCIÓN DE CATEGORÍAS ---
-  // Tomamos el arreglo de tu JSON, si no existe o es incorrecto, usamos el interno como fallback.
-  // Nota: Asegúrate de tener "categoriesList": ["All", "Social", "Health", "Education", "Sports"] en en.json
   const rawCategories = t.eventstab?.categoriesList;
   const CATEGORIES_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_CATEGORIES.length
       ? rawCategories 
@@ -90,7 +88,7 @@ export default function EventsScreen() {
     { 
       id: 1, 
       title: 'Feria de Salud Rancho', 
-      category: 'Salud', // Guarda el valor interno (en español) para consistencia
+      category: 'Salud', 
       date: '15 May', 
       time: '10:00 AM', 
       timeEnd: '02:00 PM', 
@@ -136,8 +134,12 @@ export default function EventsScreen() {
   const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
 
   // --- BOTÓN AUTOAJUSTABLE BASE TIENDAS ---
-  const ActionBtn = ({ icon, text, color, bgColor, onPress, minWidth = 100 }: any) => (
-    <TouchableOpacity onPress={onPress} style={{ flexGrow: 1, minWidth: minWidth, height: 42, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8, marginRight: 8 }}>
+  const ActionBtn = ({ icon, text, color, bgColor, onPress, minWidth = 100, disabled = false }: any) => (
+    <TouchableOpacity 
+      disabled={disabled} 
+      onPress={onPress} 
+      style={{ flexGrow: 1, minWidth: minWidth, height: 42, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8, marginRight: 8, opacity: disabled ? 0.4 : 1 }}
+    >
        <MaterialCommunityIcons name={icon} size={16} color={color} />
        <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: color }}>{text}</ThemedText>
     </TouchableOpacity>
@@ -222,7 +224,7 @@ export default function EventsScreen() {
       const newEvent = { 
         id: Date.now(), 
         title: trimmedTitle, 
-        category: INTERNAL_CATEGORIES[formCategoryIdx] || 'Social', // Guarda el neutro para la BD
+        category: INTERNAL_CATEGORIES[formCategoryIdx] || 'Social',
         date: formDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
         time: formTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
         timeEnd: formTimeEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
@@ -253,6 +255,12 @@ export default function EventsScreen() {
     setEvents(prev => [approvedEvent, ...prev]);
     setPendingEvents(pendingEvents.filter(e => e.id !== event.id));
     triggerAlert("Aprobado", "El evento se ha publicado en la cartelera.");
+  };
+
+  // --- NUEVA FUNCIÓN PARA RECHAZAR ---
+  const rejectEvent = (id: number) => {
+    setPendingEvents(pendingEvents.filter(e => e.id !== id));
+    triggerAlert("Rechazado", "El evento ha sido eliminado de la lista de pendientes.");
   };
 
   const resetForm = () => {
@@ -318,19 +326,7 @@ export default function EventsScreen() {
                 {/* CONTENIDO PRINCIPAL */}
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
                   
-                  {/* CAJA DE APROBACIÓN ADMIN */}
-                  {isAdminMode && pendingEvents.length > 0 && (
-                    <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 15, borderWidth: 1, borderColor: '#FFD700' }}>
-                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingEvents.length})</ThemedText>
-                      {pendingEvents.map(ev => (
-                        <View key={ev.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
-                          <View style={{flex:1}}><ThemedText style={{ fontSize: 13, fontWeight:'bold', color: Colors.text }}>{ev.title}</ThemedText></View>
-                          <TouchableOpacity onPress={() => approveEvent(ev)}><MaterialCommunityIcons name="check-circle" size={24} color="green" /></TouchableOpacity>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
+                  {/* BUSCADOR */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, paddingHorizontal: 16, height: 48 }}>
                     <MaterialCommunityIcons name="magnify" size={22} color={Colors.iconInactive} style={{ marginRight: 10 }} />
                     <TextInput style={{ flex: 1, color: Colors.text, fontSize: 15, height: '100%', fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.eventstab.inputEvents} placeholderTextColor={Colors.iconInactive} value={searchQuery} onChangeText={setSearchQuery} />
@@ -367,6 +363,41 @@ export default function EventsScreen() {
                   )}
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+                    
+                    {/* CAJA DE APROBACIÓN ADMIN */}
+                    {isAdminMode && pendingEvents.length > 0 && (
+                      <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
+                        <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingEvents.length})</ThemedText>
+                        {pendingEvents.map(ev => (
+                          <View key={ev.id} style={{ marginBottom: 15 }}>
+                             <EventCard 
+                               item={ev} 
+                               isLargeWeb={false} 
+                               isDark={isDark} 
+                               Colors={Colors} 
+                               orangeGradient={orangeGradient} 
+                               onOpen={(it: any) => setSelectedEventDetails(it)} 
+                               ActionBtn={ActionBtn}
+                               t={t} 
+                               categoryLabels={CATEGORIES_LABELS}
+                               internalCategories={INTERNAL_CATEGORIES} 
+                             />
+                             {/* BOTONES RECHAZAR Y APROBAR */}
+                             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
+                               <TouchableOpacity onPress={() => rejectEvent(ev.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                 <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+                                 <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+                               </TouchableOpacity>
+                               <TouchableOpacity onPress={() => approveEvent(ev)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                 <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+                                 <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
+                               </TouchableOpacity>
+                             </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                       {filteredEvents.length === 0 ? (
                         <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
@@ -385,8 +416,8 @@ export default function EventsScreen() {
                             onOpen={(it: any) => setSelectedEventDetails(it)} 
                             ActionBtn={ActionBtn}
                             t={t} 
-                            categoryLabels={CATEGORIES_LABELS} // Pasamos los labels
-                            internalCategories={INTERNAL_CATEGORIES} // Pasamos los internos para el mapeo
+                            categoryLabels={CATEGORIES_LABELS}
+                            internalCategories={INTERNAL_CATEGORIES} 
                           />
                         ))
                       )}
@@ -603,6 +634,7 @@ export default function EventsScreen() {
                 {selectedEventDetails?.phone && (
                   <ActionBtn 
                     minWidth={130}
+                    disabled={!selectedEventDetails?.approved}
                     onPress={() => {
                       if(selectedEventDetails.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${selectedEventDetails.phone.replace(/\D/g, '')}`); } 
                       else { Linking.openURL(`tel:${selectedEventDetails.phone}`); }
@@ -613,7 +645,7 @@ export default function EventsScreen() {
                     bgColor={selectedEventDetails.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
                   />
                 )}
-                <ActionBtn minWidth={130} onPress={() => handleShare(selectedEventDetails)} icon="share-variant" text={t.genericbtn.sharingbtn} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+                <ActionBtn minWidth={130} disabled={!selectedEventDetails?.approved} onPress={() => handleShare(selectedEventDetails)} icon="share-variant" text={t.genericbtn.sharingbtn} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
               </View>
 
             </ScrollView>
@@ -634,9 +666,24 @@ export default function EventsScreen() {
 const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories }: any) => {
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
+  
+  // Verificamos si el evento está pendiente
+  const isPending = !item.approved;
 
   return (
-    <TouchableOpacity activeOpacity={0.9} onPress={() => onOpen(item)} style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderColor: Colors.border, borderRadius: 28 }}>
+    <TouchableOpacity 
+        activeOpacity={0.9} 
+        onPress={() => onOpen(item)} 
+        style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
+    >
+      {/* Banner de Pendiente de Revisión */}
+      {isPending && (
+        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
+            <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
+            <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
+        </View>
+      )}
+
       <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center' }}>
         <LinearGradient colors={orangeGradient} style={{ width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-check" size={14} color="#FFF" /></LinearGradient>
         <ThemedText style={{ marginLeft: 10, fontSize: 13, fontWeight: '800', flex: 1, color: Colors.text }}>{item.date}</ThemedText>
@@ -659,17 +706,18 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
       
       <View style={{ padding: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.01)' }}>
         <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Colors.text }} numberOfLines={1}>{item.title}</ThemedText>
-        <ThemedText style={{ color: Colors.subtext, fontSize: 13, marginTop: 4, marginBottom: 8 }} numberOfLines={2}>{item.description}</ThemedText>
+        <ThemedText style={{ color: Colors.subtext, fontSize: 13, marginTop: 4, marginBottom: 8 }} numberOfLines={isPending ? undefined : 2}>{item.description}</ThemedText>
         <View style={{ marginTop: 4 }}>
           <View style={{flexDirection:'row', alignItems:'center', marginBottom:4}}><MaterialCommunityIcons name="clock-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.text }}>{item.time} - {item.timeEnd}</ThemedText></View>
           <View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText></View>
         </View>
 
-        {/* BOTONES DE CONTACTO EN LA TARJETA */}
+        {/* BOTONES DE CONTACTO EN LA TARJETA (Se deshabilitan y bajan su opacidad si está pendiente) */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
           {item.phone && (
             <ActionBtn 
               minWidth={100}
+              disabled={isPending}
               onPress={(e: any) => {
                 e.stopPropagation?.();
                 if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
@@ -681,7 +729,15 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
               bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
             />
           )}
-          <ActionBtn minWidth={100} onPress={(e: any) => { e.stopPropagation?.(); Share.share({ message: item.title }) }} icon="share-variant" text={t.genericbtn?.sharingbtn || 'Compartir'} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+          <ActionBtn 
+            minWidth={100} 
+            disabled={isPending}
+            onPress={(e: any) => { e.stopPropagation?.(); Share.share({ message: item.title }) }} 
+            icon="share-variant" 
+            text={t.genericbtn?.sharingbtn || 'Compartir'} 
+            color={isDark ? '#4FC3F7' : '#1976D2'} 
+            bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
+           />
         </View>
 
       </View>

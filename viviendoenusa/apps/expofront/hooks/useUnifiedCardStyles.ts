@@ -69,7 +69,7 @@ export const useUnifiedCardStyles = () => {
     // --- SERVICIOS ---
     welcomeText: { fontSize: 30, fontWeight: '900', letterSpacing: -1, color: glassColors.text },
     middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8, color: glassColors.text },
-    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10 },
+    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 5 },
     webGridCentering: { justifyContent: 'center', gap: 20 },
     mobileCard: { width: '47%', height: 110, marginBottom: 16 },
     webCard: { width: '31%', height: 105, marginBottom: 20, minWidth: 260 },

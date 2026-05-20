@@ -416,7 +416,6 @@ export default function EntrepreneurshipScreen() {
       <TouchableOpacity activeOpacity={0.93}
         onPress={() => { setDetailItem(item); setShowReviewInput(false); }}
         style={[S.card, { backgroundColor: DC.cardBg, borderColor: DC.border }]}>
-
         {item.image && <Image source={{ uri: item.image }} style={S.cardImage} resizeMode="cover" />}
         <View style={S.verMasBadge}>
           <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
@@ -593,7 +592,7 @@ export default function EntrepreneurshipScreen() {
                     </View>
                   )}
 
-                  {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length} {t.lawyerstab?.resultdomore || 'resultados'}</ThemedText>}
+                  {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore : t.genericbtn?.resultone)}</ThemedText>}
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {results.length === 0 && (

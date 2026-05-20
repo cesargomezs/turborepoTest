@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ActivityIndicator,
@@ -47,7 +47,6 @@ const INTERNAL_IDS = ['all', 'clothes', 'furniture', 'food', 'others'];
 const ICONS_ARRAY = ['apps', 'tshirt-crew', 'sofa', 'food-apple', 'dots-horizontal-circle'];
 
 const DONATIONS_MOCK = [
-  // Nota: categoryIdx 4 = 'others', categoryIdx 2 = 'furniture'
   { id: 1, title: 'Coche de bebé (Stroller)', categoryIdx: 4, status: 'active', description: 'Marca Graco, excelente estado.', image: 'https://images.unsplash.com/photo-1591084728795-1149f32d9866?w=800', location: 'Rancho Cucamonga', phone: '+19090000000', ownerName: 'Admin', contactMethod: 'whatsapp' },
   { id: 2, title: 'Mesa de comedor', categoryIdx: 2, status: 'active', description: 'Madera clara, firme.', image: 'https://images.unsplash.com/photo-1577145946459-39a587ed504e?w=800', location: 'Ontario', phone: '+19091112222', ownerName: 'Maria Silva', contactMethod: 'phone' },
 ];
@@ -94,8 +93,6 @@ export default function DonationsScreen() {
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
   // --- TRADUCCIÓN SEGURA DE CATEGORÍAS ---
-  // Tomamos el arreglo de tu JSON. Asumimos que se llama subCategories u options.
-  // Si no existe, damos un array por defecto en español para que no se rompa la app.
   const rawCategories = (t.donationstab as any)?.subCategories || (t.donationstab as any)?.categories;
   const CATEGORY_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_IDS.length
       ? rawCategories 
@@ -104,7 +101,6 @@ export default function DonationsScreen() {
   const [donations, setDonations] = useState(DONATIONS_MOCK);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Guardamos el ÍNDICE de la categoría seleccionada (0 = Todos)
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [viewStatus, setViewStatus] = useState<'active' | 'delivered'>('active');
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -114,7 +110,7 @@ export default function DonationsScreen() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formCategoryIdx, setFormCategoryIdx] = useState(4); // 4 = Otros
+  const [formCategoryIdx, setFormCategoryIdx] = useState(4); 
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formContactMethod, setFormContactMethod] = useState<'whatsapp' | 'phone'>('whatsapp');
   const [formPhone, setFormPhone] = useState('');
@@ -159,7 +155,7 @@ export default function DonationsScreen() {
       const newEntry = {
         id: Date.now(), 
         title: trimmedTitle, 
-        categoryIdx: formCategoryIdx, // Guardamos índice
+        categoryIdx: formCategoryIdx,
         status: 'active' as const,
         description: trimmedDesc, 
         image: formImage, 
@@ -185,7 +181,6 @@ export default function DonationsScreen() {
     }
   };
 
-  // FILTRO: Compara usando índices numéricos
   const filteredDonations = useMemo(() => {
     return donations.filter(item => 
       item.status === viewStatus && 
@@ -342,7 +337,6 @@ export default function DonationsScreen() {
 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{(t.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
-                  {/* Ocultamos el índice 0 ('Todos') del formulario */}
                   {CATEGORY_LABELS.map((catLabel: string, index: number) => {
                     if (index === 0) return null; 
 
@@ -424,8 +418,8 @@ export default function DonationsScreen() {
   );
 }
 
-// --- 3. COMPONENTE DE TARJETA DE DONACIÓN ---
-const DonationCard = memo(({ item, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels }: any) => {
+// --- 3. COMPONENTE DE TARJETA DE DONACIÓN (SIN MEMO) ---
+const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels }: any) => {
   const isOwner = item.ownerName === currentUserName;
   const isDelivered = item.status === 'delivered';
   const isWhatsapp = item.contactMethod === 'whatsapp';
@@ -459,7 +453,7 @@ const DonationCard = memo(({ item, currentUserName, isLargeWeb, isDark, Colors, 
       <TouchableOpacity activeOpacity={0.9} onPress={() => onPreview(item.image)}>
         <Image source={{ uri: item.image }} style={{ width: '100%', aspectRatio: 16 / 10, opacity: isDelivered ? 0.6 : 1 }} resizeMode="cover" />
         
-        {/* --- ETIQUETA "VER DETALLE" AÑADIDA AQUÍ SOBRE LA IMAGEN --- */}
+        {/* --- ETIQUETA "VER DETALLE" --- */}
         <View style={{ position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
           <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
           <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
@@ -487,23 +481,28 @@ const DonationCard = memo(({ item, currentUserName, isLargeWeb, isDark, Colors, 
           {!isDelivered && (
             <TouchableOpacity onPress={handleContact} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isWhatsapp ? 'rgba(37,211,102,0.1)' : 'rgba(255, 95, 109, 0.15)' }}>
                <MaterialCommunityIcons name={isWhatsapp ? 'whatsapp' : 'phone'} size={18} color={isWhatsapp ? '#25D366' : Colors.accent} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>{t.genericbtn.contactme}</ThemedText>
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>{(t.genericbtn as any)?.contactme || 'Contactar'}</ThemedText>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity onPress={() => Share.share({ message: item.title })} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
             <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-            <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.genericbtn.sharingbtn}</ThemedText>
+            <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.genericbtn as any)?.sharingbtn || 'Compartir'}</ThemedText>
           </TouchableOpacity>
 
           {isOwner && (
             <TouchableOpacity onPress={() => onToggleStatus(item.id)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDelivered ? 'rgba(76, 175, 80, 0.1)' : (isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0') }}>
-              <MaterialCommunityIcons name={isDelivered ? "refresh" : "archive-check"} size={18} color={isDelivered ? Colors.success : (isDark ? '#FFF' : '#444')} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDelivered ? Colors.success : (isDark ? '#FFF' : '#444') }}>{isDelivered ? ((t.donationstab as any)?.activateBtn || 'Activar') : ((t.donationstab as any)?.deliverBtn || 'Entregar')}</ThemedText>
-            </TouchableOpacity>
+  <MaterialCommunityIcons name={isDelivered ? "refresh" : "archive-check"} size={18} color={isDelivered ? Colors.success : (isDark ? '#FFF' : '#444')} />
+  <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDelivered ? Colors.success : (isDark ? '#FFF' : '#444') }}>
+    {/* LÓGICA BLINDADA: Busca en donationstab, si no está busca en la raíz, y si no, pone el texto por defecto */}
+    {isDelivered 
+      ? (t.donationstab?.activateBtn || t?.activateBtn || 'Activar') 
+      : (t.donationstab?.deliverBtn || t?.deliverBtn || 'Entregar')}
+  </ThemedText>
+</TouchableOpacity>
           )}
         </View>
       </View>
     </View>
   );
-});
+};
