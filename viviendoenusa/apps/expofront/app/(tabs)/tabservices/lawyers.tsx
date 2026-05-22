@@ -3,7 +3,7 @@ import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, ActivityIndicator, Image, Linking, Alert,
-  Modal, KeyboardAvoidingView,
+  Modal, KeyboardAvoidingView, Share, ColorValue
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -11,6 +11,8 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import MapView from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -22,6 +24,7 @@ import { getContentCardStyles } from 'app/src/styles/contentcommunity';
 import MapComponent from '@/components/Map';
 
 import badWordsData from '../../../utils/babwords.json';
+import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -29,6 +32,10 @@ const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
   return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
 };
+
+const COUNTRIES = [
+  { code: '+1', flag: '🇺🇸', name: 'USA' }
+];
 
 const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
@@ -59,7 +66,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         ))}
       </View>
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment} placeholder="Escribe tu opinión..." placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16 }} />
+        <TextInput value={comment} onChangeText={setComment} placeholder="Escribe tu opinión..." placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
@@ -70,6 +77,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
+// --- ICONOS Y NUEVAS ESPECIALIDADES ---
 const AREA_ICONS: Record<string, { lib: any, name: string }> = {
   'General': { lib: MaterialCommunityIcons, name: 'gavel' },
   'Inmigración': { lib: MaterialCommunityIcons, name: 'passport' },
@@ -77,14 +85,17 @@ const AREA_ICONS: Record<string, { lib: any, name: string }> = {
   'Accidentes': { lib: FontAwesome5, name: 'car-crash' },
   'Laboral': { lib: MaterialCommunityIcons, name: 'briefcase' },
   'Criminal': { lib: MaterialCommunityIcons, name: 'handcuffs' },
+  'Pro Bono': { lib: MaterialCommunityIcons, name: 'hand-heart' },
+  'Civil': { lib: MaterialCommunityIcons, name: 'scale-balance' },
+  'Bienes Raíces': { lib: MaterialCommunityIcons, name: 'home-city' },
   'Default': { lib: MaterialCommunityIcons, name: 'scale-balance' }
 };
 
 const DATA_SOURCE = [
-  { id: 1, name: 'Neil Panchal Law', area: 'General', rating: 5.0, lat: 34.0668, lng: -117.6115, phone: '+19517036499', image: 'https://randomuser.me/api/portraits/men/32.jpg', reviews: [] },
-  { id: 2, name: 'BANDERAS LAW, PC', area: 'Inmigración', rating: 5.0, lat: 34.0668, lng: -117.5783, phone: '+19097070000', image: 'https://randomuser.me/api/portraits/women/44.jpg', reviews: [] },
-  { id: 3, name: 'Law Office of Cierra Esq', area: 'Familia', rating: 4.8, lat: 34.0696, lng: -117.5782, phone: '+18883644444', image: 'https://randomuser.me/api/portraits/women/22.jpg', reviews: [] },
-  { id: 4, name: 'Centro Legal De Accidentes', area: 'Accidentes', rating: 4.9, lat: 34.0652, lng: -117.6509, phone: '+18559126909', image: 'https://randomuser.me/api/portraits/men/45.jpg', reviews: [] }
+  { id: 1, name: 'Neil Panchal Law', area: 'General', rating: 5.0, lat: 34.0668, lng: -117.6115, phone: '+19517036499', image: 'https://randomuser.me/api/portraits/men/32.jpg', reviews: [], status: 'approved' },
+  { id: 2, name: 'BANDERAS LAW, PC', area: 'Inmigración', rating: 5.0, lat: 34.0668, lng: -117.5783, phone: '+19097070000', image: 'https://randomuser.me/api/portraits/women/44.jpg', reviews: [], status: 'approved' },
+  { id: 3, name: 'Law Office of Cierra Esq', area: 'Familia', rating: 4.8, lat: 34.0696, lng: -117.5782, phone: '+18883644444', image: 'https://randomuser.me/api/portraits/women/22.jpg', reviews: [], status: 'approved' },
+  { id: 4, name: 'Centro Legal De Accidentes', area: 'Accidentes', rating: 4.9, lat: 34.0652, lng: -117.6509, phone: '+18559126909', image: 'https://randomuser.me/api/portraits/men/45.jpg', reviews: [], status: 'approved' }
 ];
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -99,6 +110,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 export default function LawyersScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null); 
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
@@ -113,7 +125,8 @@ export default function LawyersScreen() {
   const styles = getContentCardStyles(isDark);
   const localStyles = useUnifiedCardStyles(); 
 
-  // --- SE AGREGARON LOS COLORES INACTIVOS AQUÍ ---
+  const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
+
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#455A64', 
@@ -125,10 +138,14 @@ export default function LawyersScreen() {
   };
 
   const [zipCode, setZipCode] = useState('');
-  const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) ? t.lawyerstab.practiceAreas : [];
-  const allFilterText = PRACTICE_AREAS[0] || '';
+  
+  // Agregamos las nuevas especialidades a la lista predeterminada si no vienen del idioma
+  const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) ? t.lawyerstab.practiceAreas : ['Todas', 'General', 'Inmigración', 'Familia', 'Accidentes', 'Laboral', 'Criminal', 'Pro Bono', 'Civil', 'Bienes Raíces'];
+  
+  const allFilterText = PRACTICE_AREAS[0] || 'Todas';
   const [selectedArea, setSelectedArea] = useState(allFilterText);
   const [loading, setLoading] = useState(false);
+  const [localData, setLocalData] = useState<any[]>(DATA_SOURCE);
   const [results, setResults] = useState<any[]>([]); 
   const [userLocation, setUserLocation] = useState<any>(null);
   const [showMarkers, setShowMarkers] = useState(false);
@@ -137,6 +154,20 @@ export default function LawyersScreen() {
 
   const [selectedLawyer, setSelectedLawyer] = useState<any>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
+
+  // --- ESTADOS DE CREACIÓN Y ADMIN ---
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [formName, setFormName] = useState('');
+  const [formAddress, setFormAddress] = useState(''); 
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
+  const [formZip, setFormZip] = useState('');
+  const [formPhone, setFormPhone] = useState(''); 
+  const [countryIdx, setCountryIdx] = useState(0); 
+  const [formImage, setFormImage] = useState<string | null>(null);
+  
+  const [pendingLawyers, setPendingLawyers] = useState<any[]>([]);
+  const [isAdminMode, setIsAdminMode] = useState(false);
 
   const isZipValid = zipCode.length === 5;
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
@@ -195,11 +226,11 @@ export default function LawyersScreen() {
       setShowMarkers(true);
       if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
-      let filtered = (areaToSearch === allFilterText) ? [...DATA_SOURCE] : DATA_SOURCE.filter(l => l.area === areaToSearch);
+      let filtered = (areaToSearch === allFilterText) ? [...localData] : localData.filter(l => l.area === areaToSearch);
       filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
       setResults(filtered);
       setMapKey(k => k + 1);
-    } catch (e) { if(!isWeb) Alert.alert("Error", t.lawyerstab?.zipnofound); } finally { setLoading(false); }
+    } catch (e) { if(!isWeb) Alert.alert("Error", t.lawyerstab?.zipnofound || "No se encontró el ZIP"); } finally { setLoading(false); }
   };
 
   const handleMarkerSelection = (lawyer: any) => {
@@ -219,11 +250,99 @@ export default function LawyersScreen() {
     if (url) Linking.openURL(url);
   };
 
+  // --- FUNCIONES CREACIÓN Y ADMIN ---
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+    if (!result.canceled) setFormImage(result.assets[0].uri);
+  };
+
+  const handlePublishLawyer = async () => {
+    if (!formName.trim() || !formAddress.trim() || formZip.length < 5 || !formPhone.trim()) {
+      const msg = "Debes completar todos los campos obligatorios.";
+      return isWeb ? window.alert(msg) : Alert.alert("Atención", msg);
+    }
+    setIsPublishing(true);
+
+    try {
+      if (formImage) {
+        const esSegura = await validarImagenEnServidor(formImage);
+        if (!esSegura) {
+          setIsPublishing(false);
+          const title = "Error";
+          const desc = "Imagen inválida o inapropiada";
+          if (isWeb) { window.alert(`${title}\n${desc}`); } 
+          else { Alert.alert(title, desc); }
+          return;
+        }
+      }
+
+      const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '+1000000000';
+      const mockLat = userLocation ? userLocation.latitude + (Math.random() * 0.01 - 0.005) : 34.0934;
+      const mockLng = userLocation ? userLocation.longitude + (Math.random() * 0.01 - 0.005) : -117.5847;
+
+      const newEntry = {
+        id: Date.now(), 
+        name: formName, 
+        area: PRACTICE_AREAS[formCategoryIdx] || PRACTICE_AREAS[1],
+        address: formAddress,
+        zip: formZip, 
+        image: formImage || 'https://randomuser.me/api/portraits/lego/1.jpg',
+        rating: 5.0, 
+        lat: mockLat, 
+        lng: mockLng, 
+        phone: fullPhone, 
+        reviews: [],
+        status: 'pending' // Estado "Pendiente"
+      };
+
+      setPendingLawyers([newEntry, ...pendingLawyers]);
+      
+      const success = "Revisaremos la información para agregar al profesional a la red.";
+      isWeb ? window.alert(success) : Alert.alert("Solicitud Enviada", success);
+      
+      setModalVisible(false);
+      setFormName(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setFormImage(null); setFormCategoryIdx(1);
+
+    } catch (err) {
+      const errorTitle = "Error de red";
+      const errorDesc = "No se pudo enviar la solicitud.";
+      if (isWeb) { window.alert(`${errorTitle}\n${errorDesc}`); } 
+      else { Alert.alert(errorTitle, errorDesc); }
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const approveLawyer = (lawyer: any) => {
+    const approvedLawyer = { ...lawyer, status: 'approved' };
+    setLocalData(prev => [approvedLawyer, ...prev]); 
+    if (showMarkers) { setResults(prev => [approvedLawyer, ...prev]); }
+    setPendingLawyers(pendingLawyers.filter(s => s.id !== lawyer.id));
+    setMapKey(k => k + 1); 
+    
+    if (!isWeb && mapRef.current) {
+        mapRef.current.animateToRegion({ latitude: lawyer.lat, longitude: lawyer.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 1000);
+    }
+  };
+
+  const rejectLawyer = (id: number) => {
+    setPendingLawyers(pendingLawyers.filter(l => l.id !== id));
+  };
+
   const LawyerCard = ({ lawyer }: { lawyer: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
+    const isPending = lawyer.status === 'pending';
+
     return (
-      <View style={[styles.lawyerCard, { flexDirection: 'column', padding: 15, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)', marginBottom: 12, borderRadius: 20, borderWidth: 1, borderBottomColor: Colors.border, borderColor: Colors.border, shadowOpacity: 0, elevation: 0 }]}>
+      <View style={[styles.lawyerCard, { flexDirection: 'column', padding: 15, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)', marginBottom: 12, borderRadius: 20, borderWidth: 1, borderBottomColor: isPending ? '#FFB74D' : Colors.border, borderColor: isPending ? '#FFB74D' : Colors.border, shadowOpacity: 0, elevation: 0 }]}>
         
+        {isPending && (
+          <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 8, borderRadius: 10, marginBottom: 10, flexDirection: 'row', alignItems: 'center' }}>
+              <MaterialCommunityIcons name="clock-alert-outline" size={16} color="#FFB74D" />
+              <ThemedText style={{ color: '#FFB74D', fontSize: 11, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación</ThemedText>
+          </View>
+        )}
+
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Image source={{ uri: lawyer.image }} style={{ width: 60, height: 60, borderRadius: 30 }} />
           <View style={{flex: 1, marginLeft: 15}}>
@@ -237,28 +356,27 @@ export default function LawyersScreen() {
           </View>
         </View>
 
-        {/* --- CORRECCIÓN WEB: BOTONES CON FLEXWRAP PARA NO CORTARSE --- */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 }}>
-          <TouchableOpacity onPress={() => setSelectedLawyer(lawyer)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#E0E0E0' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
+          <TouchableOpacity onPress={() => !isPending && setSelectedLawyer(lawyer)} disabled={isPending} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#E0E0E0' }}>
              <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} />
              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.lawyerstab?.reviews}</ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => openDirections(lawyer)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
+          <TouchableOpacity onPress={() => !isPending && openDirections(lawyer)} disabled={isPending} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
             <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
             <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.lawyerstab?.route}</ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => Linking.openURL(`tel:${lawyer.phone}`)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
+          <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${lawyer.phone}`)} disabled={isPending} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
             <MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} />
             <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.lawyerstab?.call}</ThemedText>
           </TouchableOpacity>
         </View>
-
       </View>
     );
   };
 
   return (
     <View style={{ flex: 1 }}>
+      {/* MODAL REVIEW */}
       <Modal visible={!!selectedLawyer} transparent animationType="slide">
         <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
@@ -312,6 +430,81 @@ export default function LawyersScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL CREAR ABOGADO */}
+      <Modal visible={isModalVisible} animationType="slide" transparent statusBarTranslucent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
+          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 550 : '100%' }}>
+            <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: Colors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
+              {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+              {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
+                <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>Sugerir Abogado</ThemedText>
+                <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+              </View>
+              <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
+                
+                <TouchableOpacity onPress={pickImage} style={{ height: 120, width: 120, alignSelf: 'center', borderRadius: 60, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 2, borderStyle: 'dashed', borderColor: Colors.border, overflow: 'hidden', backgroundColor: Colors.inputBg }}>
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} color={Colors.text} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 4 }}>{t.genericbtn.photo}</ThemedText></View>}
+                </TouchableOpacity>
+                
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>Área de Práctica</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
+                  {PRACTICE_AREAS.map((area, index) => {
+                    if (index === 0) return null; 
+                    const isActive = formCategoryIdx === index;
+                    const iconInfo = AREA_ICONS[area] || AREA_ICONS['Default'];
+                    return (
+                      <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                        {isActive ? (
+                          <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                            <iconInfo.lib name={iconInfo.name} size={14} color="#FFF" style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'capitalize' }}>{area}</ThemedText>
+                          </LinearGradient>
+                        ) : (
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
+                            <iconInfo.lib name={iconInfo.name} size={14} color={Colors.iconInactive} style={{ marginRight: 6 }} />
+                            <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600',textTransform:'capitalize' }}>{area}</ThemedText>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder="Nombre del Abogado / Firma" placeholderTextColor={Colors.subtext} value={formName} onChangeText={setFormName} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder="Dirección del Despacho" placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={setFormAddress} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder="Código Postal" placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
+                
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform: 'capitalize' }}>Teléfono de Oficina</ThemedText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, overflow: 'hidden' }}>
+                  <TouchableOpacity 
+                    activeOpacity={0.7}
+                    onPress={() => setCountryIdx(prev => (prev === 0 ? 0 : 0))} // Solo hay 1 pais por ahora
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}
+                  >
+                    <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText>
+                    <ThemedText style={{ fontWeight: '800', color: Colors.text }}>{COUNTRIES[countryIdx].code}</ThemedText>
+                  </TouchableOpacity>
+                  <TextInput value={formPhone} onChangeText={setFormPhone}
+                    placeholder="(909) 000-0000"
+                    placeholderTextColor={Colors.subtext}
+                    keyboardType="phone-pad"
+                    style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                </View>
+
+                <TouchableOpacity onPress={handlePublishLawyer} disabled={isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
+                  <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
+                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Enviar Sugerencia</ThemedText>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View style={[localStyles.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }}>
@@ -323,12 +516,37 @@ export default function LawyersScreen() {
                   <TouchableOpacity onPress={() => { setResults([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <MaterialCommunityIcons name="scale-balance" size={40} color={Colors.text} style={{opacity: 0.2}} />
+                  <TouchableOpacity onLongPress={() => setIsAdminMode(!isAdminMode)}>
+                     <MaterialCommunityIcons name="scale-balance" size={40} color={isAdminMode ? Colors.accent : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
+                  </TouchableOpacity>
                 </View>
               </View>
 
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  
+                  {/* ADMIN PENDIENTES (MÓVIL) */}
+                  {isAdminMode && pendingLawyers.length > 0 && (
+                    <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
+                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingLawyers.length})</ThemedText>
+                      {pendingLawyers.map(lawyer => (
+                        <View key={lawyer.id} style={{ marginBottom: 15 }}>
+                           <LawyerCard lawyer={lawyer} />
+                           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
+                             <TouchableOpacity onPress={() => rejectLawyer(lawyer.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                               <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+                               <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+                             </TouchableOpacity>
+                             <TouchableOpacity onPress={() => approveLawyer(lawyer)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                               <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+                               <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
+                             </TouchableOpacity>
+                           </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
                     <TextInput style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1 }]} placeholder={t.lawyerstab?.messagezip} keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={Colors.subtext} />
                     <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 48, height: 48 }}>
@@ -417,23 +635,47 @@ export default function LawyersScreen() {
                   </View>
                   <View style={{ flex: 1, flexDirection: 'row', marginLeft: 25 }}>
                     <View style={{ flex: 1 }}>
+                      
+                      {/* ADMIN PENDIENTES (WEB) */}
+                      {isAdminMode && pendingLawyers.length > 0 && (
+                        <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
+                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingLawyers.length})</ThemedText>
+                          {pendingLawyers.map(lawyer => (
+                            <View key={lawyer.id} style={{ marginBottom: 15 }}>
+                               <LawyerCard lawyer={lawyer} />
+                               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
+                                 <TouchableOpacity onPress={() => rejectLawyer(lawyer.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                   <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+                                 </TouchableOpacity>
+                                 <TouchableOpacity onPress={() => approveLawyer(lawyer)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                   <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
+                                 </TouchableOpacity>
+                               </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
-                        <TextInput style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1 }]} placeholder={t.lawyerstab?.messagezip} value={zipCode} maxLength={5} onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={Colors.subtext} />
+                        <TextInput style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} placeholder={t.lawyerstab?.messagezip} value={zipCode} maxLength={5} onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={Colors.subtext} />
                         <TouchableOpacity onPress={() => handleSearch()} style={{ width: 48, height: 48 }} disabled={!isZipValid}>
                           <LinearGradient colors={isZipValid ? ['#FF5F6D', '#FFC371'] : ['#CFD8DC', '#B0BEC5']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
                             <MaterialCommunityIcons name="magnify" size={22} color="#fff" />
                           </LinearGradient>
                         </TouchableOpacity>
                       </View>
+                      
                       <ScrollView showsVerticalScrollIndicator={false}>
-                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: Colors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.lawyerstab?.resultdomore}</ThemedText>}
+                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: Colors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.genericbtn?.resultdomore}</ThemedText>}
                         {isFilteredByMap && (
                           <TouchableOpacity onPress={() => { setIsFilteredByMap(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: Colors.accent }}>
                             <MaterialCommunityIcons name="filter-remove-outline" size={16} color={Colors.accent} />
-                            <ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.lawyerstab?.viewallresults }`}</ThemedText>
+                            <ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults }`}</ThemedText>
                           </TouchableOpacity>
                         )}
-                        {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
+                        {results.length > 0 ? results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />) : localData.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
                       </ScrollView>
                     </View>
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, position: 'relative' }}>
@@ -441,7 +683,7 @@ export default function LawyersScreen() {
                         mapRef={mapRef} 
                         userLocation={userLocation} 
                         showMarkers={showMarkers} 
-                        dataSource={results.length > 0 ? results : DATA_SOURCE} 
+                        dataSource={results.length > 0 ? results : localData} 
                         mapKey={mapKey} 
                         onMarkerPress={handleMarkerSelection} 
                         onZoom={handleZoom}
@@ -460,6 +702,13 @@ export default function LawyersScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* FAB AGREGAR ABOGADO */}
+      <TouchableOpacity onPress={() => setModalVisible(true)} style={[localStyles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+        <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
+          <MaterialCommunityIcons name="scale-balance" size={28} color="#FFF" />
+        </LinearGradient>
+      </TouchableOpacity>
     </View>
   );
 }

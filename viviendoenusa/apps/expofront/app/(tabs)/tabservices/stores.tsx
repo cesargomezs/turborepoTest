@@ -612,10 +612,17 @@ export default function StoresScreen() {
                       {pendingStores.map(store => (
                         <View key={store.id} style={{ marginBottom: 15 }}>
                            <StoreCard store={store} />
-                           <TouchableOpacity onPress={() => approveStore(store)} style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                             <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                             <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar Contacto</ThemedText>
-                           </TouchableOpacity>
+                           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
+                           
+                            <TouchableOpacity onPress={() => approveStore(store)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+                                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+                              </TouchableOpacity>
+                            <TouchableOpacity onPress={() => approveStore(store)} style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                              <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar </ThemedText>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       ))}
                     </View>

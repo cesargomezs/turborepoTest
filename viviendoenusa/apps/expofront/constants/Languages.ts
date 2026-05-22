@@ -31,6 +31,8 @@ export const translations = {
       resultone: "Resultado encontrado",
       resultdomore: "Resultados encontrados",
       viewallresults: "Ver todos los resultados",
+      photo:"Foto",
+      choisephoto:"Seleccionar fotografía",
     },
     genericlabel:{
       labelopinion:"Escribe tu opinión..."
@@ -72,7 +74,7 @@ export const translations = {
     },
     lawyerstab: {
       label: "Especialidades",
-      practiceAreas: ['Todas', 'Familia', 'Penal', 'Inmigración', 'Accidentes'], 
+      practiceAreas: ['Todas', 'General', 'Inmigración', 'Familia', 'Accidentes', 'Laboral', 'Criminal', 'Pro Bono', 'Civil', 'Bienes Raíces'],
       //practiceAreas: "all",
       messagezip: "Código Postal",
       validatezip: "Código Postal no encontrado.",
@@ -281,6 +283,8 @@ export const translations = {
       resultone: "Result found",
       resultdomore: "Results found",
       viewallresults: "View all results",
+      photo:"Foto",
+      choisephoto: "Photo",
     },
     genericlabel:{
       labelopinion:"Write your opinion..."
@@ -321,7 +325,7 @@ export const translations = {
     },
     lawyerstab: {
       label: "Specialties",
-      practiceAreas: ['All' , 'Family' , 'Criminal', 'Immigration', 'Accidents'],
+      practiceAreas:  ['All', 'General', 'Immigration', 'Family', 'Accidents', 'Labor', 'Criminal', 'Pro Bono', 'Civil', 'Real Estate'],
       //practiceAreas: "all",
       messagezip: "ZIP Code",
       validatezip: "ZIP not found.",
