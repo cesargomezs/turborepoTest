@@ -6,8 +6,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "migrate:dev": "drizzle-kit generate:migration --schema ./src/schema.ts --out ./drizzle/migrations --driver pg --db-url $DATABASE_URL",
-    "push:dev": "drizzle-kit push --schema ./src/schema.ts --driver pg --db-url $DATABASE_URL",
-    "pull:dev": "drizzle-kit pull --schema ./src/schema.ts --driver pg --db-url $DATABASE_URL"
+    "push:dev": "drizzle-kit push",
+    "pull:dev": "drizzle-kit pull --schema ./src/schema.ts --driver pg --db-url $DATABASE_URL",
+    "migrate:prod": "drizzle-kit generate:migration --schema ./src/schema.ts --out ./drizzle/migrations --driver pg --db-url $DATABASE_URL_PROD",
+    "db:generate": "drizzle-kit generate"
   },
   "keywords": [],
   "author": "",

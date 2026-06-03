@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
-  TextInput, ActivityIndicator, Image, Linking, Alert,
-  Modal, KeyboardAvoidingView, Share, ColorValue
+  TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert,
+  Modal, KeyboardAvoidingView, ColorValue
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -25,6 +25,9 @@ import MapComponent from '@/components/Map';
 
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
+
+// 📡 URL BASE FIJA Y SEGURA CON TU IP CONFIRMADA 
+const API_BASE_URL = 'http://192.168.1.248:3000/lawyers';
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -77,7 +80,6 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
-// --- ICONOS Y NUEVAS ESPECIALIDADES ---
 const AREA_ICONS: Record<string, { lib: any, name: string }> = {
   'General': { lib: MaterialCommunityIcons, name: 'gavel' },
   'Inmigración': { lib: MaterialCommunityIcons, name: 'passport' },
@@ -90,13 +92,6 @@ const AREA_ICONS: Record<string, { lib: any, name: string }> = {
   'Bienes Raíces': { lib: MaterialCommunityIcons, name: 'home-city' },
   'Default': { lib: MaterialCommunityIcons, name: 'scale-balance' }
 };
-
-const DATA_SOURCE = [
-  { id: 1, name: 'Neil Panchal Law', area: 'General', rating: 5.0, lat: 34.0668, lng: -117.6115, phone: '+19517036499', image: 'https://randomuser.me/api/portraits/men/32.jpg', reviews: [], status: 'approved' },
-  { id: 2, name: 'BANDERAS LAW, PC', area: 'Inmigración', rating: 5.0, lat: 34.0668, lng: -117.5783, phone: '+19097070000', image: 'https://randomuser.me/api/portraits/women/44.jpg', reviews: [], status: 'approved' },
-  { id: 3, name: 'Law Office of Cierra Esq', area: 'Familia', rating: 4.8, lat: 34.0696, lng: -117.5782, phone: '+18883644444', image: 'https://randomuser.me/api/portraits/women/22.jpg', reviews: [], status: 'approved' },
-  { id: 4, name: 'Centro Legal De Accidentes', area: 'Accidentes', rating: 4.9, lat: 34.0652, lng: -117.6509, phone: '+18559126909', image: 'https://randomuser.me/api/portraits/men/45.jpg', reviews: [], status: 'approved' }
-];
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 3958.8;
@@ -138,14 +133,12 @@ export default function LawyersScreen() {
   };
 
   const [zipCode, setZipCode] = useState('');
-  
-  // Agregamos las nuevas especialidades a la lista predeterminada si no vienen del idioma
   const PRACTICE_AREAS: string[] = Array.isArray(t?.lawyerstab?.practiceAreas) ? t.lawyerstab.practiceAreas : ['Todas', 'General', 'Inmigración', 'Familia', 'Accidentes', 'Laboral', 'Criminal', 'Pro Bono', 'Civil', 'Bienes Raíces'];
   
   const allFilterText = PRACTICE_AREAS[0] || 'Todas';
   const [selectedArea, setSelectedArea] = useState(allFilterText);
   const [loading, setLoading] = useState(false);
-  const [localData, setLocalData] = useState<any[]>(DATA_SOURCE);
+  const [localData, setLocalData] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]); 
   const [userLocation, setUserLocation] = useState<any>(null);
   const [showMarkers, setShowMarkers] = useState(false);
@@ -155,7 +148,6 @@ export default function LawyersScreen() {
   const [selectedLawyer, setSelectedLawyer] = useState<any>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
 
-  // --- ESTADOS DE CREACIÓN Y ADMIN ---
   const [isModalVisible, setModalVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
@@ -212,6 +204,7 @@ export default function LawyersScreen() {
     }
   }, []);
 
+  // 🚀 INTERCEPCIÓN Y MAPEADO SEGURO DE TU TRAMA DE POSTGRESQL
   const handleSearch = async (forcedArea?: string) => {
     const areaToSearch = typeof forcedArea === 'string' ? forcedArea : selectedArea;
     if (!isZipValid) return;
@@ -226,11 +219,36 @@ export default function LawyersScreen() {
       setShowMarkers(true);
       if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
-      let filtered = (areaToSearch === allFilterText) ? [...localData] : localData.filter(l => l.area === areaToSearch);
+      // ✅ Uso correcto de backticks para la variable zipCode
+      const response = await fetch(`${API_BASE_URL}?zip=${zipCode}`); 
+      const apiData = await response.json();
+
+      const transformedData = Array.isArray(apiData) ? apiData.map((item: any) => {
+        return {
+          id: item.id,
+          name: item.nameLawy || 'Sin nombre', 
+          area: item.area || 'General',
+          rating: item.totalRating !== undefined ? Number(item.totalRating) : (Number(item.rating) || 5.0),
+          lat: item.lat ? Number(item.lat) : 34.0668, 
+          lng: item.lng ? Number(item.lng) : -117.6115, 
+          phone: item.phone || '',
+          image: item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', 
+          reviews: Array.isArray(item.rating) ? item.rating : [], 
+          status: item.approved ? 'approved' : 'pending'
+        };
+      }) : [];
+
+      let filtered = (areaToSearch === allFilterText) ? [...transformedData] : transformedData.filter(l => l.area === areaToSearch);
       filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
+      
+      setLocalData(transformedData);
       setResults(filtered);
       setMapKey(k => k + 1);
-    } catch (e) { if(!isWeb) Alert.alert("Error", t.lawyerstab?.zipnofound || "No se encontró el ZIP"); } finally { setLoading(false); }
+    } catch (e) { 
+      if(!isWeb) Alert.alert("Error", t.lawyerstab?.zipnofound || "No se encontró el ZIP"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleMarkerSelection = (lawyer: any) => {
@@ -245,17 +263,17 @@ export default function LawyersScreen() {
     const url = Platform.select({
       ios: `maps:0,0?q=${label}@${lawyer.lat},${lawyer.lng}`,
       android: `geo:0,0?q=${lawyer.lat},${lawyer.lng}(${label})`,
-      web: `https://www.google.com/maps/search/?api=1&query=${lawyer.lat},${lawyer.lng}`
+      web: `http://googleusercontent.com/maps.google.com/?q=${lawyer.lat},${lawyer.lng}`
     });
-    if (url) Linking.openURL(url);
+    if (url) RNLinking.openURL(url);
   };
 
-  // --- FUNCIONES CREACIÓN Y ADMIN ---
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.7 });
     if (!result.canceled) setFormImage(result.assets[0].uri);
   };
 
+  // 🚀 PUBLICACIÓN ASÍNCRONA HACIA TU CONTROLADOR EXPRESS
   const handlePublishLawyer = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5 || !formPhone.trim()) {
       const msg = "Debes completar todos los campos obligatorios.";
@@ -280,22 +298,37 @@ export default function LawyersScreen() {
       const mockLat = userLocation ? userLocation.latitude + (Math.random() * 0.01 - 0.005) : 34.0934;
       const mockLng = userLocation ? userLocation.longitude + (Math.random() * 0.01 - 0.005) : -117.5847;
 
-      const newEntry = {
-        id: Date.now(), 
-        name: formName, 
+      const newEntryPayload = {
+        nameLawy: formName, 
         area: PRACTICE_AREAS[formCategoryIdx] || PRACTICE_AREAS[1],
         address: formAddress,
         zip: formZip, 
-        image: formImage || 'https://randomuser.me/api/portraits/lego/1.jpg',
-        rating: 5.0, 
+        imageUrl: formImage || 'https://randomuser.me/api/portraits/lego/1.jpg',
         lat: mockLat, 
         lng: mockLng, 
         phone: fullPhone, 
-        reviews: [],
-        status: 'pending' // Estado "Pendiente"
+        userId: "baeb641a-3fa4-4fef-9846-d75947d1bca9",
+        approved: false
       };
 
-      setPendingLawyers([newEntry, ...pendingLawyers]);
+      const response = await fetch(API_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEntryPayload)
+      });
+
+      const savedFromDB = await response.json();
+      
+      const normalizedPending = {
+        ...savedFromDB,
+        name: savedFromDB.nameLawy,
+        image: savedFromDB.imageUrl,
+        rating: 5.0,
+        reviews: [],
+        status: 'pending'
+      };
+
+      setPendingLawyers([normalizedPending, ...pendingLawyers]);
       
       const success = "Revisaremos la información para agregar al profesional a la red.";
       isWeb ? window.alert(success) : Alert.alert("Solicitud Enviada", success);
@@ -313,6 +346,7 @@ export default function LawyersScreen() {
     }
   };
 
+  /*
   const approveLawyer = (lawyer: any) => {
     const approvedLawyer = { ...lawyer, status: 'approved' };
     setLocalData(prev => [approvedLawyer, ...prev]); 
@@ -322,6 +356,47 @@ export default function LawyersScreen() {
     
     if (!isWeb && mapRef.current) {
         mapRef.current.animateToRegion({ latitude: lawyer.lat, longitude: lawyer.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 1000);
+    }
+  };*/
+  // 🚀 APROBAR ABOGADO: Conectado a tu ruta PUT /:id de Express
+  const approveLawyer = async (lawyer: any) => {
+    try {
+      // 1. Petición silenciosa a la base de datos
+      const response = await fetch(`${API_BASE_URL}/${lawyer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        // Le decimos a tu esquema de Drizzle que pase este registro a true
+        body: JSON.stringify({ approved: true }) 
+      });
+
+      if (!response.ok) throw new Error("Fallo al actualizar en el servidor");
+
+      // 2. Si la BD responde Ok, ejecutamos la magia visual en la app
+      const approvedLawyer = { ...lawyer, status: 'approved' };
+      
+      setLocalData(prev => [approvedLawyer, ...prev]); 
+      if (showMarkers) { setResults(prev => [approvedLawyer, ...prev]); }
+      
+      // Lo sacamos de la caja amarilla de revisión
+      setPendingLawyers(pendingLawyers.filter(s => s.id !== lawyer.id));
+      setMapKey(k => k + 1); 
+      
+      // Animación del mapa hacia el nuevo abogado aprobado
+      if (!isWeb && mapRef.current) {
+          mapRef.current.animateToRegion({ 
+            latitude: lawyer.lat, longitude: lawyer.lng, 
+            latitudeDelta: 0.02, longitudeDelta: 0.02 
+          }, 1000);
+      }
+
+      // Mensaje de éxito
+      const msg = "Abogado aprobado y publicado en el directorio.";
+      isWeb ? window.alert(msg) : Alert.alert("Éxito", msg);
+
+    } catch (error) {
+      console.error("Error al aprobar:", error);
+      const errMsg = "No se pudo aprobar al abogado en la base de datos.";
+      isWeb ? window.alert(errMsg) : Alert.alert("Error de conexión", errMsg);
     }
   };
 
@@ -349,7 +424,10 @@ export default function LawyersScreen() {
             <ThemedText style={{fontWeight: '800', fontSize: 16, color: Colors.text}}>{lawyer.name}</ThemedText>
             <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 4}}>
               <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
-              <ThemedText style={{color: Colors.text, fontSize: 13, fontWeight: '600', marginLeft: 4}}>{lawyer.rating.toFixed(1)}</ThemedText>
+              {/* Blindaje .toFixed(1) contra nulos */}
+              <ThemedText style={{color: Colors.text, fontSize: 13, fontWeight: '600', marginLeft: 4}}>
+                {typeof lawyer.rating === 'number' ? lawyer.rating.toFixed(1) : Number(lawyer.rating || 5).toFixed(1)}
+              </ThemedText>
               {dist !== null && <ThemedText style={{color: Colors.accent, fontSize: 13, fontWeight: '700'}}> • {dist} mi</ThemedText>}
             </View>
             <ThemedText style={{fontSize: 13, color: Colors.subtext, fontWeight: '800', marginTop: 4}}>{lawyer.area}</ThemedText>
@@ -365,7 +443,7 @@ export default function LawyersScreen() {
             <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
             <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.lawyerstab?.route}</ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${lawyer.phone}`)} disabled={isPending} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
+          <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${lawyer.phone}`)} disabled={isPending} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
             <MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} />
             <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.lawyerstab?.call}</ThemedText>
           </TouchableOpacity>
@@ -405,10 +483,10 @@ export default function LawyersScreen() {
                        <View key={r.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
                          <View style={{ flexDirection: 'row', gap: 2, marginBottom: 8 }}>
                            {[1, 2, 3, 4, 5].map((s) => (
-                             <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
+                             <MaterialCommunityIcons key={s} name="star" size={14} color={s <= (r.rating || r.stars || 5) ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
                            ))}
                          </View>
-                         <ThemedText style={{ color: Colors.text, fontSize: 14 }}>{r.comment}</ThemedText>
+                         <ThemedText style={{ color: Colors.text, fontSize: 14 }}>{r.comment || r.review}</ThemedText>
                        </View>
                     ))}
                   </ScrollView>
@@ -418,10 +496,56 @@ export default function LawyersScreen() {
                     isDark={isDark} 
                     t={t} 
                     onCancel={() => setShowReviewInput(false)} 
-                    onPublish={(rating: number, comment: string) => { 
-                        const review = { id: Date.now().toString(), stars: rating, comment: comment }; 
-                        selectedLawyer.reviews = [review, ...(selectedLawyer.reviews || [])]; 
-                        setShowReviewInput(false); 
+                    onPublish={async (ratingNum: number, commentStr: string) => { 
+                        try {
+                          const ratingPayload = {
+                            referenceId: selectedLawyer.id,
+                            typeEntry: 'lawyer',
+                            rating: ratingNum,
+                            review: commentStr,
+                            userId: "baeb641a-3fa4-4fef-9846-d75947d1bca9"
+                          };
+
+                          // 1. Enviamos a la base de datos de fondo
+                          const res = await fetch(`${API_BASE_URL}/rating`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(ratingPayload)
+                          });
+                          const fromDB = await res.json();
+
+                          // 2. Construimos la reseña con nombres de variables seguros
+                          const newReview = { 
+                            id: fromDB.id || Date.now().toString(), 
+                            rating: ratingNum, 
+                            stars: ratingNum, 
+                            comment: commentStr, 
+                            review: commentStr 
+                          }; 
+                          
+                          const updatedReviews = [newReview, ...(selectedLawyer.reviews || [])];
+
+                          // 3. Calculamos el nuevo promedio de estrellas en caliente
+                          const totalStars = updatedReviews.reduce((sum, r) => sum + (r.rating || r.stars || 5), 0);
+                          const newAverageRating = totalStars / updatedReviews.length;
+
+                          // 4. Creamos una copia inmutable del abogado actualizado
+                          const updatedLawyer = {
+                            ...selectedLawyer,
+                            reviews: updatedReviews,
+                            rating: newAverageRating
+                          };
+
+                          // 5. ¡LA MAGIA REACTIVA! Actualizamos todos los estados al mismo tiempo
+                          setSelectedLawyer(updatedLawyer); // Actualiza el modal actual
+                          setLocalData(prev => prev.map(l => l.id === selectedLawyer.id ? updatedLawyer : l)); // Actualiza la lista en memoria
+                          setResults(prev => prev.map(l => l.id === selectedLawyer.id ? updatedLawyer : l));   // Actualiza lo que ves en pantalla y en el mapa
+
+                        } catch (err) {
+                          console.log(err);
+                        } finally {
+                          setShowReviewInput(false); 
+                        }
                     }} 
                 />
               )}
@@ -480,7 +604,7 @@ export default function LawyersScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, overflow: 'hidden' }}>
                   <TouchableOpacity 
                     activeOpacity={0.7}
-                    onPress={() => setCountryIdx(prev => (prev === 0 ? 0 : 0))} // Solo hay 1 pais por ahora
+                    onPress={() => setCountryIdx(0)} 
                     style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}
                   >
                     <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText>
@@ -525,7 +649,6 @@ export default function LawyersScreen() {
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                   
-                  {/* ADMIN PENDIENTES (MÓVIL) */}
                   {isAdminMode && pendingLawyers.length > 0 && (
                     <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
                       <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingLawyers.length})</ThemedText>
@@ -584,7 +707,7 @@ export default function LawyersScreen() {
                       userLocation={userLocation} 
                       showMarkers={showMarkers} 
                       onZoom={handleZoom} 
-                      dataSource={results.length > 0 ? results : DATA_SOURCE} 
+                      dataSource={results.length > 0 ? results : []} 
                       mapKey={mapKey} 
                       onMarkerPress={handleMarkerSelection} 
                       showsUserLocation={true}
@@ -636,7 +759,6 @@ export default function LawyersScreen() {
                   <View style={{ flex: 1, flexDirection: 'row', marginLeft: 25 }}>
                     <View style={{ flex: 1 }}>
                       
-                      {/* ADMIN PENDIENTES (WEB) */}
                       {isAdminMode && pendingLawyers.length > 0 && (
                         <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
                           <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingLawyers.length})</ThemedText>
@@ -703,7 +825,6 @@ export default function LawyersScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB AGREGAR ABOGADO */}
       <TouchableOpacity onPress={() => setModalVisible(true)} style={[localStyles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="scale-balance" size={28} color="#FFF" />

@@ -1,0 +1,147 @@
+-- Habilitar la extensión para generar UUIDs aleatorios automáticamente
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. TABLA: USERS
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE, -- El email suele ser único
+    birth TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    phone VARCHAR(15), 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    type_detail TEXT, 
+    status BOOLEAN DEFAULT true
+);
+
+-- 2. TABLA: TYPE DETAIL
+CREATE TABLE type_detail (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type TEXT,
+    description TEXT,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status BOOLEAN DEFAULT true
+);
+
+-- 3. TABLA: COMMUNITY
+CREATE TABLE community (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    text_content TEXT,
+    image_url TEXT,
+    tag VARCHAR(80),
+    sub_category VARCHAR(120),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. TABLA: REVIEWS
+-- Nota: Quitamos "reviewsId: []" de otras tablas. Las reviews ahora se asocian aquí.
+CREATE TABLE reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    community_id UUID REFERENCES community(id) ON DELETE CASCADE,
+    type_detail_id UUID REFERENCES type_detail(id) ON DELETE SET NULL,
+    /*
+    lawyer_id UUID,      -- Se asociará más abajo mediante ALTER TABLE
+    store_id UUID,       -- Se asociará más abajo mediante ALTER TABLE
+    comment TEXT,
+    */
+    relationship_id UUID, -- Para identificar si es de un abogado o tienda o comunidad
+    comment TEXT,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. TABLA: LAWYERS
+CREATE TABLE lawyers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
+    name TEXT NOT NULL, 
+    area TEXT, 
+    rating DOUBLE PRECISION DEFAULT 0.0, -- Mejor numérico para promedios
+    lat DOUBLE PRECISION, 
+    lng DOUBLE PRECISION, 
+    phone TEXT, 
+    image TEXT, 
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. TABLA: LIKES
+CREATE TABLE likes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    community_id UUID REFERENCES community(id) ON DELETE CASCADE,
+    likes_count INTEGER DEFAULT 0,
+    dislikes_count INTEGER DEFAULT 0,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP  
+);
+
+-- 7. TABLA: DONATIONS
+CREATE TABLE donations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
+    title TEXT NOT NULL, 
+    category_idx INTEGER DEFAULT 0, 
+    status_id UUID REFERENCES type_detail(id) ON DELETE SET NULL, 
+    description TEXT, 
+    image TEXT, 
+    location TEXT, 
+    phone VARCHAR(15), 
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, 
+    contact_method TEXT 
+);
+
+-- 8. TABLA: EVENTS
+CREATE TABLE events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
+    title TEXT NOT NULL, 
+    category_idx INTEGER DEFAULT 0, 
+    date DATE, -- Corregido: faltaba el tipo de dato
+    time TEXT,
+    time_end TEXT,
+    description TEXT, 
+    image TEXT, 
+    location TEXT, 
+    zip INTEGER, -- Corregido: NUMBER no existe, usamos INTEGER
+    phone VARCHAR(15), 
+    contact_method TEXT,
+    status_id UUID REFERENCES type_detail(id) ON DELETE SET NULL, 
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    approved BOOLEAN DEFAULT false 
+);
+
+-- 9. TABLA: STORES
+CREATE TABLE stores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
+    name TEXT NOT NULL, 
+    description TEXT,
+    address TEXT,
+    category_id UUID REFERENCES type_detail(id) ON DELETE SET NULL,
+    zip VARCHAR(10), -- Los ZIP codes son mejor como texto por los ceros a la izquierda
+    image TEXT,
+    rating DOUBLE PRECISION DEFAULT 0.0, 
+    lat DOUBLE PRECISION, 
+    lng DOUBLE PRECISION, 
+    phone TEXT, 
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status_id UUID REFERENCES type_detail(id) ON DELETE SET NULL
+);
+
+-- 10. TABLA: ENTREPRENEURSHIP (Emprendimientos)
+CREATE TABLE entrepreneurship (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
+    name TEXT NOT NULL,
+    category_id UUID REFERENCES type_detail(id) ON DELETE SET NULL,
+    description TEXT,
+    rating DOUBLE PRECISION DEFAULT 0.0,
+    phone VARCHAR(15),
+    verified BOOLEAN DEFAULT false,
+    promo TEXT,
+    image TEXT,
+    saved BOOLEAN DEFAULT false,
+    contact_method TEXT 
+);
+
+-- Llaves foráneas restantes para la tabla REVIEWS (ya que lawyers y stores se crean después)
+/*ALTER TABLE reviews ADD CONSTRAINT fk_reviews_lawyer FOREIGN KEY (lawyer_id) REFERENCES lawyers(id) ON DELETE CASCADE;
+ALTER TABLE reviews ADD CONSTRAINT fk_reviews_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE;
+ALTER TABLE reviews ADD CONSTRAINT fk_reviews_community FOREIGN KEY (community_id) REFERENCES community(id) ON DELETE CASCADE;
+*/

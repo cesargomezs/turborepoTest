@@ -14,16 +14,18 @@ import multer from 'multer'; // 1. Importar Multer
 const upload = multer({ storage: multer.memoryStorage() }); // 1.1 Definir el middleware de Multer
 
 import * as tf from '@tensorflow/tfjs';
-
 import * as nsfwjs from 'nsfwjs'; // 3. Importar NSFWJS
 import { db } from '@viviendoenusa/db';
-import { users } from '@viviendoenusa/db/schema';
+import { community, typeDetail, users } from '@viviendoenusa/db/schema';
 import { eq } from 'drizzle-orm';
 
+// 🚀 INTEGRACIÓN: Importamos tus rutas independientes de abogados
+import lawyerRoutes from './lawyers.routes';
+import communityRoutes from './community.routes';
 
 const app = express();
 
-console.log(process.env.PORT);
+console.log("Puerto desde .env:", process.env.PORT);
 const port = process.env.PORT || 3000;
 
 // ✅ CAMBIO: Usamos 'any' o el tipo genérico para evitar el error de Namespace
@@ -36,9 +38,9 @@ async function loadModel() {
       // Forzamos el backend de CPU para evitar problemas de drivers en el servidor
       await tf.setBackend('cpu');
       model = await nsfwjs.load();
-      //console.log("✅ Modelo cargado correctamente");
+      console.log("✅ Modelo cargado correctamente");
     } catch (error) {
-      //console.error("❌ Error cargando modelo:", error);
+      console.error("❌ Error cargando modelo:", error);
     }
   }
 }
@@ -47,6 +49,11 @@ loadModel();
 app.use(cors());
 app.use(express.json());
 
+// 🚀 INTEGRACIÓN: Activamos tus rutas independientes bajo el prefijo /lawyers
+app.use('/lawyers', lawyerRoutes);
+
+app.use('/community', communityRoutes);
+
 // --- NUEVO: ENDPOINT DE VALIDACIÓN NSFW ---
 app.post('/validate-nsfw', upload.single('image'), async (req, res) => {
   try {
@@ -54,7 +61,7 @@ app.post('/validate-nsfw', upload.single('image'), async (req, res) => {
       return res.json({ isSafe: true });
     }
 
-    //console.log("📸 Procesando imagen...");
+    console.log("📸 Procesando imagen...");
 
     // 1. LEER LA IMAGEN (Sintaxis para Jimp v1+)
     const jimpImage = await Jimp.read(req.file.buffer);
@@ -63,7 +70,6 @@ app.post('/validate-nsfw', upload.single('image'), async (req, res) => {
     jimpImage.cover({ w: 224, h: 224 });
 
     // 3. CONVERTIR A TENSOR
-    // Accedemos a los datos crudos de los píxeles
     const imageWidth = jimpImage.bitmap.width;
     const imageHeight = jimpImage.bitmap.height;
     const imageData = jimpImage.bitmap.data; // Buffer de píxeles RGBA
@@ -80,23 +86,22 @@ app.post('/validate-nsfw', upload.single('image'), async (req, res) => {
     imageTensor.dispose();
 
     // 5. LOGS DE CONTROL
-    //console.log('--- Resultados de la IA ---');
-    //console.table(predictions);
+    console.log('--- Resultados de la IA ---');
+    console.table(predictions);
 
     const threshold = 0.40;
     const isUnsafe = predictions.some((p: any) => 
       ['Porn', 'Hentai', 'Sexy'].includes(p.className) && p.probability > threshold
     );
 
-    //console.log(`¿Es inapropiada?: ${isUnsafe ? '❌ SÍ' : '✅ NO'}`);
+    console.log(`¿Es inapropiada?: ${isUnsafe ? '❌ SÍ' : '✅ NO'}`);
     res.json({ isSafe: !isUnsafe });
 
   } catch (error) {
-    //console.error("❌ Error en la validación:", error);
+    console.error("❌ Error en la validación:", error);
     res.json({ isSafe: true });
   }
 });
-// --- TUS ENDPOINTS ANTERIORES ---
 
 app.get('/health', (req, res) => {
   res.send('API de VUSA operativa ✅');
@@ -106,6 +111,15 @@ app.get('/users', async (req, res) => {
   try {
     const allUsers = await db.select().from(users);
     res.json(allUsers);
+  } catch (error) {
+    res.status(500).json({ error: 'Fallo al conectar con la DB' });
+  }
+});
+
+app.get('/typeDetail', async (req, res) => {
+  try {
+    const alltypeDetail = await db.select().from(typeDetail);
+    res.json(alltypeDetail);
   } catch (error) {
     res.status(500).json({ error: 'Fallo al conectar con la DB' });
   }
@@ -124,6 +138,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Servidor Express corriendo en http://192.168.1.107:${port}`);
+// Levantar el servidor escuchando en todas las interfaces de red local
+app.listen(Number(port) ,"192.168.1.248", () => {
+  console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port}`);
 });

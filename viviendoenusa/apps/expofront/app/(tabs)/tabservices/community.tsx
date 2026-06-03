@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
-  TextInput, Image, Alert, Share, ColorValue, ActivityIndicator,
-  Platform, Modal as RNModal, KeyboardAvoidingView
+  TextInput, Image, Alert, Share, ActivityIndicator,
+  Platform, Modal as RNModal, KeyboardAvoidingView,
+  ColorValue
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter, useSegments } from 'expo-router'; 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,10 +20,7 @@ import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
-// Importación del JSON de malas palabras
 import badWordsData from '../../../utils/babwords.json';
-
-import { contentCardStyles as stylesOriginal } from "app/src/styles/contentcard";
 
 // --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
@@ -31,6 +29,9 @@ const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
   return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
 };
+
+// 📡 URL BASE PARA LA COMUNIDAD CONECTADA A TU EXPRESS
+const API_COMMUNITY_URL = 'http://192.168.1.248:3000/community'; 
 
 export default function CommunityScreen() {
   const { t } = useTranslation();
@@ -62,8 +63,10 @@ export default function CommunityScreen() {
     categoryUnselected: isDark ? 'rgba(255,255,255,0.15)' : 'transparent',
   };
 
-  const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
-  const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'] as const;
+  const orangeGradient: readonly [ColorValue, ColorValue] = ['#FF5F6D', '#FFC371'];
+  const disabledGradient: readonly [ColorValue, ColorValue] = isDark 
+    ? ['#333333', '#444444'] 
+    : ['#dddddd', '#cccccc'];
 
   const tagIcons: Record<string, any> = {
     'All': 'apps', 'Todos': 'apps',
@@ -89,6 +92,8 @@ export default function CommunityScreen() {
 
   const [postText, setPostText] = useState('');
   const [posts, setPosts] = useState<any[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [zipCode, setZipCode] = useState(''); 
 
   const defaultTag = (t.communitytab.typepostAdd && t.communitytab.typepostAdd.length > 0) ? t.communitytab.typepostAdd[0] : 'Experience';
   const [selectedTag, setSelectedTag] = useState(defaultTag); 
@@ -108,11 +113,54 @@ export default function CommunityScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
 
+  // 🚀 OBTENER POSTS DESDE EL BACKEND
+  const fetchCommunityPosts = async (searchZip?: string) => {
+    try {
+      setLoadingPosts(true);
+      const url = searchZip && searchZip.length === 5 
+        ? `${API_COMMUNITY_URL}?zip=${searchZip}` 
+        : API_COMMUNITY_URL;
+
+      const response = await fetch(url);
+      const apiData = await response.json();
+      
+      if (Array.isArray(apiData)) {
+        setPosts(apiData);
+        
+        // Extraer comentarios del leftJoin y mapearlos al estado de la interfaz
+        const commentsMap: Record<number, any[]> = {};
+        apiData.forEach((p: any) => {
+          if (p.commentsList && Array.isArray(p.commentsList)) {
+            commentsMap[p.id] = p.commentsList.map((c: any) => ({
+              id: c.id,
+              text: c.review || c.text || '',
+              displayTime: c.createdAt ? new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+              userName: c.userName || 'User'
+            }));
+          }
+        });
+        setComments(commentsMap);
+
+      } else {
+        setPosts([]);
+      }
+    } catch (error) {
+      console.error("Error cargando posts de la comunidad:", error);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCommunityPosts();
+  }, []);
+
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) { window.alert(`${title}\n${message}`); } 
     else { Alert.alert(title, message); }
   };
 
+  // 🚀 CREAR UN NUEVO POST (POST al backend) CON DEBUGGER
   const handlePost = async () => {
     const trimmedText = postText.trim();
     if (!trimmedText || isPublishing) return;
@@ -132,30 +180,69 @@ export default function CommunityScreen() {
           return;
         }
       }
-      const newPost = {
-        id: Date.now(),
+
+      // ⚠️ REVISA ESTOS NOMBRES: Deben coincidir EXACTAMENTE con los de tu Drizzle schema
+      /*const newPostPayload = {
         text: trimmedText,
         image: selectedImage,
         tag: tagMapping[selectedTag] || selectedTag,
         subCategory: selectedSubCategory,
+        zip: zipCode || null, 
         likes: 0,
         dislikes: 0,
-        userVote: null,
-        displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        userName: userMetadata?.name || 'User'
+        userName: userMetadata?.name || 'User',
+        displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };*/
+      // ⚠️ PAYLOAD CORREGIDO: Usando los nombres exactos que pide tu base de datos
+      const newPostPayload = {
+        // En lugar de 'text', Drizzle espera 'textContent' o 'text_content'
+        textContent: trimmedText, 
+        // En lugar de 'image', Drizzle espera 'imageUrl' o 'image_url'
+        // imageUrl: selectedImage || null, validacion de carpeta
+        tag: tagMapping[selectedTag] || selectedTag,
+        // En lugar de 'subCategory', el DB espera 'sub_category' (o subCategory en JS)
+        subCategory: selectedSubCategory,
+        // La BD exige un user_id válido (usaremos el UUID que usamos en Abogados para pruebas)
+        userId: "baeb641a-3fa4-4fef-9846-d75947d1bca9",
+        zip: zipCode || "91730",
+        estate: "CA"
+
       };
-      setPosts(prev => [newPost, ...prev]);
+      
+      console.log("Intentando enviar a BD:", newPostPayload);
+
+      const response = await fetch(API_COMMUNITY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPostPayload)
+      });
+
+      const responseData = await response.json();
+
+      // Si el backend devuelve status 400 o 500, lanzamos el error para verlo
+      if (!response.ok) {
+        console.error("❌ ERROR DEL BACKEND:", responseData);
+        throw new Error(responseData.error || "Error desconocido en el servidor");
+      }
+
+      console.log("✅ GUARDADO EXITOSO EN BD:", responseData);
+      
+      // Actualización reactiva instantánea
+      setPosts(prev => [{ ...responseData, commentsList: [] }, ...prev]);
+      
       setPostText('');
       setSelectedImage(null);
       setModalVisible(false);
-    } catch (err) {
-      triggerAlert("Error", t.communitytab.errorServer);
+    } catch (err: any) {
+      console.error("❌ ERROR EN FETCH:", err.message);
+      triggerAlert("Error de Base de Datos", err.message || t.communitytab.errorServer);
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const handleAddComment = () => {
+  // 🚀 AGREGAR COMENTARIO (POST a tabla de reviews)
+  const handleAddComment = async () => {
     const trimmed = commentText.trim();
     if (!trimmed || !activeCommentId) return;
 
@@ -164,32 +251,76 @@ export default function CommunityScreen() {
       return;
     }
 
-    const newComment = {
-      id: Date.now(),
-      text: trimmed,
-      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      userName: userMetadata?.name || 'User'
-    };
-    setComments(prev => ({
-      ...prev,
-      [activeCommentId]: [...(prev[activeCommentId] || []), newComment]
-    }));
-    setCommentText('');
-    setShowCommentInput(false);
-    setVisibleComments(prev => ({ ...prev, [activeCommentId]: true }));
+    try {
+
+      const reviewPayload = {
+        typeDetailId: "771c41ff-802d-4df9-8d89-d6fa58c8b3c6", // Sin guión bajo
+        relationshipId: String(activeCommentId),              // Sin guión bajo
+        comment: trimmed,                                     // Este está bien
+        userId: "baeb641a-3fa4-4fef-9846-d75947d1bca9"        // Sin guión bajo
+      };
+
+      console.log("Enviando Comentario a BD:", reviewPayload);
+
+      const response = await fetch(`${API_COMMUNITY_URL}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reviewPayload)
+      });
+      const savedReview = await response.json();
+
+      console.log("Respuesta del backend para nuevo comentario:", savedReview);
+
+      const newLocalComment = {
+        id: savedReview.id || Date.now(),
+        text: trimmed,
+        displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        userName: userMetadata?.name || 'User'
+      };
+
+      setComments(prev => ({
+        ...prev,
+        [activeCommentId]: [...(prev[activeCommentId] || []), newLocalComment]
+      }));
+      setCommentText('');
+      setShowCommentInput(false);
+      setVisibleComments(prev => ({ ...prev, [activeCommentId]: true }));
+    } catch (error) {
+       triggerAlert("Error", "No se pudo guardar el comentario.");
+    }
   };
 
-  const handleVote = (postId: number, type: 'like' | 'dislike') => {
+  // 🚀 ACTUALIZAR VOTOS (PUT al backend para actualizar likes)
+  const handleVote = async (postId: number, type: 'like' | 'dislike') => {
+    let newLikes = 0;
+    let newDislikes = 0;
+
+    // Actualizamos la UI inmediatamente (Optimistic update)
     setPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
       const isSelected = p.userVote === type;
+      
+      newLikes = type === 'like' ? (isSelected ? p.likes - 1 : p.likes + 1) : (p.userVote === 'like' ? p.likes - 1 : p.likes);
+      newDislikes = type === 'dislike' ? (isSelected ? p.dislikes - 1 : p.dislikes + 1) : (p.userVote === 'dislike' ? p.dislikes - 1 : p.dislikes);
+      
       return {
         ...p,
-        likes: type === 'like' ? (isSelected ? p.likes - 1 : p.likes + 1) : (p.userVote === 'like' ? p.likes - 1 : p.likes),
-        dislikes: type === 'dislike' ? (isSelected ? p.dislikes - 1 : p.dislikes + 1) : (p.userVote === 'dislike' ? p.dislikes - 1 : p.dislikes),
+        likes: newLikes,
+        dislikes: newDislikes,
         userVote: isSelected ? null : type
       };
     }));
+
+    // Sincronizamos en segundo plano
+    try {
+      await fetch(`${API_COMMUNITY_URL}/${postId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ likes: newLikes, dislikes: newDislikes })
+      });
+    } catch (error) {
+      console.error("Error al actualizar voto:", error);
+    }
   };
 
   const filteredPosts = useMemo(() => {
@@ -250,7 +381,32 @@ export default function CommunityScreen() {
                 )}
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
+                  
+                  {/* BARRAS DE BÚSQUEDA Y FILTROS */}
                   <View style={{marginBottom: 15}}>
+                    
+                    {/* BARRA DE CÓDIGO POSTAL */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10, paddingRight: isLargeWeb ? 0 : 20 }}>
+                      <TextInput 
+                        style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                        placeholder={t.lawyerstab?.messagezip || "Filtrar por código postal..."} 
+                        keyboardType="numeric" 
+                        maxLength={5} 
+                        value={zipCode} 
+                        onChangeText={(text) => {
+                          setZipCode(text);
+                          if(text.length === 0) fetchCommunityPosts(); 
+                        }} 
+                        onSubmitEditing={() => fetchCommunityPosts(zipCode)} 
+                        placeholderTextColor={DynamicColors.subtext} 
+                      />
+                      <TouchableOpacity onPress={() => fetchCommunityPosts(zipCode)} disabled={zipCode.length > 0 && zipCode.length < 5} style={{ width: 48, height: 48 }}>
+                        <LinearGradient colors={zipCode.length === 5 || zipCode.length === 0 ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                          {loadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </View>
+
                     {isLargeWeb ? (
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 5 }}>
                         <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -346,61 +502,68 @@ export default function CommunityScreen() {
                   </View>
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                    {filteredPosts.map(post => (
-                      <View key={post.id} style={styles.postCard}>
-                        <View style={styles.postHeaderRow}>
-                          <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
-                          <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
-                        </View>
-                        <ThemedText style={styles.bodyText}>{post.text}</ThemedText>
-                        {post.image && (
-                          <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
-                            <Image source={{ uri: post.image }} style={styles.postImage} />
-                            {/* --- ETIQUETA "VER DETALLE" --- */}
-                            <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
-                              <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-                              <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
-                                {(t as any)?.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
-                              </ThemedText>
+                    {loadingPosts ? (
+                      <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 50 }} />
+                    ) : filteredPosts.length === 0 ? (
+                      <ThemedText style={{ textAlign: 'center', marginTop: 50, color: DynamicColors.subtext }}>
+                        No hay publicaciones para mostrar.
+                      </ThemedText>
+                    ) : (
+                      filteredPosts.map(post => (
+                        <View key={post.id} style={styles.postCard}>
+                          <View style={styles.postHeaderRow}>
+                            <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
+                            <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
+                          </View>
+                          <ThemedText style={styles.bodyText}>{post.text}</ThemedText>
+                          {post.image && (
+                            <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
+                              <Image source={{ uri: post.image }} style={styles.postImage} />
+                              <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
+                                <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
+                                <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
+                                  {(t as any)?.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
+                                </ThemedText>
+                              </View>
+                            </TouchableOpacity>
+                          )}
+                          {visibleComments[post.id] && (
+                            <View style={styles.commentSection}>
+                              {(comments[post.id] || []).length > 0 ? (
+                                (comments[post.id] || []).map(c => (
+                                  <View key={c.id} style={styles.commentBubble}>
+                                    <ThemedText style={styles.commentUser}>{c.userName}: <ThemedText style={styles.commentText}>{c.text}</ThemedText></ThemedText>
+                                  </View>
+                                ))
+                              ) : <ThemedText style={styles.noCommentsText}>{t.communitytab.firtscomment}</ThemedText>}
+                              <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={styles.replyBtn}>
+                                <MaterialCommunityIcons name="pencil-outline" size={12} color={DynamicColors.accent} />
+                                <ThemedText style={[styles.replyBtnText, { color: DynamicColors.accent }]}>{t.communitytab.responsebutton}</ThemedText>
+                              </TouchableOpacity>
                             </View>
-                          </TouchableOpacity>
-                        )}
-                        {visibleComments[post.id] && (
-                          <View style={styles.commentSection}>
-                            {(comments[post.id] || []).length > 0 ? (
-                              (comments[post.id] || []).map(c => (
-                                <View key={c.id} style={styles.commentBubble}>
-                                  <ThemedText style={styles.commentUser}>{c.userName}: <ThemedText style={styles.commentText}>{c.text}</ThemedText></ThemedText>
-                                </View>
-                              ))
-                            ) : <ThemedText style={styles.noCommentsText}>{t.communitytab.firtscomment}</ThemedText>}
-                            <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={styles.replyBtn}>
-                              <MaterialCommunityIcons name="pencil-outline" size={12} color={DynamicColors.accent} />
-                              <ThemedText style={[styles.replyBtnText, { color: DynamicColors.accent }]}>{t.communitytab.responsebutton}</ThemedText>
+                          )}
+                          <View style={styles.postFooter}>
+                            <View style={styles.reaccionGroup}>
+                              <TouchableOpacity onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
+                                <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
+                                <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes}</ThemedText>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
+                                <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : DynamicColors.iconInactive} />
+                                <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : DynamicColors.iconInactive }]}>{(comments[post.id] || []).length}</ThemedText>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
+                                <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
+                                <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes}</ThemedText>
+                              </TouchableOpacity>
+                            </View>
+                            <TouchableOpacity onPress={() => Share.share({ message: post.text })}>
+                              <MaterialCommunityIcons name="share-variant" size={18} color={DynamicColors.iconInactive} />
                             </TouchableOpacity>
                           </View>
-                        )}
-                        <View style={styles.postFooter}>
-                          <View style={styles.reaccionGroup}>
-                            <TouchableOpacity onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
-                              <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
-                              <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes}</ThemedText>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
-                              <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : DynamicColors.iconInactive} />
-                              <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : DynamicColors.iconInactive }]}>{(comments[post.id] || []).length}</ThemedText>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
-                              <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
-                              <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes}</ThemedText>
-                            </TouchableOpacity>
-                          </View>
-                          <TouchableOpacity onPress={() => Share.share({ message: post.text })}>
-                            <MaterialCommunityIcons name="share-variant" size={18} color={DynamicColors.iconInactive} />
-                          </TouchableOpacity>
                         </View>
-                      </View>
-                    ))}
+                      ))
+                    )}
                   </ScrollView>
                 </View>
               </View>
@@ -520,20 +683,9 @@ export default function CommunityScreen() {
               <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
                 <TextInput style={[{backgroundColor: DynamicColors.inputBg, borderRadius: 15, padding: 15, color: DynamicColors.text, minHeight: 80, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {})}]} placeholder={t.communitytab.placeHolderModal} placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
                 
-                {/* BOTÓN ENVIAR COMENTARIO ARREGLADO (Píldora centrada) */}
                 <TouchableOpacity 
                   onPress={handleAddComment} 
-                  style={{
-                    backgroundColor: '#FF5F6D', 
-                    marginTop: 15, 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    flexDirection: 'row', 
-                    alignSelf: 'center', 
-                    paddingHorizontal: 30, 
-                    paddingVertical: 12,   
-                    borderRadius: 20
-                  }}>
+                  style={{ backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', alignSelf: 'center', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 20 }}>
                   <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
                   <ThemedText style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>{t.communitytab.sendbutton}</ThemedText>
                 </TouchableOpacity>

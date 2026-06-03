@@ -6,7 +6,11 @@
       "types": ["node"], // <--- OBLIGATORIO: Esto activa 'process'
       "strict": true,
       "esModuleInterop": true,
-      "skipLibCheck": true
+      "skipLibCheck": true,
+      "baseUrl": ".",
+      "paths": {
+        "@db/*": ["packages/db/*"]
+      }
     },
     "include": ["src", "test-db.ts", "drizzle.config.ts"]
   }
