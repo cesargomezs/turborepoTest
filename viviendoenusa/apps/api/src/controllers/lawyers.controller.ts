@@ -9,12 +9,11 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🔍 1. CONSULTA GENERAL: Obtiene los abogados filtrados por zip con promedios y URLs firmadas
+// 🔍 1. CONSULTA GENERAL: Obtiene TODOS los abogados para que el frontend los ordene por distancia
 export const getLawyers = async (rawZip?: string | number) => {
   try {
-    // 🚀 LÓGICA DE BLINDAJE: Aseguramos que el Zip sea un string limpio
     const zip = rawZip ? String(rawZip).trim() : '';
-    console.log(`🚨 [BACKEND] getLawyers llamado. Zip recibido: "${zip}"`);
+    console.log(`🚨 [BACKEND] getLawyers llamado. Preparando datos cerca del Zip: "${zip}"`);
 
     let query = db
       .select()
@@ -22,12 +21,10 @@ export const getLawyers = async (rawZip?: string | number) => {
       .leftJoin(rating, eq(rating.referenceId, lawyers.id))
       .$dynamic(); 
 
-    if (zip && zip.length === 5) {
-      console.log(`✅ Aplicando filtro estricto en BD para el Zip Code: ${zip}`);
-      query = query.where(eq(lawyers.zip, zip));
-    } else {
-      console.log(`⚠️ No se aplicó filtro (El Zip es inválido o vino vacío). Devolviendo todos.`);
-    }
+    // 🚀 LÓGICA DE CERCANÍA: Eliminamos el filtro estricto (`query.where`).
+    // Ahora devolvemos todos los abogados aprobados/pendientes para que tu app (Frontend) 
+    // calcule los kilómetros/millas y los ordene del más cercano al más lejano.
+    console.log(`✅ Devolviendo la lista completa para ordenamiento inteligente en el mapa.`);
 
     const rows = await query;
 

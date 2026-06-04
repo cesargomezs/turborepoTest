@@ -219,7 +219,6 @@ export default function LawyersScreen() {
       const apiData = await response.json();
 
       const transformedData = Array.isArray(apiData) ? apiData.map((item: any) => {
-        // Aseguramos que siempre sean números
         const latNumber = item.lat ? Number(item.lat) : 34.0668;
         const lngNumber = item.lng ? Number(item.lng) : -117.6115;
 
@@ -329,8 +328,37 @@ export default function LawyersScreen() {
       }
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '+1000000000';
-      const mockLat = userLocation ? userLocation.latitude + (Math.random() * 0.01 - 0.005) : 34.0934;
-      const mockLng = userLocation ? userLocation.longitude + (Math.random() * 0.01 - 0.005) : -117.5847;
+      
+      // 🚀 CONVERSIÓN ESTRICTA DE DIRECCIÓN A COORDENADAS
+      let finalLat = null;
+      let finalLng = null;
+
+      try {
+        const geoResult = await Location.geocodeAsync(`${formAddress}, ${formZip}`);
+        if (geoResult.length > 0) {
+          finalLat = geoResult[0].latitude;
+          finalLng = geoResult[0].longitude;
+        } else {
+          // Intento secundario solo con el Zip Code
+          const zipResult = await Location.geocodeAsync(formZip);
+          if (zipResult.length > 0) {
+             finalLat = zipResult[0].latitude;
+             finalLng = zipResult[0].longitude;
+          }
+        }
+      } catch (error) {
+        console.log("Error al geocodificar la dirección");
+      }
+
+      // 🚨 VALIDACIÓN ESTRICTA: Si no se encontraron coordenadas, detenemos el proceso
+      if (finalLat === null || finalLng === null) {
+        setIsPublishing(false);
+        const title = "Dirección inválida";
+        const desc = "No pudimos ubicar la dirección o código postal en el mapa. Por favor, verifícalos e intenta de nuevo.";
+        if (isWeb) { window.alert(`${title}\n${desc}`); } 
+        else { Alert.alert(title, desc); }
+        return; 
+      }
 
       const newEntryPayload = {
         nameLawy: formName, 
@@ -338,8 +366,8 @@ export default function LawyersScreen() {
         address: formAddress,
         zip: formZip, 
         imageUrl: finalImageName || 'https://randomuser.me/api/portraits/lego/1.jpg',
-        lat: mockLat, 
-        lng: mockLng, 
+        lat: finalLat, 
+        lng: finalLng, 
         phone: fullPhone, 
         userId: currentUserId,
         approved: false
@@ -425,7 +453,6 @@ export default function LawyersScreen() {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     const isPending = lawyer.status === 'pending';
 
-    // 🚀 BLINDAJE CONTRA EL NaN: Aseguramos que sea un número válido antes de renderizar
     const safeRating = Number(lawyer.rating);
     const displayRating = isNaN(safeRating) ? "5.0" : safeRating.toFixed(1);
 
@@ -446,7 +473,6 @@ export default function LawyersScreen() {
             <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 4}}>
               <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
               <ThemedText style={{color: Colors.text, fontSize: 13, fontWeight: '600', marginLeft: 4}}>
-                {/* 🚀 Usamos el rating seguro (sin fallos de NaN) */}
                 {displayRating}
               </ThemedText>
               {dist !== null && <ThemedText style={{color: Colors.accent, fontSize: 13, fontWeight: '700'}}> • {dist} mi</ThemedText>}
@@ -536,7 +562,7 @@ export default function LawyersScreen() {
 
                           const newReview = { 
                             id: fromDB.id || Date.now().toString(), 
-                            rating: Number(ratingNum), // 🚀 Aseguramos que sea número
+                            rating: Number(ratingNum),
                             stars: Number(ratingNum), 
                             comment: commentStr, 
                             review: commentStr 
@@ -544,7 +570,6 @@ export default function LawyersScreen() {
                           
                           const updatedReviews = [newReview, ...(selectedLawyer.reviews || [])];
 
-                          // 🚀 CORRECCIÓN MATEMÁTICA: Obligamos a sumar siempre como números, no como textos
                           const totalStars = updatedReviews.reduce((sum, r) => sum + (Number(r.rating) || Number(r.stars) || 5), 0);
                           const newAverageRating = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 5;
 
