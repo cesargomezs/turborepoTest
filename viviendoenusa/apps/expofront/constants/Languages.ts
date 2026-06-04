@@ -33,6 +33,11 @@ export const translations = {
       viewallresults: "Ver todos los resultados",
       photo:"Foto",
       choisephoto:"Seleccionar fotografía",
+      sendsuggestion: "Enviar Sugerencia",
+      tittleReview: "Revisión",   
+      aprovedbtn: "Aprobar",
+      rejectbtn: "Rechazar",
+
     },
     genericlabel:{
       labelopinion:"Escribe tu opinión..."
@@ -91,8 +96,10 @@ export const translations = {
       reviews: "Reseñas",
       route: "Ruta",
       call: "Llamar",
-
-      
+      messageNoemptytitle: "Descubre Abogados",
+      messageNoempty: "Ingresa un código postal de 5 dígitos para encontrar profesionales en tu área.",
+      messageNodatatitle: "No hay abogados",
+      messageNodata: "¡Sé el primero en sugerir un abogado para esta zona!"
     },
     communitytab: {
       labeltypepost: "Tipo de publicación",
@@ -117,6 +124,10 @@ export const translations = {
       sendbutton: "Enviar",
       responsebutton: "Responder",
       messageNewPost:"¿Qué estás pensando?",
+      messageemptytitle: "Descubre tu zona",
+      messageempty: "Ingresa un código postal de 5 dígitos para conectar con la comunidad local.",
+      messageNodatatitle: "No hay publicaciones",
+      messageNodata: "¡Sé el primero en sugerir un abogado para esta zona!"
 
     },
     donationstab: {
@@ -285,6 +296,10 @@ export const translations = {
       viewallresults: "View all results",
       photo:"Foto",
       choisephoto: "Photo",
+      sendsuggestion: "Send Suggestion",
+      tittleReview: "Review",
+      aprovedbtn: "Approve",
+      rejectbtn: "Reject"
     },
     genericlabel:{
       labelopinion:"Write your opinion..."
@@ -340,7 +355,11 @@ export const translations = {
       recent: "Recent",
       reviews: "Reviews",
       route: "Route",
-      call: "Call"
+      call: "Call",
+      messageNoemptytitle: "Discover Lawyers",
+      messageNoempty: "Enter a 5-digit ZIP code to find professionals in your area.",
+      messageNodatatitle: "No lawyers found",
+      messageNodata: "Be the first to suggest a lawyer for this area!"
 
     },
     communitytab: {
@@ -365,7 +384,11 @@ export const translations = {
       placeHolderModal: "Write something...",
       sendbutton: "Send",
       responsebutton: "Reply",
-      messageNewPost:"What are you thinking?"
+      messageNewPost:"What are you thinking?",
+      messageemptytitle: "Discover your area",
+      messageempty: "Enter a 5-digit ZIP code to connect with the local community.",
+      messageNodatatitle: "No posts found",
+      messageNodata: "Be the first to suggest a lawyer for this area!"
     },
     donationstab: {
         category: "Categories",

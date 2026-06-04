@@ -5,12 +5,17 @@ import { createLawyer, getLawyers, getLawyerById, updateLawyer, getLawyerByIdWit
 const router = Router();
 
 // Consulta (Todos)
-router.get("/", async (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const data = await getLawyers();
-    res.json(data);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    // 🚨 Extraemos el zip code de la URL (ej. ?zip=91730)
+    const zipCode = req.query.zip as string; 
+    
+    // 🚨 Se lo pasamos a la función getLawyers
+    const lawyers = await getLawyers(zipCode);
+    
+    res.json(lawyers);
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
   }
 });
 

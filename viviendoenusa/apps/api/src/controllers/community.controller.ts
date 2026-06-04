@@ -1,83 +1,187 @@
 import { db } from "../../../../packages/db/src"; 
-import { community, reviews } from "../../../../packages/db/src/schema"; 
-import { eq, desc } from "drizzle-orm";
+import { community, reviews, countlikes, users } from "../../../../packages/db/src/schema"; 
+import { eq, desc, and, sql, inArray } from "drizzle-orm"; 
+import { createClient } from '@supabase/supabase-js';
 
-// 🔍 1. CONSULTA GENERAL: Obtener posts filtrados por ZIP con sus comentarios anidados
+// 🚀 1. Inicializamos Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const NOMBRE_BUCKET = 'images'; 
+
+// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado)
 export const getCommunityPosts = async (zip?: string) => {
   try {
+
+    // 🛡️ BARRERA DE RENDIMIENTO: Si no hay ZIP válido, no tocamos la base de datos
+    if (!zip || zip.trim().length !== 5) {
+      return []; 
+    }
+
+    const cleanZip = zip.trim();
+    
     let query = db
       .select()
       .from(community)
-      .leftJoin(reviews, eq(reviews.relationshipId, community.id)) // Cruce por relationshipId
-      .orderBy(desc(community.id)) // 🚀 AGREGADO: Ordenar del más reciente al más antiguo
+      .leftJoin(reviews, eq(reviews.relationshipId, community.id)) 
+      .leftJoin(users, eq(reviews.userId, users.id)) 
       .$dynamic(); 
 
-    // Si viene el ZIP desde el teléfono, filtramos
+    // 🚀 FILTRO INTELIGENTE DE ZIP CODE (A prueba de fallos de tipo numérico/texto)
     if (zip && zip.trim().length === 5) {
-      query = query.where(eq(community.zip, String(zip.trim()))); 
+      const cleanZip = zip.trim();
+      query = query.where(sql`${community.zip}::text = ${cleanZip}`); 
     }
 
-    const rows = await query;
+    // El ordenamiento se aplica siempre después del filtrado
+    query = query.orderBy(desc(community.id));
 
+    const rows = await query;
     if (!rows || rows.length === 0) return [];
 
-    // Agrupamos por publicación para procesar sus comentarios sin duplicar posts
     const postsMap = new Map<string, any>();
 
     for (const row of rows) {
       const postId = row.community.id;
 
       if (!postsMap.has(postId)) {
+        const dbPost = row.community as any;
+        const textoNormalizado = dbPost.text || dbPost.textContent || dbPost.text_content || '';
+
         postsMap.set(postId, {
           ...row.community,
-          zip: row.community.zip ? String(row.community.zip) : null, // Blindaje de tipo
-          commentsList: [] // Inicializamos el arreglo de comentarios vacío
+          text: textoNormalizado,
+          textContent: textoNormalizado, 
+          zip: row.community.zip ? String(row.community.zip) : null, 
+          commentsList: [] 
         });
       }
 
-      // Si la fila trae un comentario asociado y tiene texto, lo inyectamos al arreglo
-      if (row.reviews && row.reviews.comment) {
-        postsMap.get(postId).commentsList.push(row.reviews);
+      if (row.reviews && row.reviews.id) {
+        const usr = row.users as any;
+        const nombreUsuario = usr?.name || usr?.firstName || usr?.first_name || usr?.full_name || 'Usuario Anónimo';
+        
+        postsMap.get(postId).commentsList.push({
+          ...row.reviews,
+          userName: nombreUsuario
+        });
       }
     }
 
-    // Convertimos el mapa en un arreglo limpio
-    return Array.from(postsMap.values());
+    const rawPosts = Array.from(postsMap.values());
+
+    // 🔗 CONEXIÓN DIRECTA A LA TABLA COUNTLIKES PARA LOS TOTALES
+    if (rawPosts.length > 0) {
+      const postIds = rawPosts.map(post => post.id);
+      
+      const targetColName = (countlikes as any).communityId ? 'communityId' : 'relationshipId';
+      const targetColumn = (countlikes as any)[targetColName];
+
+      const votesFromDb = await db
+        .select()
+        .from(countlikes)
+        .where(inArray(targetColumn, postIds));
+
+      rawPosts.forEach((post: any) => {
+        const postVotes = votesFromDb.filter((v: any) => String(v[targetColName]) === String(post.id));
+        post.likes = postVotes.reduce((sum, v) => sum + (Number(v.likes) || 0), 0);
+        post.dislikes = postVotes.reduce((sum, v) => sum + (Number(v.dislikes) || 0), 0);
+      });
+    }
+
+    const postsConImagenesSeguras = await Promise.all(rawPosts.map(async (post) => {
+        if (post.imageUrl && post.imageUrl.trim() !== '') {
+            const rutaArchivo = post.imageUrl.startsWith('community/') 
+                ? post.imageUrl : `community/${post.imageUrl}`;
+
+            const { data, error } = await supabase
+                .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
+
+            if (!error && data) {
+                return { ...post, image: data.signedUrl, imageUrl: data.signedUrl }; 
+            }
+        }
+        return post; 
+    }));
+
+    return postsConImagenesSeguras;
+
   } catch (error) {
     console.error("❌ Error en getCommunityPosts:", error);
     return [];
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL: Obtener un post específico por su ID con todos sus comentarios
+// 🔍 2. CONSULTA INDIVIDUAL
 export const getCommunityPostById = async (id: string) => {
   try {
     const rows = await db
       .select()
       .from(community)
       .leftJoin(reviews, eq(reviews.relationshipId, community.id))
+      .leftJoin(users, eq(reviews.userId, users.id))
       .where(eq(community.id, id));
 
     if (!rows || rows.length === 0) return null;
 
-    // Extraemos todos los comentarios descartando nulos o vacíos
     const commentsArray = rows
-      .filter(row => row.reviews !== null && row.reviews !== undefined && row.reviews.comment)
-      .map(row => row.reviews);
+      .filter(row => row.reviews !== null && row.reviews !== undefined && row.reviews.id)
+      .map(row => {
+        const usr = row.users as any;
+        return {
+          ...row.reviews,
+          userName: usr?.name || usr?.firstName || usr?.first_name || 'Usuario Anónimo'
+        };
+      });
 
-    return {
+    const dbPostBase = rows[0].community as any;
+    const textoNormalizadoBase = dbPostBase.text || dbPostBase.textContent || dbPostBase.text_content || '';
+
+    const postFinal: any = {
       ...rows[0].community,
+      text: textoNormalizadoBase,
+      textContent: textoNormalizadoBase,
       zip: rows[0].community.zip ? String(rows[0].community.zip) : null,
       commentsList: commentsArray
     };
+
+    const targetColName = (countlikes as any).communityId ? 'communityId' : 'relationshipId';
+    const targetColumn = (countlikes as any)[targetColName];
+
+    const postVotes = await db
+      .select()
+      .from(countlikes)
+      .where(eq(targetColumn, id));
+    
+    postFinal.likes = postVotes.reduce((sum, v) => sum + (Number(v.likes) || 0), 0);
+    postFinal.dislikes = postVotes.reduce((sum, v) => sum + (Number(v.dislikes) || 0), 0);
+
+    if (postFinal.imageUrl && postFinal.imageUrl.trim() !== '') {
+        const rutaArchivo = postFinal.imageUrl.startsWith('community/') 
+            ? postFinal.imageUrl : `community/${postFinal.imageUrl}`;
+
+        const { data, error } = await supabase
+            .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+            
+        if (!error && data) {
+            postFinal.image = data.signedUrl;
+            postFinal.imageUrl = data.signedUrl;
+        }
+    }
+
+    return postFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener la publicación por ID: ${error.message}`);
   }
 };
 
-// 📥 3. CREAR POST: Insertar una nueva publicación en la comunidad
+// 📥 3. CREAR POST
 export const createCommunityPost = async (data: any) => {
   try {
+    if (data.imageUrl && data.imageUrl.startsWith('community/')) {
+      data.imageUrl = data.imageUrl.replace('community/', '');
+    }
     const newPost = await db.insert(community).values(data).returning();
     return newPost[0];
   } catch (error: any) { 
@@ -85,7 +189,7 @@ export const createCommunityPost = async (data: any) => {
   }
 };
 
-// 📥 4. CREAR COMENTARIO (REVIEW): Insertar una respuesta en una publicación
+// 📥 4. CREAR COMENTARIO
 export const createCommunityReview = async (data: any) => {
   try {
     const newReview = await db.insert(reviews).values(data).returning();
@@ -95,27 +199,87 @@ export const createCommunityReview = async (data: any) => {
   }
 };
 
-// 🔄 5. ACTUALIZAR POST: Modificar datos (ideal para sumar Likes/Dislikes)
+// 🔄 5. PROCESAR VOTO
+export const handlePostVote = async (postId: string, userId: string, voteType: 'like' | 'dislike') => {
+  try {
+    console.log("\n==========================================");
+    console.log(`⚙️ [CTRL-VOTO] NUEVA PETICIÓN DE VOTO`);
+    console.log("==========================================");
+
+    const targetColName = (countlikes as any).communityId ? 'communityId' : 'relationshipId';
+    const targetColumn = (countlikes as any)[targetColName];
+
+    const votosPrevios = await db
+      .select()
+      .from(countlikes)
+      .where(and(eq(targetColumn, postId), eq(countlikes.userId, userId)));
+
+    const existingVote = votosPrevios.length > 0 ? votosPrevios[0] : null;
+    const hasLiked = existingVote && existingVote.likes === 1;
+    const hasDisliked = existingVote && existingVote.dislikes === 1;
+
+    if (voteType === 'like') {
+      if (hasLiked) {
+        await db.delete(countlikes).where(eq(countlikes.id, existingVote.id));
+      } else if (hasDisliked) {
+        await db.update(countlikes).set({ likes: 1, dislikes: 0 }).where(eq(countlikes.id, existingVote.id));
+      } else {
+        await db.insert(countlikes).values({ [targetColName]: postId, userId: userId, likes: 1, dislikes: 0 } as any);
+      }
+    } else if (voteType === 'dislike') {
+      if (hasDisliked) {
+        await db.delete(countlikes).where(eq(countlikes.id, existingVote.id));
+      } else if (hasLiked) {
+        await db.update(countlikes).set({ likes: 0, dislikes: 1 }).where(eq(countlikes.id, existingVote.id));
+      } else {
+        await db.insert(countlikes).values({ [targetColName]: postId, userId: userId, likes: 0, dislikes: 1 } as any);
+      }
+    }
+
+    const allPostVotes = await db.select().from(countlikes).where(eq(targetColumn, postId));
+    let trueLikes = 0;
+    let trueDislikes = 0;
+    
+    allPostVotes.forEach((v: any) => {
+      trueLikes += (Number(v.likes) || 0);
+      trueDislikes += (Number(v.dislikes) || 0);
+    });
+
+    try {
+      await db.execute(sql`UPDATE community SET likes = ${trueLikes}, dislikes = ${trueDislikes} WHERE id = ${postId}`);
+    } catch(e: any) {}
+
+    let finalUserVote = null;
+    if (voteType === 'like' && !hasLiked) finalUserVote = 'like';
+    if (voteType === 'dislike' && !hasDisliked) finalUserVote = 'dislike';
+
+    return {
+      success: true,
+      likes: trueLikes,     
+      dislikes: trueDislikes, 
+      userVote: finalUserVote
+    };
+
+  } catch (error: any) {
+    console.error("❌ ERROR CRÍTICO EN VOTO:", error.message);
+    throw new Error(`Error en la transacción de voto: ${error.message}`);
+  }
+};
+
+// 🔄 6. ACTUALIZAR POST
 export const updateCommunityPost = async (id: string, data: any) => {
   try {
-    const updated = await db
-      .update(community)
-      .set(data)
-      .where(eq(community.id, id))
-      .returning();
+    const updated = await db.update(community).set(data).where(eq(community.id, id)).returning();
     return updated[0] || null;
   } catch (error: any) { 
     throw new Error(`Error al actualizar la publicación: ${error.message}`);
   }
 };
 
-// 🗑️ 6. ELIMINAR POST: Borrar una publicación de la base de datos
+// 🗑️ 7. ELIMINAR POST
 export const deleteCommunityPost = async (id: string) => {
   try {
-    const deleted = await db
-      .delete(community)
-      .where(eq(community.id, id))
-      .returning();
+    const deleted = await db.delete(community).where(eq(community.id, id)).returning();
     return deleted[0] || null;
   } catch (error: any) {
     throw new Error(`Error al eliminar la publicación: ${error.message}`);

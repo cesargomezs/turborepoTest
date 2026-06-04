@@ -21,6 +21,7 @@ import {
   export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").unique(),
+    name: text("name"),
     birth: date("birth").notNull().defaultNow(), // Corregido a date según tu SQL original
     phone: text("phone"),
     createdAt: timestamp("created_at").defaultNow(),
@@ -98,10 +99,9 @@ import {
   // 6. TABLA: LIKES
   export const countlikes = pgTable("countlikes", {
     id: uuid("id").primaryKey().defaultRandom(),
-    textContent: text("text_content"),
-    communityId: uuid("community_id").references(() => community.id, { onDelete: "cascade" }),
-    likesCount: integer("likes_count").default(0),
-    dislikesCount: integer("dislikes_count").default(0),
+    relationshipId: uuid("relationship_id"),
+    likes: integer("likes").default(0),
+    dislikes: integer("dislikes").default(0),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
   });

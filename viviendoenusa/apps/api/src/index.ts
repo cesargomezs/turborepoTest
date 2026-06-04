@@ -9,17 +9,19 @@ if (!(util as any).isNullOrUndefined) {
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer'; // 1. Importar Multer
+import multer from 'multer';
 
-const upload = multer({ storage: multer.memoryStorage() }); // 1.1 Definir el middleware de Multer
+import sharp from 'sharp';
+import { createClient } from '@supabase/supabase-js';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 import * as tf from '@tensorflow/tfjs';
-import * as nsfwjs from 'nsfwjs'; // 3. Importar NSFWJS
+import * as nsfwjs from 'nsfwjs';
 import { db } from '@viviendoenusa/db';
 import { community, typeDetail, users } from '@viviendoenusa/db/schema';
 import { eq } from 'drizzle-orm';
 
-// 🚀 INTEGRACIÓN: Importamos tus rutas independientes de abogados
 import lawyerRoutes from './lawyers.routes';
 import communityRoutes from './community.routes';
 
@@ -28,14 +30,18 @@ const app = express();
 console.log("Puerto desde .env:", process.env.PORT);
 const port = process.env.PORT || 3000;
 
-// ✅ CAMBIO: Usamos 'any' o el tipo genérico para evitar el error de Namespace
+// --- CONFIGURACIÓN DE SUPABASE ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const NOMBRE_BUCKET = 'images'; 
+
 let model: any = null;
 
 async function loadModel() {
   if (!model) {
     console.log("⏳ Cargando modelo IA (Modo JS)...");
     try {
-      // Forzamos el backend de CPU para evitar problemas de drivers en el servidor
       await tf.setBackend('cpu');
       model = await nsfwjs.load();
       console.log("✅ Modelo cargado correctamente");
@@ -49,43 +55,83 @@ loadModel();
 app.use(cors());
 app.use(express.json());
 
-// 🚀 INTEGRACIÓN: Activamos tus rutas independientes bajo el prefijo /lawyers
 app.use('/lawyers', lawyerRoutes);
-
 app.use('/community', communityRoutes);
 
-// --- NUEVO: ENDPOINT DE VALIDACIÓN NSFW ---
+// --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (DINÁMICO Y SEGURO) ---
+app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {
+  console.log(`🚨 [CONEXIÓN] Petición de subida recibida para la sección: ${req.params.carpeta}`);
+  
+  if (!req.file) {
+    console.log("❌ [ERROR] No se recibió ningún archivo en el campo 'imagen'.");
+    return res.status(400).json({ error: 'Por favor, envía una imagen en el campo "imagen".' });
+  }
+
+  // Lógica segura de parseo de directorios para evitar vulnerabilidades de path traversal
+  const carpetaParam = String(req.params.carpeta);
+  const carpetaSolicitada = carpetaParam.replace(/[^a-zA-Z0-9_-]/g, '');
+  const carpetaFinal = (carpetaSolicitada && carpetaSolicitada !== 'undefined') ? carpetaSolicitada : 'general';
+
+  try {
+    const calidadDeseada = parseInt(req.query.calidad as string) || 80;
+
+    console.log("⏳ Optimizando y convirtiendo formato a WebP...");
+    const bufferWebp = await sharp(req.file.buffer)
+      .webp({ quality: calidadDeseada })
+      .toBuffer();
+
+    const nombreArchivo = `${carpetaFinal}/img-${Date.now()}.webp`;
+    console.log(`⏳ Almacenando en el bucket: "${NOMBRE_BUCKET}" como: ${nombreArchivo}`);
+
+    const { data: uploadData, error: uploadError } = await supabase
+      .storage
+      .from(NOMBRE_BUCKET)
+      .upload(nombreArchivo, bufferWebp, {
+        contentType: 'image/webp',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('❌ [ERROR DE STORAGE EN SUPABASE]:', uploadError);
+      return res.status(500).json({ error: 'Error al almacenar el archivo en el proveedor de nube.' });
+    }
+
+    console.log(`✅ [ÉXITO] Archivo guardado correctamente en la carpeta: ${carpetaFinal}`);
+    return res.status(200).json({
+      mensaje: 'Imagen optimizada y guardada con éxito.',
+      identificadorArchivo: nombreArchivo
+    });
+
+  } catch (error: any) {
+    console.error('❌ [ERROR CRÍTICO EN PROCESAMIENTO]:', error);
+    return res.status(500).json({ error: 'Ocurrió un error inesperado al procesar la imagen.' });
+  }
+});
+
+// --- ENDPOINT DE VALIDACIÓN NSFW ---
 app.post('/validate-nsfw', upload.single('image'), async (req, res) => {
   try {
     if (!req.file || !model) {
       return res.json({ isSafe: true });
     }
 
-    console.log("📸 Procesando imagen...");
+    console.log("📸 Procesando imagen para NSFW...");
 
-    // 1. LEER LA IMAGEN (Sintaxis para Jimp v1+)
     const jimpImage = await Jimp.read(req.file.buffer);
-    
-    // 2. REDIMENSIONAR 
     jimpImage.cover({ w: 224, h: 224 });
 
-    // 3. CONVERTIR A TENSOR
     const imageWidth = jimpImage.bitmap.width;
     const imageHeight = jimpImage.bitmap.height;
-    const imageData = jimpImage.bitmap.data; // Buffer de píxeles RGBA
+    const imageData = jimpImage.bitmap.data; 
 
     const imageTensor = tf.tidy(() => {
-      // Creamos el tensor desde el Uint8Array de Jimp
       const img = tf.tensor3d(new Uint8Array(imageData), [imageHeight, imageWidth, 4]);
-      // Removemos el canal Alpha (RGBA -> RGB)
       return img.slice([0, 0, 0], [-1, -1, 3]) as tf.Tensor3D;
     });
 
-    // 4. CLASIFICAR
     const predictions = await model.classify(imageTensor);
     imageTensor.dispose();
 
-    // 5. LOGS DE CONTROL
     console.log('--- Resultados de la IA ---');
     console.table(predictions);
 
@@ -98,7 +144,7 @@ app.post('/validate-nsfw', upload.single('image'), async (req, res) => {
     res.json({ isSafe: !isUnsafe });
 
   } catch (error) {
-    console.error("❌ Error en la validación:", error);
+    console.error("❌ Error en la validación NSFW:", error);
     res.json({ isSafe: true });
   }
 });
@@ -138,7 +184,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Levantar el servidor escuchando en todas las interfaces de red local
-app.listen(Number(port) ,"192.168.1.248", () => {
+app.listen(Number(port), "172.20.10.3", () => {
   console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port}`);
 });

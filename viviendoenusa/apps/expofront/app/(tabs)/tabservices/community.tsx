@@ -16,6 +16,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator'; 
 import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
@@ -30,8 +31,53 @@ const validateComment = (text: string): boolean => {
   return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
 };
 
+// 🚀 PARSER DEFINITIVO Y A PRUEBA DE BALAS PARA REACT NATIVE
+const parseSafeDate = (dateString: string | Date) => {
+  if (!dateString) return new Date();
+  const s = dateString.toString();
+  
+  // Extraemos exactamente los números ignorando "Z", "T" o microsegundos
+  // Espera formato: YYYY-MM-DD HH:MM:SS
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
+  
+  if (match) {
+    // JavaScript usa meses indexados en 0 (Enero = 0, Junio = 5), por eso el -1 en el mes
+    return new Date(
+      parseInt(match[1]),      // Año
+      parseInt(match[2]) - 1,  // Mes
+      parseInt(match[3]),      // Día
+      parseInt(match[4]),      // Hora
+      parseInt(match[5]),      // Minutos
+      parseInt(match[6])       // Segundos
+    );
+  }
+  
+  // Respaldo por si mandan un objeto Date ya parseado
+  const parsed = new Date(s);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+// 🚀 CÁLCULO DE TIEMPO RELATIVO
+const getRelativeTime = (dateString: string | Date) => {
+  const past = parseSafeDate(dateString);
+  const now = new Date();
+  
+  const diffMs = now.getTime() - past.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMs < 0 || diffMins < 1) return 'Hace un momento';
+  if (diffMins < 60) return `Hace ${diffMins} min`;
+  if (diffHours < 24) return `Hace ${diffHours} h`;
+  if (diffDays === 1) return 'Ayer';
+  if (diffDays < 7) return `Hace ${diffDays} días`;
+  
+  return past.toLocaleDateString();
+};
+
 // 📡 URL BASE PARA LA COMUNIDAD CONECTADA A TU EXPRESS
-const API_COMMUNITY_URL = 'http://192.168.1.248:3000/community'; 
+const API_COMMUNITY_URL = 'http://172.20.10.3:3000/community'; 
 
 export default function CommunityScreen() {
   const { t } = useTranslation();
@@ -51,6 +97,8 @@ export default function CommunityScreen() {
   const styles = useUnifiedCardStyles();
   const segments = useSegments();
   const isCommunityScreen = segments.includes('community');
+
+  const currentUserId =  "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
@@ -105,37 +153,53 @@ export default function CommunityScreen() {
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false); 
-  const [comments, setComments] = useState<Record<number, any[]>>({}); 
-  const [activeCommentId, setActiveCommentId] = useState<number | null>(null);
+  
+  const [comments, setComments] = useState<Record<string, any[]>>({}); 
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
-  const [visibleComments, setVisibleComments] = useState<Record<number, boolean>>({});
+  const [visibleComments, setVisibleComments] = useState<Record<string, boolean>>({});
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
 
-  // 🚀 OBTENER POSTS DESDE EL BACKEND
   const fetchCommunityPosts = async (searchZip?: string) => {
+    if (!searchZip || searchZip.length !== 5) return;
+
     try {
       setLoadingPosts(true);
-      const url = searchZip && searchZip.length === 5 
-        ? `${API_COMMUNITY_URL}?zip=${searchZip}` 
-        : API_COMMUNITY_URL;
+      const url = `${API_COMMUNITY_URL}?zip=${searchZip}`;
 
       const response = await fetch(url);
-      const apiData = await response.json();
+      const textResponse = await response.text();
+      
+      if (!textResponse) {
+        setPosts([]);
+        return;
+      }
+      
+      const apiData = JSON.parse(textResponse);
       
       if (Array.isArray(apiData)) {
-        setPosts(apiData);
+        const formattedPosts = apiData.map((p: any) => ({
+          ...p,
+          likes: p.likes || 0,
+          dislikes: p.dislikes || 0,
+          userVote: p.userVote || null, 
+          createdAt: p.createdAt || new Date().toISOString(), 
+          displayTime: p.createdAt ? getRelativeTime(p.createdAt) : 'Hace un momento'
+        }));
         
-        // Extraer comentarios del leftJoin y mapearlos al estado de la interfaz
-        const commentsMap: Record<number, any[]> = {};
-        apiData.forEach((p: any) => {
+        setPosts(formattedPosts);
+        
+        const commentsMap: Record<string, any[]> = {};
+        formattedPosts.forEach((p: any) => {
           if (p.commentsList && Array.isArray(p.commentsList)) {
             commentsMap[p.id] = p.commentsList.map((c: any) => ({
               id: c.id,
-              text: c.review || c.text || '',
-              displayTime: c.createdAt ? new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-              userName: c.userName || 'User'
+              text: c.comment || c.review || c.text || '',
+              createdAt: c.createdAt || new Date().toISOString(),
+              displayTime: c.createdAt ? getRelativeTime(c.createdAt) : 'Hace un momento',
+              userName: c.userName || 'Usuario Anónimo'
             }));
           }
         });
@@ -152,7 +216,6 @@ export default function CommunityScreen() {
   };
 
   useEffect(() => {
-    fetchCommunityPosts();
   }, []);
 
   const triggerAlert = (title: string, message: string) => {
@@ -160,7 +223,6 @@ export default function CommunityScreen() {
     else { Alert.alert(title, message); }
   };
 
-  // 🚀 CREAR UN NUEVO POST (POST al backend) CON DEBUGGER
   const handlePost = async () => {
     const trimmedText = postText.trim();
     if (!trimmedText || isPublishing) return;
@@ -172,6 +234,8 @@ export default function CommunityScreen() {
 
     setIsPublishing(true);
     try {
+      let finalImageName = null; 
+
       if (selectedImage) {
         const esSegura = await validarImagenEnServidor(selectedImage);
         if (!esSegura) {
@@ -179,38 +243,47 @@ export default function CommunityScreen() {
           triggerAlert(t.communitytab.imageInappropriateTittle, t.communitytab.imageInappropriateDescription);
           return;
         }
+
+        const formData = new FormData();
+        const filename = selectedImage.split('/').pop() || 'imagen.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('imagen', { 
+          uri: selectedImage, 
+          name: filename, 
+          type 
+        } as any);
+
+        const uploadResponse = await fetch('http://172.20.10.3:3000/api/subir-imagen-optimizada/community', {
+          method: 'POST',
+          body: formData,
+          headers: { 
+            'Accept': 'application/json' 
+          },
+        });
+
+        const uploadData = await uploadResponse.json();
+
+        if (!uploadResponse.ok) {
+          throw new Error(uploadData.error || "Error al subir la imagen a la nube.");
+        }
+
+        finalImageName = uploadData.identificadorArchivo; 
       }
 
-      // ⚠️ REVISA ESTOS NOMBRES: Deben coincidir EXACTAMENTE con los de tu Drizzle schema
-      /*const newPostPayload = {
-        text: trimmedText,
-        image: selectedImage,
-        tag: tagMapping[selectedTag] || selectedTag,
-        subCategory: selectedSubCategory,
-        zip: zipCode || null, 
-        likes: 0,
-        dislikes: 0,
-        userName: userMetadata?.name || 'User',
-        displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };*/
-      // ⚠️ PAYLOAD CORREGIDO: Usando los nombres exactos que pide tu base de datos
-      const newPostPayload = {
-        // En lugar de 'text', Drizzle espera 'textContent' o 'text_content'
-        textContent: trimmedText, 
-        // En lugar de 'image', Drizzle espera 'imageUrl' o 'image_url'
-        // imageUrl: selectedImage || null, validacion de carpeta
-        tag: tagMapping[selectedTag] || selectedTag,
-        // En lugar de 'subCategory', el DB espera 'sub_category' (o subCategory en JS)
-        subCategory: selectedSubCategory,
-        // La BD exige un user_id válido (usaremos el UUID que usamos en Abogados para pruebas)
-        userId: "baeb641a-3fa4-4fef-9846-d75947d1bca9",
-        zip: zipCode || "91730",
-        estate: "CA"
+      const targetZip = zipCode && zipCode.length === 5 ? zipCode : "91730";
 
+      const newPostPayload = {
+        textContent: trimmedText, 
+        imageUrl: finalImageName, 
+        tag: tagMapping[selectedTag] || selectedTag,
+        subCategory: selectedSubCategory,
+        userId: currentUserId,
+        zip: targetZip,
+        estate: "CA"
       };
       
-      console.log("Intentando enviar a BD:", newPostPayload);
-
       const response = await fetch(API_COMMUNITY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,29 +292,41 @@ export default function CommunityScreen() {
 
       const responseData = await response.json();
 
-      // Si el backend devuelve status 400 o 500, lanzamos el error para verlo
       if (!response.ok) {
-        console.error("❌ ERROR DEL BACKEND:", responseData);
         throw new Error(responseData.error || "Error desconocido en el servidor");
       }
+      
+      const rawCreatedAt = responseData.createdAt || new Date().toISOString();
 
-      console.log("✅ GUARDADO EXITOSO EN BD:", responseData);
-      
-      // Actualización reactiva instantánea
-      setPosts(prev => [{ ...responseData, commentsList: [] }, ...prev]);
-      
+      const newPost = { 
+        ...responseData, 
+        image: selectedImage || responseData.imageUrl, 
+        likes: 0, 
+        dislikes: 0, 
+        userVote: null, 
+        commentsList: [],
+        createdAt: rawCreatedAt, 
+        displayTime: getRelativeTime(rawCreatedAt)
+      };
+
+      setPosts(prev => [newPost, ...prev]);
       setPostText('');
       setSelectedImage(null);
       setModalVisible(false);
+
+      if (!zipCode || zipCode.length < 5) {
+        setZipCode(targetZip);
+        fetchCommunityPosts(targetZip);
+      }
+
     } catch (err: any) {
       console.error("❌ ERROR EN FETCH:", err.message);
-      triggerAlert("Error de Base de Datos", err.message || t.communitytab.errorServer);
+      triggerAlert("Error", err.message || t.communitytab.errorServer);
     } finally {
       setIsPublishing(false);
     }
   };
 
-  // 🚀 AGREGAR COMENTARIO (POST a tabla de reviews)
   const handleAddComment = async () => {
     const trimmed = commentText.trim();
     if (!trimmed || !activeCommentId) return;
@@ -252,15 +337,12 @@ export default function CommunityScreen() {
     }
 
     try {
-
       const reviewPayload = {
-        typeDetailId: "771c41ff-802d-4df9-8d89-d6fa58c8b3c6", // Sin guión bajo
-        relationshipId: String(activeCommentId),              // Sin guión bajo
-        comment: trimmed,                                     // Este está bien
-        userId: "baeb641a-3fa4-4fef-9846-d75947d1bca9"        // Sin guión bajo
+        typeDetailId: "771c41ff-802d-4df9-8d89-d6fa58c8b3c6", 
+        relationshipId: String(activeCommentId),              
+        comment: trimmed,                                     
+        userId: currentUserId        
       };
-
-      console.log("Enviando Comentario a BD:", reviewPayload);
 
       const response = await fetch(`${API_COMMUNITY_URL}/review`, {
         method: 'POST',
@@ -269,13 +351,14 @@ export default function CommunityScreen() {
       });
       const savedReview = await response.json();
 
-      console.log("Respuesta del backend para nuevo comentario:", savedReview);
+      const rawCreatedAt = savedReview.createdAt || new Date().toISOString();
 
       const newLocalComment = {
         id: savedReview.id || Date.now(),
         text: trimmed,
-        displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        userName: userMetadata?.name || 'User'
+        createdAt: rawCreatedAt,
+        displayTime: getRelativeTime(rawCreatedAt),
+        userName: userMetadata?.name || 'Tú'
       };
 
       setComments(prev => ({
@@ -290,36 +373,74 @@ export default function CommunityScreen() {
     }
   };
 
-  // 🚀 ACTUALIZAR VOTOS (PUT al backend para actualizar likes)
-  const handleVote = async (postId: number, type: 'like' | 'dislike') => {
-    let newLikes = 0;
-    let newDislikes = 0;
-
-    // Actualizamos la UI inmediatamente (Optimistic update)
+  const handleVote = async (postId: string, type: 'like' | 'dislike') => {
     setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const isSelected = p.userVote === type;
-      
-      newLikes = type === 'like' ? (isSelected ? p.likes - 1 : p.likes + 1) : (p.userVote === 'like' ? p.likes - 1 : p.likes);
-      newDislikes = type === 'dislike' ? (isSelected ? p.dislikes - 1 : p.dislikes + 1) : (p.userVote === 'dislike' ? p.dislikes - 1 : p.dislikes);
-      
-      return {
-        ...p,
-        likes: newLikes,
-        dislikes: newDislikes,
-        userVote: isSelected ? null : type
-      };
+      if (String(p.id) !== String(postId)) return p;
+
+      let newLikes = p.likes || 0;
+      let newDislikes = p.dislikes || 0;
+      let newVote = p.userVote;
+
+      if (type === 'like') {
+        if (p.userVote === 'like') {
+          newLikes = Math.max(0, newLikes - 1);
+          newVote = null;
+        } else if (p.userVote === 'dislike') {
+          newLikes += 1;
+          newDislikes = Math.max(0, newDislikes - 1);
+          newVote = 'like';
+        } else {
+          newLikes += 1;
+          newVote = 'like';
+        }
+      } else { 
+        if (p.userVote === 'dislike') {
+          newDislikes = Math.max(0, newDislikes - 1);
+          newVote = null;
+        } else if (p.userVote === 'like') {
+          newDislikes += 1;
+          newLikes = Math.max(0, newLikes - 1);
+          newVote = 'dislike';
+        } else {
+          newDislikes += 1;
+          newVote = 'dislike';
+        }
+      }
+
+      return { ...p, likes: newLikes, dislikes: newDislikes, userVote: newVote };
     }));
 
-    // Sincronizamos en segundo plano
     try {
-      await fetch(`${API_COMMUNITY_URL}/${postId}`, {
-        method: 'PUT',
+      const response = await fetch(`${API_COMMUNITY_URL}/vote`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ likes: newLikes, dislikes: newDislikes })
+        body: JSON.stringify({ 
+          postId: postId,
+          userId: currentUserId, 
+          voteType: type 
+        })
       });
+
+      if (!response.ok) {
+        fetchCommunityPosts(zipCode);
+        return; 
+      }
+
+      const data = await response.json();
+      
+      if (data.success || data.likes !== undefined) {
+        setPosts(prev => prev.map(p => 
+          String(p.id) === String(postId) ? {
+            ...p,
+            likes: data.likes,
+            dislikes: data.dislikes,
+            userVote: data.userVote
+          } : p
+        ));
+      }
+
     } catch (error) {
-      console.error("Error al actualizar voto:", error);
+      fetchCommunityPosts(zipCode); 
     }
   };
 
@@ -329,7 +450,13 @@ export default function CommunityScreen() {
       const matchSub = activeSubFilter === 'All' || p.subCategory === activeSubFilter;
       return matchTag && matchSub;
     });
-    return res.sort((a, b) => isRecentFirst ? b.id - a.id : a.id - b.id);
+    
+    // 🚀 LÓGICA DE ORDENAMIENTO (Usando el nuevo parser manual)
+    return res.sort((a, b) => {
+      const timeA = parseSafeDate(a.createdAt).getTime();
+      const timeB = parseSafeDate(b.createdAt).getTime();
+      return isRecentFirst ? timeB - timeA : timeA - timeB;
+    });
   }, [posts, activeFilter, activeSubFilter, isRecentFirst]);
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
@@ -344,12 +471,62 @@ export default function CommunityScreen() {
             {!isAndroid && <BlurView intensity={isDark ? 100 : 60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
 
             <View style={styles.cardContent}>
-              <View style={styles.headerRow}>
-                <TouchableOpacity onPress={() => router.push('/services')}>
+              
+              <View style={[styles.headerRow, { marginBottom: 15, alignItems: 'center', justifyContent: 'space-between' }]}>
+                <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 5 }}>
                   <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
                 </TouchableOpacity>
-                <View style={{flex:1}} />
-                <MaterialCommunityIcons name="account-group" size={40} color={DynamicColors.text} style={{opacity: 0.2}} />
+
+                <View style={{ 
+                  flexDirection: 'row', 
+                  alignItems: 'center', 
+                  flex: 1,
+                  maxWidth: 220, 
+                  marginHorizontal: 10
+                }}>
+                  <TextInput 
+                    style={[{ 
+                      flex: 1, 
+                      height: 40, 
+                      borderRadius: 12, 
+                      paddingHorizontal: 14, 
+                      fontSize: 14,
+                      color: DynamicColors.text, 
+                      backgroundColor: DynamicColors.inputBg, 
+                      borderColor: DynamicColors.border, 
+                      borderWidth: 1, 
+                      ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) 
+                    }]} 
+                    placeholder="Zip Code..." 
+                    keyboardType="numeric" 
+                    maxLength={5} 
+                    value={zipCode} 
+                    onChangeText={(text) => {
+                      setZipCode(text);
+                      if (text.length < 5) {
+                        if (posts.length > 0) setPosts([]); 
+                      } else if (text.length === 5) {
+                        fetchCommunityPosts(text); 
+                      }
+                    }} 
+                    onSubmitEditing={() => zipCode.length === 5 && fetchCommunityPosts(zipCode)} 
+                    placeholderTextColor={DynamicColors.subtext} 
+                  />
+                  <TouchableOpacity 
+                    onPress={() => fetchCommunityPosts(zipCode)} 
+                    disabled={zipCode.length !== 5} 
+                    style={{ width: 40, height: 40, marginLeft: 6 }}
+                  >
+                    <LinearGradient 
+                      colors={zipCode.length === 5 ? orangeGradient : disabledGradient} 
+                      style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}
+                    >
+                      {loadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={18} color={zipCode.length === 5 ? "#fff" : DynamicColors.iconInactive} />}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+
+                <MaterialCommunityIcons name="account-group" size={32} color={DynamicColors.text} style={{opacity: 0.15, paddingLeft: 5}} />
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
@@ -382,31 +559,7 @@ export default function CommunityScreen() {
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
                   
-                  {/* BARRAS DE BÚSQUEDA Y FILTROS */}
-                  <View style={{marginBottom: 15}}>
-                    
-                    {/* BARRA DE CÓDIGO POSTAL */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10, paddingRight: isLargeWeb ? 0 : 20 }}>
-                      <TextInput 
-                        style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                        placeholder={t.lawyerstab?.messagezip || "Filtrar por código postal..."} 
-                        keyboardType="numeric" 
-                        maxLength={5} 
-                        value={zipCode} 
-                        onChangeText={(text) => {
-                          setZipCode(text);
-                          if(text.length === 0) fetchCommunityPosts(); 
-                        }} 
-                        onSubmitEditing={() => fetchCommunityPosts(zipCode)} 
-                        placeholderTextColor={DynamicColors.subtext} 
-                      />
-                      <TouchableOpacity onPress={() => fetchCommunityPosts(zipCode)} disabled={zipCode.length > 0 && zipCode.length < 5} style={{ width: 48, height: 48 }}>
-                        <LinearGradient colors={zipCode.length === 5 || zipCode.length === 0 ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
-                          {loadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </View>
-
+                  <View style={{marginBottom: 10}}>
                     {isLargeWeb ? (
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 5 }}>
                         <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -444,7 +597,7 @@ export default function CommunityScreen() {
                       </View>
                     ) : (
                       <View>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}} contentContainerStyle={{ paddingRight: 20 }}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}} contentContainerStyle={{ paddingHorizontal: 5 }}>
                           <TouchableOpacity onPress={() => setIsRecentFirst(!isRecentFirst)} style={{ marginRight: 10, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isRecentFirst ? 0 : 1, borderColor: DynamicColors.border }}>
                             {isRecentFirst ? (
                               <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
@@ -477,7 +630,7 @@ export default function CommunityScreen() {
                             );
                           })}
                         </ScrollView>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 5 }}>
                           {subCategories.map(cat => {
                             const isActive = activeSubFilter === cat.id;
                             return (
@@ -504,10 +657,30 @@ export default function CommunityScreen() {
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {loadingPosts ? (
                       <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 50 }} />
+                    ) : (!zipCode || zipCode.length < 5) ? (
+                      <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
+                        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+                          <MaterialCommunityIcons name="map-marker-radius" size={40} color={DynamicColors.subtext} />
+                        </View>
+                        <ThemedText style={{ textAlign: 'center', color: DynamicColors.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }}>
+                          {t.communitytab.messageemptytitle}
+                        </ThemedText>
+                        <ThemedText style={{ textAlign: 'center', color: DynamicColors.subtext, fontSize: 14, lineHeight: 20 }}>
+                          {t.communitytab.messageempty}
+                        </ThemedText>
+                      </View>
                     ) : filteredPosts.length === 0 ? (
-                      <ThemedText style={{ textAlign: 'center', marginTop: 50, color: DynamicColors.subtext }}>
-                        No hay publicaciones para mostrar.
-                      </ThemedText>
+                      <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
+                        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+                          <MaterialCommunityIcons name="post-outline" size={40} color={DynamicColors.subtext} />
+                        </View>
+                        <ThemedText style={{ textAlign: 'center', color: DynamicColors.text, fontSize: 16, fontWeight: '800', marginBottom: 8 }}>
+                          {t.communitytab.messageNodatatitle}
+                        </ThemedText>
+                        <ThemedText style={{ textAlign: 'center', color: DynamicColors.subtext, fontSize: 14, lineHeight: 20 }}>
+                          {t.communitytab.messageNodata}
+                        </ThemedText>
+                      </View>
                     ) : (
                       filteredPosts.map(post => (
                         <View key={post.id} style={styles.postCard}>
@@ -515,7 +688,9 @@ export default function CommunityScreen() {
                             <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
                             <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
                           </View>
-                          <ThemedText style={styles.bodyText}>{post.text}</ThemedText>
+                          
+                          <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20 }]}>{post.text}</ThemedText>
+                          
                           {post.image && (
                             <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
                               <Image source={{ uri: post.image }} style={styles.postImage} />
@@ -527,26 +702,30 @@ export default function CommunityScreen() {
                               </View>
                             </TouchableOpacity>
                           )}
+                          
                           {visibleComments[post.id] && (
-                            <View style={styles.commentSection}>
+                            <View style={[styles.commentSection, { marginTop: 6, paddingTop: 4 }]}>
                               {(comments[post.id] || []).length > 0 ? (
                                 (comments[post.id] || []).map(c => (
-                                  <View key={c.id} style={styles.commentBubble}>
-                                    <ThemedText style={styles.commentUser}>{c.userName}: <ThemedText style={styles.commentText}>{c.text}</ThemedText></ThemedText>
+                                  <View key={c.id} style={[styles.commentBubble, { marginBottom: 2, paddingVertical: 2, minHeight: 0 }]}>
+                                    <ThemedText style={[styles.commentUser, { lineHeight: 18 }]}>
+                                      {c.userName}: <ThemedText style={[styles.commentText, { lineHeight: 18 }]}>{c.text}</ThemedText>
+                                    </ThemedText>
                                   </View>
                                 ))
-                              ) : <ThemedText style={styles.noCommentsText}>{t.communitytab.firtscomment}</ThemedText>}
-                              <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={styles.replyBtn}>
-                                <MaterialCommunityIcons name="pencil-outline" size={12} color={DynamicColors.accent} />
+                              ) : <ThemedText style={[styles.noCommentsText, { marginBottom: 4 }]}>{t.communitytab.firtscomment}</ThemedText>}
+                              
+                              <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={[styles.replyBtn, { marginTop: 4 }]}>
+                                <MaterialCommunityIcons name="pencil-outline" size={14} color={DynamicColors.accent} />
                                 <ThemedText style={[styles.replyBtnText, { color: DynamicColors.accent }]}>{t.communitytab.responsebutton}</ThemedText>
                               </TouchableOpacity>
                             </View>
                           )}
-                          <View style={styles.postFooter}>
+                          <View style={[styles.postFooter, { marginTop: 10 }]}>
                             <View style={styles.reaccionGroup}>
                               <TouchableOpacity onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
                                 <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
-                                <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes}</ThemedText>
+                                <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes || 0}</ThemedText>
                               </TouchableOpacity>
                               <TouchableOpacity onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
                                 <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : DynamicColors.iconInactive} />
@@ -554,7 +733,7 @@ export default function CommunityScreen() {
                               </TouchableOpacity>
                               <TouchableOpacity onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
                                 <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
-                                <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes}</ThemedText>
+                                <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes || 0}</ThemedText>
                               </TouchableOpacity>
                             </View>
                             <TouchableOpacity onPress={() => Share.share({ message: post.text })}>
@@ -657,7 +836,24 @@ export default function CommunityScreen() {
                 )}
 
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
-                  <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({quality:0.7}); if(!r.canceled) setSelectedImage(r.assets[0].uri); }}
+                  <TouchableOpacity onPress={async () => { 
+                      let r = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                        quality: 0.8
+                      }); 
+                      
+                      if(!r.canceled) {
+                        const originalUri = r.assets[0].uri;
+                        
+                        const manipResult = await ImageManipulator.manipulateAsync(
+                          originalUri,
+                          [], 
+                          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+                        );
+                        
+                        setSelectedImage(manipResult.uri); 
+                      }
+                    }}
                     style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: DynamicColors.inputBg, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center' }}>
                     <MaterialCommunityIcons name="camera-plus" size={32} color="#FF5F6D" />
                   </TouchableOpacity>

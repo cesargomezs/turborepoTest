@@ -15,14 +15,12 @@ export async function validarImagenEnServidor(uri: string): Promise<boolean> {
       type,
     });
 
-    const response = await fetch('http://127.0.0.1:3000/validate-nsfw', {
+    const response = await fetch('http://172.20.10.3:3000/validate-nsfw', {
       method: 'POST',
       body: formData,
       headers: {
-        // ELIMINADO: 'Content-Type': 'multipart/form-data'
-        // Dejamos los headers vacíos o solo con 'Accept' para que fetch 
-        // genere automáticamente el Content-Type con el Boundary correcto.
         'Accept': 'application/json',
+        'Connection': 'close' // 🚀 NUEVO: Cierra el tubo apenas termine la validación
       },
     });
 

@@ -1,27 +1,38 @@
 import { db } from "../../../../packages/db/src"; 
 import { lawyers, rating } from "../../../../packages/db/src/schema"; 
 import { eq } from "drizzle-orm";
+import { createClient } from '@supabase/supabase-js'; // 🚀 Importación de Supabase
 
-// 🔍 1. CONSULTA GENERAL: Obtiene los abogados filtrados por zip (opcional) incluyendo promedios y lista de calificaciones
-export const getLawyers = async (zip?: string) => {
+// 🚀 Inicializamos Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const NOMBRE_BUCKET = 'images'; 
+
+// 🔍 1. CONSULTA GENERAL: Obtiene los abogados filtrados por zip con promedios y URLs firmadas
+export const getLawyers = async (rawZip?: string | number) => {
   try {
-    // Inicializamos la query base con el leftJoin de los ratings
+    // 🚀 LÓGICA DE BLINDAJE: Aseguramos que el Zip sea un string limpio
+    const zip = rawZip ? String(rawZip).trim() : '';
+    console.log(`🚨 [BACKEND] getLawyers llamado. Zip recibido: "${zip}"`);
+
     let query = db
       .select()
       .from(lawyers)
       .leftJoin(rating, eq(rating.referenceId, lawyers.id))
-      .$dynamic(); // Volvemos la query dinámica para agregar condicionales
+      .$dynamic(); 
 
-    // 🎯 Si el frontend envía el código postal, aplicamos el filtro en la consulta de Postgres
-    if (zip && zip.trim().length === 5) {
-      query = query.where(eq(lawyers.zip, zip.trim()));
+    if (zip && zip.length === 5) {
+      console.log(`✅ Aplicando filtro estricto en BD para el Zip Code: ${zip}`);
+      query = query.where(eq(lawyers.zip, zip));
+    } else {
+      console.log(`⚠️ No se aplicó filtro (El Zip es inválido o vino vacío). Devolviendo todos.`);
     }
 
     const rows = await query;
 
     if (!rows || rows.length === 0) return [];
 
-    // Agrupamos por abogado para procesar sus promedios individuales
     const lawyersMap = new Map<string, any>();
 
     for (const row of rows) {
@@ -39,7 +50,6 @@ export const getLawyers = async (zip?: string) => {
       }
     }
 
-    // Convertimos el mapa en el arreglo final calculando las matemáticas de cada uno
     const finalResult = Array.from(lawyersMap.values()).map((lawyer: any) => {
       const ratingsArray = lawyer.rawRatings;
       let averageRating = 0;
@@ -49,7 +59,6 @@ export const getLawyers = async (zip?: string) => {
         averageRating = Math.round((sum / ratingsArray.length) * 10) / 10;
       }
 
-      // Estructura limpia compatible con tu LawyerCard del frontend
       return {
         id: lawyer.id,
         nameLawy: lawyer.nameLawy,
@@ -61,17 +70,30 @@ export const getLawyers = async (zip?: string) => {
         userId: lawyer.userId,
         createdAt: lawyer.createdAt,
         approved: lawyer.approved,
-        
-        // 🛡️ BLINDAJE: Forzamos string para evitar el error de casteo "code: 42804" en Postgres
         zip: lawyer.zip ? String(lawyer.zip) : null,
-
         totalReviews: ratingsArray.length,
         totalRating: averageRating, 
         rating: ratingsArray         
       };
     });
 
-    return finalResult;
+    // 🚀 LÓGICA SUPABASE: Transformar las imágenes a URLs seguras (Signed URLs)
+    const lawyersConImagenesSeguras = await Promise.all(finalResult.map(async (lawyer) => {
+      if (lawyer.imageUrl && lawyer.imageUrl.trim() !== '' && !lawyer.imageUrl.startsWith('http')) {
+          const rutaArchivo = lawyer.imageUrl.startsWith('lawyers/') 
+              ? lawyer.imageUrl : `lawyers/${lawyer.imageUrl}`;
+
+          const { data, error } = await supabase
+              .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
+
+          if (!error && data) {
+              return { ...lawyer, image: data.signedUrl, imageUrl: data.signedUrl }; 
+          }
+      }
+      return { ...lawyer, image: lawyer.imageUrl }; 
+    }));
+
+    return lawyersConImagenesSeguras;
   } catch (error: any) {
     console.error("❌ Error en getLawyers con Ratings:", error);
     return [];
@@ -99,12 +121,29 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       averageRating = Math.round((sum / ratingsArray.length) * 10) / 10;
     }
   
-    return {
+    const lawyerFinal: any = {
       ...rows[0].lawyers, 
       totalReviews: ratingsArray.length, 
       totalRating: averageRating,         
       rating: ratingsArray              
     };
+
+    if (lawyerFinal.imageUrl && lawyerFinal.imageUrl.trim() !== '' && !lawyerFinal.imageUrl.startsWith('http')) {
+        const rutaArchivo = lawyerFinal.imageUrl.startsWith('lawyers/') 
+            ? lawyerFinal.imageUrl : `lawyers/${lawyerFinal.imageUrl}`;
+
+        const { data, error } = await supabase
+            .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+            
+        if (!error && data) {
+            lawyerFinal.image = data.signedUrl;
+            lawyerFinal.imageUrl = data.signedUrl;
+        }
+    } else {
+        lawyerFinal.image = lawyerFinal.imageUrl;
+    }
+
+    return lawyerFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener el abogado por ID: ${error.message}`);
   }
@@ -113,6 +152,9 @@ export const getLawyerByIdWithReviews = async (id: string) => {
 // 📥 3. INGRESO: Crear un nuevo abogado
 export const createLawyer = async (data: any) => {
   try {
+    if (data.imageUrl && data.imageUrl.startsWith('lawyers/')) {
+      data.imageUrl = data.imageUrl.replace('lawyers/', '');
+    }
     const newLawyer = await db.insert(lawyers).values(data).returning();
     return newLawyer[0];
   } catch (error: any) { 
@@ -123,12 +165,33 @@ export const createLawyer = async (data: any) => {
 // 🔍 4. CONSULTA SIMPLE: Obtener un abogado por ID sin joints
 export const getLawyerById = async (id: string) => {
   const result = await db.select().from(lawyers).where(eq(lawyers.id, id));
-  return result[0] || null;
+  
+  if (!result || result.length === 0) return null;
+  const lawyerFinal = result[0];
+
+  if (lawyerFinal.imageUrl && lawyerFinal.imageUrl.trim() !== '' && !lawyerFinal.imageUrl.startsWith('http')) {
+      const rutaArchivo = lawyerFinal.imageUrl.startsWith('lawyers/') 
+          ? lawyerFinal.imageUrl : `lawyers/${lawyerFinal.imageUrl}`;
+
+      const { data, error } = await supabase
+          .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+          
+      if (!error && data) {
+          (lawyerFinal as any).image = data.signedUrl;
+          lawyerFinal.imageUrl = data.signedUrl;
+      }
+  }
+
+  return lawyerFinal;
 };
 
 // 🔄 5. ACTUALIZACIÓN: Modificar datos existentes de un abogado
 export const updateLawyer = async (id: string, data: any) => {
   try {
+    if (data.imageUrl && data.imageUrl.startsWith('lawyers/')) {
+      data.imageUrl = data.imageUrl.replace('lawyers/', '');
+    }
+
     const updated = await db
       .update(lawyers)
       .set(data)

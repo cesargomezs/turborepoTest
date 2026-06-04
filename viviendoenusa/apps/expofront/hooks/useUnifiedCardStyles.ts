@@ -100,8 +100,8 @@ export const useUnifiedCardStyles = () => {
       borderColor: glassColors.border
     },
     postHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    tagText: { fontSize: 9, color: glassColors.accent, fontWeight: 'bold', textTransform: 'uppercase' },
-    timeText: { fontSize: 9, color: glassColors.subtext, opacity: 0.6 },
+    tagText: { fontSize: 13, color: glassColors.accent, fontWeight: 'bold', textTransform: 'uppercase' },
+    timeText: { fontSize: 12, color: glassColors.subtext, opacity: 0.6 },
     bodyText: { fontSize: 14, marginBottom: 12, lineHeight: 20, color: glassColors.text },
     postImage: { width: '100%', height: 180, borderRadius: 18, marginBottom: 12, resizeMode: 'cover' },
     postFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
@@ -111,11 +111,11 @@ export const useUnifiedCardStyles = () => {
       borderRadius: 10, padding: 10 
     },
     commentBubble: { marginBottom: 6 },
-    commentUser: { fontSize: 11, fontWeight: 'bold', color: glassColors.accent },
-    commentText: { fontWeight: 'normal', fontSize: 11, color: glassColors.text },
-    noCommentsText: { fontSize: 10, color: glassColors.subtext, fontStyle: 'italic', textAlign: 'center', marginVertical: 8 },
+    commentUser: { fontSize: 13, fontWeight: 'bold', color: glassColors.accent },
+    commentText: { fontWeight: 'normal', fontSize: 13, color: glassColors.text, lineHeight: 8, padding:0 },
+    noCommentsText: { fontSize: 13, color: glassColors.subtext, fontStyle: 'italic', textAlign: 'center', marginVertical: 8 },
     replyBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-    replyBtnText: { color: glassColors.accent, fontSize: 10, marginLeft: 5, fontWeight: 'bold' },
+    replyBtnText: { color: glassColors.accent, fontSize: 13, marginLeft: 5, fontWeight: 'bold' },
     reaccionGroup: { flexDirection: 'row', gap: 8 },
     reaccionBtn: { 
       flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, 
