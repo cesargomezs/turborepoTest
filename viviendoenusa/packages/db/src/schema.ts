@@ -113,12 +113,13 @@ import {
     categoryIdx: integer("category_idx").default(0),
     statusId: uuid("status_id").references(() => typeDetail.id, { onDelete: "set null" }),
     descriptionDon: text("description_don"),
-    imageDon: text("image_don"),
-    locationDon: text("location_don"),
+    locationDon: text("location_don"),    
+    imageUrl: text("image_url"),
     phone: text("phone"),
     zip: text("zip"),
     estate: text("estate"),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
     contactMethod: text("contact_method"),
   });
   
@@ -149,7 +150,7 @@ import {
     nameStores: text("name_stores").notNull(),
     descriptionStores: text("description_stores"),
     addressStores: text("address_stores"),
-    categoryId: uuid("category_id").references(() => typeDetail.id, { onDelete: "set null" }),
+    categoryId: text("category_id"),
     zip: text("zip"),
     estate: text("estate"),
     imageStores: text("image_stores"),
@@ -167,7 +168,7 @@ import {
   export const entrepreneurship = pgTable("entrepreneurship", {
     id: uuid("id").primaryKey().defaultRandom(),
     nameEntrepren: text("name_entrepren").notNull(),
-    categoryId: uuid("category_id").references(() => typeDetail.id, { onDelete: "set null" }),
+    categoryId: text("categoryId"),
     descriptionEntrepren: text("description_entrepren"),
     phone: text("phone"),
     verified: boolean("verified").default(false),

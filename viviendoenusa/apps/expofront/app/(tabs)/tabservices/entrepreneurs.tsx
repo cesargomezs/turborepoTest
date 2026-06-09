@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
@@ -6,7 +6,7 @@ import {
   Modal as RNModal, KeyboardAvoidingView, ActivityIndicator,
   ColorValue, Image,
 } from 'react-native';
-import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,6 +28,9 @@ const BANNED_WORDS = Array.isArray((badWordsData as any).badWordsList)
 const validateComment = (text: string): boolean =>
   !BANNED_WORDS.some((w: string) => text.toLowerCase().includes(w.toLowerCase()));
 
+// 📡 URL BASE PARA LOS EMPRENDIMIENTOS
+const API_ENTREPRENEURSHIP_URL = 'http://172.20.10.3:3000/entrepreneurship';
+
 // --- TIPOS ---
 type Review = {
   id: string;
@@ -37,7 +40,7 @@ type Review = {
 };
 
 type Emprendimiento = {
-  id: number;
+  id: string;
   name: string;
   categoryId: number; 
   description: string;
@@ -52,6 +55,7 @@ type Emprendimiento = {
   saved: boolean;
   reviews: Review[];
   contactMethod: 'whatsapp' | 'phone'; 
+  zip: string;
 };
 
 const COUNTRIES = [
@@ -59,58 +63,52 @@ const COUNTRIES = [
   { code: '+52', flag: '🇲🇽', name: 'Mexico' }
 ];
 
-// Íconos seguros por índice (0: Todas, 1: Garaje, 2: Reparaciones, 3: Comida, 4: Salud, 5: Tecnología)
 const ICONS_ARRAY = ['apps', 'sale', 'wrench-outline', 'silverware-fork-knife', 'heart-pulse', 'laptop'];
 
-const DATA_SOURCE: Emprendimiento[] = [
-  {
-    id: 1, name: 'Gran Venta de Garaje', categoryId: 1, 
-    description: 'Ropa de segunda mano en excelente estado, muebles vintage, juguetes y herramientas. Precios negociables, ¡todo debe irse este fin de semana! Ven y encuentra tesoros a precios de locura.',
-    rating: 5.0, phone: '+1909000000', verified: true,
-    promo: '2x1 en toda la ropa',
-    image: 'https://images.unsplash.com/photo-1555529771-835f59fc5efe?w=800',
-    likes: 12, dislikes: 1, userVote: null, saved: false,
-    contactMethod: 'whatsapp',
-    reviews: [
-      { id: 'r1', stars: 5, comment: 'Encontré cosas muy buenas y baratas.', displayTime: '10:30 AM' },
-    ],
-  },
-  {
-    id: 2, name: 'Tech Repair', categoryId: 2, 
-    description: 'Reparación de equipos electrónicos y computación. Servicio a domicilio disponible en toda el área de Inland Empire. Reparamos laptops, celulares, tablets y consolas. Diagnóstico gratuito y garantía.',
-    rating: 4.8, phone: '+1909111111', verified: true, promo: null,
-    image: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=800',
-    likes: 8, dislikes: 0, userVote: null, saved: false, contactMethod: 'phone', reviews: [],
-  },
-  {
-    id: 3, name: 'Comida Típica Mamá Rosa', categoryId: 3, 
-    description: 'Platillos caseros y auténticos de la cocina mexicana y latinoamericana. Pedidos a domicilio y catering para eventos especiales. Especialidad en tamales, pozole, birria y enchiladas.',
-    rating: 4.9, phone: '+1909222222', verified: false,
-    promo: 'Envío gratis en tu primer pedido',
-    image: 'https://images.unsplash.com/photo-1555126634-323283e090fa?w=800',
-    likes: 24, dislikes: 2, userVote: null, saved: false, contactMethod: 'whatsapp',
-    reviews: [
-      { id: 'r3', stars: 5, comment: '¡La mejor birria que he probado fuera de México!', displayTime: '12:00 PM' },
-    ],
-  },
-  {
-    id: 4, name: 'Clínica Salud Latina', categoryId: 4, 
-    description: 'Consultas médicas generales, vacunas y chequeos preventivos. Atención completamente en español. Contamos con médicos bilingües, nutricionistas y servicio de laboratorio.',
-    rating: 4.7, phone: '+1909333333', verified: true, promo: null,
-    image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800',
-    likes: 17, dislikes: 1, userVote: null, saved: false, contactMethod: 'phone', reviews: [],
-  },
-  {
-    id: 5, name: 'WebSol Digital', categoryId: 5, 
-    description: 'Desarrollo de páginas web profesionales, tiendas online y marketing digital para tu negocio. Ayudamos a pequeñas empresas latinas a crecer en internet con presupuestos accesibles.',
-    rating: 4.6, phone: '+1909444444', verified: true,
-    promo: '1 mes gratis de mantenimiento',
-    image: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800',
-    likes: 6, dislikes: 0, userVote: null, saved: false, contactMethod: 'whatsapp', reviews: [],
-  },
-];
+// --- COMPONENTE: FORMULARIO DE RESEÑA ---
+const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
 
-// --- COMPONENTE PRINCIPAL ---
+  const handlePrePublish = () => {
+    if (!validateComment(comment)) {
+      const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
+      if (Platform.OS === 'web') { window.alert(errorMsg); } 
+      else { Alert.alert("Error", errorMsg); }
+      return;
+    }
+    onPublish(rating, comment);
+  };
+
+  return (
+    <View style={{ flex: 1, paddingVertical: 10 }}>
+      <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.entrepreneurshiptab?.backBtn || 'Volver'}</ThemedText>
+      </TouchableOpacity>
+      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>
+        {t.entrepreneurshiptab?.viewExpe || 'Tu Experiencia'}
+      </ThemedText>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
+        {[1, 2, 3, 4, 5].map(s => (
+          <TouchableOpacity key={s} onPress={() => setRating(s)}>
+            <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+        <TextInput value={comment} onChangeText={setComment} placeholder={t.entrepreneurshiptab?.viewopinion || "Escribe tu opinión..."} placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+      </View>
+      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+        <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+          <MaterialCommunityIcons name="send" size={18} color="#FFF" />
+          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>{t.entrepreneurshiptab?.publishReviews || 'Publicar reseña'}</ThemedText>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
 export default function EntrepreneurshipScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -119,14 +117,16 @@ export default function EntrepreneurshipScreen() {
   const { t } = useTranslation();
   const stylesUnified = useUnifiedCardStyles();
   const router = useRouter();
-  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
+  
+  // 🚀 BLINDAJE REDUX
+  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
+  const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
 
   const isWeb      = Platform.OS === 'web';
   const isLargeWeb = isWeb && width > 1000;
   const isAndroid  = Platform.OS === 'android';
   const isIOS      = Platform.OS === 'ios';
 
-  // --- EXTRACCIÓN SEGURA DE TRADUCCIONES ---
   const rawCategories = t.entrepreneurshiptab?.categoryentre;
   const CATEGORIES = Array.isArray(rawCategories) && rawCategories.length > 0 
       ? rawCategories 
@@ -158,53 +158,112 @@ export default function EntrepreneurshipScreen() {
   const OG: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'];
   const DG: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
-  // --- State ---
+  // --- State Principal ---
+  const [zipCode, setZipCode] = useState('');
+  const [loading, setLoading] = useState(false);
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
-  const [searchText,          setSearchText]          = useState('');
-  const [localData,           setLocalData]           = useState<Emprendimiento[]>(DATA_SOURCE);
-  const [isFormVisible,       setFormVisible]         = useState(false);
-  const [detailItem,          setDetailItem]          = useState<Emprendimiento | null>(null);
-  const [reviewTarget,        setReviewTarget]        = useState<Emprendimiento | null>(null);
-  const [showReviewInput,     setShowReviewInput]     = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [localData, setLocalData] = useState<Emprendimiento[]>([]);
+  const [results, setResults] = useState<Emprendimiento[]>([]);
+  
+  // --- State Modales ---
+  const [isFormVisible, setFormVisible] = useState(false);
+  const [detailItem, setDetailItem] = useState<Emprendimiento | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<Emprendimiento | null>(null);
+  const [showReviewInput, setShowReviewInput] = useState(false);
 
-  // Formulario nuevo emprendimiento
-  const [formName,           setFormName]           = useState('');
-  const [formDesc,           setFormDesc]           = useState('');
-  const [formPhone,          setFormPhone]          = useState('');
-  const [formContactMethod,  setFormContactMethod]  = useState<'whatsapp' | 'phone'>('whatsapp');
-  const [countryIdx,         setCountryIdx]         = useState(0); 
-  const [formCategoryIdx,    setFormCategoryIdx]    = useState(1); 
-  const [formPromo,          setFormPromo]          = useState('');
-  const [formImage,          setFormImage]          = useState<string | null>(null);
-  const [isSubmitting,       setIsSubmitting]       = useState(false);
+  // --- Formulario nuevo emprendimiento ---
+  const [formName, setFormName] = useState('');
+  const [formDesc, setFormDesc] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formContactMethod, setFormContactMethod] = useState<'whatsapp' | 'phone'>('whatsapp');
+  const [countryIdx, setCountryIdx] = useState(0); 
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
+  const [formPromo, setFormPromo] = useState('');
+  const [formZip, setFormZip] = useState('');
+  const [formImage, setFormImage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isZipValid = zipCode.length === 5;
 
   const triggerAlert = (title: string, msg: string) =>
     isWeb ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
 
+  // --- FETCH DESDE EL BACKEND ---
+  const fetchEntrepreneurships = async (searchZip: string) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}?zip=${searchZip.trim()}`);
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        const mappedData: Emprendimiento[] = data.map(item => ({
+          id: item.id,
+          name: item.nameEntrepren || 'Sin nombre',
+          categoryId: Number(item.categoryId) || 0,
+          description: item.descriptionEntrepren || '',
+          rating: item.rating || 5.0, // <-- Ahora recibe el promedio del backend
+          phone: item.phone || '',
+          verified: item.verified || false,
+          promo: item.promo || null,
+          image: item.imageEntrepren || '',
+          likes: 0, dislikes: 0, userVote: null, saved: item.saved || false, 
+          reviews: item.reviews || [], // <-- Recibe las reseñas del backend
+          contactMethod: item.contactMethod || 'whatsapp',
+          zip: item.zip || ''
+        }));
+
+        setLocalData(mappedData);
+        return mappedData;
+      }
+      return [];
+    } catch (e) {
+      console.error("Error obteniendo emprendimientos:", e);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async (forcedCategoryIdx?: number) => {
+    if (!isZipValid) return;
+    const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
+    
+    const backendData = await fetchEntrepreneurships(zipCode);
+    applyFilters(backendData, categoryToSearch, searchText);
+  };
+
+  const handleZipChange = (text: string) => {
+    setZipCode(text);
+    if (text.length < 5) {
+      setResults([]);
+      setLocalData([]);
+    }
+  };
+
+  const applyFilters = (dataList: Emprendimiento[], catIdx: number, textQuery: string) => {
+    let list = catIdx === 0 ? dataList : dataList.filter(l => l.categoryId === catIdx);
+    if (textQuery.trim()) {
+      const q = textQuery.toLowerCase();
+      list = list.filter(l => l.name.toLowerCase().includes(q) || l.description.toLowerCase().includes(q));
+    }
+    setResults(list);
+  };
+
+  useEffect(() => {
+    applyFilters(localData, selectedCategoryIdx, searchText);
+  }, [selectedCategoryIdx, searchText, localData]);
+
   // --- Image picker ---
   const pickImage = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') { triggerAlert('Permisos', 'Necesitamos acceso a tu galería.'); return; }
-    }
     const r = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true, aspect: [16, 9], quality: 0.8,
     });
     if (!r.canceled) setFormImage(r.assets[0].uri);
   };
 
-  // --- Filtros ---
-  const results = useMemo(() => {
-    let list = selectedCategoryIdx === 0 ? localData : localData.filter(l => l.categoryId === selectedCategoryIdx);
-    if (searchText.trim()) {
-      const q = searchText.toLowerCase();
-      list = list.filter(l => l.name.toLowerCase().includes(q) || l.description.toLowerCase().includes(q));
-    }
-    return list;
-  }, [localData, selectedCategoryIdx, searchText]);
-
-  // --- Votos ---
+  // --- Votos Local ---
   const applyVote = (item: Emprendimiento, type: 'like' | 'dislike'): Emprendimiento => {
     const isSel = item.userVote === type;
     return {
@@ -215,13 +274,13 @@ export default function EntrepreneurshipScreen() {
     };
   };
 
-  const handleVote = (id: number, type: 'like' | 'dislike') => {
+  const handleVote = (id: string, type: 'like' | 'dislike') => {
     setLocalData(prev => prev.map(it => it.id === id ? applyVote(it, type) : it));
     setDetailItem(prev => prev?.id === id ? applyVote(prev, type) : prev);
   };
 
   const applySave = (item: Emprendimiento): Emprendimiento => ({ ...item, saved: !item.saved });
-  const handleSave = (id: number) => {
+  const handleSave = (id: string) => {
     setLocalData(prev => prev.map(it => it.id === id ? applySave(it) : it));
     setDetailItem(prev => prev?.id === id ? applySave(prev) : prev);
   };
@@ -229,48 +288,71 @@ export default function EntrepreneurshipScreen() {
   const handleShare = (item: Emprendimiento) =>
     Share.share({ message: `${item.name}\n${item.description}\nTel: ${item.phone}` });
 
-  // --- Reseñas ---
-  const handleAddReview = (targetId: number, stars: number, comment: string) => {
-    const newReview: Review = {
-      id: Date.now().toString(), stars, comment,
-      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    
-    let newAverage = 0;
+  // 🚀 --- RESEÑAS CONECTADAS AL BACKEND ---
+  const handleAddReview = async (targetId: string, stars: number, comment: string) => {
+    try {
+      const payload = {
+        reference_id: targetId,
+        stars: stars,
+        comment: comment,
+        userId: userMetadata?.id || null
+      };
 
-    // Actualiza la lista principal
-    setLocalData(prev => prev.map(it => {
-        if (it.id === targetId) {
-            const updatedReviews = [newReview, ...it.reviews];
-            newAverage = updatedReviews.reduce((acc, r) => acc + r.stars, 0) / updatedReviews.length;
-            return { ...it, reviews: updatedReviews, rating: newAverage };
-        }
-        return it;
-    }));
+      // 1. Guardar en PostgreSQL
+      const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-    // Actualiza el modal de detalle
-    setDetailItem(prev => {
-        if (prev?.id === targetId) {
-           const updatedReviews = [newReview, ...prev.reviews];
-           return { ...prev, reviews: updatedReviews, rating: newAverage };
-        }
-        return prev;
-    });
+      if (!response.ok) throw new Error("Fallo al guardar reseña en el servidor");
 
-    // Actualiza el modal de reseñas independiente
-    setReviewTarget(prev => {
-        if (prev?.id === targetId) {
-           const updatedReviews = [newReview, ...prev.reviews];
-           return { ...prev, reviews: updatedReviews, rating: newAverage };
-        }
-        return prev;
-    });
+      const savedReview = await response.json();
 
-    setShowReviewInput(false);
-    triggerAlert('¡Gracias!', 'Tu reseña ha sido publicada exitosamente.');
+      // 2. Formatear para la vista local
+      const newReview: Review = {
+        id: savedReview.id || Date.now().toString(),
+        stars: savedReview.stars || stars,
+        comment: savedReview.comment || comment,
+        displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      let newAverage = 0;
+
+      // 3. Actualizar los estados visuales sin recargar
+      setLocalData(prev => prev.map(it => {
+          if (it.id === targetId) {
+              const updatedReviews = [newReview, ...it.reviews];
+              newAverage = updatedReviews.reduce((acc, r) => acc + r.stars, 0) / updatedReviews.length;
+              return { ...it, reviews: updatedReviews, rating: newAverage };
+          }
+          return it;
+      }));
+
+      setDetailItem(prev => {
+          if (prev?.id === targetId) {
+             const updatedReviews = [newReview, ...prev.reviews];
+             return { ...prev, reviews: updatedReviews, rating: newAverage };
+          }
+          return prev;
+      });
+
+      setReviewTarget(prev => {
+          if (prev?.id === targetId) {
+             const updatedReviews = [newReview, ...prev.reviews];
+             return { ...prev, reviews: updatedReviews, rating: newAverage };
+          }
+          return prev;
+      });
+
+      setShowReviewInput(false);
+      triggerAlert('¡Gracias!', 'Tu reseña ha sido publicada exitosamente.');
+
+    } catch (error) {
+      triggerAlert('Error', 'No se pudo guardar la reseña. Revisa tu conexión.');
+    }
   };
 
-  // Esta función previene el "Modal over Modal" en iOS/Android
   const openReviews = (item: Emprendimiento, focusInput: boolean = false) => {
     if (detailItem) {
       setDetailItem(null); 
@@ -284,13 +366,15 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // --- Publicar emprendimiento ---
+  // --- PUBLICAR EMPRENDIMIENTO AL BACKEND ---
   const handlePublish = async () => {
-    if (!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage) {
-      triggerAlert('Campos incompletos', 'Completa nombre, descripción, teléfono e imagen.'); return;
+    if (!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5) {
+      triggerAlert('Campos incompletos', 'Completa nombre, descripción, teléfono, código postal e imagen.'); return;
     }
     setIsSubmitting(true);
+    
     try {
+      let finalImageName = '';
       if (formImage) {
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
@@ -298,33 +382,80 @@ export default function EntrepreneurshipScreen() {
           triggerAlert("Imagen bloqueada", "La imagen no cumple nuestras normas.");
           return;
         }
+
+        const formData = new FormData();
+        const filename = formImage.split('/').pop() || 'imagen.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('imagen', { uri: formImage, name: filename, type } as any);
+
+        const uploadResponse = await fetch('http://172.20.10.3:3000/api/subir-imagen-optimizada/entrepreneurship', {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' },
+        });
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
+        finalImageName = uploadData.identificadorArchivo;
       }
 
-      setLocalData(prev => [{
-        id: Date.now(), 
-        name: formName.trim(), 
-        categoryId: formCategoryIdx, 
-        description: formDesc.trim(), 
-        rating: 0, 
-        phone: `${COUNTRIES[countryIdx].code}${formPhone.trim()}`,
+      const fullPhone = `${COUNTRIES[countryIdx].code}${formPhone.trim()}`;
+
+      const payload = {
+        nameEntrepren: formName.trim(), 
+        categoryId: String(formCategoryIdx), 
+        descriptionEntrepren: formDesc.trim(), 
+        phone: fullPhone,
         verified: false, 
         promo: formPromo.trim() || null, 
-        image: formImage,
-        likes: 0, 
-        dislikes: 0, 
-        userVote: null, 
+        imageEntrepren: finalImageName,
         saved: false, 
-        reviews: [],
         contactMethod: formContactMethod,
-      }, ...prev]);
+        zip: formZip.trim(),
+        userId: userMetadata?.id || null
+      };
+
+      const response = await fetch(API_ENTREPRENEURSHIP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       
-      setFormName(''); setFormDesc(''); setFormPhone('');
+      const savedFromDB = await response.json();
+      if (!response.ok) throw new Error(savedFromDB.error || "Error al guardar");
+
+      const newLocalItem: Emprendimiento = {
+        id: savedFromDB.id, 
+        name: savedFromDB.nameEntrepren, 
+        categoryId: Number(savedFromDB.categoryId) || 0, 
+        description: savedFromDB.descriptionEntrepren, 
+        rating: 5.0, 
+        phone: savedFromDB.phone,
+        verified: false, 
+        promo: savedFromDB.promo, 
+        image: formImage,
+        likes: 0, dislikes: 0, userVote: null, saved: false, reviews: [],
+        contactMethod: savedFromDB.contactMethod,
+        zip: savedFromDB.zip
+      };
+      
+      setLocalData(prev => [newLocalItem, ...prev]);
+      
+      setFormName(''); setFormDesc(''); setFormPhone(''); setFormZip('');
       setFormPromo(''); setFormImage(null); setFormCategoryIdx(1); setCountryIdx(0); setFormContactMethod('whatsapp');
       setIsSubmitting(false); setFormVisible(false);
+      
+      if (!zipCode || zipCode.length < 5) {
+        setZipCode(payload.zip);
+        handleSearch();
+      }
+
       triggerAlert('¡Éxito!', 'Tu emprendimiento fue publicado.');
 
-    } catch (err) {
-      triggerAlert("Error", "Error conectando con el servidor. Revisa tu conexión.");
+    } catch (err: any) {
+      triggerAlert("Error", err.message || "Error conectando con el servidor. Revisa tu conexión.");
       setIsSubmitting(false);
     }
   };
@@ -334,7 +465,6 @@ export default function EntrepreneurshipScreen() {
   const cardHeight     = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // --- Botón de Acción Dinámico (Grid System 2x2 para Modal de Detalle) ---
   const ActionGridBtn = ({ icon, text, color, bgColor, onPress }: any) => (
     <TouchableOpacity onPress={onPress} style={{ flexBasis: '48%', height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8 }}>
        <MaterialCommunityIcons name={icon} size={16} color={color} />
@@ -342,7 +472,6 @@ export default function EntrepreneurshipScreen() {
     </TouchableOpacity>
   );
 
-  // --- Botón de Acción Lineal (Para las tarjetas de la lista principal) ---
   const ActionBtnLine = ({ icon, text, color, bgColor, onPress }: any) => (
     <TouchableOpacity onPress={onPress} style={{ flexGrow: 1, flexBasis: 80, height: 40, paddingHorizontal: 8, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8, marginRight: 6 }}>
        <MaterialCommunityIcons name={icon} size={16} color={color} />
@@ -350,64 +479,6 @@ export default function EntrepreneurshipScreen() {
     </TouchableOpacity>
   );
 
-  // --- ReviewForm Tipado ---
-  const ReviewForm = ({
-    onPublish, 
-    onCancel, 
-    isDark
-  }: {
-    onPublish: (stars: number, comment: string) => void;
-    onCancel: () => void;
-    isDark: boolean;
-  }) => {
-    const [rating,  setRating]  = useState(5);
-    const [comment, setComment] = useState('');
-
-    const handlePrePublish = () => {
-      if (!validateComment(comment)) {
-        const msg = 'Tu reseña contiene contenido inapropiado.';
-        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Contenido no permitido', msg);
-        return;
-      }
-      onPublish(rating, comment);
-    };
-
-    return (
-      <View style={{ flex: 1, paddingVertical: 10 }}>
-        <TouchableOpacity onPress={onCancel} style={{ marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-          <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.entrepreneurshiptab?.backBtn || 'Volver'}</ThemedText>
-        </TouchableOpacity>
-        <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>
-          {t.entrepreneurshiptab.viewExpe }
-        </ThemedText>
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 }}>
-          {[1, 2, 3, 4, 5].map(s => (
-            <TouchableOpacity key={s} onPress={() => setRating(s)}>
-              <MaterialCommunityIcons
-                name={s <= rating ? 'star' : 'star-outline'} size={40}
-                color={s <= rating ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)')} />
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-          <TextInput value={comment} onChangeText={setComment}
-            placeholder={t.entrepreneurshiptab.viewopinion}
-            placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
-            multiline
-            style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-        </View>
-        <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-          <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-            <MaterialCommunityIcons name="send" size={18} color="#FFF" />
-            <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>{t.entrepreneurshiptab?.publishReviews || 'Publicar reseña'}</ThemedText>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  // --- Tarjeta de emprendimiento (Feed Principal - Versión Resumida) ---
   const EmprendimientoCard = ({ item }: { item: Emprendimiento }) => {
     const categoryName = CATEGORIES[item.categoryId] || 'Categoría';
     const categoryIcon = CATEGORY_ICONS_DICT[categoryName] || ICONS_ARRAY[item.categoryId] || 'store';
@@ -416,7 +487,15 @@ export default function EntrepreneurshipScreen() {
       <TouchableOpacity activeOpacity={0.93}
         onPress={() => { setDetailItem(item); setShowReviewInput(false); }}
         style={[S.card, { backgroundColor: DC.cardBg, borderColor: DC.border }]}>
-        {item.image && <Image source={{ uri: item.image }} style={S.cardImage} resizeMode="cover" />}
+        
+        {item.image && item.image.length > 5 ? (
+          <Image source={{ uri: item.image }} style={S.cardImage} resizeMode="cover" />
+        ) : (
+          <View style={[S.cardImage, { backgroundColor: DC.inputBg, justifyContent: 'center', alignItems: 'center' }]}>
+            <MaterialCommunityIcons name="image-off-outline" size={40} color={DC.subtext} />
+          </View>
+        )}
+        
         <View style={S.verMasBadge}>
           <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
           <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{t.entrepreneurshiptab?.viewdetail || 'Ver detalle'}</ThemedText>
@@ -498,12 +577,30 @@ export default function EntrepreneurshipScreen() {
 
             <View style={stylesUnified.cardContent}>
 
-              <View style={stylesUnified.headerRow}>
-                <TouchableOpacity onPress={() => router.push('/services')}>
+              {/* 🚀 HEADER CON BUSCADOR INTEGRADO */}
+              <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
+                <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>
                   <MaterialCommunityIcons name="arrow-left" size={26} color={DC.text} />
                 </TouchableOpacity>
-                <View style={{ flex: 1 }} />
-                <MaterialCommunityIcons name="lightbulb-multiple-outline" size={40} color={DC.text} style={{ opacity: 0.2 }} />
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
+                  <TextInput 
+                    style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                    placeholder="Código postal..." 
+                    keyboardType="numeric" maxLength={5} value={zipCode} 
+                    onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
+                    placeholderTextColor={DC.subtext} 
+                  />
+                  <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 42, height: 42, marginLeft: 8 }}>
+                    <LinearGradient colors={isZipValid ? OG : DG} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={isZipValid ? "#fff" : DC.iconInactive} />}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity onPress={() => { setResults([]); setLocalData([]); setZipCode(''); setSearchText(''); setSelectedCategoryIdx(0); }}>
+                    <MaterialCommunityIcons name="refresh" size={24} color={DC.text} style={{opacity: 0.7, marginLeft: 5}} />
+                </TouchableOpacity>
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
@@ -592,18 +689,36 @@ export default function EntrepreneurshipScreen() {
                     </View>
                   )}
 
-                  {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore : t.genericbtn?.resultone)}</ThemedText>}
-
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                    {results.length === 0 && (
-                      <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
-                        <MaterialCommunityIcons name="store-off-outline" size={56} color={DC.subtext} />
-                        <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14 }}>
-                          {t.entrepreneurshiptab?.nofoundresults || 'No hay resultados'}
-                        </ThemedText>
-                      </View>
+                    {results.length > 0 ? (
+                      <>
+                        <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore : t.genericbtn?.resultone)}</ThemedText>
+                        {results.map(item => <EmprendimientoCard key={item.id} item={item} />)}
+                      </>
+                    ) : (
+                      (!loading && zipCode.length === 5) ? (
+                        <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
+                          <MaterialCommunityIcons name="store-off-outline" size={56} color={DC.subtext} />
+                          <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14 }}>
+                            {t.entrepreneurshiptab?.nofoundresults || 'No hay resultados'}
+                          </ThemedText>
+                        </View>
+                      ) : (
+                        (!zipCode || zipCode.length < 5) && (
+                          <View style={{ flex: 1, alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
+                            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: DC.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+                              <MaterialCommunityIcons name="map-marker-radius" size={40} color={DC.subtext} />
+                            </View>
+                            <ThemedText style={{ textAlign: 'center', color: DC.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }}>
+                              Descubre Emprendimientos
+                            </ThemedText>
+                            <ThemedText style={{ textAlign: 'center', color: DC.subtext, fontSize: 14, lineHeight: 20 }}>
+                              Ingresa un código postal para apoyar a emprendedores en tu zona.
+                            </ThemedText>
+                          </View>
+                        )
+                      )
                     )}
-                    {results.map(item => <EmprendimientoCard key={item.id} item={item} />)}
                   </ScrollView>
                 </View>
               </View>
@@ -631,7 +746,13 @@ export default function EntrepreneurshipScreen() {
             <BlurView style={StyleSheet.absoluteFill} intensity={90} tint={isDark ? 'dark' : 'light'} />
 
             <View style={{ position: 'relative' }}>
-              <Image source={{ uri: detailItem.image }} style={S.detailHeroImage} resizeMode="cover" />
+               {detailItem.image && detailItem.image.length > 5 ? (
+                 <Image source={{ uri: detailItem.image }} style={S.detailHeroImage} resizeMode="cover" />
+               ) : (
+                 <View style={[S.detailHeroImage, { backgroundColor: DC.inputBg, justifyContent: 'center', alignItems: 'center' }]}>
+                   <MaterialCommunityIcons name="image-off-outline" size={50} color={DC.subtext} />
+                 </View>
+               )}
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.45)']} style={StyleSheet.absoluteFill} />
               <TouchableOpacity onPress={() => setDetailItem(null)}
                 style={[S.detailCloseBtn, { top: insets.top + 12 }]}>
@@ -745,7 +866,7 @@ export default function EntrepreneurshipScreen() {
 
                   {showReviewInput ? (
                      <ReviewForm
-                        isDark={isDark}
+                        isDark={isDark} t={t}
                         onCancel={() => setShowReviewInput(false)}
                         onPublish={(stars: number, comment: string) => handleAddReview(detailItem.id, stars, comment)}
                       />
@@ -871,7 +992,7 @@ export default function EntrepreneurshipScreen() {
                   </View>
                 ) : (
                   <ReviewForm
-                    isDark={isDark}
+                    isDark={isDark} t={t}
                     onCancel={() => setShowReviewInput(false)}
                     onPublish={(stars: number, comment: string) => handleAddReview(reviewTarget!.id, stars, comment)}
                   />
@@ -909,7 +1030,7 @@ export default function EntrepreneurshipScreen() {
                   {formImage
                     ? <Image source={{ uri: formImage }} style={S.formImagePreview} />
                     : <View style={{ alignItems: 'center' }}>
-                        <MaterialCommunityIcons name="camera-plus" size={32} />
+                        <MaterialCommunityIcons name="camera-plus" size={32} color={DC.subtext} />
                         <ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'capitalize' }}>{t.entrepreneurshiptab?.businessphoto || 'FOTO'}</ThemedText>
                       </View>
                   }
@@ -950,10 +1071,17 @@ export default function EntrepreneurshipScreen() {
 
                 <TextInput value={formName} onChangeText={setFormName}
                   placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'}
-                  style={[S.input, { backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
+                  style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+
+                <TextInput value={formZip} onChangeText={setFormZip}
+                  placeholder="Código Postal (Zip)" keyboardType="numeric" maxLength={5}
+                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
+                  style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TextInput value={formDesc} onChangeText={setFormDesc}
                   placeholder={t.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'}
+                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
                   multiline numberOfLines={3}
                   style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border,
                     minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
@@ -995,11 +1123,11 @@ export default function EntrepreneurshipScreen() {
                     borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TouchableOpacity onPress={handlePublish}
-                  disabled={!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || isSubmitting}>
+                  disabled={!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5 || isSubmitting}>
                   <LinearGradient
-                    colors={(formName.trim() && formDesc.trim() && formPhone.trim() && formImage) ? OG : DG}
+                    colors={(formName.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? OG : DG}
                     style={[S.publishBtn, {
-                      opacity: (formName.trim() && formDesc.trim() && formPhone.trim() && formImage) ? 1 : 0.55,
+                      opacity: (formName.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? 1 : 0.55,
                     }]}>
                     {isSubmitting
                       ? <ActivityIndicator color="#fff" />

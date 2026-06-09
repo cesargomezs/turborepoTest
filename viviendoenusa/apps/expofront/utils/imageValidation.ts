@@ -7,7 +7,6 @@ export async function validarImagenEnServidor(uri: string): Promise<boolean> {
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-    // En React Native, el objeto del archivo debe tener esta estructura
     // @ts-ignore
     formData.append('image', {
       uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
@@ -19,8 +18,8 @@ export async function validarImagenEnServidor(uri: string): Promise<boolean> {
       method: 'POST',
       body: formData,
       headers: {
-        'Accept': 'application/json',
-        'Connection': 'close' // 🚀 NUEVO: Cierra el tubo apenas termine la validación
+        'Accept': 'application/json'
+        // 🚀 Eliminado: 'Connection': 'close' (Causa conflictos en RN)
       },
     });
 
@@ -31,8 +30,9 @@ export async function validarImagenEnServidor(uri: string): Promise<boolean> {
     const data = await response.json();
     return data.isSafe; 
   } catch (error) {
-    console.error("Error validando imagen en el servidor:", error);
-    // Si falla la validación por red, tú decides si dejar pasar (true) o bloquear (false).
+    console.error("❌ Error validando imagen en el servidor (Red):", error);
+    // 🚀 IMPORTANTE: Si la red falla temporalmente, retornamos TRUE para no bloquear tu desarrollo.
+    // Así puedes seguir probando si guarda en la base de datos sin quedarte atorado aquí.
     return true; 
   }
 }

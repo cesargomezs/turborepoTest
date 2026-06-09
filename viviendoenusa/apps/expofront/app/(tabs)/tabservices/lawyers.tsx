@@ -742,7 +742,7 @@ export default function LawyersScreen() {
                       <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
                   <TouchableOpacity onLongPress={() => setIsAdminMode(!isAdminMode)}>
-                     <MaterialCommunityIcons name="scale-balance" size={32} color={isAdminMode ? Colors.accent : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
+                     <MaterialCommunityIcons name="scale-balance" size={40} color={isAdminMode ? Colors.accent : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
                   </TouchableOpacity>
                 </View>
               </View>

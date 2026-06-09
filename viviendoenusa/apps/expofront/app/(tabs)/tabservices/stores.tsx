@@ -5,7 +5,7 @@ import {
   TextInput, ActivityIndicator, Image, Linking, Alert,
   Modal, KeyboardAvoidingView, Share, ColorValue
 } from 'react-native';
-import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router'; 
 import * as Location from 'expo-location';
@@ -27,13 +27,15 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
-// Iconos asignados por posición (Índice): 0: Todas, 1: Supermercado, 2: Panadería, 3: Electrónica, 4: Otros
 const ICONS_ARRAY = ['apps', 'cart', 'baguette', 'laptop', 'storefront'];
 
 const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' },
   { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
+
+// 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
+const API_STORES_URL = 'http://172.20.10.3:3000/stores';
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
@@ -51,6 +53,7 @@ const openDirections = (store: any) => {
 };
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
   const R = 3958.8;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -60,17 +63,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 };
 
 // --- COMPONENTE: FORMULARIO DE RESEÑA ---
-const ReviewForm = ({ 
-  onPublish, 
-  onCancel, 
-  isDark, 
-  t 
-}: {
-  onPublish: (stars: number, comment: string) => void;
-  onCancel: () => void;
-  isDark: boolean;
-  t: any;
-}) => {
+const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 
@@ -110,12 +103,6 @@ const ReviewForm = ({
   );
 };
 
-const DATA_SOURCE = [
-  // Nota: categoryId 1 corresponde a la segunda opción de la lista (ej. "Supermercado")
-  { id: 1, name: 'Cardenas Markets', categoryId: 1, description: 'Productos frescos y auténtica comida mexicana preparada directamente en la tienda.', rating: 4.5, lat: 34.0934, lng: -117.5847, phone: '+19099451100', image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800', reviews: [], status: 'approved' },
-  { id: 2, name: 'El Super', categoryId: 1, description: 'Gran variedad de productos importados con los mejores precios de la zona.', rating: 4.3, lat: 34.0775, lng: -117.6050, phone: '+19099843665', image: 'https://images.unsplash.com/photo-1601599963565-b7ba29c8e3ff?w=800', reviews: [], status: 'approved' }
-];
-
 export default function StoresScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -123,7 +110,10 @@ export default function StoresScreen() {
   const mapRef = useRef<MapView>(null); 
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
+  
+  const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
+  
   const { t } = useTranslation();
   const stylesUnified = useUnifiedCardStyles();
 
@@ -133,6 +123,7 @@ export default function StoresScreen() {
   const isIOS = Platform.OS === 'ios';
 
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
+  const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
@@ -145,7 +136,6 @@ export default function StoresScreen() {
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
 
-  // --- TRADUCCIONES SEGURAS DE CATEGORÍAS ---
   const rawCategories = t.storestab?.categoriesList;
   const CATEGORIES_LIST = Array.isArray(rawCategories) && rawCategories.length > 0
     ? rawCategories
@@ -153,10 +143,11 @@ export default function StoresScreen() {
 
   // --- ESTADOS ---
   const [zipCode, setZipCode] = useState('');
-  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); // 0 = 'Todas'
+  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [loading, setLoading] = useState(false);
   
-  const [localData, setLocalData] = useState<any[]>(DATA_SOURCE);
+  // Listas de datos
+  const [allStores, setAllStores] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]); 
   
   const [userLocation, setUserLocation] = useState<any>(null);
@@ -174,7 +165,7 @@ export default function StoresScreen() {
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formAddress, setFormAddress] = useState(''); 
-  const [formCategoryIdx, setFormCategoryIdx] = useState(1); // Default a la primera opción que NO sea "Todas"
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
@@ -208,11 +199,142 @@ export default function StoresScreen() {
     }
   }, []);
 
-  // --- FUNCIONES ---
+  // 🚀 EFECTO PARA MODO ADMIN: Cargar TODOS los pendientes al activarlo
+  useEffect(() => {
+    if (isAdminMode) {
+      fetchAllPendingStores();
+    } else {
+      // Si salimos de Admin y no hay Zip, limpiamos. Si hay Zip, recargamos la zona.
+      if (zipCode.length !== 5) {
+        setPendingStores([]);
+      } else {
+        fetchStoresData(zipCode);
+      }
+    }
+  }, [isAdminMode]);
+
+  // --- RE-FILTRAR RESULTADOS LOCALMENTE ---
+  const applyLocalFilters = (storesList: any[], categoryIdx: number, lat: number, lng: number) => {
+    let filtered = (categoryIdx === 0) ? [...storesList] : storesList.filter(l => Number(l.categoryId) === categoryIdx);
+    filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
+    return filtered;
+  };
+
+  // 🚀 FETCH GLOBAL DE PENDIENTES (Sin filtrar por ZIP)
+  const fetchAllPendingStores = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_STORES_URL}`); // Sin zip para traer todo
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        const mappedData = data.map(item => ({
+          id: item.id,
+          name: item.nameStores || 'Sin nombre',
+          description: item.descriptionStores || '',
+          address: item.addressStores || '',
+          categoryId: item.categoryId || 0,
+          zip: item.zip,
+          image: item.imageStores || '',
+          lat: Number(item.lat) || 34.0934,
+          lng: Number(item.lng) || -117.5847,
+          phone: item.phone || '',
+          rating: 5.0,
+          reviews: [],
+          status: item.approved ? 'approved' : 'pending',
+          ownerName: item.ownerName
+        }));
+        // Solo inyectamos los pendientes en el panel amarillo
+        setPendingStores(mappedData.filter(s => s.status === 'pending'));
+      }
+    } catch (e) {
+      console.error("Error obteniendo pendientes globales:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- FETCH DESDE EL BACKEND POR ZONA ---
+  const fetchStoresData = async (searchZip: string) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}`);
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        const mappedData = data.map(item => ({
+          id: item.id,
+          name: item.nameStores || 'Sin nombre',
+          description: item.descriptionStores || '',
+          address: item.addressStores || '',
+          categoryId: item.categoryId || 0,
+          zip: item.zip,
+          image: item.imageStores || '',
+          lat: Number(item.lat) || 34.0934,
+          lng: Number(item.lng) || -117.5847,
+          phone: item.phone || '',
+          rating: 5.0,
+          reviews: [],
+          status: item.approved ? 'approved' : 'pending',
+          ownerName: item.ownerName
+        }));
+
+        const approved = mappedData.filter(s => s.status === 'approved');
+        setAllStores(approved);
+        
+        // Si no estamos en Admin, actualizamos los pendientes de la zona.
+        if (!isAdminMode) {
+          setPendingStores(mappedData.filter(s => s.status === 'pending'));
+        }
+        return approved;
+      }
+      return [];
+    } catch (e) {
+      console.error("Error obteniendo tiendas:", e);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async (forcedCategoryIdx?: number) => {
+    if (!isZipValid) return;
+    const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
+    setIsFilteredByMap(false);
+
+    let lat = userLocation ? userLocation.latitude : 34.0934; 
+    let lng = userLocation ? userLocation.longitude : -117.5847;
+
+    try {
+      const geo = await Location.geocodeAsync(zipCode);
+      if (geo.length > 0) {
+        lat = geo[0].latitude;
+        lng = geo[0].longitude;
+      }
+    } catch (e) { }
+
+    const newCoords = { latitude: lat, longitude: lng, latitudeDelta: 0.06, longitudeDelta: 0.06 };
+    setUserLocation(newCoords);
+    setShowMarkers(true); 
+    
+    if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
+
+    const approvedStores = await fetchStoresData(zipCode);
+    const filtered = applyLocalFilters(approvedStores, categoryToSearch, lat, lng);
+    
+    setResults(filtered);
+    setMapKey(k => k + 1);
+  };
+
   const handleZipChange = (text: string) => {
     setZipCode(text);
     if (text.length < 5) {
       setResults([]);
+      setAllStores([]);
+      // 🚀 Solo limpiamos los pendientes si NO somos admin, para que el Admin no los pierda al borrar el ZIP
+      if (!isAdminMode) {
+        setPendingStores([]);
+      }
       setShowMarkers(false);
       setIsFilteredByMap(false);
     }
@@ -227,43 +349,15 @@ export default function StoresScreen() {
     });
   };
 
-  const handleSearch = async (forcedCategoryIdx?: number) => {
-    if (!isZipValid) return;
-
-    const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
-    setLoading(true);
-    setIsFilteredByMap(false);
-
-    let lat = userLocation ? userLocation.latitude : 34.0934; 
-    let lng = userLocation ? userLocation.longitude : -117.5847;
-
-    try {
-      const geo = await Location.geocodeAsync(zipCode);
-      if (geo.length > 0) {
-        lat = geo[0].latitude;
-        lng = geo[0].longitude;
-      }
-    } catch (e) {
-      if(!isWeb) Alert.alert("Error", "No se encontró el ZIP");
-    }
-
-    const newCoords = { latitude: lat, longitude: lng, latitudeDelta: 0.06, longitudeDelta: 0.06 };
-    setUserLocation(newCoords);
-    setShowMarkers(true); 
-    
-    if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
-
-    let filtered = (categoryToSearch === 0) ? [...localData] : localData.filter(l => l.categoryId === categoryToSearch);
-    filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
-    
-    setResults(filtered);
-    setMapKey(k => k + 1);
-    setLoading(false);
-  };
-
   const handleCategorySelect = (index: number) => {
     setSelectedCategoryIdx(index);
-    if (isZipValid) {
+    if (isZipValid && allStores.length > 0) {
+      // Filtrado local rápido sin volver a llamar a la API si ya tenemos datos
+      const lat = userLocation ? userLocation.latitude : 34.0934;
+      const lng = userLocation ? userLocation.longitude : -117.5847;
+      const filtered = applyLocalFilters(allStores, index, lat, lng);
+      setResults(filtered);
+    } else if (isZipValid) {
       handleSearch(index); 
     }
   };
@@ -284,7 +378,7 @@ export default function StoresScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true, aspect: [16, 9], quality: 0.7,
     });
     if (!result.canceled) setFormImage(result.assets[0].uri);
@@ -297,58 +391,138 @@ export default function StoresScreen() {
     
     setIsPublishing(true);
     try {
+      let finalImageName = '';
       if (formImage) {
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
           setIsPublishing(false);
-          const title = t.communitytab?.imageInappropriateTittle || "Error";
-          const desc = t.communitytab?.imageInappropriateDescription || "Imagen inválida";
-          if (isWeb) { window.alert(`${title}\n${desc}`); } 
-          else { Alert.alert(title, desc); }
-          return;
+          return Alert.alert(t.communitytab?.imageInappropriateTittle || "Bloqueada", t.communitytab?.imageInappropriateDescription || "Imagen inválida");
         }
+
+        const formData = new FormData();
+        const filename = formImage.split('/').pop() || 'imagen.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('imagen', { uri: formImage, name: filename, type } as any);
+
+        const uploadResponse = await fetch('http://172.20.10.3:3000/api/subir-imagen-optimizada/stores', {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' },
+        });
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
+        finalImageName = uploadData.identificadorArchivo;
       }
 
-      const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '+1000000000';
-      const newEntry = {
-        id: Date.now(), 
-        name: formName, 
-        description: formDesc, 
-        address: formAddress,
-        categoryId: formCategoryIdx, 
+      let lat = 34.0934; 
+      let lng = -117.5847;
+      try {
+        const geo = await Location.geocodeAsync(formZip);
+        if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; }
+      } catch (e) { }
+
+      const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
+      
+      const payload = {
+        nameStores: formName, 
+        descriptionStores: formDesc, 
+        addressStores: formAddress,
+        categoryId: String(formCategoryIdx), // Ajuste por si el backend bloquea enteros temporales
         zip: formZip, 
-        image: formImage || 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=800',
-        rating: 5.0, 
-        lat: 34.0934, 
-        lng: -117.5847, 
+        imageStores: finalImageName,
+        lat: lat, 
+        lng: lng, 
         phone: fullPhone, 
-        reviews: [],
+        userId: userMetadata?.id || userMetadata?.userId || null,
+        approved: false 
+      };
+
+      const response = await fetch(API_STORES_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      const savedFromDB = await response.json();
+      if (!response.ok) throw new Error(savedFromDB.error || "Error guardando tienda");
+
+      const newEntryLocal = {
+        id: savedFromDB.id,
+        name: savedFromDB.nameStores,
+        description: savedFromDB.descriptionStores,
+        address: savedFromDB.addressStores,
+        categoryId: savedFromDB.categoryId,
+        image: formImage, 
+        lat, lng,
+        rating: 5.0,
+        phone: savedFromDB.phone,
         status: 'pending'
       };
       
-      setPendingStores([newEntry, ...pendingStores]);
+      setPendingStores([newEntryLocal, ...pendingStores]);
       setModalVisible(false);
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1);
-      Alert.alert(t.storestab?.sendnewsug || "Enviado con éxito");
+      
+      if (!zipCode || zipCode.length < 5) {
+        setZipCode(formZip);
+        handleSearch();
+      }
 
-    } catch (err) {
-      const errorTitle = "Error de red";
-      const errorDesc = t.communitytab?.errorServer || "Error";
-      if (isWeb) { window.alert(`${errorTitle}\n${errorDesc}`); } 
-      else { Alert.alert(errorTitle, errorDesc); }
+      Alert.alert(t.storestab?.sendnewsug || "Enviado con éxito, pendiente de aprobación");
+
+    } catch (err: any) {
+      Alert.alert("Error", err.message || t.communitytab?.errorServer || "Error");
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const approveStore = (store: any) => {
-    const approvedStore = { ...store, status: 'approved' };
-    setLocalData(prev => [approvedStore, ...prev]); 
-    if (showMarkers) {
-      setResults(prev => [approvedStore, ...prev]); 
+  // --- ADMINISTRADOR: APROBAR Y RECHAZAR ---
+  const approveStore = async (store: any) => {
+    try {
+      const response = await fetch(`${API_STORES_URL}/${store.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved: true })
+      });
+      if (!response.ok) throw new Error("Error en servidor");
+      
+      const approvedStore = { ...store, status: 'approved' };
+      
+      // 🚀 Si el negocio pertenece al código postal que estamos viendo, lo agregamos a los resultados.
+      if (store.zip === zipCode) {
+        const newAllStores = [approvedStore, ...allStores];
+        setAllStores(newAllStores); 
+        
+        if (showMarkers || isZipValid) {
+          const lat = userLocation ? userLocation.latitude : 34.0934;
+          const lng = userLocation ? userLocation.longitude : -117.5847;
+          const filtered = applyLocalFilters(newAllStores, selectedCategoryIdx, lat, lng);
+          setResults(filtered);
+        }
+        setMapKey(k => k + 1);
+      }
+      
+      // Lo eliminamos de la lista amarilla
+      setPendingStores(pendingStores.filter(s => s.id !== store.id));
+      Alert.alert("Aprobado", "El negocio es ahora público.");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo aprobar.");
     }
-    setPendingStores(pendingStores.filter(s => s.id !== store.id));
-    setMapKey(k => k + 1);
+  };
+
+  const rejectStore = async (id: number) => {
+    try {
+      const response = await fetch(`${API_STORES_URL}/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error("Error en servidor");
+      setPendingStores(pendingStores.filter(e => e.id !== id));
+      Alert.alert("Rechazado", "Negocio eliminado.");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo rechazar.");
+    }
   };
 
   const StoreCard = ({ store }: { store: any }) => {
@@ -358,7 +532,6 @@ export default function StoresScreen() {
 
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: isPending ? '#FFB74D' : DynamicColors.border }}>
-        {/* Banner de Pendiente de Revisión */}
         {isPending && (
           <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
               <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
@@ -371,11 +544,17 @@ export default function StoresScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
             <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
-            <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{store.rating.toFixed(1)}</ThemedText>
+            <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{store.rating?.toFixed(1) || '5.0'}</ThemedText>
           </View>
         </View>
         <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140 }}>
-          <Image source={{ uri: store.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          {store.image && store.image.length > 5 ? (
+            <Image source={{ uri: store.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : (
+            <View style={{ width: '100%', height: '100%', backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+              <MaterialCommunityIcons name="image-off-outline" size={40} color={DynamicColors.subtext} />
+            </View>
+          )}
           
           <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
             <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
@@ -383,7 +562,6 @@ export default function StoresScreen() {
               {t.genericbtn?.viewdetail || 'Ver detalle'}
             </ThemedText>
           </View>
-
         </TouchableOpacity>
         <View style={{ padding: 15 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -426,7 +604,13 @@ export default function StoresScreen() {
           <View style={{ width: '90%', height: '75%', borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={{ width: '100%', height: 240 }}>
-               <Image source={{ uri: selectedDetail?.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+               {selectedDetail?.image && selectedDetail?.image.length > 5 ? (
+                 <Image source={{ uri: selectedDetail?.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+               ) : (
+                 <View style={{ width: '100%', height: '100%', backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+                   <MaterialCommunityIcons name="image-off-outline" size={40} color={DynamicColors.subtext} />
+                 </View>
+               )}
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={StyleSheet.absoluteFill} />
                <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="share-variant" size={22} color="#FFF" /></TouchableOpacity>
                <TouchableOpacity onPress={() => setSelectedDetail(null)} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="close" size={24} color="#FFF" /></TouchableOpacity>
@@ -441,7 +625,7 @@ export default function StoresScreen() {
                   </LinearGradient>
                   <View style={{ flexDirection: 'row', marginLeft: 15, alignItems: 'center' }}>
                     <MaterialCommunityIcons name="star" size={18} color="#FFB300" />
-                    <ThemedText style={{ marginLeft: 5, fontWeight: '900', color: DynamicColors.text, fontSize: 16 }}>{selectedDetail?.rating}</ThemedText>
+                    <ThemedText style={{ marginLeft: 5, fontWeight: '900', color: DynamicColors.text, fontSize: 16 }}>{selectedDetail?.rating?.toFixed(1) || '5.0'}</ThemedText>
                   </View>
                 </View>
                 <ThemedText style={{ fontSize: 24, fontWeight: '900', marginVertical: 10, color: DynamicColors.text }}>{selectedDetail?.name}</ThemedText>
@@ -590,14 +774,34 @@ export default function StoresScreen() {
             {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
             <View style={stylesUnified.cardContent}>
-              <View style={stylesUnified.headerRow}>
-                <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} /></TouchableOpacity>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
-                  <TouchableOpacity onPress={() => { setResults([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
+              
+              {/* 🚀 HEADER CON BUSCADOR INTEGRADO (ESTILO LAWYERS) */}
+              <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
+                <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>
+                  <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
+                </TouchableOpacity>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
+                  <TextInput 
+                    style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                    placeholder={t.lawyerstab?.messagezip || "Código postal..."} 
+                    keyboardType="numeric" maxLength={5} value={zipCode} 
+                    onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
+                    placeholderTextColor={DynamicColors.subtext} 
+                  />
+                  <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 42, height: 42, marginLeft: 8 }}>
+                    <LinearGradient colors={isZipValid ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={isZipValid ? "#fff" : DynamicColors.iconInactive} />}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
                   <TouchableOpacity onLongPress={() => { setIsAdminMode(!isAdminMode); }}>
-                    <MaterialCommunityIcons name="store-plus-outline" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
+                    <MaterialCommunityIcons name="store-plus-outline" size={32} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -613,35 +817,19 @@ export default function StoresScreen() {
                         <View key={store.id} style={{ marginBottom: 15 }}>
                            <StoreCard store={store} />
                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
-                           
-                            <TouchableOpacity onPress={() => approveStore(store)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                            <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
                                 <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
                                 <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
-                              </TouchableOpacity>
+                            </TouchableOpacity>
                             <TouchableOpacity onPress={() => approveStore(store)} style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
                               <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar </ThemedText>
+                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
                             </TouchableOpacity>
                           </View>
                         </View>
                       ))}
                     </View>
                   )}
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
-                    <TextInput 
-                      style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                      placeholder={t.lawyerstab?.messagezip || "Código postal"} 
-                      keyboardType="numeric" maxLength={5} value={zipCode} 
-                      onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
-                      placeholderTextColor={DynamicColors.subtext} 
-                    />
-                    <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 48, height: 48 }}>
-                      <LinearGradient colors={isZipValid ? orangeGradient : ['#CFD8DC', '#B0BEC5']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
-                        {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
 
                   <View style={{ marginBottom: 15 }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
@@ -687,14 +875,25 @@ export default function StoresScreen() {
                   </View>
 
                   <View style={{ marginTop: 20 }}>
-                    {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore : t.genericbtn?.resultone)}</ThemedText>}
-                    {isFilteredByMap && (
-                      <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accenticon }}>
-                        <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accenticon} />
-                        <ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
-                      </TouchableOpacity>
+                    {results.length > 0 ? (
+                      <>
+                        <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore || 'resultados' : t.genericbtn?.resultone || 'resultado')}</ThemedText>
+                        {isFilteredByMap && (
+                          <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accenticon }}>
+                            <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accenticon} />
+                            <ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
+                          </TouchableOpacity>
+                        )}
+                        {results.map((store) => <StoreCard key={store.id} store={store} />)}
+                      </>
+                    ) : (
+                      (!loading && zipCode.length === 5) ? (
+                        <View style={{ flex: 1, alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
+                          <MaterialCommunityIcons name="store-remove-outline" size={48} color={DynamicColors.text} />
+                          <ThemedText style={{ marginTop: 10, color: DynamicColors.text }}>No se encontraron negocios aquí.</ThemedText>
+                        </View>
+                      ) : null
                     )}
-                    {results.map((store) => <StoreCard key={store.id} store={store} />)}
                   </View>
                 </ScrollView>
               ) : (
@@ -734,37 +933,41 @@ export default function StoresScreen() {
                           {pendingStores.map(store => (
                             <View key={store.id} style={{ marginBottom: 15 }}>
                                <StoreCard store={store} />
-                               <TouchableOpacity onPress={() => approveStore(store)} style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                 <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                                 <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar Contacto</ThemedText>
-                               </TouchableOpacity>
+                               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+                                 <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                   <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+                                 </TouchableOpacity>
+                                 <TouchableOpacity onPress={() => approveStore(store)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                   <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
+                                 </TouchableOpacity>
+                               </View>
                             </View>
                           ))}
                         </View>
                       )}
 
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 10 }}>
-                        <TextInput 
-                          style={[{ flex: 1, height: 48, borderRadius: 14, paddingHorizontal: 16, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                          placeholder={t.lawyerstab?.messagezip || "Código postal"} value={zipCode} maxLength={5} 
-                          onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={DynamicColors.subtext} 
-                        />
-                        <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 48, height: 48 }}>
-                          <LinearGradient colors={isZipValid ? orangeGradient : ['#CFD8DC', '#B0BEC5']} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
-                            {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={22} color="#fff" />}
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      </View>
-
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.genericbtn?.resultdomore || 'resultados'}</ThemedText>}
-                        {isFilteredByMap && (
-                          <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}>
-                            <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} />
-                            <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
-                          </TouchableOpacity>
+                        {results.length > 0 ? (
+                          <>
+                            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.genericbtn?.resultdomore || 'resultados'}</ThemedText>
+                            {isFilteredByMap && (
+                              <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}>
+                                <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} />
+                                <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
+                              </TouchableOpacity>
+                            )}
+                            {results.map((store) => <StoreCard key={store.id} store={store} />)}
+                          </>
+                        ) : (
+                          (!loading && zipCode.length === 5) ? (
+                            <View style={{ flex: 1, alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
+                              <MaterialCommunityIcons name="store-remove-outline" size={48} color={DynamicColors.text} />
+                              <ThemedText style={{ marginTop: 10, color: DynamicColors.text }}>No se encontraron negocios aquí.</ThemedText>
+                            </View>
+                          ) : null
                         )}
-                        {results.map((store) => <StoreCard key={store.id} store={store} />)}
                       </ScrollView>
                     </View>
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>

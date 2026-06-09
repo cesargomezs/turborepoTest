@@ -526,7 +526,7 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <MaterialCommunityIcons name="account-group" size={32} color={DynamicColors.text} style={{opacity: 0.15, paddingLeft: 5}} />
+                <MaterialCommunityIcons name="account-group" size={40} color={DynamicColors.text} style={{opacity: 0.15, paddingLeft: 5}} />
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>

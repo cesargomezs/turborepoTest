@@ -19,11 +19,15 @@ const upload = multer({ storage: multer.memoryStorage() });
 import * as tf from '@tensorflow/tfjs';
 import * as nsfwjs from 'nsfwjs';
 import { db } from '@viviendoenusa/db';
-import { community, typeDetail, users } from '@viviendoenusa/db/schema';
+import { community, stores, typeDetail, users } from '@viviendoenusa/db/schema';
 import { eq } from 'drizzle-orm';
 
 import lawyerRoutes from './lawyers.routes';
 import communityRoutes from './community.routes';
+import donationsRoutes from './donations.routes';
+import eventsRoutes from  './events.routes';
+import storesRoutes from './stores.routes';
+import entrepreneurshipRoutes from './entrepreneurship.routes';
 
 const app = express();
 
@@ -56,7 +60,11 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/lawyers', lawyerRoutes);
+app.use('/events', eventsRoutes);
 app.use('/community', communityRoutes);
+app.use('/donations', donationsRoutes);
+app.use('/stores', storesRoutes);
+app.use('/entrepreneurship', entrepreneurshipRoutes);
 
 // --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (DINÁMICO Y SEGURO) ---
 app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {

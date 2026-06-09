@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
@@ -20,6 +20,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 // --- VALIDACIONES ---
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
+import { useMockSelector } from '@/redux/slices';
 
 let BANNED_WORDS: string[] = [];
 try {
@@ -43,6 +44,9 @@ const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
 
+// 📡 URL BASE PARA LOS EVENTOS
+const API_EVENTS_URL = 'http://172.20.10.3:3000/events';
+
 export default function EventsScreen() {
   const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
@@ -51,6 +55,11 @@ export default function EventsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const stylesUnified = useUnifiedCardStyles();
+  
+  
+  const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
+  const currentUserName = 'Cesar'; 
+  const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
   
   const isWeb = Platform.OS === 'web';
   const isLargeWeb = isWeb && width > 1000;
@@ -84,25 +93,11 @@ export default function EventsScreen() {
       : INTERNAL_CATEGORIES;
 
   // --- ESTADOS ---
-  const [events, setEvents] = useState([
-    { 
-      id: 1, 
-      title: 'Feria de Salud Rancho', 
-      category: 'Salud', 
-      date: '15 May', 
-      time: '10:00 AM', 
-      timeEnd: '02:00 PM', 
-      description: 'Atención médica gratuita para toda la comunidad local.', 
-      image: 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800', 
-      location: 'Rancho Cucamonga Park',
-      zip: '91730',
-      phone: '+1909000000',
-      contactMethod: 'whatsapp',
-      approved: true 
-    }
-  ]);
-
+  const [zipCode, setZipCode] = useState('');
+  const [events, setEvents] = useState<any[]>([]);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); // 0 = 'Todos'
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
@@ -132,6 +127,48 @@ export default function EventsScreen() {
 
   // Validación de formulario estricta
   const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
+
+  // --- FETCH EVENTOS ---
+  const fetchEvents = async (searchZip?: string) => {
+    if (!searchZip || searchZip.trim().length !== 5) return;
+    try {
+      setIsLoadingPosts(true);
+      const res = await fetch(`${API_EVENTS_URL}?zip=${searchZip.trim()}`);
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        // Mapeamos los datos del backend al formato que espera el UI
+        const mappedData = data.map(item => {
+          let formattedDate = '';
+          try {
+            formattedDate = new Date(item.dateEvent).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+          } catch(e) { formattedDate = 'Fecha N/A'; }
+
+          return {
+            ...item,
+            category: INTERNAL_CATEGORIES[item.categoryIdx] || 'Social',
+            date: formattedDate,
+            time: item.timeStart || 'N/A',
+            timeEnd: item.timeEnd || 'N/A',
+            description: item.descriptionEven || '',
+            image: item.imageEven || '',
+            location: item.locationEven || '',
+          };
+        });
+
+        // Separar eventos aprobados de los pendientes para la vista Admin
+        setEvents(mappedData.filter(e => e.approved === true));
+        setPendingEvents(mappedData.filter(e => e.approved !== true));
+      } else {
+        setEvents([]);
+        setPendingEvents([]);
+      }
+    } catch (e) {
+      console.error("Error obteniendo eventos:", e);
+    } finally {
+      setIsLoadingPosts(false);
+    }
+  };
 
   // --- BOTÓN AUTOAJUSTABLE BASE TIENDAS ---
   const ActionBtn = ({ icon, text, color, bgColor, onPress, minWidth = 100, disabled = false }: any) => (
@@ -219,48 +256,113 @@ export default function EventsScreen() {
         return;
       }
 
+      const formData = new FormData();
+      const filename = formImage!.split('/').pop() || 'imagen.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      formData.append('imagen', { 
+        uri: formImage, 
+        name: filename, 
+        type 
+      } as any);
+
+      const uploadResponse = await fetch('http://172.20.10.3:3000/api/subir-imagen-optimizada/events', {
+        method: 'POST',
+        body: formData,
+        headers: { 'Accept': 'application/json' },
+      });
+
+      const uploadData = await uploadResponse.json();
+      if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
+      
+      const finalImageName = uploadData.identificadorArchivo; 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
 
-      const newEvent = { 
-        id: Date.now(), 
+      const newEntryPayload = {
         title: trimmedTitle, 
-        category: INTERNAL_CATEGORIES[formCategoryIdx] || 'Social',
-        date: formDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-        time: formTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
+        categoryIdx: formCategoryIdx,
+        dateEvent: formDate.toISOString(),
+        timeStart: formTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
         timeEnd: formTimeEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase(), 
-        description: trimmedDesc, 
-        image: formImage, 
-        location: trimmedLoc,
+        descriptionEven: trimmedDesc, 
+        imageEven: finalImageName, 
+        locationEven: trimmedLoc,
         zip: trimmedZip, 
         phone: fullPhone, 
         contactMethod: formContactMethod,
-        approved: false 
+        approved: false, // Por defecto se va a revisión
+        userId: userMetadata?.id || userMetadata?.userId || null
       };
 
-      setPendingEvents(prev => [newEvent, ...prev]);
+      const response = await fetch(API_EVENTS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEntryPayload)
+      });
+      
+      const savedFromDB = await response.json();
+      if (!response.ok) throw new Error(savedFromDB.error || "Error guardando evento");
+
+      const newEventLocal = {
+        ...savedFromDB,
+        image: formImage,
+        category: INTERNAL_CATEGORIES[savedFromDB.categoryIdx],
+        date: new Date(savedFromDB.dateEvent).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+        time: savedFromDB.timeStart,
+        timeEnd: savedFromDB.timeEnd,
+        description: savedFromDB.descriptionEven,
+        location: savedFromDB.locationEven
+      };
+
+      setPendingEvents(prev => [newEventLocal, ...prev]);
       setModalVisible(false);
       resetForm();
       
+      if (!zipCode || zipCode.length < 5) {
+        setZipCode(trimmedZip);
+        fetchEvents(trimmedZip);
+      }
+      
       triggerAlert("¡Recibido!", "Tu evento ha sido enviado. Aparecerá en la lista una vez sea aprobado por el administrador.");
       
-    } catch (err) {
-      triggerAlert("Error", t.communitytab?.errorServer || "Error");
+    } catch (err: any) {
+      triggerAlert("Error", err.message || t.communitytab?.errorServer || "Error");
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const approveEvent = (event: any) => {
-    const approvedEvent = { ...event, approved: true };
-    setEvents(prev => [approvedEvent, ...prev]);
-    setPendingEvents(pendingEvents.filter(e => e.id !== event.id));
-    triggerAlert("Aprobado", "El evento se ha publicado en la cartelera.");
+  const approveEvent = async (event: any) => {
+    try {
+      const response = await fetch(`${API_EVENTS_URL}/${event.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved: true })
+      });
+      if (!response.ok) throw new Error("Error en servidor");
+      
+      const approvedEvent = { ...event, approved: true };
+      setEvents(prev => [approvedEvent, ...prev]);
+      setPendingEvents(pendingEvents.filter(e => e.id !== event.id));
+      triggerAlert("Aprobado", "El evento se ha publicado en la cartelera.");
+    } catch (error) {
+      triggerAlert("Error", "No se pudo aprobar el evento en el servidor.");
+    }
   };
 
-  // --- NUEVA FUNCIÓN PARA RECHAZAR ---
-  const rejectEvent = (id: number) => {
-    setPendingEvents(pendingEvents.filter(e => e.id !== id));
-    triggerAlert("Rechazado", "El evento ha sido eliminado de la lista de pendientes.");
+  const rejectEvent = async (id: number) => {
+    try {
+      const response = await fetch(`${API_EVENTS_URL}/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error("Error en servidor");
+
+      setPendingEvents(pendingEvents.filter(e => e.id !== id));
+      triggerAlert("Rechazado", "El evento ha sido eliminado de la lista de pendientes.");
+    } catch (error) {
+      triggerAlert("Error", "No se pudo rechazar el evento en el servidor.");
+    }
   };
 
   const resetForm = () => {
@@ -270,11 +372,12 @@ export default function EventsScreen() {
   };
 
   const filteredEvents = useMemo(() => 
-    events.filter(item => 
-      item.approved === true && 
-      (selectedCategoryIdx === 0 || item.category === INTERNAL_CATEGORIES[selectedCategoryIdx]) && 
-      item.title.toLowerCase().includes(searchQuery.toLowerCase())
-    ), 
+    events.filter(item => {
+      const title = item.title || '';
+      return item.approved === true && 
+             (selectedCategoryIdx === 0 || item.category === INTERNAL_CATEGORIES[selectedCategoryIdx]) && 
+             title.toLowerCase().includes(searchQuery.toLowerCase());
+    }), 
   [events, selectedCategoryIdx, searchQuery]);
 
   return (
@@ -285,11 +388,42 @@ export default function EventsScreen() {
             {!isAndroid && <BlurView intensity={isDark ? 95 : 65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
             <View style={stylesUnified.cardContent}>
-              <View style={[stylesUnified.headerRow, { marginBottom: 20 }]}>
-                <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
+              <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
+                <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>
+                  <MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} />
+                </TouchableOpacity>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
+                  <TextInput 
+                    style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                    placeholder="Buscar código postal..." 
+                    keyboardType="numeric" 
+                    maxLength={5} 
+                    value={zipCode} 
+                    onChangeText={(text) => {
+                      setZipCode(text);
+                      if (text.length < 5) {
+                        if (events.length > 0 || pendingEvents.length > 0) {
+                          setEvents([]); 
+                          setPendingEvents([]);
+                        }
+                      } else if (text.length === 5) {
+                        fetchEvents(text); 
+                      }
+                    }} 
+                    onSubmitEditing={() => zipCode.length === 5 && fetchEvents(zipCode)} 
+                    placeholderTextColor={Colors.subtext} 
+                  />
+                  <TouchableOpacity onPress={() => fetchEvents(zipCode)} disabled={zipCode.length !== 5} style={{ width: 42, height: 42, marginLeft: 8 }}>
+                    <LinearGradient colors={zipCode.length === 5 ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={zipCode.length === 5 ? "#fff" : Colors.iconInactive} />}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+                
                 {/* MANTENER PRESIONADO PARA ENTRAR A MODO ADMINISTRADOR */}
                 <TouchableOpacity onLongPress={() => setIsAdminMode(!isAdminMode)}>
-                  <MaterialCommunityIcons name="calendar-star" size={40} color={isAdminMode ? Colors.accent : Colors.accenticon} style={{opacity: isAdminMode ? 1 : 0.2}}/>
+                  <MaterialCommunityIcons name="calendar-star" size={32} color={isAdminMode ? Colors.accent : Colors.accenticon} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
                 </TouchableOpacity>
               </View>
 
@@ -326,10 +460,10 @@ export default function EventsScreen() {
                 {/* CONTENIDO PRINCIPAL */}
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
                   
-                  {/* BUSCADOR */}
+                  {/* BUSCADOR DE TEXTO */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, paddingHorizontal: 16, height: 48 }}>
                     <MaterialCommunityIcons name="magnify" size={22} color={Colors.iconInactive} style={{ marginRight: 10 }} />
-                    <TextInput style={{ flex: 1, color: Colors.text, fontSize: 15, height: '100%', fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.eventstab.inputEvents} placeholderTextColor={Colors.iconInactive} value={searchQuery} onChangeText={setSearchQuery} />
+                    <TextInput style={{ flex: 1, color: Colors.text, fontSize: 15, height: '100%', fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.eventstab?.inputEvents || 'Buscar evento...'} placeholderTextColor={Colors.iconInactive} value={searchQuery} onChangeText={setSearchQuery} />
                     {searchQuery.length > 0 && (
                       <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}><MaterialCommunityIcons name="close-circle" size={20} color={Colors.iconInactive} /></TouchableOpacity>
                     )}
@@ -399,7 +533,19 @@ export default function EventsScreen() {
                     )}
 
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                      {filteredEvents.length === 0 ? (
+                      {(!zipCode || zipCode.length < 5) ? (
+                        <View style={{ flex: 1, alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
+                          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+                            <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.subtext} />
+                          </View>
+                          <ThemedText style={{ textAlign: 'center', color: Colors.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }}>
+                            Descubre Eventos
+                          </ThemedText>
+                          <ThemedText style={{ textAlign: 'center', color: Colors.subtext, fontSize: 14, lineHeight: 20 }}>
+                            Ingresa un código postal de 5 dígitos para ver los eventos disponibles en la zona.
+                          </ThemedText>
+                        </View>
+                      ) : filteredEvents.length === 0 && !isLoadingPosts ? (
                         <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                           <MaterialCommunityIcons name="calendar-remove" size={56} color={Colors.subtext} />
                           <ThemedText style={{ color: Colors.subtext, marginTop: 14, fontWeight: '700', fontSize: 14 }}>No hay eventos disponibles</ThemedText>
@@ -609,7 +755,13 @@ export default function EventsScreen() {
           <View style={{ width: '92%', height: '80%', borderRadius: 35, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: Colors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={{ width: '100%', height: 240, backgroundColor: 'transparent' }}>
-               <Image source={{ uri: selectedEventDetails?.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+               {selectedEventDetails?.image && selectedEventDetails?.image.length > 5 ? (
+                 <Image source={{ uri: selectedEventDetails?.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+               ) : (
+                 <View style={{ width: '100%', height: '100%', backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+                   <MaterialCommunityIcons name="image-off-outline" size={40} color={Colors.subtext} />
+                 </View>
+               )}
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={{ position: 'absolute', width: '100%', height: 80 }} />
             </View>
             <TouchableOpacity onPress={() => setSelectedEventDetails(null)} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, padding: 6, zIndex: 10 }}><MaterialCommunityIcons name="close" size={24} color="#FFF" /></TouchableOpacity>
@@ -645,7 +797,7 @@ export default function EventsScreen() {
                     bgColor={selectedEventDetails.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
                   />
                 )}
-                <ActionBtn minWidth={130} disabled={!selectedEventDetails?.approved} onPress={() => handleShare(selectedEventDetails)} icon="share-variant" text={t.genericbtn.sharingbtn} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+                <ActionBtn minWidth={130} disabled={!selectedEventDetails?.approved} onPress={() => handleShare(selectedEventDetails)} icon="share-variant" text={t.genericbtn?.sharingbtn || 'Compartir'} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
               </View>
 
             </ScrollView>
@@ -688,12 +840,19 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
         <LinearGradient colors={orangeGradient} style={{ width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-check" size={14} color="#FFF" /></LinearGradient>
         <ThemedText style={{ marginLeft: 10, fontSize: 13, fontWeight: '800', flex: 1, color: Colors.text }}>{item.date}</ThemedText>
         <View style={{ backgroundColor: 'rgba(255,95,109,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
-          <ThemedText style={{ fontSize: 9, color: '#FF5F6D', fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
+          <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
         </View>
       </View>
       
       <View style={{ width: '100%', height: 180, backgroundColor: 'transparent' }}>
-         <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        {/* Blindaje Visual de Imagen */}
+        {item.image && item.image.length > 5 ? (
+          <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        ) : (
+          <View style={{ width: '100%', height: '100%', backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+            <MaterialCommunityIcons name="image-off-outline" size={40} color={Colors.subtext} />
+          </View>
+        )}
          
          <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
            <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
@@ -744,3 +903,4 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
     </TouchableOpacity>
   );
 });
+

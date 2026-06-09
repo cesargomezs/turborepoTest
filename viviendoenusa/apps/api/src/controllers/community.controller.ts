@@ -104,8 +104,8 @@ export const getCommunityPosts = async (zip?: string) => {
         }
         return post; 
     }));
-
-    return postsConImagenesSeguras;
+    
+   return postsConImagenesSeguras;
 
   } catch (error) {
     console.error("❌ Error en getCommunityPosts:", error);
