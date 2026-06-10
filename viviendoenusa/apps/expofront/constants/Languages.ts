@@ -37,7 +37,7 @@ export const translations = {
       tittleReview: "Revisión",   
       aprovedbtn: "Aprobar",
       rejectbtn: "Rechazar",
-
+      reviews: "Reseñas"
     },
     genericlabel:{
       labelopinion:"Escribe tu opinión..."
@@ -299,7 +299,8 @@ export const translations = {
       sendsuggestion: "Send Suggestion",
       tittleReview: "Review",
       aprovedbtn: "Approve",
-      rejectbtn: "Reject"
+      rejectbtn: "Reject",
+      reviews: "Reviews"
     },
     genericlabel:{
       labelopinion:"Write your opinion..."

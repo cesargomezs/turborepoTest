@@ -598,10 +598,13 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity onPress={() => { setResults([]); setLocalData([]); setZipCode(''); setSearchText(''); setSelectedCategoryIdx(0); }}>
-                    <MaterialCommunityIcons name="refresh" size={24} color={DC.text} style={{opacity: 0.7, marginLeft: 5}} />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="lightbulb-multiple-outline" size={40} color={DC.text} style={{opacity: 0.2, marginLeft: 5}} />
+                </View>
               </View>
+
+              
+              
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
 
@@ -841,7 +844,7 @@ export default function EntrepreneurshipScreen() {
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <MaterialCommunityIcons name="comment-text-multiple-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} />
+                      <MaterialCommunityIcons name="comment-text-multiple-outline" size={18} color={DC.accent} style={{ marginRight: 8 }} />
                       <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.reviews || 'Reseñas'}</ThemedText>
                       {detailItem.reviews.length > 0 && (
                         <View style={[S.reviewCountBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}>

@@ -19,11 +19,14 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '@/utils/babwords.json';
 
 // --- LÓGICA DE VALIDACIÓN ---
-const BANNED_WORDS = Array.isArray(badWordsData?.badWordsList) ? badWordsData.badWordsList : []; 
+const BANNED_WORDS = Array.isArray((badWordsData as any)?.badWordsList) ? (badWordsData as any).badWordsList : []; 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
-  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+  return !BANNED_WORDS.some((word: string) => lowerText.includes(word.toLowerCase()));
 };
+
+// 📡 URL BASE PARA LOS EMPLEOS
+const API_JOBS_URL = 'http://172.20.10.3:3000/jobs';
 
 // --- BASE DE DATOS LOCAL DE CIUDADES ---
 const usCitiesData: Record<string, string[]> = {
@@ -50,13 +53,14 @@ export default function JobsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const segments = useSegments();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark'; 
-  const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata);
-  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   
-  const currentUser = userMetadata?.name || 'Cesar Gomez';
+  // 🚀 BLINDAJE REDUX
+  const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
+  
+  const currentUser = userMetadata?.name || userMetadata?.firstName || 'Cesar Gomez';
 
   // --- MANEJO SEGURO DE TRADUCCIONES ---
   const jobstabData = (t.jobstab as any) || {};
@@ -75,15 +79,6 @@ export default function JobsScreen() {
   const SHIFT_OPTIONS = jobstabData.filter === 'Filter' 
     ? ['Morning', 'Afternoon', 'Night', 'Weekends', 'Flexible']
     : ['Mañana', 'Tarde', 'Noche', 'Fines de Semana', 'Flexible'];
-
-  // --- MOCK DATA BILINGÜE ---
-  const INITIAL_JOBS = [
-    { id: 1, userName: 'Cesar Gomez', title: 'Técnico de Construcción', company: 'BuildUSA Corp', category: 'Construcción', state: 'California', city: 'Rancho Cucamonga', contactMethod: 'whatsapp', phoneCode: '+1', phone: '1234567890', shifts: ['Mañana', 'Morning'], salaryMin: '25', salaryMax: '35', rating: 4.8, reviews: [{id: 1, text: 'Pagan a tiempo y buen trato.', stars: 5, userName: 'Anónimo'}], description: 'Se busca técnico con experiencia en framing y drywall. Contratación inmediata. Es necesario contar con herramienta propia básica y medio de transporte. El proyecto durará aproximadamente 6 meses con posibilidad a extensión.', status: 'approved', isOpen: true, displayTime: 'Hace 2h' },
-    { id: 2, userName: 'AdminWarehouse', title: 'Operador de Montacargas', company: 'Amazon Fulfillment', category: 'Bodega', state: 'California', city: 'Ontario', contactMethod: 'whatsapp', phoneCode: '+1', phone: '0987654321', shifts: ['Noche', 'Night', 'Fines de Semana', 'Weekends'], salaryMin: '21', salaryMax: '24', rating: 4.5, reviews: [], description: 'Se requiere operador de montacargas (Stand-up Reach) con certificación vigente. Beneficios desde el primer día incluyendo seguro médico, dental y visión. Turno nocturno de 10pm a 6am.', status: 'approved', isOpen: true, displayTime: 'Hace 3h' },
-    { id: 3, userName: 'ChefMaria', title: 'Cocinero de Línea', company: 'El Torito', category: 'Restaurantes', state: 'California', city: 'Chino', contactMethod: 'whatsapp', phoneCode: '+1', phone: '9093334444', shifts: ['Tarde', 'Afternoon', 'Noche', 'Night'], salaryMin: '19', salaryMax: '22', rating: 4.0, reviews: [], description: 'Buscamos cocinero con experiencia en comida mexicana tradicional. Disponibilidad para fines de semana indispensable. Ofrecemos comida de empleado gratuita por turno y excelente ambiente de trabajo.', status: 'approved', isOpen: true, displayTime: 'Hace 6h' },
-    { id: 4, userName: 'JohnBuilder', title: 'Drywall Installer', company: 'Cali Builders Inc.', category: 'Construction', state: 'California', city: 'Fontana', contactMethod: 'call', phoneCode: '+1', phone: '9091112233', shifts: ['Morning', 'Mañana'], salaryMin: '26', salaryMax: '32', rating: 4.7, reviews: [{id: 4, text: 'Great management and steady work.', stars: 5, userName: 'Mike T.'}], description: 'Looking for experienced drywall installers for residential projects. Must have own tools and transportation. Immediate start available. Paid weekly via direct deposit.', status: 'approved', isOpen: true, displayTime: 'Ayer' },
-    { id: 5, userName: 'WarehousePro', title: 'Packer / Scanner', company: 'Target Distribution', category: 'Warehouse', state: 'California', city: 'Eastvale', contactMethod: 'whatsapp', phoneCode: '+1', phone: '9512223344', shifts: ['Night', 'Noche', 'Flexible'], salaryMin: '19', salaryMax: '22', rating: 4.2, reviews: [], description: 'Entry-level packing and scanning position. Light physical work. Night shift differential pay included. Overtime available during peak seasons.', status: 'approved', isOpen: true, displayTime: 'Hace 2 días' },
-  ];
 
   const styles = useUnifiedCardStyles();
 
@@ -112,8 +107,14 @@ export default function JobsScreen() {
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'] as const;
 
+  // --- ESTADOS ---
+  const [loading, setLoading] = useState(false);
+  const [allJobs, setAllJobs] = useState<any[]>([]); // Todos los empleos (aprobados y pendientes)
+  const [jobs, setJobs] = useState<any[]>([]); // Empleos aprobados para la vista normal
+  const [pendingJobs, setPendingJobs] = useState<any[]>([]); // Empleos pendientes
+  const [isAdminMode, setIsAdminMode] = useState(false); // Modo Administrador
+
   // Estados de Filtro Principales
-  const [jobs, setJobs] = useState(INITIAL_JOBS);
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [availabilityFilter, setAvailabilityFilter] = useState<'open' | 'closed'>('open'); 
   const [filterTitle, setFilterTitle] = useState<string>('Todos'); 
@@ -131,11 +132,11 @@ export default function JobsScreen() {
   const [newJob, setNewJob] = useState<{
       title: string; company: string; category: string; description: string; 
       contactMethod: 'whatsapp' | 'call'; phoneCode: string; phone: string;
-      shifts: string[]; salaryMin: string; salaryMax: string; state: string; city: string; 
+      shifts: string[]; salaryMin: string; salaryMax: string; state: string; city: string;
   }>({ 
       title: '', company: '', category: 'Bodega', description: '', 
       contactMethod: 'whatsapp', phoneCode: '+1', phone: '',
-      shifts: [], salaryMin: '', salaryMax: '', state: 'California', city: '' 
+      shifts: [], salaryMin: '', salaryMax: '', state: 'California', city: ''
   });
   
   // Selectores y Reseñas
@@ -143,10 +144,75 @@ export default function JobsScreen() {
   const [showTitlePickerModal, setShowTitlePickerModal] = useState(false); 
   const [showLocationPickerModal, setShowLocationPickerModal] = useState(false); 
   
-  const [selectedCompany, setSelectedCompany] = useState<any>(null);
+  const [selectedCompany, setSelectedCompany] = useState<any>(null); 
   const [selectedJobDetail, setSelectedJobDetail] = useState<any>(null); 
-  const [savedJobs, setSavedJobs] = useState<number[]>([]);
+  const [savedJobs, setSavedJobs] = useState<string[]>([]);
   const [reviewForm, setReviewForm] = useState({ visible: false, text: '', rating: 0, isAnonymous: false });
+
+  // --- OBTENER EMPLEOS (FETCH SIN ZIP) ---
+  const fetchJobsData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_JOBS_URL}`);
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        const mappedData = data.map(item => {
+          
+          // 1. Primero extraemos y limpiamos las reseñas que vienen del backend
+          const parsedReviews = item.reviews ? item.reviews.map((r: any) => ({
+             id: r.id,
+             stars: Number(r.rating || r.stars) || 0,
+             text: r.review || r.comment || '',
+             userName: r.userName || 'Anónimo',
+             displayTime: r.displayTime || ''
+          })) : [];
+
+          // 🚀 2. BLINDAJE FRONTEND: Calculamos el promedio nosotros mismos.
+          // Si no hay reseñas, obligamos a que sea 0 sin importar qué diga la BD.
+          const realRating = parsedReviews.length > 0 
+            ? parsedReviews.reduce((sum: number, r: any) => sum + r.stars, 0) / parsedReviews.length 
+            : 0;
+
+          return {
+            id: item.id,
+            userName: item.ownerName || item.userNameId || 'Anónimo',
+            userId: item.userId,
+            title: item.title || item.nameJobs || 'Sin Título',
+            company: item.company || '',
+            category: item.category || 'Otros',
+            state: item.stateCountry || 'California',
+            city: item.city || '',
+            zip: item.zip || '',
+            contactMethod: item.contactMethod ? 'whatsapp' : 'call', 
+            phoneCode: item.phoneCode || '+1',
+            phone: item.phone || '',
+            shifts: item.shifts ? item.shifts.split(',').map((s: string) => s.trim()) : [],
+            salaryMin: item.salaryMin || '',
+            salaryMax: item.salaryMax || '',
+            rating: realRating, // <-- AQUÍ INYECTAMOS NUESTRO CÁLCULO ESTRICTO
+            reviews: parsedReviews, // <-- USAMOS EL ARREGLO LIMPIO
+            description: item.descriptionJob || '',
+            status: item.approved ? 'approved' : 'pending',
+            isOpen: item.isOpen,
+            displayTime: new Date(item.createdAt).toLocaleDateString()
+          };
+        });
+
+        setAllJobs(mappedData);
+        setJobs(mappedData.filter(job => job.status === 'approved'));
+        setPendingJobs(mappedData.filter(job => job.status === 'pending'));
+      }
+    } catch (e) {
+      console.error("Error al obtener empleos:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobsData();
+  }, []);
 
   const availableTitles = useMemo(() => {
     if (activeFilter === 'Todos' || activeFilter === 'All') {
@@ -187,7 +253,7 @@ export default function JobsScreen() {
       }
   };
 
-  const toggleSaveJob = (id: number) => {
+  const toggleSaveJob = (id: string) => {
       setSavedJobs(prev => {
           if (prev.includes(id)) {
               triggerAlert("Eliminado", "Empleo eliminado de guardados.");
@@ -199,7 +265,8 @@ export default function JobsScreen() {
       });
   };
 
-  const handlePublishJob = () => {
+  // --- PUBLICAR EMPLEO (POST) ---
+  const handlePublishJob = async () => {
     if (!newJob.title || !newJob.company || !newJob.city || !newJob.description || !newJob.phone || newJob.shifts.length === 0 || !newJob.salaryMin) {
       triggerAlert("Campos Incompletos", "Por favor completa el título, empresa, estado, ciudad, salario mínimo, turno(s), descripción y el número de contacto.");
       return;
@@ -210,33 +277,111 @@ export default function JobsScreen() {
     }
     
     setIsPublishing(true);
-    setTimeout(() => {
-      const jobToAdd = {
-        ...newJob,
-        id: Date.now(),
-        rating: 0,
-        reviews: [],
-        status: 'pending',
+    try {
+      const payload = {
+        nameJobs: newJob.title.trim(),
+        title: newJob.title.trim(),
+        company: newJob.company.trim(),
+        category: newJob.category,
+        stateCountry: newJob.state,
+        city: newJob.city.trim(),
+        zip: '', 
+        contactMethod: newJob.contactMethod === 'whatsapp',
+        phoneCode: newJob.phoneCode,
+        phone: newJob.phone.trim(),
+        shifts: newJob.shifts.join(', '),
+        salaryMin: newJob.salaryMin.trim(),
+        salaryMax: newJob.salaryMax.trim(),
+        descriptionJob: newJob.description.trim(),
         isOpen: true,
-        userName: currentUser,
-        displayTime: 'Justo ahora'
+        userId: userMetadata?.id || null,
+        userNameId: currentUser,
+        imageRute: '' 
       };
-      setJobs([jobToAdd, ...jobs]);
-      setIsPublishing(false);
+
+      const res = await fetch(API_JOBS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Fallo en servidor");
+
+      fetchJobsData(); // Recargar la lista
+      
       setModalVisible(false);
       setNewJob({ title: '', company: '', category: 'Bodega', description: '', contactMethod: 'whatsapp', phoneCode: '+1', phone: '', shifts: [], salaryMin: '', salaryMax: '', state: 'California', city: '' });
-      triggerAlert("¡Recibido!", "Tu empleo ha sido enviado y está pendiente de revisión por el administrador.");
-    }, 1200);
+      triggerAlert("¡Recibido!", "Tu empleo ha sido publicado/enviado exitosamente y está pendiente de aprobación.");
+    } catch (e) {
+      triggerAlert("Error", "No se pudo publicar el empleo. Revisa tu conexión.");
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
-  const toggleJobStatus = (id: number) => {
-    setJobs(prevJobs => prevJobs.map(job => {
-      if (job.id === id) {
-        const willBeOpen = !job.isOpen;
-        return { ...job, isOpen: willBeOpen, displayTime: willBeOpen ? 'Justo ahora' : job.displayTime };
+  // --- ADMINISTRADOR: APROBAR EMPLEO (PUT) ---
+  const handleApproveJob = async (id: string) => {
+    try {
+      const res = await fetch(`${API_JOBS_URL}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved: true })
+      });
+
+      if (!res.ok) throw new Error("No se pudo aprobar");
+
+      // Actualizar estado local
+      const jobToApprove = pendingJobs.find(job => job.id === id);
+      if (jobToApprove) {
+        jobToApprove.status = 'approved';
+        setJobs(prev => [jobToApprove, ...prev]);
+        setPendingJobs(prev => prev.filter(job => job.id !== id));
       }
-      return job;
-    }));
+      triggerAlert("Aprobado", "La oferta de empleo ahora es pública.");
+    } catch (e) {
+      triggerAlert("Error", "Ocurrió un error al aprobar la oferta.");
+    }
+  };
+
+  // --- ADMINISTRADOR: RECHAZAR EMPLEO (DELETE) ---
+  const handleRejectJob = async (id: string) => {
+    try {
+      const res = await fetch(`${API_JOBS_URL}/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) throw new Error("No se pudo rechazar");
+
+      setPendingJobs(prev => prev.filter(job => job.id !== id));
+      triggerAlert("Rechazado", "La oferta de empleo ha sido eliminada.");
+    } catch (e) {
+      triggerAlert("Error", "Ocurrió un error al rechazar la oferta.");
+    }
+  };
+
+  // --- CERRAR O REABRIR VACANTE (PUT) ---
+  const toggleJobStatus = async (id: string, currentIsOpen: boolean) => {
+    try {
+      const willBeOpen = !currentIsOpen;
+      
+      // Actualización optimista local
+      setJobs(prevJobs => prevJobs.map(job => {
+        if (job.id === id) {
+          return { ...job, isOpen: willBeOpen, displayTime: willBeOpen ? 'Justo ahora' : job.displayTime };
+        }
+        return job;
+      }));
+
+      // Llamada al backend
+      await fetch(`${API_JOBS_URL}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isOpen: willBeOpen })
+      });
+
+    } catch (e) {
+      console.error("Error al actualizar estado:", e);
+    }
   };
 
   const handleContact = (method: 'whatsapp' | 'call', code: string, phone: string) => {
@@ -249,7 +394,8 @@ export default function JobsScreen() {
     }).catch(err => console.log(err));
   };
 
-  const handleSubmitReview = () => {
+  // --- PUBLICAR RESEÑA (POST) ---
+  const handleSubmitReview = async () => {
       if (!reviewForm.text.trim() || reviewForm.rating === 0) {
           triggerAlert("Incompleto", "Por favor ingresa un comentario y selecciona la cantidad de estrellas.");
           return;
@@ -258,34 +404,64 @@ export default function JobsScreen() {
           triggerAlert("Error", "Tu reseña contiene palabras no permitidas.");
           return;
       }
-      const newReview = { id: Date.now(), text: reviewForm.text, stars: reviewForm.rating, userName: reviewForm.isAnonymous ? 'Anónimo' : currentUser };
-      let newAverage = 0;
-      setJobs(prevJobs => prevJobs.map(job => {
-          if (job.company === selectedCompany.company) {
-              const updatedReviews = [newReview, ...job.reviews];
-              newAverage = updatedReviews.reduce((acc, r) => acc + r.stars, 0) / updatedReviews.length;
-              return { ...job, reviews: updatedReviews, rating: newAverage };
-          }
-          return job;
-      }));
-      setSelectedCompany((prev: any) => {
-          if(!prev) return prev;
-          const updatedReviews = [newReview, ...prev.reviews];
-          return { ...prev, reviews: updatedReviews, rating: newAverage };
-      });
-      setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false });
-      triggerAlert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+
+      try {
+        const payload = {
+          reference_id: selectedCompany.id,
+          stars: reviewForm.rating,
+          comment: reviewForm.text,
+          userId: reviewForm.isAnonymous ? null : (userMetadata?.id || null)
+        };
+
+        const res = await fetch(`${API_JOBS_URL}/reviews`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error();
+
+        const savedReview = await res.json();
+        
+        const newReviewFormatted = { 
+          id: savedReview.id || Date.now(), 
+          text: savedReview.review || reviewForm.text, 
+          stars: Number(savedReview.rating || reviewForm.rating), 
+          userName: reviewForm.isAnonymous ? 'Anónimo' : currentUser 
+        };
+        
+        let newAverage = 0;
+        
+        setJobs(prevJobs => prevJobs.map(job => {
+            if (job.id === selectedCompany.id) {
+                const updatedReviews = [newReviewFormatted, ...job.reviews];
+                newAverage = updatedReviews.reduce((acc: number, r: any) => acc + r.stars, 0) / updatedReviews.length;
+                return { ...job, reviews: updatedReviews, rating: newAverage };
+            }
+            return job;
+        }));
+        
+        setSelectedCompany((prev: any) => {
+            if(!prev) return prev;
+            const updatedReviews = [newReviewFormatted, ...prev.reviews];
+            return { ...prev, reviews: updatedReviews, rating: newAverage };
+        });
+        
+        setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false });
+        triggerAlert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+
+      } catch (e) {
+        triggerAlert("Error", "No se pudo publicar la reseña.");
+      }
   };
 
-  // --- LÓGICA DE FILTRADO ROBUSTA PARA BILINGÜISMO ---
+  // --- LÓGICA DE FILTRADO ---
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
-      // Validar categoría (Mapea inglés a español y viceversa para que el filtro funcione)
       let matchCategory = false;
       if (activeFilter === 'Todos' || activeFilter === 'All') {
           matchCategory = true;
       } else {
-          // Busca en el diccionario de mapeo
           const spanishCategory = Object.keys(CATEGORY_MAP).find(key => 
               CATEGORY_MAP[key].includes(activeFilter) || key === activeFilter
           );
@@ -298,10 +474,7 @@ export default function JobsScreen() {
       }
 
       const matchAvailability = availabilityFilter === 'open' ? job.isOpen === true : job.isOpen === false;
-      
-      // Validación de Turno (Busca si la palabra en español o inglés existe en el arreglo de turnos del empleo)
-      const matchShift = filterShift === 'Todos' || filterShift === 'All' || job.shifts.some(s => s === filterShift);
-      
+      const matchShift = filterShift === 'Todos' || filterShift === 'All' || job.shifts.some((s: string) => s === filterShift);
       const matchTitle = filterTitle === 'Todos' || filterTitle === 'All' || job.title === filterTitle;
       const matchState = job.state === filterState;
       const matchLocation = filterLocations.length === 0 || filterLocations.includes(job.city);
@@ -325,8 +498,11 @@ export default function JobsScreen() {
 
             <View style={styles.cardContent}>
               
-              {/* --- CABECERA --- */}
+              {/* --- CABECERA ORIGINAL RESTAURADA --- */}
               <View style={[styles.headerRow, { marginBottom: 15 }]}>
+                <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4, zIndex: 10 }}>
+                  <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
+                </TouchableOpacity>
 
                 <View style={{ flex: 1, alignItems: 'center' }}>
                     <View style={{ flexDirection: 'row', backgroundColor: DynamicColors.inputBg, borderRadius: 16, padding: 4, borderWidth: 1, borderColor: DynamicColors.border }}>
@@ -339,7 +515,12 @@ export default function JobsScreen() {
                     </View>
                 </View>
 
-                <MaterialCommunityIcons name="briefcase-search" size={40} color={DynamicColors.text} style={{opacity: 0.2}}/>
+                {/* BOTÓN REFRESH, MALETÍN y ADMIN */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <TouchableOpacity onLongPress={() => { setIsAdminMode(!isAdminMode); }}>
+                      <MaterialCommunityIcons name="briefcase-search" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}}/>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
@@ -390,9 +571,46 @@ export default function JobsScreen() {
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
                   
+                  {/* --- ADMIN PENDING JOBS --- */}
+                  {isAdminMode && pendingJobs.length > 0 && (
+                    <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
+                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Verificar ({pendingJobs.length})</ThemedText>
+                      {pendingJobs.map(job => (
+                        <View key={job.id} style={{ marginBottom: 15 }}>
+                          <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: '#FFB74D' }}>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedJobDetail(job)}>
+                                <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
+                                    <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
+                                    <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
+                                </View>
+                                <View style={{ padding: 15 }}>
+                                  <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
+                                  <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginTop: 4, fontWeight: 'bold' }}>{job.company}</ThemedText>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
+                                     <MaterialCommunityIcons name="arrow-expand" size={14} color={DynamicColors.accent} />
+                                     <ThemedText style={{ fontSize: 12, color: DynamicColors.accent, fontWeight: 'bold', marginLeft: 4 }}>Ver detalle completo</ThemedText>
+                                  </View>
+                                </View>
+                            </TouchableOpacity>
+                          </View>
+                          
+                          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
+                            <TouchableOpacity onPress={() => handleRejectJob(job.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                                <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+                                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleApproveJob(job.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                              <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
                   {/* --- 1. FILTROS SUPERIORES: CIUDAD Y TURNO --- */}
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
-                    
                     <TouchableOpacity onPress={() => setShowLocationPickerModal(true)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: filterLocations.length > 0 ? 'rgba(255, 95, 109, 0.1)' : DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: filterLocations.length > 0 ? DynamicColors.accent : DynamicColors.border, paddingHorizontal: 15, height: 48 }}>
                         <MaterialCommunityIcons name="map-marker-radius" size={18} color={filterLocations.length > 0 ? DynamicColors.accent : DynamicColors.subtext} style={{ marginRight: 8 }} />
                         <View style={{ flex: 1, overflow: 'hidden' }}>
@@ -415,18 +633,12 @@ export default function JobsScreen() {
                             </>
                         )}
                     </TouchableOpacity>
-
                   </View>
 
                   {/* --- 2. CATEGORÍAS MÓVILES --- */}
                   {!isLargeWeb && (
                     <View style={{ marginBottom: 8, minHeight: 46 }}> 
-                      <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
-                        contentContainerStyle={{ paddingHorizontal: 2, paddingBottom: 6 }}
-                        keyboardShouldPersistTaps="handled" 
-                      >
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 2, paddingBottom: 6 }} keyboardShouldPersistTaps="handled">
                         <View style={{ flexDirection: 'row', gap: 8 }}> 
                           {JOB_CATEGORIES.map((cat: any) => {
                             const isActive = activeFilter === cat.id;
@@ -462,7 +674,7 @@ export default function JobsScreen() {
                       </TouchableOpacity>
                   </View>
 
-                  {/* FEED EMPLEOS (FONDO TRANSPARENTE / DISEÑO ORIGINAL SIN FOTOS) */}
+                  {/* FEED EMPLEOS */}
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {filteredJobs.length === 0 ? (
                        <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
@@ -470,98 +682,102 @@ export default function JobsScreen() {
                          <ThemedText style={{ color: DynamicColors.subtext, marginTop: 14, fontWeight: 'bold' }}>No se encontraron empleos con estos filtros.</ThemedText>
                        </View>
                     ) : (
-                      filteredJobs.map(job => (
-                        <View key={job.id} style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: job.status === 'pending' ? '#FFB74D' : DynamicColors.border, opacity: job.isOpen ? 1 : 0.65 }}>
-                          
-                          {/* Banner Pendiente Admin */}
-                          {job.status === 'pending' && (
-                            <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
-                                <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
-                                <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
-                            </View>
-                          )}
+                      filteredJobs.map(job => {
+                        // 🚀 LÓGICA DE CONTADOR ABREVIADO PARA EL BOTÓN
+                        const reviewCount = job.reviews?.length || 0;
+                        let formattedCount = reviewCount.toString();
+                        if (reviewCount >= 1000) {
+                          formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
+                        }
 
-                          <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedJobDetail(job)}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
-                              <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-                                <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{job.category.toUpperCase()}</ThemedText>
+                        return (
+                          <View key={job.id} style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: DynamicColors.border, opacity: job.isOpen ? 1 : 0.65 }}>
+
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedJobDetail(job)}>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+                                <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+                                  <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{job.category.toUpperCase()}</ThemedText>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
+                                  <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
+                                  <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{job.rating > 0 ? job.rating.toFixed(1) : 'Nuevo'}</ThemedText>
+                                </View>
                               </View>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
-                                <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
-                                <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{job.rating > 0 ? job.rating.toFixed(1) : 'Nuevo'}</ThemedText>
+
+                              <View style={{ padding: 15, paddingTop: 0 }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                  <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                    <MaterialCommunityIcons name="domain" size={14} color={DynamicColors.subtext} />
+                                    <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginLeft: 4, fontWeight: 'bold' }}>{job.company}</ThemedText>
+                                </View>
+                                
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                                      <MaterialCommunityIcons name="map-marker-radius" size={14} color={DynamicColors.subtext} />
+                                      <ThemedText numberOfLines={1} style={{ fontSize: 12, fontWeight: 'bold', color: DynamicColors.subtext, marginLeft: 4 }}>
+                                          {job.city}, {job.state}
+                                      </ThemedText>
+                                  </View>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(76, 175, 80, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                                      <MaterialCommunityIcons name="cash" size={14} color="#4CAF50" />
+                                      <ThemedText numberOfLines={1} style={{ fontSize: 12, fontWeight: 'bold', color: '#4CAF50', marginLeft: 4 }}>
+                                          ${job.salaryMin}{job.salaryMax ? ` - $${job.salaryMax}` : ''}/hr
+                                      </ThemedText>
+                                  </View>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 95, 109, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                                      <MaterialCommunityIcons name="clock-outline" size={14} color={DynamicColors.accent} />
+                                      <ThemedText numberOfLines={1} style={{ fontSize: 12, fontWeight: 'bold', color: DynamicColors.accent, marginLeft: 4 }}>
+                                          {job.shifts.join(', ')}
+                                      </ThemedText>
+                                  </View>
+                                </View>
+
+                                {/* Descripción resumida */}
+                                <ThemedText numberOfLines={2} style={{ fontSize: 14, color: DynamicColors.text, marginTop: 15, lineHeight: 22, opacity: 0.8 }}>{job.description}</ThemedText>
+
+                                {/* Botón visual para abrir detalles */}
+                                <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginTop: 12 }}>
+                                    <MaterialCommunityIcons name="arrow-expand" size={14} color={DynamicColors.text} style={{ marginRight: 6 }} />
+                                    <ThemedText style={{ fontSize: 12, fontWeight: 'bold', color: DynamicColors.text }}>Ver detalle completo</ThemedText>
+                                </View>
                               </View>
-                            </View>
+                            </TouchableOpacity>
 
                             <View style={{ padding: 15, paddingTop: 0 }}>
-                              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
-                              </View>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                                  <MaterialCommunityIcons name="domain" size={14} color={DynamicColors.subtext} />
-                                  <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginLeft: 4, fontWeight: 'bold' }}>{job.company}</ThemedText>
-                              </View>
-                              
-                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                                    <MaterialCommunityIcons name="map-marker-radius" size={14} color={DynamicColors.subtext} />
-                                    <ThemedText numberOfLines={1} style={{ fontSize: 12, fontWeight: 'bold', color: DynamicColors.subtext, marginLeft: 4 }}>
-                                        {job.city}, {job.state}
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15, marginTop: 5, paddingBottom: (job.userName === currentUser || job.userId === userMetadata?.id) ? 10 : 0 }}>
+                                  <TouchableOpacity onPress={() => setSelectedCompany(job)} style={{ flex: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: DynamicColors.inputBg }}>
+                                    <MaterialCommunityIcons name="comment-text-outline" size={16} color={DynamicColors.text} />
+                                    {/* 🚀 CONTADOR INYECTADO AQUÍ AL TEXTO ORIGINAL */}
+                                    <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: DynamicColors.text }}>
+                                      Reseñas {reviewCount > 0 ? `(${formattedCount})` : ''}
                                     </ThemedText>
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(76, 175, 80, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                                    <MaterialCommunityIcons name="cash" size={14} color="#4CAF50" />
-                                    <ThemedText numberOfLines={1} style={{ fontSize: 12, fontWeight: 'bold', color: '#4CAF50', marginLeft: 4 }}>
-                                        ${job.salaryMin}{job.salaryMax ? ` - $${job.salaryMax}` : ''}/hr
-                                    </ThemedText>
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 95, 109, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                                    <MaterialCommunityIcons name="clock-outline" size={14} color={DynamicColors.accent} />
-                                    <ThemedText numberOfLines={1} style={{ fontSize: 12, fontWeight: 'bold', color: DynamicColors.accent, marginLeft: 4 }}>
-                                        {job.shifts.join(', ')}
-                                    </ThemedText>
-                                </View>
+                                  </TouchableOpacity>
+
+                                  <TouchableOpacity onPress={() => handleContact(job.contactMethod as 'whatsapp'|'call', job.phoneCode, job.phone)} disabled={!job.isOpen} style={{ flex: 2, minWidth: 140, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: job.contactMethod === 'whatsapp' ? 'rgba(76, 175, 80, 0.15)' : (isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'), opacity: !job.isOpen ? 0.4 : 1 }}>
+                                  <MaterialCommunityIcons name={job.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={16} color={job.contactMethod === 'whatsapp' ? "#4CAF50" : (isDark ? '#4FC3F7' : '#1976D2')} />
+                                  <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: job.contactMethod === 'whatsapp' ? "#4CAF50" : (isDark ? '#4FC3F7' : '#1976D2') }}>
+                                      {job.contactMethod === 'whatsapp' ? 'WhatsApp' : 'Llamar'}
+                                  </ThemedText>
+                                  </TouchableOpacity>
                               </View>
 
-                              {/* Descripción resumida */}
-                              <ThemedText numberOfLines={2} style={{ fontSize: 14, color: DynamicColors.text, marginTop: 15, lineHeight: 22, opacity: 0.8 }}>{job.description}</ThemedText>
-
-                              {/* Botón visual para abrir detalles */}
-                              <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginTop: 12 }}>
-                                  <MaterialCommunityIcons name="arrow-expand" size={14} color={DynamicColors.text} style={{ marginRight: 6 }} />
-                                  <ThemedText style={{ fontSize: 12, fontWeight: 'bold', color: DynamicColors.text }}>Ver detalle completo</ThemedText>
-                              </View>
+                              {/* Opciones de Administrador de la Vacante (Solo si es dueño) */}
+                              {(job.userName === currentUser || job.userId === userMetadata?.id) && (
+                                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 10 }}>
+                                  <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.1)' : 'rgba(76, 175, 80, 0.1)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 12 }}>
+                                      <MaterialCommunityIcons name={job.isOpen ? "briefcase-off" : "briefcase-check"} size={16} color={job.isOpen ? "#FF5252" : "#4CAF50"} />
+                                      <ThemedText style={{ fontSize: 12, fontWeight: 'bold', color: job.isOpen ? "#FF5252" : "#4CAF50", marginLeft: 6 }}>
+                                      {job.isOpen ? "Marcar como No Disponible" : "Reabrir Vacante"}
+                                      </ThemedText>
+                                  </TouchableOpacity>
+                                  </View>
+                              )}
                             </View>
-                          </TouchableOpacity>
-
-                          <View style={{ padding: 15, paddingTop: 0 }}>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15, marginTop: 5, paddingBottom: job.userName === currentUser ? 10 : 0 }}>
-                                <TouchableOpacity onPress={() => setSelectedCompany(job)} style={{ flex: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: DynamicColors.inputBg }}>
-                                <MaterialCommunityIcons name="comment-text-outline" size={16} color={DynamicColors.text} />
-                                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: DynamicColors.text }}>Reseñas</ThemedText>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity onPress={() => handleContact(job.contactMethod as 'whatsapp'|'call', job.phoneCode, job.phone)} disabled={job.status === 'pending' || !job.isOpen} style={{ flex: 2, minWidth: 140, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: job.contactMethod === 'whatsapp' ? 'rgba(76, 175, 80, 0.15)' : (isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'), opacity: (job.status === 'pending' || !job.isOpen) ? 0.4 : 1 }}>
-                                <MaterialCommunityIcons name={job.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={16} color={job.contactMethod === 'whatsapp' ? "#4CAF50" : (isDark ? '#4FC3F7' : '#1976D2')} />
-                                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: job.contactMethod === 'whatsapp' ? "#4CAF50" : (isDark ? '#4FC3F7' : '#1976D2') }}>
-                                    {job.contactMethod === 'whatsapp' ? 'WhatsApp' : 'Llamar'}
-                                </ThemedText>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Opciones de Administrador de la Vacante */}
-                            {job.userName === currentUser && (
-                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 10 }}>
-                                <TouchableOpacity onPress={() => toggleJobStatus(job.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.1)' : 'rgba(76, 175, 80, 0.1)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 12 }}>
-                                    <MaterialCommunityIcons name={job.isOpen ? "briefcase-off" : "briefcase-check"} size={16} color={job.isOpen ? "#FF5252" : "#4CAF50"} />
-                                    <ThemedText style={{ fontSize: 12, fontWeight: 'bold', color: job.isOpen ? "#FF5252" : "#4CAF50", marginLeft: 6 }}>
-                                    {job.isOpen ? "Marcar como No Disponible" : "Reabrir Vacante"}
-                                    </ThemedText>
-                                </TouchableOpacity>
-                                </View>
-                            )}
                           </View>
-                        </View>
-                      ))
+                        );
+                      })
                     )}
                   </ScrollView>
                 </View>
@@ -578,7 +794,7 @@ export default function JobsScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* MODAL DETALLES DEL EMPLEO (SIN FOTO, ESTILO LIMPIO CON ICONOS DE CRISTAL) */}
+      {/* MODAL DETALLES DEL EMPLEO */}
       <RNModal visible={!!selectedJobDetail} transparent animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -586,14 +802,14 @@ export default function JobsScreen() {
           <View style={{ width: '90%', maxHeight: '80%', borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
-            {/* CABECERA DEL MODAL (Transparente estilo cristal) */}
+            {/* CABECERA DEL MODAL */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: 10 }}>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                     <TouchableOpacity onPress={() => handleShareJob(selectedJobDetail)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
                         <MaterialCommunityIcons name="share-variant" size={22} color={DynamicColors.text} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => toggleSaveJob(selectedJobDetail.id)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
-                        <MaterialCommunityIcons name={savedJobs.includes(selectedJobDetail?.id) ? "bookmark" : "bookmark-outline"} size={22} color={savedJobs.includes(selectedJobDetail?.id) ? DynamicColors.accent : DynamicColors.text} />
+                        <MaterialCommunityIcons name={savedJobs.includes(savedJobs.includes(selectedJobDetail?.id) ? "bookmark" : "bookmark-outline") ? "bookmark" : "bookmark-outline"} size={22} color={savedJobs.includes(selectedJobDetail?.id) ? DynamicColors.accent : DynamicColors.text} />
                     </TouchableOpacity>
                 </View>
                 <TouchableOpacity onPress={() => setSelectedJobDetail(null)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
@@ -650,7 +866,7 @@ export default function JobsScreen() {
                         <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>Ver Reseñas</ThemedText>
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => handleContact(selectedJobDetail?.contactMethod as 'whatsapp'|'call', selectedJobDetail?.phoneCode, selectedJobDetail?.phone)} disabled={selectedJobDetail?.status === 'pending' || !selectedJobDetail?.isOpen} style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: selectedJobDetail?.contactMethod === 'whatsapp' ? '#4CAF50' : '#2196F3', opacity: (selectedJobDetail?.status === 'pending' || !selectedJobDetail?.isOpen) ? 0.4 : 1 }}>
+                    <TouchableOpacity onPress={() => handleContact(selectedJobDetail?.contactMethod as 'whatsapp'|'call', selectedJobDetail?.phoneCode, selectedJobDetail?.phone)} disabled={!selectedJobDetail?.isOpen} style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: selectedJobDetail?.contactMethod === 'whatsapp' ? '#4CAF50' : '#2196F3', opacity: !selectedJobDetail?.isOpen ? 0.4 : 1 }}>
                         <MaterialCommunityIcons name={selectedJobDetail?.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={18} color="#FFF" />
                         <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: '#FFF' }}>
                             {selectedJobDetail?.contactMethod === 'whatsapp' ? 'WhatsApp' : 'Llamar'}
@@ -671,7 +887,6 @@ export default function JobsScreen() {
             <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', maxHeight: height * 0.9, borderColor: DynamicColors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               
-              {/* --- VISTA: SELECCIONAR CIUDAD AL PUBLICAR --- */}
               {publishView === 'city' ? (
                  <View style={{ padding: 25, height: height * 0.7, zIndex: 999 }}>
                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
@@ -694,7 +909,6 @@ export default function JobsScreen() {
                      </ScrollView>
                  </View>
               ) : publishView === 'country' ? (
-              /* --- VISTA: SELECCIONAR PAÍS AL PUBLICAR --- */
                  <View style={{ padding: 25, height: height * 0.6, zIndex: 999 }}>
                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
                          <TouchableOpacity onPress={() => setPublishView('form')} style={{ paddingRight: 15 }}>
@@ -717,7 +931,6 @@ export default function JobsScreen() {
                      </ScrollView>
                  </View>
               ) : (
-              /* --- VISTA: FORMULARIO PRINCIPAL DE PUBLICACIÓN --- */
               <>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 25, marginBottom: 10 }}>
                     <View>
@@ -729,7 +942,6 @@ export default function JobsScreen() {
 
                   <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
                     
-                    {/* CATEGORÍAS */}
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                       {JOB_CATEGORIES.filter((c: any) => c.id !== 'Todos').map((cat: any) => (
                         <TouchableOpacity key={cat.id} onPress={() => setNewJob({...newJob, category: cat.id, title: ''})} style={{ borderRadius: 12, overflow: 'hidden', height: 42, borderWidth: newJob.category === cat.id ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -748,7 +960,6 @@ export default function JobsScreen() {
                       ))}
                     </View>
 
-                    {/* SUGERENCIAS DE TÍTULOS */}
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>TÍTULO DEL PUESTO *</ThemedText>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}} contentContainerStyle={{gap: 8}}>
                         {(SUGGESTED_TITLES[newJob.category] || SUGGESTED_TITLES['Todos'] || []).map((suggestion: string) => {
@@ -771,7 +982,6 @@ export default function JobsScreen() {
                     </ScrollView>
                     <TextInput value={newJob.title} onChangeText={t => setNewJob({...newJob, title: t})} placeholder="Escribe o elige un puesto arriba..." placeholderTextColor="#999" style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
 
-                    {/* ESTADO Y CIUDAD AL PUBLICAR */}
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>ESTADO *</ThemedText>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}} contentContainerStyle={{gap: 8}}>
                         {STATES.map(st => {
@@ -793,7 +1003,7 @@ export default function JobsScreen() {
                     </ScrollView>
 
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>CIUDAD *</ThemedText>
-                    <View style={{ zIndex: 50, marginBottom: 15 }}>
+                    <View style={{ zIndex: 50, marginBottom: 20 }}>
                         <TouchableOpacity 
                             onPress={() => setPublishView('city')} 
                             style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, borderWidth: 1, borderColor: DynamicColors.border }}>
@@ -807,7 +1017,6 @@ export default function JobsScreen() {
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>EMPRESA / CONTRATISTA *</ThemedText>
                     <TextInput value={newJob.company} onChangeText={t => setNewJob({...newJob, company: t})} placeholder="Nombre del negocio o persona" placeholderTextColor="#999" style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
 
-                    {/* RANGO SALARIAL */}
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>PAGO POR HORA (USD) *</ThemedText>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 14, borderWidth: 1, borderColor: DynamicColors.border, paddingHorizontal: 15 }}>
@@ -820,7 +1029,6 @@ export default function JobsScreen() {
                         </View>
                     </View>
 
-                    {/* SELECCIÓN MÚLTIPLE DE TURNOS */}
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>TURNOS DISPONIBLES *</ThemedText>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                         {SHIFT_OPTIONS.map(shift => {
@@ -843,7 +1051,6 @@ export default function JobsScreen() {
                         })}
                     </View>
 
-                    {/* DISEÑO DE CONTACTO */}
                     <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 10 }}>Método de contacto principal</ThemedText>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                         <TouchableOpacity
@@ -894,9 +1101,7 @@ export default function JobsScreen() {
         </View>
       </RNModal>
 
-      {/* --- MODALES PRINCIPALES (EXTERNOS) --- */}
-      
-      {/* SELECTOR DE PUESTO (TÍTULO) */}
+      {/* --- MODALES DE FILTROS --- */}
       <RNModal visible={showTitlePickerModal} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowTitlePickerModal(false)} />
@@ -925,7 +1130,6 @@ export default function JobsScreen() {
           </View>
       </RNModal>
 
-      {/* SELECTOR DE FILTRO DE TURNO */}
       <RNModal visible={showShiftPickerModal} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowShiftPickerModal(false)} />
@@ -947,7 +1151,6 @@ export default function JobsScreen() {
           </View>
       </RNModal>
 
-      {/* SELECTOR MULTI-CIUDAD Y ESTADO PARA FILTROS */}
       <RNModal visible={showLocationPickerModal} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowLocationPickerModal(false)} />
@@ -1049,7 +1252,6 @@ export default function JobsScreen() {
                             value={reviewForm.text}
                             onChangeText={t => setReviewForm(prev => ({...prev, text: t}))}
                             placeholder="Describe tu experiencia trabajando aquí..."
-                            
                             multiline
                             style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 12, padding: 15, color: DynamicColors.text, minHeight: 80, textAlignVertical: 'top', marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }}
                         />
@@ -1075,7 +1277,6 @@ export default function JobsScreen() {
                     </TouchableOpacity>
                 )}
 
-                {/* LISTA DE RESEÑAS EXISTENTES */}
                 {selectedCompany?.reviews && selectedCompany.reviews.length > 0 ? (
                     selectedCompany.reviews.map((r: any) => (
                         <View key={r.id} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 16, padding: 15, marginBottom: 10, borderWidth: 1, borderColor: DynamicColors.border }}>

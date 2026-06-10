@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
-// 🚀 1. Agregamos 'rating' a la importación del esquema
-import { entrepreneurship, users, rating, reviews } from "../../../../packages/db/src/schema"; 
+// 🚀 1. Usamos ALIAS para la tabla 'rating' y agregamos la tabla 'reviews' (plural)
+import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 
@@ -11,15 +11,17 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🔍 1. CONSULTA GENERAL (Con filtro, Supabase y RESEÑAS)
+// 🔍 1. CONSULTA GENERAL (Con doble JOIN para Ratings y Reviews)
 export const getEntrepreneurships = async (zip?: string) => {
     try {
       let query = db
         .select()
         .from(entrepreneurship)
         .leftJoin(users, eq(entrepreneurship.userId, users.id))
-        // 🚀 Hacemos JOIN con la tabla rating para traer las reseñas
-        .leftJoin(rating, eq(rating.referenceId, entrepreneurship.id)) 
+        // 🚀 PRIMER JOIN: Traemos las estrellas
+        .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id)) 
+        // 🚀 SEGUNDO JOIN: Traemos el texto de la reseña enlazado al rating
+        .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
         .$dynamic(); 
   
       // Filtro por Zip Code si se proporciona
@@ -49,13 +51,15 @@ export const getEntrepreneurships = async (zip?: string) => {
           });
         }
   
-        // Si hay una reseña válida en la fila, la agregamos y TRADUCIMOS los campos
+        // Si hay un rating válido, lo agregamos y buscamos su review correspondiente
         if (row.rating && row.rating.id) {
+          // 🛡️ Buscamos el texto donde sea que esté en la tabla reviews
+          const commentText = row.reviews?.comment || '';
+
           itemsMap.get(itemId).reviews.push({
              ...row.rating,
-             // 🚀 TRADUCCIÓN: De DB a Frontend
-             stars: Number(row.rating.rating) || 0, // BD usa 'rating', Front usa 'stars'
-             comment: row.rating.review || '',      // BD usa 'review', Front usa 'comment'
+             stars: Number(row.rating.rating) || 0,
+             comment: commentText, 
              displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           });
         }
@@ -63,10 +67,12 @@ export const getEntrepreneurships = async (zip?: string) => {
   
       const finalList = await Promise.all(Array.from(itemsMap.values()).map(async (item) => {
           
-          // 🧮 Calcular promedio de estrellas (Ahora sí encontrará 'stars')
+          // 🧮 Calcular promedio de estrellas
           if (item.reviews.length > 0) {
               const totalStars = item.reviews.reduce((sum: number, r: any) => sum + (Number(r.stars) || 0), 0);
               item.rating = totalStars / item.reviews.length;
+          } else {
+              item.rating = 0; // Forzamos el 0 si no hay reseñas
           }
   
           const fileName = item.imageEntrepren;
@@ -202,10 +208,9 @@ export const deleteEntrepreneurship = async (id: string) => {
   }
 };
 
-// 📥 6. CREAR RESEÑA 
+// 📥 6. CREAR RESEÑA (INSERCIÓN DOBLE)
 export const createEntrepreneurshipReview = async (data: any) => {
     try {
-      // 1. BLINDAJE DEL USER_ID 
       let validUserId = null;
       if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
           validUserId = data.userId;
@@ -214,38 +219,58 @@ export const createEntrepreneurshipReview = async (data: any) => {
           if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
       }
   
-      // 🚀 2. TRADUCCIÓN EXACTA AL ESQUEMA DE TU BD
-      const payload: any = {
-        // Tu BD espera 'rating' (y le pasamos data.stars del front)
-        rating: String(data.stars || 5), // Lo pasamos como string por si Drizzle espera numeric(3,2)
-        
-        // Tu BD espera 'review' (y le pasamos data.comment del front)
-        review: data.comment || '',
-        
-        // Tu BD espera 'type_entry' para saber de dónde viene
-        typeEntry: 'entrepreneurship', // Formato Drizzle
-        type_entry: 'entrepreneurship', // Formato SQL directo (por seguridad)
-        
+      // --- PASO A: GUARDAR LAS ESTRELLAS EN 'rating' ---
+      const ratingPayload: any = {
+        rating: String(data.stars || 5), 
         userId: validUserId,
-        
-        // El ID de referencia
-        referenceId: data.reference_id, 
-        reference_id: data.reference_id 
       };
-  
-      console.log("📤 Intentando guardar reseña con payload:", payload);
-  
-      const newReview = await db.insert(rating).values(payload).returning();
       
-      // Devolvemos al frontend con los nombres que él espera (stars y comment)
+      if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'entrepreneurship';
+      else ratingPayload.type_entry = 'entrepreneurship';
+  
+      if ('referenceId' in ratingTable) ratingPayload.referenceId = data.reference_id;
+      else ratingPayload.reference_id = data.reference_id;
+  
+      const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
+      const generatedRatingId = newRating[0].id;
+  
+      // --- PASO B: GUARDAR EL TEXTO EN 'reviews' (Plural) ---
+      let savedComment = '';
+      
+      if (data.comment && data.comment.trim() !== '') {
+        const reviewPayload: any = {
+          userId: validUserId
+        };
+  
+        // 1. Asignamos el texto a la columna correcta
+        if ('review' in reviewsTable) reviewPayload.review = data.comment;
+        else if ('text' in reviewsTable) reviewPayload.text = data.comment;
+        else reviewPayload.comment = data.comment;
+  
+        // 2. 🚀 Usamos relationshipId para coincidir con el JOIN
+        if ('relationshipId' in reviewsTable) reviewPayload.relationshipId = generatedRatingId;
+        else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
+        else reviewPayload.rating_id = generatedRatingId;
+        
+        // 3. 🚀 Asignamos tu UUID fijo para Entrepreneurship directamente al payload
+        if ('typeDetailId' in reviewsTable) {
+            reviewPayload.typeDetailId = '035118eb-612e-41a2-ac95-b4f339b4e388';
+        } else {
+            reviewPayload.type_detail_id = '035118eb-612e-41a2-ac95-b4f339b4e388';
+        }
+  
+        const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
+        savedComment = newReview[0].comment || '';
+      }
+  
       return {
-        ...newReview[0],
-        stars: Number(newReview[0].rating),
-        comment: newReview[0].review
+        id: generatedRatingId,
+        stars: Number(newRating[0].rating),
+        comment: savedComment
       };
   
     } catch (error: any) { 
-      console.error("❌ Error CRÍTICO en createEntrepreneurshipReview:", error);
+      console.error("❌ Error CRÍTICO en createEntrepreneurshipReview (Doble Insert):", error);
       throw new Error(`Error al crear la reseña: ${error.message}`);
     }
   };

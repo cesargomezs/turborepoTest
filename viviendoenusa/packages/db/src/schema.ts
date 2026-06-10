@@ -51,7 +51,7 @@ import {
     referenceId: uuid("reference_id"),
     typeEntry: text("type_entry"),
     rating: numeric("rating", { precision: 3, scale: 2 }), // Soporta puntuaciones decimales (ej: 4.50)
-    review: text("review"),
+    //review: text("review"),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
   });

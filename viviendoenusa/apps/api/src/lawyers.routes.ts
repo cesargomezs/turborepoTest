@@ -1,10 +1,10 @@
 import { Router } from "express";
-// Apuntamos correctamente a la carpeta controllers que se ve en tu imagen
-import { createLawyer, getLawyers, getLawyerById, updateLawyer, getLawyerByIdWithReviews,createRating } from "./controllers/lawyers.controller";
+// Apuntamos correctamente a la carpeta controllers
+import { createLawyer, getLawyers, updateLawyer, getLawyerByIdWithReviews, createRating } from "./controllers/lawyers.controller";
 
 const router = Router();
 
-// Consulta (Todos)
+// 🔍 Consulta (Todos)
 router.get('/', async (req, res) => {
   try {
     // 🚨 Extraemos el zip code de la URL (ej. ?zip=91730)
@@ -19,7 +19,28 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Consulta (Por ID)
+// 📥 Ingreso (Creación de Abogado)
+router.post("/", async (req, res) => {
+  try {
+    const newLawyer = await createLawyer(req.body);
+    res.status(201).json(newLawyer);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// 🚀 Ingreso de RATING (Creación de una nueva calificación/reseña)
+// VA ANTES DE LOS /:id PARA QUE EXPRESS NO SE CONFUNDA
+router.post("/rating", async (req, res) => {
+    try {
+      const newRating = await createRating(req.body);
+      res.status(201).json(newRating);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+});
+
+// 🔍 Consulta (Por ID)
 router.get("/:id", async (req, res) => {
   try {
     const lawyer = await getLawyerByIdWithReviews(req.params.id);
@@ -30,19 +51,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-
-// Ingreso (Creación)
-router.post("/", async (req, res) => {
-  try {
-
-    const newLawyer = await createLawyer(req.body);
-    res.status(201).json(newLawyer);
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// Actualización
+// 🔄 Actualización
 router.put("/:id", async (req, res) => {
   try {
     const updated = await updateLawyer(req.params.id, req.body);
@@ -51,16 +60,6 @@ router.put("/:id", async (req, res) => {
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
-});
-
-// Ingreso de RATING (Creación de una nueva calificación/reseña)
-router.post("/rating", async (req, res) => {
-    try {
-      const newRating = await createRating(req.body);
-      res.status(201).json(newRating);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
 });
 
 export default router;

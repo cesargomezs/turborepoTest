@@ -226,7 +226,7 @@ export default function LawyersScreen() {
           id: item.id,
           name: item.nameLawy || 'Sin nombre', 
           area: item.area || 'General',
-          rating: item.totalRating !== undefined ? Number(item.totalRating) : (Number(item.rating) || 5.0),
+          rating: item.totalRating !== undefined ? Number(item.totalRating) : (Number(item.rating) || 0),
           
           lat: latNumber, 
           lng: lngNumber, 
@@ -236,7 +236,7 @@ export default function LawyersScreen() {
 
           phone: item.phone || '',
           image: item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', 
-          reviews: Array.isArray(item.rating) ? item.rating : [], 
+          reviews: Array.isArray(item.reviews || item.rating) ? (item.reviews || item.rating) : [], 
           status: item.approved ? 'approved' : 'pending'
         };
       }) : [];
@@ -329,7 +329,6 @@ export default function LawyersScreen() {
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '+1000000000';
       
-      // 🚀 CONVERSIÓN ESTRICTA DE DIRECCIÓN A COORDENADAS
       let finalLat = null;
       let finalLng = null;
 
@@ -339,7 +338,6 @@ export default function LawyersScreen() {
           finalLat = geoResult[0].latitude;
           finalLng = geoResult[0].longitude;
         } else {
-          // Intento secundario solo con el Zip Code
           const zipResult = await Location.geocodeAsync(formZip);
           if (zipResult.length > 0) {
              finalLat = zipResult[0].latitude;
@@ -350,7 +348,6 @@ export default function LawyersScreen() {
         console.log("Error al geocodificar la dirección");
       }
 
-      // 🚨 VALIDACIÓN ESTRICTA: Si no se encontraron coordenadas, detenemos el proceso
       if (finalLat === null || finalLng === null) {
         setIsPublishing(false);
         const title = "Dirección inválida";
@@ -385,7 +382,7 @@ export default function LawyersScreen() {
         ...savedFromDB,
         name: savedFromDB.nameLawy,
         image: formImage || 'https://randomuser.me/api/portraits/lego/1.jpg',
-        rating: 5.0,
+        rating: 0,
         reviews: [],
         status: 'pending'
       };
@@ -400,7 +397,6 @@ export default function LawyersScreen() {
 
     } catch (err: any) {
       console.error("❌ [ERROR DETECTADO EN FORMULARIO]:", err?.message || err);
-      
       const errorTitle = "Error de red";
       const errorDesc = "No se pudo enviar la solicitud.";
       if (isWeb) { window.alert(`${errorTitle}\n${errorDesc}`); } 
@@ -449,12 +445,21 @@ export default function LawyersScreen() {
     setPendingLawyers(pendingLawyers.filter(l => l.id !== id));
   };
 
+  // 🚀 LÓGICA DEL CARD CON CÁLCULO DE RESEÑAS
   const LawyerCard = ({ lawyer }: { lawyer: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     const isPending = lawyer.status === 'pending';
 
-    const safeRating = Number(lawyer.rating);
-    const displayRating = isNaN(safeRating) ? "5.0" : safeRating.toFixed(1);
+    // Manejo de estrellas y etiqueta "Nuevo"
+    const safeRating = Number(lawyer.rating) || 0;
+    const displayRating = safeRating > 0 ? safeRating.toFixed(1) : "Nuevo";
+
+    // Contador de reseñas con formato para números grandes (ej. 1500 -> 1.5k)
+    const reviewCount = lawyer.reviews?.length || 0;
+    let formattedCount = reviewCount.toString();
+    if (reviewCount >= 1000) {
+      formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
+    }
 
     return (
       <View style={[styles.lawyerCard, { flexDirection: 'column', padding: 15, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)', marginBottom: 12, borderRadius: 20, borderWidth: 1, borderBottomColor: isPending ? '#FFB74D' : Colors.border, borderColor: isPending ? '#FFB74D' : Colors.border, shadowOpacity: 0, elevation: 0 }]}>
@@ -484,7 +489,10 @@ export default function LawyersScreen() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
           <TouchableOpacity onPress={() => !isPending && setSelectedLawyer(lawyer)} disabled={isPending} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#E0E0E0' }}>
              <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} />
-             <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.lawyerstab?.reviews}</ThemedText>
+             {/* 🚀 AQUÍ AÑADIMOS EL CONTADOR AL TEXTO DEL BOTÓN */}
+             <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
+                {t.lawyerstab?.reviews} {reviewCount > 0 ? `(${formattedCount})` : ''}
+             </ThemedText>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => !isPending && openDirections(lawyer)} disabled={isPending} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
             <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
@@ -571,7 +579,7 @@ export default function LawyersScreen() {
                           const updatedReviews = [newReview, ...(selectedLawyer.reviews || [])];
 
                           const totalStars = updatedReviews.reduce((sum, r) => sum + (Number(r.rating) || Number(r.stars) || 5), 0);
-                          const newAverageRating = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 5;
+                          const newAverageRating = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
 
                           const updatedLawyer = {
                             ...selectedLawyer,
@@ -969,4 +977,4 @@ export default function LawyersScreen() {
       </TouchableOpacity>
     </View>
   );
-}
+} 

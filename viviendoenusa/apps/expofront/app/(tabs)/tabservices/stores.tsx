@@ -204,7 +204,6 @@ export default function StoresScreen() {
     if (isAdminMode) {
       fetchAllPendingStores();
     } else {
-      // Si salimos de Admin y no hay Zip, limpiamos. Si hay Zip, recargamos la zona.
       if (zipCode.length !== 5) {
         setPendingStores([]);
       } else {
@@ -224,7 +223,7 @@ export default function StoresScreen() {
   const fetchAllPendingStores = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}`); // Sin zip para traer todo
+      const res = await fetch(`${API_STORES_URL}`); 
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -239,12 +238,12 @@ export default function StoresScreen() {
           lat: Number(item.lat) || 34.0934,
           lng: Number(item.lng) || -117.5847,
           phone: item.phone || '',
-          rating: 5.0,
-          reviews: [],
+          rating: Number(item.rating) || 0,
+          reviews: Array.isArray(item.reviews) ? item.reviews : [],
+          totalReviews: Number(item.totalReviews) || 0,
           status: item.approved ? 'approved' : 'pending',
           ownerName: item.ownerName
         }));
-        // Solo inyectamos los pendientes en el panel amarillo
         setPendingStores(mappedData.filter(s => s.status === 'pending'));
       }
     } catch (e) {
@@ -273,8 +272,9 @@ export default function StoresScreen() {
           lat: Number(item.lat) || 34.0934,
           lng: Number(item.lng) || -117.5847,
           phone: item.phone || '',
-          rating: 5.0,
-          reviews: [],
+          rating: Number(item.rating) || 0,
+          reviews: Array.isArray(item.reviews) ? item.reviews : [],
+          totalReviews: Number(item.totalReviews) || 0,
           status: item.approved ? 'approved' : 'pending',
           ownerName: item.ownerName
         }));
@@ -282,7 +282,6 @@ export default function StoresScreen() {
         const approved = mappedData.filter(s => s.status === 'approved');
         setAllStores(approved);
         
-        // Si no estamos en Admin, actualizamos los pendientes de la zona.
         if (!isAdminMode) {
           setPendingStores(mappedData.filter(s => s.status === 'pending'));
         }
@@ -331,7 +330,6 @@ export default function StoresScreen() {
     if (text.length < 5) {
       setResults([]);
       setAllStores([]);
-      // 🚀 Solo limpiamos los pendientes si NO somos admin, para que el Admin no los pierda al borrar el ZIP
       if (!isAdminMode) {
         setPendingStores([]);
       }
@@ -352,7 +350,6 @@ export default function StoresScreen() {
   const handleCategorySelect = (index: number) => {
     setSelectedCategoryIdx(index);
     if (isZipValid && allStores.length > 0) {
-      // Filtrado local rápido sin volver a llamar a la API si ya tenemos datos
       const lat = userLocation ? userLocation.latitude : 34.0934;
       const lng = userLocation ? userLocation.longitude : -117.5847;
       const filtered = applyLocalFilters(allStores, index, lat, lng);
@@ -430,7 +427,7 @@ export default function StoresScreen() {
         nameStores: formName, 
         descriptionStores: formDesc, 
         addressStores: formAddress,
-        categoryId: String(formCategoryIdx), // Ajuste por si el backend bloquea enteros temporales
+        categoryId: String(formCategoryIdx), 
         zip: formZip, 
         imageStores: finalImageName,
         lat: lat, 
@@ -457,7 +454,9 @@ export default function StoresScreen() {
         categoryId: savedFromDB.categoryId,
         image: formImage, 
         lat, lng,
-        rating: 5.0,
+        rating: 0,
+        reviews: [],
+        totalReviews: 0,
         phone: savedFromDB.phone,
         status: 'pending'
       };
@@ -492,7 +491,6 @@ export default function StoresScreen() {
       
       const approvedStore = { ...store, status: 'approved' };
       
-      // 🚀 Si el negocio pertenece al código postal que estamos viendo, lo agregamos a los resultados.
       if (store.zip === zipCode) {
         const newAllStores = [approvedStore, ...allStores];
         setAllStores(newAllStores); 
@@ -506,7 +504,6 @@ export default function StoresScreen() {
         setMapKey(k => k + 1);
       }
       
-      // Lo eliminamos de la lista amarilla
       setPendingStores(pendingStores.filter(s => s.id !== store.id));
       Alert.alert("Aprobado", "El negocio es ahora público.");
     } catch (error) {
@@ -530,6 +527,16 @@ export default function StoresScreen() {
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
     const isPending = store.status === 'pending';
 
+    // 🚀 LÓGICA DE PROGRAMACIÓN DEFENSIVA PARA RATING Y CONTADOR (COMO LAWYERS)
+    const safeRating = Number(store.rating) || 0;
+    const displayRating = safeRating > 0 ? safeRating.toFixed(1) : "Nuevo";
+
+    const reviewCount = store.reviews?.length || store.totalReviews || 0;
+    let formattedCount = reviewCount.toString();
+    if (reviewCount >= 1000) {
+      formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
+    }
+
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: isPending ? '#FFB74D' : DynamicColors.border }}>
         {isPending && (
@@ -544,7 +551,9 @@ export default function StoresScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
             <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
-            <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{store.rating?.toFixed(1) || '5.0'}</ThemedText>
+            <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>
+              {displayRating}
+            </ThemedText>
           </View>
         </View>
         <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140 }}>
@@ -576,15 +585,18 @@ export default function StoresScreen() {
           <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6 }} numberOfLines={isPending ? undefined : 2}>{store.description}</ThemedText>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
             <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
-               <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.storestab?.reviews || 'Reseñas'}</ThemedText>
+               <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
+               {/* 🚀 CONTADOR DE RESEÑAS SEGURO EN EL BOTÓN */}
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
+                  {t.storestab?.reviews || 'Reseñas'} {reviewCount > 0 ? `(${formattedCount})` : ''}
+               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
               <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.storestab?.route || 'Cómo llegar'}</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${store.phone}`)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
-              <MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} />
+              <MaterialCommunityIcons name="phone" size={17} color={isDark ? '#FFB74D' : '#EF6C00'} />
               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.storestab?.callbton || 'Llamar'}</ThemedText>
             </TouchableOpacity>
           </View>
@@ -625,13 +637,29 @@ export default function StoresScreen() {
                   </LinearGradient>
                   <View style={{ flexDirection: 'row', marginLeft: 15, alignItems: 'center' }}>
                     <MaterialCommunityIcons name="star" size={18} color="#FFB300" />
-                    <ThemedText style={{ marginLeft: 5, fontWeight: '900', color: DynamicColors.text, fontSize: 16 }}>{selectedDetail?.rating?.toFixed(1) || '5.0'}</ThemedText>
+                    <ThemedText style={{ marginLeft: 5, fontWeight: '900', color: DynamicColors.text, fontSize: 16 }}>
+                      {selectedDetail?.rating > 0 ? selectedDetail.rating.toFixed(1) : "Nuevo"}
+                    </ThemedText>
                   </View>
                 </View>
                 <ThemedText style={{ fontSize: 24, fontWeight: '900', marginVertical: 10, color: DynamicColors.text }}>{selectedDetail?.name}</ThemedText>
                 {selectedDetail?.address && <ThemedText style={{ color: '#FF5F6D', fontWeight:'700', marginBottom:10 }}>{selectedDetail.address}</ThemedText>}
                 <View style={{height:1, backgroundColor:DynamicColors.border, marginVertical:20}} />
-                <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9 }}>{selectedDetail?.description}</ThemedText>
+                <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>{selectedDetail?.description}</ThemedText>
+
+                {/* 🚀 BOTONES DE ACCIÓN PARA ADMINISTRADOR DENTRO DEL DETALLE */}
+                {isAdminMode && selectedDetail?.status === 'pending' && (
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                        <TouchableOpacity onPress={() => { rejectStore(selectedDetail.id); setSelectedDetail(null); }} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                            <MaterialCommunityIcons name="close-circle" size={18} color="#FFF" />
+                            <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>Rechazar</ThemedText>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => { approveStore(selectedDetail); setSelectedDetail(null); }} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                            <MaterialCommunityIcons name="check-circle" size={18} color="#FFF" />
+                            <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>Aprobar</ThemedText>
+                        </TouchableOpacity>
+                    </View>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -680,10 +708,51 @@ export default function StoresScreen() {
                     isDark={isDark} 
                     t={t} 
                     onCancel={() => setShowReviewInput(false)} 
-                    onPublish={(rating: number, comment: string) => { 
-                        const review = { id: Date.now().toString(), stars: rating, comment: comment }; 
-                        selectedStore.reviews = [review, ...(selectedStore.reviews || [])]; 
-                        setShowReviewInput(false); 
+                    onPublish={async (ratingNum: number, commentStr: string) => { 
+                       try {
+                         const reviewPayload = {
+                           reference_id: selectedStore.id,
+                           stars: ratingNum,
+                           comment: commentStr,
+                           userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9"
+                         };
+
+                         const res = await fetch(`${API_STORES_URL}/reviews`, {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify(reviewPayload)
+                         });
+
+                         if (!res.ok) throw new Error();
+                         const fromDB = await res.json();
+
+                         const newReviewFormatted = { 
+                           id: fromDB.id || Date.now().toString(), 
+                           stars: Number(ratingNum), 
+                           comment: commentStr 
+                         };
+
+                         const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
+                         const totalStars = updatedReviews.reduce((sum, r) => sum + r.stars, 0);
+                         const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
+
+                         const updatedStoreObj = {
+                           ...selectedStore,
+                           reviews: updatedReviews,
+                           rating: newAverage,
+                           totalReviews: updatedReviews.length
+                         };
+
+                         setSelectedStore(updatedStoreObj);
+                         setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
+                         setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
+
+                         Alert.alert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+                       } catch (e) {
+                         Alert.alert("Error", "No se pudo conectar al servidor.");
+                       } finally {
+                         setShowReviewInput(false);
+                       }
                     }} 
                 />
               )}
@@ -775,7 +844,7 @@ export default function StoresScreen() {
             
             <View style={stylesUnified.cardContent}>
               
-              {/* 🚀 HEADER CON BUSCADOR INTEGRADO (ESTILO LAWYERS) */}
+              {/* HEADER CON BUSCADOR INTEGRADO */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>
                   <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />

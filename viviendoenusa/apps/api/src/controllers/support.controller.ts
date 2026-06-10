@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
-// 🚀 1. Importamos las tablas 'rating' y 'reviews' con sus alias de seguridad
-import { stores, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
+// 🚀 1. Importamos la nueva tabla 'support' y las tablas de opiniones con alias de seguridad
+import { support, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 
@@ -12,45 +12,45 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
 // 🔍 1. CONSULTA GENERAL (Con doble JOIN para Ratings y Reviews)
-export const getStores = async (zip?: string) => {
+export const getSupports = async (zip?: string) => {
   try {
     let query = db
       .select()
-      .from(stores)
-      .leftJoin(users, eq(stores.userId, users.id)) 
+      .from(support)
+      .leftJoin(users, eq(support.userId, users.id)) 
       // 🚀 PRIMER JOIN: Traemos las estrellas
-      .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id)) 
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id)) 
       // 🚀 SEGUNDO JOIN: Traemos el texto de la reseña enlazado al rating
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
       .$dynamic(); 
 
     if (zip && zip.trim().length === 5) {
       const cleanZip = zip.trim();
-      query = query.where(sql`${stores.zip}::text = ${cleanZip}`); 
+      query = query.where(sql`${support.zip}::text = ${cleanZip}`); 
     }
 
-    query = query.orderBy(desc(stores.createdAt));
+    query = query.orderBy(desc(support.createdAt));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
-    // 🚀 AGRUPAMOS LAS RESEÑAS POR TIENDA
+    // 🚀 AGRUPAMOS LAS RESEÑAS POR ELEMENTO DE SOPORTE
     const itemsMap = new Map<string, any>();
 
     for (const row of rows) {
-      const itemId = row.stores.id;
+      const itemId = row.support.id;
 
       if (!itemsMap.has(itemId)) {
         const dbUser = row.users;
         itemsMap.set(itemId, {
-          ...row.stores,
-          ownerName: dbUser?.name  || 'Usuario Anónimo',
+          ...row.support,
+          ownerName: dbUser?.name || 'Usuario Anónimo',
           reviews: [], 
-          rating: 0 // Inicializado en 0 para evitar el 5.0 fantasma
+          rating: 0 // Inicializado en 0 neto para el Front-End
         });
       }
 
-      // Si hay un rating válido, agregamos la reseña mapeando el texto al frontend
+      // Si hay un rating válido, agregamos la reseña mapeando el texto de forma segura
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
@@ -63,23 +63,24 @@ export const getStores = async (zip?: string) => {
       }
     }
 
-    const finalStores = await Promise.all(Array.from(itemsMap.values()).map(async (item) => {
-        // 🧮 Calcular promedio de estrellas real en el Backend
+    const finalSupports = await Promise.all(Array.from(itemsMap.values()).map(async (item) => {
+        // 🧮 Calcular promedio de estrellas real en el Backend (Programación defensiva)
         if (item.reviews.length > 0) {
             const totalStars = item.reviews.reduce((sum: number, r: any) => sum + (Number(r.stars) || 0), 0);
             item.rating = totalStars / item.reviews.length;
-            item.totalReviews = item.reviews.length; // Enviamos el contador real
+            item.totalReviews = item.reviews.length; // Contador de reseñas real enviado al Front
         } else {
             item.rating = 0;
             item.totalReviews = 0;
         }
 
-        const fileName = item.imageStores;
+        const fileName = item.imageSupp;
         let publicUrl = fileName; 
 
+        // 🚀 Firma de imagen en Supabase (Carpeta 'support/')
         if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
-            const cleanName = fileName.replace('stores/', '');
-            const rutaArchivo = `stores/${cleanName}`;
+            const cleanName = fileName.replace('support/', '');
+            const rutaArchivo = `support/${cleanName}`;
 
             const { data, error } = await supabase.storage
                 .from(NOMBRE_BUCKET)
@@ -88,42 +89,42 @@ export const getStores = async (zip?: string) => {
             if (!error && data?.signedUrl) {
                 publicUrl = data.signedUrl;
             } else if (error) {
-                console.warn(`⚠️ Error firmando imagen de tienda ${item.id}:`, error.message);
+                console.warn(`⚠️ Error firmando imagen de soporte ${item.id}:`, error.message);
             }
         }
 
         return { 
             ...item,
-            imageStores: publicUrl
+            imageSupp: publicUrl
         }; 
     }));
 
-    return finalStores;
+    return finalSupports;
   } catch (error) {
-    console.error("❌ Error en getStores:", error);
+    console.error("❌ Error en getSupports:", error);
     return [];
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID (Actualizado con Reviews para la vista detalle)
-export const getStoreById = async (id: string) => {
+// 🔍 2. CONSULTA INDIVIDUAL POR ID (Con soporte para detalles completos y opiniones)
+export const getSupportById = async (id: string) => {
   try {
     const rows = await db
       .select()
-      .from(stores)
-      .leftJoin(users, eq(stores.userId, users.id))
-      .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
+      .from(support)
+      .leftJoin(users, eq(support.userId, users.id))
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .where(eq(stores.id, id));
+      .where(eq(support.id, id));
 
     if (!rows || rows.length === 0) return null;
 
-    const dbStore = rows[0].stores;
+    const dbSupport = rows[0].support;
     const dbUser = rows[0].users;
     const nombreUsuario = dbUser?.name || 'Usuario Anónimo';
 
-    const storeFinal: any = {
-        ...dbStore,
+    const supportFinal: any = {
+        ...dbSupport,
         ownerName: nombreUsuario,
         reviews: [],
         rating: 0,
@@ -133,7 +134,7 @@ export const getStoreById = async (id: string) => {
     for (const row of rows) {
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
-        storeFinal.reviews.push({
+        supportFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
@@ -142,91 +143,99 @@ export const getStoreById = async (id: string) => {
       }
     }
 
-    if (storeFinal.reviews.length > 0) {
-      const totalStars = storeFinal.reviews.reduce((sum: number, r: any) => sum + r.stars, 0);
-      storeFinal.rating = totalStars / storeFinal.reviews.length;
-      storeFinal.totalReviews = storeFinal.reviews.length;
+    if (supportFinal.reviews.length > 0) {
+      const totalStars = supportFinal.reviews.reduce((sum: number, r: any) => sum + r.stars, 0);
+      supportFinal.rating = totalStars / supportFinal.reviews.length;
+      supportFinal.totalReviews = supportFinal.reviews.length;
     }
 
-    let publicUrl = storeFinal.imageStores;
+    let publicUrl = supportFinal.imageSupp;
 
     if (publicUrl && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
-        const cleanName = publicUrl.replace('stores/', '');
+        const cleanName = publicUrl.replace('support/', '');
         const { data, error } = await supabase.storage
-            .from(NOMBRE_BUCKET).createSignedUrl(`stores/${cleanName}`, 3600);
+            .from(NOMBRE_BUCKET).createSignedUrl(`support/${cleanName}`, 3600);
             
         if (!error && data?.signedUrl) {
             publicUrl = data.signedUrl;
         }
     }
 
-    storeFinal.imageStores = publicUrl;
-    return storeFinal;
+    supportFinal.imageSupp = publicUrl;
+    return supportFinal;
   } catch (error: any) {
-    throw new Error(`Error al obtener la tienda por ID: ${error.message}`);
+    throw new Error(`Error al obtener el soporte por ID: ${error.message}`);
   }
 };
 
-// 📥 3. CREAR TIENDA
-export const createStore = async (data: any) => {
+// 📥 3. CREAR REGISTRO DE SOPORTE
+export const createSupport = async (data: any) => {
   try {
-    let cleanImage = data.imageStores || '';
-    if (cleanImage.startsWith('stores/')) {
-        cleanImage = cleanImage.replace('stores/', '');
+    let cleanImage = data.imageSupp || '';
+    if (cleanImage.startsWith('support/')) {
+        cleanImage = cleanImage.replace('support/', '');
+    }
+
+    // 🚀 BLINDAJE DE UUID PARA EL USER_ID
+    let validUserId = null;
+    if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
+        validUserId = data.userId;
+    } else {
+        const fallbackUser = await db.select().from(users).limit(1);
+        if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
     }
 
     const payload: any = {
-      nameStores: data.nameStores || 'Sin nombre',
-      descriptionStores: data.descriptionStores || '',
-      addressStores: data.addressStores || '',
-      categoryId: data.categoryId || null, 
+      nameSupp: data.nameSupp || 'Sin nombre',
+      descriptionSupp: data.descriptionSupp || '',
+      addressSupp: data.addressSupp || '',
+      categoryId: data.categoryId ? Number(data.categoryId) : null, 
       zip: data.zip ? String(data.zip).trim() : null,
-      estate: 'CA',
-      imageStores: cleanImage,
+      estate: data.estate || 'CA',
+      imageSupp: cleanImage,
       lat: data.lat ? Number(data.lat) : null,
       lng: data.lng ? Number(data.lng) : null,
       phone: data.phone || '',
-      statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
       approved: data.approved !== undefined ? data.approved : false, 
-      rating: 0, // Iniciamos en 0 neto
+      userId: validUserId,
+      rating: 0, // Forzamos 0 neto inicial
     };
 
-    const fallbackUser = await db.select().from(users).limit(1);
-    payload.userId = data.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : null);
+    console.log("📤 Payload listo para insertar en soporte:", payload);
 
-    const newStore = await db.insert(stores).values(payload).returning();
-    return newStore[0];
+    const newSupport = await db.insert(support).values(payload).returning();
+    return newSupport[0];
   } catch (error: any) { 
-    console.error("❌ Error en createStore:", error);
-    throw new Error(`Error al crear la tienda: ${error.message}`);
+    console.error("❌ Error en createSupport:", error);
+    throw new Error(`Error al crear el registro de soporte: ${error.message}`);
   }
 };
 
-// 🔄 4. ACTUALIZAR TIENDA
-export const updateStore = async (id: string, data: any) => {
+// 🔄 4. ACTUALIZAR SOPORTE
+export const updateSupport = async (id: string, data: any) => {
   try {
-    if (data.imageStores && data.imageStores.startsWith('stores/')) {
-        data.imageStores = data.imageStores.replace('stores/', '');
+    if (data.imageSupp && data.imageSupp.startsWith('support/')) {
+        data.imageSupp = data.imageSupp.replace('support/', '');
     }
-    const updated = await db.update(stores).set(data).where(eq(stores.id, id)).returning();
+    const updated = await db.update(support).set(data).where(eq(support.id, id)).returning();
     return updated[0] || null;
   } catch (error: any) { 
-    throw new Error(`Error al actualizar la tienda: ${error.message}`);
+    throw new Error(`Error al actualizar el soporte: ${error.message}`);
   }
 };
 
-// 🗑️ 5. ELIMINAR TIENDA
-export const deleteStore = async (id: string) => {
+// 🗑️ 5. ELIMINAR SOPORTE
+export const deleteSupport = async (id: string) => {
   try {
-    const deleted = await db.delete(stores).where(eq(stores.id, id)).returning();
+    const deleted = await db.delete(support).where(eq(support.id, id)).returning();
     return deleted[0] || null;
   } catch (error: any) {
-    throw new Error(`Error al eliminar la tienda: ${error.message}`);
+    throw new Error(`Error al eliminar el soporte: ${error.message}`);
   }
 };
 
-// 📥 6. CREAR RESEÑA PARA TIENDA (NUEVO - INSERCIÓN DOBLE)
-export const createStoreReview = async (data: any) => {
+// 📥 6. CREAR RESEÑA (INSERCIÓN DOBLE)
+export const createSupportReview = async (data: any) => {
   try {
     let validUserId = null;
     if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
@@ -242,8 +251,8 @@ export const createStoreReview = async (data: any) => {
       userId: validUserId,
     };
 
-    if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'stores';
-    else ratingPayload.type_entry = 'stores';
+    if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'support';
+    else ratingPayload.type_entry = 'support';
 
     if ('referenceId' in ratingTable) ratingPayload.referenceId = data.reference_id || data.referenceId;
     else ratingPayload.reference_id = data.reference_id || data.referenceId;
@@ -267,11 +276,11 @@ export const createStoreReview = async (data: any) => {
       else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
       else reviewPayload.rating_id = generatedRatingId;
 
-      // Usamos un identificador estático genérico para agrupar en módulos de ser necesario
+      // Asignamos un UUID estático específico para identificar este módulo en la tabla intermedia
       if ('typeDetailId' in reviewsTable) {
-          reviewPayload.typeDetailId = '31a06434-8ed8-45d2-b95f-65bd314bc021';
+          reviewPayload.typeDetailId = '64fef850-9510-4591-87e9-f354dd54a533';
       } else {
-          reviewPayload.type_detail_id = '31a06434-8ed8-45d2-b95f-65bd314bc021';
+          reviewPayload.type_detail_id = '64fef850-9510-4591-87e9-f354dd54a533';
       }
 
       const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
@@ -285,7 +294,7 @@ export const createStoreReview = async (data: any) => {
     };
 
   } catch (error: any) { 
-    console.error("❌ Error CRÍTICO en createStoreReview (Doble Insert):", error);
-    throw new Error(`Error al crear la reseña de la tienda: ${error.message}`);
+    console.error("❌ Error CRÍTICO en createSupportReview (Doble Insert):", error);
+    throw new Error(`Error al crear la reseña del módulo de soporte: ${error.message}`);
   }
 };

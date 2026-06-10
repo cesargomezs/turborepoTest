@@ -4,7 +4,8 @@ import {
   getStoreById, 
   createStore, 
   updateStore, 
-  deleteStore 
+  deleteStore,
+  createStoreReview // 🚀 Importamos la nueva función del controlador
 } from './controllers/stores.controller';
 
 const router = Router();
@@ -21,6 +22,30 @@ router.get('/', async (req, res) => {
   }
 });
 
+// 📥 POST: Crear nueva tienda
+router.post('/', async (req, res) => {
+  try {
+    console.log("📦 Datos recibidos POST /stores:", JSON.stringify(req.body, null, 2));
+    const newStore = await createStore(req.body);
+    res.status(201).json(newStore);
+  } catch (error: any) {
+    console.error("❌ Error en POST /stores:", error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// 🚀 POST: Crear nueva reseña/opinión para una tienda
+// IMPORTANTE: Va ANTES de las rutas con :id para blindar el enrutamiento de Express
+router.post('/reviews', async (req, res) => {
+  try {
+    const newReview = await createStoreReview(req.body);
+    res.status(201).json(newReview);
+  } catch (error: any) {
+    console.error("❌ Error en POST /stores/reviews:", error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // 🔍 GET: Obtener una tienda por ID
 router.get('/:id', async (req, res) => {
   try {
@@ -33,18 +58,6 @@ router.get('/:id', async (req, res) => {
   } catch (error: any) {
     console.error(`❌ Error en GET /stores/${req.params.id}:`, error.message);
     res.status(500).json({ error: 'Error al obtener la tienda' });
-  }
-});
-
-// 📥 POST: Crear nueva tienda
-router.post('/', async (req, res) => {
-  try {
-    console.log("📦 Datos recibidos POST /stores:", JSON.stringify(req.body, null, 2));
-    const newStore = await createStore(req.body);
-    res.status(201).json(newStore);
-  } catch (error: any) {
-    console.error("❌ Error en POST /stores:", error.message);
-    res.status(400).json({ error: error.message });
   }
 });
 
