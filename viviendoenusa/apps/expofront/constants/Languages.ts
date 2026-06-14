@@ -75,7 +75,8 @@ export const translations = {
       help_question: "¿En qué podemos ayudarte hoy?",
       service_support: "Red de Apoyo",
       service7: "Red de Apoyo",
-      icon7: "heart-pulse"
+      icon7: "heart-pulse",
+      welcome_user: "¡Bienvenido, Cesar!"
     },
     lawyerstab: {
       label: "Especialidades",
@@ -266,7 +267,8 @@ export const translations = {
       description: "Encuentra recursos y ayuda en tu comunidad.",
       category: "Categoría",
       subCategories: ['Salud', 'Alimentos', 'Asesoría Legal', 'Apoyo Emocional', 'Otros'],
-      contactSupport: "Contactar Red de Apoyo"
+      contactSupport: "Contactar Red de Apoyo",
+      support_btn_title: "Red de Apoyo",
     }
 
     
@@ -338,6 +340,8 @@ export const translations = {
       help_question: "How can we help you today?",
       service_support: "Support Net",
       service7: "Support Net",
+      icon7: "heart-pulse",
+      welcome_user: "Welcome, Cesar!"
     },
     lawyerstab: {
       label: "Specialties",
@@ -527,7 +531,8 @@ export const translations = {
       description: "Find resources and help in your community.",
       category: "Category",
       subCategories: ['Health', 'Food', 'Legal Advice', 'Emotional Support', 'Other'],
-      contactSupport: "Contact Support Network"
+      contactSupport: "Contact Support Network",
+      support_btn_title: "Support Network",
     }
   }
 };

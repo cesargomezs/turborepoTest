@@ -97,7 +97,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 };
 
 // 📡 URL BASE PARA EL MÓDULO DE SOPORTE
-const API_STORES_URL = 'http://172.20.10.3:3000/support';
+const API_STORES_URL = 'http://192.168.1.107:3000/support';
 
 export default function SupportScreen() {
   const { width, height } = useWindowDimensions();
@@ -420,7 +420,7 @@ export default function SupportScreen() {
 
         formData.append('imagen', { uri: formImage, name: filename, type } as any);
 
-        const uploadResponse = await fetch('http://172.20.10.3:3000/api/subir-imagen-optimizada/support', {
+        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/support', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },

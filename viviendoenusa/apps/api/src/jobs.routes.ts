@@ -1,97 +1,100 @@
 import { Router } from 'express';
+// 🚀 Asegúrate de que la ruta de importación coincida con la ubicación de tu controlador
 import { 
-  getJobs, 
-  getJobById, 
-  createJob, 
-  updateJob, 
-  deleteJob,
-  createJobReview // 🚀 Importamos la función
-} from './controllers/jobs.controller';
+    getJobs, 
+    getJobById, 
+    createJob, 
+    updateJob, 
+    deleteJob, 
+    createJobReview 
+} from './controllers/jobs.controller'; 
 
 const router = Router();
 
-// 🔍 GET: Obtener empleos (soporta ?zip=12345)
+// 🔍 1. Obtener todos los empleos (Con filtro ZIP opcional)
+// Ruta: GET /jobs?zip=12345
 router.get('/', async (req, res) => {
   try {
-    const zipCode = req.query.zip as string; 
-    const itemsList = await getJobs(zipCode);
-    res.json(itemsList);
+    const { zip } = req.query;
+    const jobsList = await getJobs(zip as string);
+    res.status(200).json(jobsList);
   } catch (error: any) {
-    console.error("❌ Error en GET /jobs:", error.message);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({ message: error.message || 'Error al obtener los empleos' });
   }
 });
 
-// 📥 🚀 POST: Crear reseña para un empleo
+// 📥 6. Crear reseña para un empleo
+// ⚠️ IMPORTANTE: Esta ruta va ANTES de /:id para que Express no confunda "reviews" con un ID de empleo
+// Ruta: POST /jobs/reviews
 router.post('/reviews', async (req, res) => {
   try {
-    console.log("📝 Recibiendo reseña de empleo:", req.body);
     const newReview = await createJobReview(req.body);
     res.status(201).json(newReview);
   } catch (error: any) {
-    console.error("❌ Error en POST /jobs/reviews:", error.message);
-    res.status(400).json({ error: error.message });
+    // 🚀 Aquí atrapamos el error exacto que lanzamos desde el controlador
+    if (error.message === "ALREADY_REVIEWED") {
+      return res.status(400).json({ message: "ALREADY_REVIEWED" });
+    }
+    res.status(500).json({ message: error.message || 'Error al guardar la reseña' });
   }
 });
 
-// 🔍 GET: Obtener por ID
+// 🔍 2. Obtener un empleo individual por ID
+// Ruta: GET /jobs/:id
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const item = await getJobById(id);
-    if (!item) {
-      return res.status(404).json({ error: 'Empleo no encontrado' });
+    const job = await getJobById(id);
+    
+    if (!job) {
+      return res.status(404).json({ message: 'Empleo no encontrado' });
     }
-    res.json(item);
+    res.status(200).json(job);
   } catch (error: any) {
-    console.error(`❌ Error en GET /jobs/${req.params.id}:`, error.message);
-    res.status(500).json({ error: 'Error al obtener el empleo' });
+    res.status(500).json({ message: error.message || 'Error al obtener el empleo' });
   }
 });
 
-// 📥 POST: Crear nuevo empleo
+// 📥 3. Crear un nuevo empleo
+// Ruta: POST /jobs
 router.post('/', async (req, res) => {
   try {
-    console.log("📦 Datos recibidos POST /jobs:", JSON.stringify(req.body, null, 2));
-    const newItem = await createJob(req.body);
-    res.status(201).json(newItem);
+    const newJob = await createJob(req.body);
+    res.status(201).json(newJob);
   } catch (error: any) {
-    console.error("❌ Error en POST /jobs:", error.message);
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ message: error.message || 'Error al crear el empleo' });
   }
 });
 
-// 🔄 PUT: Actualizar
+// 🔄 4. Actualizar un empleo (Ej. Aprobarlo)
+// Ruta: PUT /jobs/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { id } = req.params; 
-    const updatedItem = await updateJob(id, req.body);
+    const { id } = req.params;
+    const updatedJob = await updateJob(id, req.body);
     
-    if (!updatedItem) {
-       return res.status(404).json({ error: 'Empleo no encontrado o no se pudo actualizar' });
+    if (!updatedJob) {
+      return res.status(404).json({ message: 'Empleo no encontrado para actualizar' });
     }
-    
-    res.json(updatedItem);
+    res.status(200).json(updatedJob);
   } catch (error: any) {
-    console.error(`❌ Error en PUT /jobs/${req.params.id}:`, error.message);
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ message: error.message || 'Error al actualizar el empleo' });
   }
 });
 
-// 🗑️ DELETE: Eliminar
+// 🗑️ 5. Eliminar un empleo (Rechazar)
+// Ruta: DELETE /jobs/:id
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const deletedItem = await deleteJob(id);
+    const deletedJob = await deleteJob(id);
     
-    if (!deletedItem) {
-      return res.status(404).json({ error: 'Empleo no encontrado' });
+    if (!deletedJob) {
+      return res.status(404).json({ message: 'Empleo no encontrado para eliminar' });
     }
-    
-    res.json({ message: 'Eliminado correctamente', item: deletedItem });
+    res.status(200).json({ message: 'Empleo eliminado correctamente', job: deletedJob });
   } catch (error: any) {
-    console.error(`❌ Error en DELETE /jobs/${req.params.id}:`, error.message);
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ message: error.message || 'Error al eliminar el empleo' });
   }
 });
 

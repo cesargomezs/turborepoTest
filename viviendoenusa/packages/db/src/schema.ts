@@ -90,6 +90,7 @@ import {
     imageUrl: text("image_url"),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
+    description: text("description"),
     timepostEnd: timestamp("timepost_end").defaultNow(),
     zip: text("zip"), // Cambiado a text para evitar problemas de casteo con numeric
     estate: text("estate"),
@@ -234,6 +235,38 @@ import {
     createdAt: timestamp("created_at").defaultNow(),
     approved: boolean("approved").default(false),
   });
+
+   // 12. TABLA: JOBS
+  export const notifications = pgTable("notifications", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    type: text("type").notNull(), 
+    referenceId: text("reference_id"), 
+    isRead: boolean("is_read").default(false).notNull(),
+    // 🚀 LA CLAVE: Cuándo debe mostrarse en la App
+    visibleAt: timestamp("visible_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  });
+
+  // 💰 TABLA MAESTRA DE PAGOS MANUALES (Y FUTURO STRIPE)
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // 🚀 REFERENCIA POLIMÓRFICA
+  entityType: text("entity_type").notNull(), // Ej: 'lawyer', 'store', 'job', 'event'
+  entityId: uuid("entity_id").notNull(), // El ID exacto de la tabla correspondiente  
+  // Usuario que realiza el pago
+  userId: uuid("user_id").references(() => users.id),
+ // Detalles del Pago
+  referenceCode: text("reference_code").notNull().unique(), // unique() bloquea duplicados a nivel BD
+  paymentMethod: text("payment_method").notNull(), // 'Zelle', 'Venmo', 'Stripe'
+  amount: numeric("amount", { precision: 10, scale: 2 }).default("0.00"),
+  durationDays: integer("duration_days").default(30).notNull(), 
+  status: text("status").default("pending").notNull(), // 'pending', 'approved', 'rejected'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  timepost_end: timestamp("timepost_end", { mode: "date" }).defaultNow().notNull(),
+  approvedAt: timestamp("approved_at"),
+});
   
   // ==========================================
   // 2. CONFIGURACIÓN DE RELACIONES (Drizzle Relations)

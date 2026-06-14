@@ -1,30 +1,29 @@
 import { db } from "../../../../packages/db/src"; 
-// 🚀 1. Usamos ALIAS para la tabla 'rating' y agregamos la tabla 'reviews'
-import { lawyers, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql } from "drizzle-orm";
+import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 
-// 🚀 Inicializamos Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🔍 1. CONSULTA GENERAL: Obtiene TODOS los abogados con sus estrellas y reseñas
+// 🔍 1. CONSULTA GENERAL
 export const getLawyers = async (rawZip?: string | number) => {
   try {
     const zip = rawZip ? String(rawZip).trim() : '';
-    console.log(`🚨 [BACKEND] getLawyers llamado. Preparando datos cerca del Zip: "${zip}"`);
 
-    // 🚀 DOBLE JOIN: Abogados -> Rating (estrellas) -> Reviews (textos)
+    // TRIPLE JOIN: Abogados -> Rating -> Reviews -> Payments
     let query = db
-      .select()
-      .from(lawyers)
-      .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
-      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-      .$dynamic(); 
-
-    console.log(`✅ Devolviendo la lista completa para ordenamiento inteligente en el mapa.`);
+    .select()
+    .from(lawyers)
+    .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
+    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+    .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
+    .where(
+      sql`${lawyers.approved} = false OR lawyers."timepostEnd" > NOW()` 
+    )
+    .$dynamic();
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -37,15 +36,15 @@ export const getLawyers = async (rawZip?: string | number) => {
       if (!lawyersMap.has(lawyerId)) {
         lawyersMap.set(lawyerId, {
           ...row.lawyers,
-          reviews: [], // Array vacío inicial para las reseñas formateadas
+          referenceCode: row.payments?.referenceCode || null,
+          paymentMethod: row.payments?.paymentMethod || null,
+          reviews: [], 
           totalRating: 0,
           totalReviews: 0
         });
       }
 
-      // Si hay un rating válido, buscamos su texto en la tabla review
       if (row.rating && row.rating.id) {
-        // Buscamos el texto donde sea que esté guardado
         const commentText = row.reviews?.comment || '';
 
         lawyersMap.get(lawyerId).reviews.push({
@@ -58,20 +57,17 @@ export const getLawyers = async (rawZip?: string | number) => {
     }
 
     const finalResult = await Promise.all(Array.from(lawyersMap.values()).map(async (lawyer: any) => {
-      
-      // 🧮 Calcular promedio y contador de reseñas
       lawyer.totalReviews = lawyer.reviews.length;
 
       if (lawyer.totalReviews > 0) {
         const sum = lawyer.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
         lawyer.totalRating = Math.round((sum / lawyer.totalReviews) * 10) / 10;
-        lawyer.rating = lawyer.totalRating; // Para compatibilidad con otros frontends
+        lawyer.rating = lawyer.totalRating; 
       } else {
         lawyer.totalRating = 0;
         lawyer.rating = 0;
       }
 
-      // 🚀 LÓGICA SUPABASE: Transformar las imágenes a URLs seguras
       if (lawyer.imageUrl && lawyer.imageUrl.trim() !== '' && !lawyer.imageUrl.startsWith('http')) {
           const rutaArchivo = lawyer.imageUrl.startsWith('lawyers/') 
               ? lawyer.imageUrl : `lawyers/${lawyer.imageUrl}`;
@@ -88,12 +84,12 @@ export const getLawyers = async (rawZip?: string | number) => {
 
     return finalResult;
   } catch (error: any) {
-    console.error("❌ Error en getLawyers con Ratings:", error);
+    console.error("❌ Error en getLawyers con Ratings y Pagos:", error);
     return [];
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID (Con doble JOIN)
+// 🔍 2. CONSULTA INDIVIDUAL POR ID 
 export const getLawyerByIdWithReviews = async (id: string) => {
   try {
     const rows = await db
@@ -112,7 +108,6 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       totalReviews: 0           
     };
 
-    // Recorremos las filas para armar el arreglo de reseñas
     for (const row of rows) {
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
@@ -125,7 +120,6 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       }
     }
 
-    // Calculamos los totales
     lawyerFinal.totalReviews = lawyerFinal.reviews.length;
     if (lawyerFinal.totalReviews > 0) {
       const sum = lawyerFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
@@ -133,7 +127,6 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       lawyerFinal.rating = lawyerFinal.totalRating;
     }
 
-    // Firmar la imagen
     if (lawyerFinal.imageUrl && lawyerFinal.imageUrl.trim() !== '' && !lawyerFinal.imageUrl.startsWith('http')) {
         const rutaArchivo = lawyerFinal.imageUrl.startsWith('lawyers/') 
             ? lawyerFinal.imageUrl : `lawyers/${lawyerFinal.imageUrl}`;
@@ -158,12 +151,56 @@ export const getLawyerByIdWithReviews = async (id: string) => {
 // 📥 3. CREAR ABOGADO
 export const createLawyer = async (data: any) => {
   try {
-    if (data.imageUrl && data.imageUrl.startsWith('lawyers/')) {
-      data.imageUrl = data.imageUrl.replace('lawyers/', '');
+    let cleanImage = data.imageUrl || '';
+    if (cleanImage.startsWith('lawyers/')) {
+      cleanImage = cleanImage.replace('lawyers/', '');
     }
-    const newLawyer = await db.insert(lawyers).values(data).returning();
-    return newLawyer[0];
+
+    return await db.transaction(async (tx) => {
+      
+      const lawyerPayload: any = {
+        nameLawy: data.nameLawy || data.name || 'Sin nombre',
+        area: data.area || 'General',
+        address: data.address || '',
+        zip: data.zip ? String(data.zip).trim() : null,
+        phone: data.phone || '',
+        imageUrl: cleanImage,
+        description: data.description || data.descriptionLawy || '', 
+        lat: data.lat ? Number(data.lat) : null,
+        lng: data.lng ? Number(data.lng) : null,
+        userId: data.userId || null,
+        approved: false, 
+        timepostEnd: null 
+      };
+      
+      const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
+
+      if (data.referenceCode && data.paymentMethod) {
+        await tx.insert(payments).values({
+          entityType: 'lawyer',
+          entityId: newLawyer.id,
+          userId: data.userId || null,
+          referenceCode: String(data.referenceCode).trim(), 
+          paymentMethod: String(data.paymentMethod).trim(), 
+          amount: "50.00", 
+          durationDays: 30, 
+          status: "pending"
+        });
+      }
+
+      return {
+         ...newLawyer,
+         referenceCode: data.referenceCode,
+         paymentMethod: data.paymentMethod
+      };
+    });
   } catch (error: any) { 
+    console.error("❌ Error en createLawyer:", error);
+    
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
+       throw new Error("Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único.");
+    }
+
     throw new Error(`Error al crear el abogado: ${error.message}`);
   }
 };
@@ -174,13 +211,54 @@ export const updateLawyer = async (id: string, data: any) => {
     if (data.imageUrl && data.imageUrl.startsWith('lawyers/')) {
       data.imageUrl = data.imageUrl.replace('lawyers/', '');
     }
-    const updated = await db
-      .update(lawyers)
-      .set(data)
-      .where(eq(lawyers.id, id))
-      .returning();
-    return updated[0] || null;
+    
+    return await db.transaction(async (tx) => {
+      
+      const isApproved = String(data.approved).toLowerCase() === 'true';
+      const updatePayload = { ...data };
+      
+      if (isApproved) {
+        updatePayload.approved = true; 
+        
+        let monthsToAdd = 1; 
+        if (data.durationMonths) {
+          const parsedMonths = Number(data.durationMonths);
+          if (!isNaN(parsedMonths)) {
+            monthsToAdd = parsedMonths;
+          }
+        }
+        
+        const expirationDate = new Date();
+        expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
+        
+        updatePayload.timepostEnd = expirationDate; 
+        delete updatePayload.durationMonths;
+
+        const daysToAdd = monthsToAdd * 30; 
+        const totalAmount = (monthsToAdd * 50).toFixed(2); 
+
+        await tx.update(payments)
+          .set({ 
+             status: "approved", 
+             approvedAt: new Date(), 
+             durationDays: daysToAdd, 
+             amount: totalAmount,
+             timepost_end: expirationDate 
+          })
+          .where(and(eq(payments.entityId, id), eq(payments.entityType, 'lawyer')));
+      }
+
+      const updated = await tx
+        .update(lawyers)
+        .set(updatePayload) 
+        .where(eq(lawyers.id, id))
+        .returning();
+        
+      return updated[0] || null;
+    });
+
   } catch (error: any) { 
+    console.error("❌ Error en updateLawyer:", error);
     throw new Error(`Error al actualizar el abogado: ${error.message}`);
   }
 };
@@ -196,7 +274,6 @@ export const createRating = async (data: any) => {
         if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
     }
 
-    // --- PASO A: GUARDAR LAS ESTRELLAS EN 'rating' ---
     const ratingPayload: any = {
       rating: String(data.stars || data.rating || 5), 
       userId: validUserId,
@@ -211,7 +288,6 @@ export const createRating = async (data: any) => {
     const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
     const generatedRatingId = newRating[0].id;
 
-    // --- PASO B: GUARDAR EL TEXTO EN 'reviews' ---
     let savedComment = '';
     const incomingText = data.comment || data.text || data.review;
     
@@ -220,17 +296,14 @@ export const createRating = async (data: any) => {
         userId: validUserId
       };
 
-      // Asignamos el texto a la columna correcta
       if ('review' in reviewsTable) reviewPayload.review = incomingText;
       else if ('text' in reviewsTable) reviewPayload.text = incomingText;
       else reviewPayload.comment = incomingText;
 
-      // 🚀 Usamos relationshipId para coincidir con el JOIN
       if ('relationshipId' in reviewsTable) reviewPayload.relationshipId = generatedRatingId;
       else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
       else reviewPayload.rating_id = generatedRatingId;
       
-      // UUID Estático para la vista detalle en el frontend
       if ('typeDetailId' in reviewsTable) {
           reviewPayload.typeDetailId = '035118eb-612e-41a2-ac95-b4f339b4e388';
       } else {
@@ -241,7 +314,6 @@ export const createRating = async (data: any) => {
       savedComment = newReview[0].comment || '';
     }
 
-    // Formateamos la respuesta para que el Front la pueda inyectar de inmediato
     return {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
@@ -254,12 +326,55 @@ export const createRating = async (data: any) => {
   }
 };
 
-// 🗑️ 6. ELIMINAR ABOGADO (Solo por completitud, por si la necesitas luego)
+// 🗑️ 6. ELIMINAR ABOGADO 
 export const deleteLawyer = async (id: string) => {
   try {
     const deleted = await db.delete(lawyers).where(eq(lawyers.id, id)).returning();
     return deleted[0] || null;
   } catch (error: any) {
     throw new Error(`Error al eliminar el abogado: ${error.message}`);
+  }
+};
+
+// 🔄 7. RENOVAR ABOGADO (Genera un nuevo pago y manda a revisión)
+export const renewLawyer = async (id: string, data: any) => {
+  try {
+    if (!data.referenceCode || !data.paymentMethod) {
+      throw new Error("Se requiere el código de referencia y método de pago.");
+    }
+
+    return await db.transaction(async (tx) => {
+      // 1. Insertamos un NUEVO registro de pago para este mes
+      await tx.insert(payments).values({
+        entityType: 'lawyer',
+        entityId: id,
+        userId: data.userId || null,
+        referenceCode: String(data.referenceCode).trim(), 
+        paymentMethod: String(data.paymentMethod).trim(), 
+        amount: "50.00", 
+        durationDays: 30, 
+        status: "pending"
+      });
+
+      // 2. Regresamos el estado del abogado a "pendiente" para que lo apruebes
+      const updated = await tx
+        .update(lawyers)
+        .set({ approved: false }) 
+        .where(eq(lawyers.id, id))
+        .returning();
+        
+      return {
+         ...updated[0],
+         referenceCode: data.referenceCode,
+         paymentMethod: data.paymentMethod
+      };
+    });
+
+  } catch (error: any) { 
+    console.error("❌ Error en renewLawyer:", error);
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
+       throw new Error("Ese código de referencia de pago ya fue utilizado en otra transacción.");
+    }
+    throw new Error(`Error al renovar el abogado: ${error.message}`);
   }
 };

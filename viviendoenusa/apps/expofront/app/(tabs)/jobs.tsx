@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useSegments } from 'expo-router'; 
+import { useLocalSearchParams, useRouter, useSegments } from 'expo-router'; 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
@@ -26,8 +26,8 @@ const validateComment = (text: string): boolean => {
   return !BANNED_WORDS.some((word: string) => lowerText.includes(word.toLowerCase()));
 };
 
-// 📡 URL BASE PARA LOS EMPLEOS
-const API_JOBS_URL = 'http://172.20.10.3:3000/jobs';
+// 📡 URL BASE PARA LOS EMPLEOS (Asegúrate de que esta sea tu IP actual)
+const API_JOBS_URL = 'http://192.168.1.107:3000/jobs';
 
 // --- BASE DE DATOS LOCAL DE CIUDADES ---
 const usCitiesData: Record<string, string[]> = {
@@ -54,6 +54,9 @@ export default function JobsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  
+  // 🚀 1. AQUÍ ATRAPAMOS EL PARÁMETRO DE LA NOTIFICACIÓN
+  const { openJobId } = useLocalSearchParams();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark'; 
   
@@ -167,6 +170,24 @@ export default function JobsScreen() {
     loadSavedJobs();
   }, []);
 
+  // Este useEffect llama al fetch cuando entras a la pantalla
+  useEffect(() => {
+    fetchJobsData();
+  }, []);
+
+  // 🚀 2. AQUÍ AGREGAS EL NUEVO USEEFFECT PARA EL DEEP LINKING DE LA NOTIFICACIÓN
+  useEffect(() => {
+    if (openJobId && jobs.length > 0) {
+      console.log("🔍 Buscando empleo con ID:", openJobId);
+      const jobToOpen = jobs.find(job => String(job.id) === String(openJobId));
+      
+      if (jobToOpen) {
+        setSelectedJobDetail(jobToOpen);
+      }
+    }
+  }, [openJobId, jobs]);
+  
+
   const toggleSaveJob = async (id: string) => {
     try {
       let newSavedList;
@@ -198,7 +219,7 @@ export default function JobsScreen() {
              id: r.id,
              stars: Number(r.rating || r.stars) || 0,
              text: r.review || r.comment || '',
-             userName: r.userName || 'Anónimo',
+             userName: r.userName || r.name || 'Anónimo',
              displayTime: r.displayTime || ''
           })) : [];
 
@@ -241,10 +262,6 @@ export default function JobsScreen() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchJobsData();
-  }, []);
 
   const availableTitles = useMemo(() => {
     if (activeFilter === 'Todos' || activeFilter === 'All') {
@@ -395,6 +412,7 @@ export default function JobsScreen() {
     }).catch(err => console.log(err));
   };
 
+  // 🚀 LÓGICA DE ENVÍO DE RESEÑA: Siempre enviamos el ID real para validación y el flag isAnonymous
   const handleSubmitReview = async () => {
       if (!reviewForm.text.trim() || reviewForm.rating === 0) {
           triggerAlert("Incompleto", "Por favor ingresa un comentario y selecciona la cantidad de estrellas.");
@@ -406,11 +424,16 @@ export default function JobsScreen() {
       }
 
       try {
+        // SIEMPRE enviamos tu ID real o el ID por defecto para que la validación anti-spam funcione
+        const idParaEnviar = userMetadata?.id || userMetadata?.uid || 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+
         const payload = {
           reference_id: selectedCompany.id,
           stars: reviewForm.rating,
           comment: reviewForm.text,
-          userId: reviewForm.isAnonymous ? null : (userMetadata?.id || null)
+          userId: idParaEnviar, // Siempre el Real
+          userName: currentUser,
+          isAnonymous: reviewForm.isAnonymous // 🚀 Le decimos al backend si debe esconderlo
         };
 
         const res = await fetch(`${API_JOBS_URL}/reviews`, {
@@ -419,14 +442,23 @@ export default function JobsScreen() {
           body: JSON.stringify(payload)
         });
 
-        if (!res.ok) throw new Error();
+        // Atrapamos el error ALREADY_REVIEWED
+        if (!res.ok) {
+           const errorData = await res.json().catch(() => ({}));
+           if (errorData.message === "ALREADY_REVIEWED" || res.status === 400) {
+               throw new Error("Ya dejaste una reseña para esta empresa anteriormente.");
+           }
+           throw new Error("No se pudo publicar la reseña.");
+        }
+
         const savedReview = await res.json();
         
+        // Mapeamos la respuesta
         const newReviewFormatted = { 
           id: savedReview.id || Date.now(), 
-          text: savedReview.review || reviewForm.text, 
-          stars: Number(savedReview.rating || reviewForm.rating), 
-          userName: reviewForm.isAnonymous ? 'Anónimo' : currentUser 
+          text: savedReview.comment || reviewForm.text, 
+          stars: Number(savedReview.stars || reviewForm.rating), 
+          userName: savedReview.userName // El backend ya retorna "Anónimo" o el nombre real aquí
         };
         
         let newAverage = 0;
@@ -449,8 +481,8 @@ export default function JobsScreen() {
         setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false });
         triggerAlert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
 
-      } catch (e) {
-        triggerAlert("Error", "No se pudo publicar la reseña.");
+      } catch (e: any) {
+        triggerAlert("Aviso", e.message || "No se pudo publicar la reseña.");
       }
   };
 

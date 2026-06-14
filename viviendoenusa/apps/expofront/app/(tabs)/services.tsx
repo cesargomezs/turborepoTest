@@ -100,9 +100,6 @@ export default function ServicesScreen() {
             <View style={localStyles.cardContent}>
               <View style={localStyles.headerRow}>
                 <View style={{ flex: 1 }}>
-                    <ThemedText style={localStyles.welcomeText}>
-                      {loggedIn ? t.servicestab?.welcome_user : t.servicestab?.welcome_guest}
-                    </ThemedText>
                 </View>
                 <MaterialCommunityIcons 
                   name="view-list" 
@@ -143,7 +140,7 @@ export default function ServicesScreen() {
                         <MaterialCommunityIcons name="heart-pulse" size={24} color="#FFFFFF" />
                       </Animated.View>
                       <ThemedText style={{ marginLeft: 10, fontWeight: '900', fontSize: 16, color: '#FFFFFF', letterSpacing: 0.5 }}>
-                        {t.servicestab?.support_btn_title || 'Red de Apoyo'}
+                        {t.supporttab?.support_btn_title }
                       </ThemedText>
                     </LinearGradient>
                   </TouchableOpacity>

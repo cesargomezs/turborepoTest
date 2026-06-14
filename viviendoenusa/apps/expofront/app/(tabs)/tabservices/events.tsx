@@ -45,7 +45,7 @@ const COUNTRIES = [
 ];
 
 // 📡 URL BASE PARA LOS EVENTOS
-const API_EVENTS_URL = 'http://172.20.10.3:3000/events';
+const API_EVENTS_URL = 'http://192.168.1.107:3000/events';
 
 export default function EventsScreen() {
   const { t } = useTranslation();
@@ -128,16 +128,23 @@ export default function EventsScreen() {
   // Validación de formulario estricta
   const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
 
-  // --- FETCH EVENTOS ---
-  const fetchEvents = async (searchZip?: string) => {
-    if (!searchZip || searchZip.trim().length !== 5) return;
+  // 🚀 FETCH EVENTOS ACTUALIZADO (Permite ignorar el Zip si es Admin)
+  const fetchEvents = async (searchZip?: string, forceAdminFetch: boolean = false) => {
+    // Si no somos admin y el zip es inválido, abortamos la petición (Regla original)
+    if (!forceAdminFetch && (!searchZip || searchZip.trim().length !== 5)) return;
+    
     try {
       setIsLoadingPosts(true);
-      const res = await fetch(`${API_EVENTS_URL}?zip=${searchZip.trim()}`);
+      
+      // Si hay zip lo usamos, sino traemos TODOS (Modo Admin global)
+      const url = (searchZip && searchZip.trim().length === 5) 
+          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}` 
+          : API_EVENTS_URL;
+
+      const res = await fetch(url);
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // Mapeamos los datos del backend al formato que espera el UI
         const mappedData = data.map(item => {
           let formattedDate = '';
           try {
@@ -156,7 +163,6 @@ export default function EventsScreen() {
           };
         });
 
-        // Separar eventos aprobados de los pendientes para la vista Admin
         setEvents(mappedData.filter(e => e.approved === true));
         setPendingEvents(mappedData.filter(e => e.approved !== true));
       } else {
@@ -267,7 +273,7 @@ export default function EventsScreen() {
         type 
       } as any);
 
-      const uploadResponse = await fetch('http://172.20.10.3:3000/api/subir-imagen-optimizada/events', {
+      const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/events', {
         method: 'POST',
         body: formData,
         headers: { 'Accept': 'application/json' },
@@ -321,7 +327,7 @@ export default function EventsScreen() {
       
       if (!zipCode || zipCode.length < 5) {
         setZipCode(trimmedZip);
-        fetchEvents(trimmedZip);
+        fetchEvents(trimmedZip, isAdminMode);
       }
       
       triggerAlert("¡Recibido!", "Tu evento ha sido enviado. Aparecerá en la lista una vez sea aprobado por el administrador.");
@@ -403,26 +409,40 @@ export default function EventsScreen() {
                     onChangeText={(text) => {
                       setZipCode(text);
                       if (text.length < 5) {
-                        if (events.length > 0 || pendingEvents.length > 0) {
-                          setEvents([]); 
-                          setPendingEvents([]);
+                        // 🚀 Si es Admin y borra el Zip, cargamos globales. Si no, vaciamos.
+                        if (isAdminMode) {
+                            fetchEvents('', true);
+                        } else if (events.length > 0 || pendingEvents.length > 0) {
+                            setEvents([]); 
+                            setPendingEvents([]);
                         }
                       } else if (text.length === 5) {
-                        fetchEvents(text); 
+                        fetchEvents(text, isAdminMode); 
                       }
                     }} 
-                    onSubmitEditing={() => zipCode.length === 5 && fetchEvents(zipCode)} 
+                    onSubmitEditing={() => zipCode.length === 5 && fetchEvents(zipCode, isAdminMode)} 
                     placeholderTextColor={Colors.subtext} 
                   />
-                  <TouchableOpacity onPress={() => fetchEvents(zipCode)} disabled={zipCode.length !== 5} style={{ width: 42, height: 42, marginLeft: 8 }}>
-                    <LinearGradient colors={zipCode.length === 5 ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
-                      {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={zipCode.length === 5 ? "#fff" : Colors.iconInactive} />}
+                  <TouchableOpacity onPress={() => fetchEvents(zipCode, isAdminMode)} disabled={zipCode.length !== 5 && !isAdminMode} style={{ width: 42, height: 42, marginLeft: 8 }}>
+                    <LinearGradient colors={(zipCode.length === 5 || isAdminMode) ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={(zipCode.length === 5 || isAdminMode) ? "#fff" : Colors.iconInactive} />}
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
                 
-                {/* MANTENER PRESIONADO PARA ENTRAR A MODO ADMINISTRADOR */}
-                <TouchableOpacity onLongPress={() => setIsAdminMode(!isAdminMode)}>
+                {/* 🚀 BOTÓN ADMINISTRADOR */}
+                <TouchableOpacity onLongPress={() => {
+                    const newAdminMode = !isAdminMode;
+                    setIsAdminMode(newAdminMode);
+                    if (newAdminMode) {
+                        // Al activar Admin, busca en DB (Globales si no hay Zip, filtrado si hay Zip)
+                        fetchEvents(zipCode, true);
+                    } else if (!zipCode || zipCode.length < 5) {
+                        // Al salir de Admin, si no había un Zip válido, vaciamos por seguridad
+                        setEvents([]);
+                        setPendingEvents([]);
+                    }
+                }}>
                   <MaterialCommunityIcons name="calendar-star" size={32} color={isAdminMode ? Colors.accent : Colors.accenticon} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
                 </TouchableOpacity>
               </View>
@@ -533,7 +553,7 @@ export default function EventsScreen() {
                     )}
 
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                      {(!zipCode || zipCode.length < 5) ? (
+                      {(!zipCode || zipCode.length < 5) && !isAdminMode ? (
                         <View style={{ flex: 1, alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
                           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
                             <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.subtext} />
@@ -903,4 +923,3 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
     </TouchableOpacity>
   );
 });
-

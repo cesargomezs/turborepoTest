@@ -19,7 +19,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 import * as tf from '@tensorflow/tfjs';
 import * as nsfwjs from 'nsfwjs';
 import { db } from '@viviendoenusa/db';
-import { community, jobs, stores, typeDetail, users } from '@viviendoenusa/db/schema';
+import { community, jobs, notifications, stores, typeDetail, users } from '@viviendoenusa/db/schema';
 import { eq } from 'drizzle-orm';
 
 import lawyerRoutes from './lawyers.routes';
@@ -30,6 +30,8 @@ import storesRoutes from './stores.routes';
 import entrepreneurshipRoutes from './entrepreneurship.routes';
 import jobsRoutes from './jobs.routes';
 import supportRoutes from './support.routes';
+import notificationsRoutes from './notifications.routes';
+import paymentsRoutes from './payments.routes';
 
 const app = express();
 
@@ -69,6 +71,8 @@ app.use('/stores', storesRoutes);
 app.use('/entrepreneurship', entrepreneurshipRoutes);
 app.use('/jobs',jobsRoutes);
 app.use('/support', supportRoutes);
+app.use('/notifications', notificationsRoutes);
+app.use('/payments', paymentsRoutes);
 
 // --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (DINÁMICO Y SEGURO) ---
 app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {
@@ -196,6 +200,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.listen(Number(port), "172.20.10.3", () => {
+app.listen(Number(port), "192.168.1.107", () => {
   console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port}`);
 });

@@ -1,35 +1,127 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // 🚀 Asegúrate de importar useEffect
 import { 
-  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, Pressable 
+  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, Pressable, ScrollView, KeyboardAvoidingView 
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { useColorScheme } from '../../hooks/useColorScheme';
 import { ThemedText } from '../ThemedText';
 
-// --- IMPORTACIONES DE REDUX ---
+// --- IMPORTACIONES DE ENRUTAMIENTO Y REDUX ---
+import { useRouter ,useLocalSearchParams } from 'expo-router'; 
 import { useMockDispatch, useMockSelector } from '../../redux/slices'; 
 import { setLanguage } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation'; 
+
+// 📡 URL BASE PARA LAS NOTIFICACIONES (Asegúrate de que esta sea tu IP correcta)
+const API_NOTIFICATIONS_URL = 'http://192.168.1.107:3000/notifications';
 
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
   const isDark = theme === 'dark';
+  
+  const router = useRouter(); 
+  const { openJobId } = useLocalSearchParams();
   const dispatch = useMockDispatch();
   
-  // Obtenemos el idioma y las traducciones globales
   const { t } = useTranslation();
-  const selectedLanguage = useMockSelector((state) => state.language.code);
+  const selectedLanguage = useMockSelector((state: any) => state.language.code);
   
-  const [modalVisible, setModalVisible] = useState(false);
+  const [langModalVisible, setLangModalVisible] = useState(false);
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
 
+  // 🚀 ESTADO PARA LAS NOTIFICACIONES (Inicia vacío, se llenará del backend)
+  const [notifications, setNotifications] = useState<any[]>([]);
+  
   const languages = [
     { code: 'es', label: 'Español' },
     { code: 'en', label: 'English' },
   ];
+
+  // 🚀 OBTENER NOTIFICACIONES DESDE EL BACKEND
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(API_NOTIFICATIONS_URL);
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        setNotifications(data);
+      }
+    } catch (error) {
+      console.error("Error al cargar notificaciones:", error);
+    }
+  };
+
+  // Cargar notificaciones al montar el Header y establecer un intervalo de refresco (opcional)
+  useEffect(() => {
+    fetchNotifications();
+    
+    // Refrescar cada minuto para que el usuario reciba notificaciones sin tener que recargar la app
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 60000); 
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const hasUnread = notifications.some(n => !n.read);
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'job': return { name: 'briefcase', color: '#4CAF50' }; 
+      case 'store': return { name: 'store', color: '#FFB300' }; 
+      case 'alert': return { name: 'alert-circle', color: '#FF5F6D' }; 
+      case 'event': return { name: 'calendar', color: '#9C27B0' }; // 🚀 Icono para eventos
+      default: return { name: 'bell', color: Colors[theme].text };
+    }
+  };
+
+  // 🚀 FUNCIÓN DE NAVEGACIÓN Y BORRADO (Conectada al Backend)
+  const handleNotificationPress = async (notif: any) => {
+    // 1. Ocultar el modal inmediatamente para que se sienta rápido
+    setNotifModalVisible(false);
+
+    // 2. Ocultar visualmente en el frontend
+    setNotifications(prev => prev.filter(n => n.id !== notif.id));
+
+    // 3. Avisar al backend que la borre (o marque como leída, según tu ruta)
+    try {
+      await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, {
+        method: 'DELETE', // o 'PUT' si decides solo cambiar 'read: true' en tu backend
+      });
+    } catch (error) {
+      console.error("Error al borrar notificación:", error);
+    }
+
+    // 4. Redirigir enviando el ID como parámetro
+    setTimeout(() => {
+      if (notif.type === 'job') {
+        router.navigate({ 
+            pathname: '/jobs', 
+            params: { openJobId: notif.referenceId } // Mandamos el ID real de referencia
+        }); 
+      } else if (notif.type === 'store') {
+        router.navigate({ 
+            pathname: '/tabservices/stores', 
+            params: { openStoreId: notif.referenceId }
+        }); 
+      } else if (notif.type === 'community' ) {
+        router.navigate({
+            pathname: '/tabservices/community',
+            params: { openEventId: notif.referenceId } // 🚀 Parámetro para abrir el evento
+        }); 
+      } else if (notif.type === 'event') {
+        router.navigate({
+            pathname: '/tabservices/events',
+            params: { openEventId: notif.referenceId } // 🚀 Parámetro para abrir el evento
+        }); 
+      }
+
+    }, 300); 
+  };
 
   return (
     <View style={{ width: '100%', backgroundColor: 'transparent' }}>
@@ -50,25 +142,30 @@ export default function Header({ title }: { title?: string }) {
             </View>
             <View style={{ marginLeft: 12 }}>
               <ThemedText style={{ fontSize: 18, fontWeight: 'bold' }}>
-                {t.welcome} {/* Texto traducido */}
+                {t.welcome}
               </ThemedText>
             </View>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity 
-            onPress={() => console.log('Acción 4')}// Acción de ejemplo, también traducida
+            onPress={() => {
+                fetchNotifications(); // 🚀 Refresca cuando abre el modal por si hubo cambios
+                setNotifModalVisible(true);
+            }}
             activeOpacity={0.7}
-            style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+            style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}
           >
             <MaterialCommunityIcons
               size={22}
               color={Colors[theme].text}
-              name="bell-ring-outline"
+              name={hasUnread ? "bell-ring" : "bell-outline"}
             />
+            {hasUnread && <View style={styles.unreadBadge} />}
           </TouchableOpacity>
+
           <TouchableOpacity 
-            onPress={() => setModalVisible(true)}
+            onPress={() => setLangModalVisible(true)}
             activeOpacity={0.7}
             style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
           >
@@ -88,11 +185,10 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </BlurView>
 
-      <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
+      <Modal animationType="fade" transparent={true} visible={langModalVisible} onRequestClose={() => setLangModalVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setLangModalVisible(false)}>
           <BlurView intensity={isDark ? 40 : 60} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
             <ThemedText style={styles.modalTitle}>{t.select_lang}</ThemedText>
-            
             <View style={styles.optionsWrapper}>
               {languages.map((lang) => {
                 const isSelected = selectedLanguage === lang.code;
@@ -101,9 +197,8 @@ export default function Header({ title }: { title?: string }) {
                     key={lang.code}
                     style={[styles.langOption, isSelected && { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)' }]}
                     onPress={() => {
-                      // ACTUALIZA REDUX GLOBALMENTE
                       dispatch(setLanguage(lang.code));
-                      setModalVisible(false);
+                      setLangModalVisible(false);
                     }}
                   >
                     <ThemedText style={[styles.langText, isSelected && { color: Colors[theme].tint, fontWeight: 'bold' }]}>
@@ -117,11 +212,84 @@ export default function Header({ title }: { title?: string }) {
           </BlurView>
         </Pressable>
       </Modal>
+
+      {/* --- MODAL DE NOTIFICACIONES --- */}
+      <Modal animationType="slide" transparent={true} visible={notifModalVisible} onRequestClose={() => setNotifModalVisible(false)}>
+        <View style={styles.notifModalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNotifModalVisible(false)} />
+          
+          <View style={[
+            styles.notifModalContent, 
+            { 
+              backgroundColor: Platform.OS === 'android' ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', 
+              borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
+              paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 25
+            }
+          ]}>
+            {Platform.OS !== 'android' && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            <View style={{ width: 40, height: 4, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', alignSelf: 'center', marginVertical: 10, borderRadius: 2 }} />
+
+            <View style={styles.notifHeader}>
+              <TouchableOpacity onPress={() => setNotifModalVisible(false)} style={{ position: 'absolute', left: 0, zIndex: 10, padding: 5 }}>
+                <MaterialCommunityIcons name="close" size={28} color={Colors[theme].text} />
+              </TouchableOpacity>
+              <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold' }}>Notificaciones</ThemedText>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {notifications.length > 0 ? (
+                notifications.map((notif) => {
+                  const iconConfig = getNotificationIcon(notif.type);
+                  return (
+                    <TouchableOpacity 
+                      key={notif.id} 
+                      activeOpacity={0.7}
+                      onPress={() => handleNotificationPress(notif)}
+                      style={[
+                        styles.notifItem, 
+                        { 
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                          borderWidth: 1
+                        },
+                        !notif.read && { backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : 'rgba(79, 195, 247, 0.1)' }
+                      ]}
+                    >
+                      <View style={[styles.notifIconWrapper, { backgroundColor: `${iconConfig.color}20` }]}>
+                        <MaterialCommunityIcons name={iconConfig.name as any} size={22} color={iconConfig.color} />
+                      </View>
+                      
+                      <View style={{ flex: 1, paddingLeft: 12 }}>
+                        <ThemedText style={{ fontSize: 15, fontWeight: !notif.read ? 'bold' : '600' }}>
+                          {notif.title}
+                        </ThemedText>
+                        <ThemedText style={{ fontSize: 13, color: isDark ? '#B0BEC5' : '#546E7A', marginTop: 4, lineHeight: 18 }}>
+                          {notif.description}
+                        </ThemedText>
+                        <ThemedText style={{ fontSize: 11, color: isDark ? '#78909C' : '#90A4AE', marginTop: 8, fontWeight: 'bold' }}>
+                          {notif.time}
+                        </ThemedText>
+                      </View>
+
+                      {!notif.read && (
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4FC3F7', alignSelf: 'center', marginLeft: 8 }} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={{ alignItems: 'center', paddingVertical: 40, opacity: 0.5 }}>
+                  <MaterialCommunityIcons name="bell-sleep-outline" size={48} color={Colors[theme].text} />
+                  <ThemedText style={{ marginTop: 15, fontWeight: 'bold' }}>No tienes notificaciones nuevas</ThemedText>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
-
-// ... (estilos se mantienen iguales)
 
 const styles = StyleSheet.create({
   headerRow: {
@@ -147,6 +315,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
+  unreadBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF5F6D',
+  },
   titleContainer: {
     width: '100%', 
     alignItems: 'center', 
@@ -154,7 +331,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)', // Fondo oscurecido sutil
+    backgroundColor: 'rgba(0,0,0,0.3)', 
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -191,18 +368,44 @@ const styles = StyleSheet.create({
   langText: {
     fontSize: 16,
   },
-  gradientButton: {
+  notifModalOverlay: {
     flex: 1,
-    borderRadius: 25,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end', 
+  },
+  notifModalContent: {
+    width: '100%',
+    maxHeight: '85%', 
+    borderTopLeftRadius: 40, 
+    borderTopRightRadius: 40,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    overflow: 'hidden', 
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.2, shadowRadius: 10 },
+      android: { elevation: 20 }
+    })
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 5,
+    paddingBottom: 15,
+    position: 'relative'
+  },
+  notifItem: {
+    flexDirection: 'row',
+    padding: 16,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  notifIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },shadowWrapper: {
-    width: '47%', // Casi la mitad para que quepan 2 por fila con espacio
-    aspectRatio: 1, // Hace que sean cuadrados perfectos
-    marginBottom: 15,
-    borderRadius: 25,
-    // ... tus otros estilos de sombra
   }
 });
