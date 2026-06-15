@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { 
     getPendingPayments, 
     approveGenericPayment 
-} from './controllers/payments.controller';
+} from '../controllers/payments.controller';
 
 const router = Router();
 

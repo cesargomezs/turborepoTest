@@ -3,7 +3,7 @@ import {
     getNotifications, 
     markNotificationAsRead, 
     deleteNotification 
-} from './controllers/notifications.controller';
+} from '../controllers/notifications.controller';
 
 const router = Router();
 

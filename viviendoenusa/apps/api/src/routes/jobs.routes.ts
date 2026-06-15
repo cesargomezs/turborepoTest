@@ -7,7 +7,7 @@ import {
     updateJob, 
     deleteJob, 
     createJobReview 
-} from './controllers/jobs.controller'; 
+} from '../controllers/jobs.controller'; 
 
 const router = Router();
 

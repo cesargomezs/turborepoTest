@@ -8,12 +8,17 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🔍 1. CONSULTA GENERAL
-export const getLawyers = async (rawZip?: string | number) => {
-  try {
-    const zip = rawZip ? String(rawZip).trim() : '';
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
 
-    // TRIPLE JOIN: Abogados -> Rating -> Reviews -> Payments
+// 🔍 1. CONSULTA GENERAL
+export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
+  try {
+    const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+
     let query = db
     .select()
     .from(lawyers)
@@ -21,7 +26,9 @@ export const getLawyers = async (rawZip?: string | number) => {
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
     .where(
-      sql`${lawyers.approved} = false OR lawyers."timepostEnd" > NOW()` 
+      currentUserId 
+        ? sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${currentUserId}`
+        : sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW()`
     )
     .$dynamic();
 
@@ -92,12 +99,15 @@ export const getLawyers = async (rawZip?: string | number) => {
 // 🔍 2. CONSULTA INDIVIDUAL POR ID 
 export const getLawyerByIdWithReviews = async (id: string) => {
   try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) return null;
+
     const rows = await db
       .select()
       .from(lawyers)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .where(eq(lawyers.id, id));
+      .where(eq(lawyers.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
   
@@ -148,10 +158,10 @@ export const getLawyerByIdWithReviews = async (id: string) => {
   }
 };
 
-// 📥 3. CREAR ABOGADO
+// 📥 3. CREAR ABOGADO (Sanitizado)
 export const createLawyer = async (data: any) => {
   try {
-    let cleanImage = data.imageUrl || '';
+    let cleanImage = sanitizeText(data.imageUrl) || '';
     if (cleanImage.startsWith('lawyers/')) {
       cleanImage = cleanImage.replace('lawyers/', '');
     }
@@ -159,18 +169,17 @@ export const createLawyer = async (data: any) => {
     return await db.transaction(async (tx) => {
       
       const lawyerPayload: any = {
-        nameLawy: data.nameLawy || data.name || 'Sin nombre',
-        area: data.area || 'General',
-        address: data.address || '',
-        zip: data.zip ? String(data.zip).trim() : null,
-        phone: data.phone || '',
+        nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
+        area: sanitizeText(data.area) || 'General',
+        address: sanitizeText(data.address) || '',
+        zip: sanitizeText(data.zip) || null,
+        phone: sanitizeText(data.phone) || '',
         imageUrl: cleanImage,
-        description: data.description || data.descriptionLawy || '', 
+        descriptionLawy: sanitizeText(data.description || data.descriptionLawy) || '',
         lat: data.lat ? Number(data.lat) : null,
         lng: data.lng ? Number(data.lng) : null,
-        userId: data.userId || null,
-        approved: false, 
-        timepostEnd: null 
+        userId: sanitizeText(data.userId) || null,
+        approved: false // 🛡️ Siempre false al crear para forzar revisión manual
       };
       
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
@@ -179,9 +188,9 @@ export const createLawyer = async (data: any) => {
         await tx.insert(payments).values({
           entityType: 'lawyer',
           entityId: newLawyer.id,
-          userId: data.userId || null,
-          referenceCode: String(data.referenceCode).trim(), 
-          paymentMethod: String(data.paymentMethod).trim(), 
+          userId: lawyerPayload.userId,
+          referenceCode: sanitizeText(data.referenceCode) || '', 
+          paymentMethod: sanitizeText(data.paymentMethod) || '', 
           amount: "50.00", 
           durationDays: 30, 
           status: "pending"
@@ -205,18 +214,36 @@ export const createLawyer = async (data: any) => {
   }
 };
 
-// 🔄 4. ACTUALIZAR ABOGADO
+// 🔄 4. ACTUALIZAR ABOGADO (Con control estricto "Anti-Overposting")
 export const updateLawyer = async (id: string, data: any) => {
   try {
-    if (data.imageUrl && data.imageUrl.startsWith('lawyers/')) {
-      data.imageUrl = data.imageUrl.replace('lawyers/', '');
-    }
-    
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
     return await db.transaction(async (tx) => {
       
-      const isApproved = String(data.approved).toLowerCase() === 'true';
-      const updatePayload = { ...data };
+      // 🛡️ REGLA: Definir SOLO los campos que el usuario puede editar.
+      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl'];
+      const updatePayload: any = {};
       
+      for (const key of allowedFields) {
+        if (data[key] !== undefined) {
+           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+        }
+      }
+
+      // La descripción la manejamos manual para mantener tu lógica de nombres dobles
+      if (data.description || data.descriptionLawy) {
+        updatePayload.descriptionLawy = sanitizeText(data.description || data.descriptionLawy);
+      }
+
+      if (data.imageUrl && typeof data.imageUrl === 'string' && data.imageUrl.startsWith('lawyers/')) {
+        updatePayload.imageUrl = data.imageUrl.replace('lawyers/', '');
+      }
+
+      // 🛡️ La lógica del administrador para aprobar no puede ser inyectada maliciosamente
+      const isApproved = String(data.approved).toLowerCase() === 'true';
+
       if (isApproved) {
         updatePayload.approved = true; 
         
@@ -232,7 +259,6 @@ export const updateLawyer = async (id: string, data: any) => {
         expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
         
         updatePayload.timepostEnd = expirationDate; 
-        delete updatePayload.durationMonths;
 
         const daysToAdd = monthsToAdd * 30; 
         const totalAmount = (monthsToAdd * 50).toFixed(2); 
@@ -245,13 +271,13 @@ export const updateLawyer = async (id: string, data: any) => {
              amount: totalAmount,
              timepost_end: expirationDate 
           })
-          .where(and(eq(payments.entityId, id), eq(payments.entityType, 'lawyer')));
+          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')));
       }
 
       const updated = await tx
         .update(lawyers)
         .set(updatePayload) 
-        .where(eq(lawyers.id, id))
+        .where(eq(lawyers.id, cleanId))
         .returning();
         
       return updated[0] || null;
@@ -263,35 +289,52 @@ export const updateLawyer = async (id: string, data: any) => {
   }
 };
 
-// 🚀 5. INGRESO DE RATING Y RESEÑA (Doble Insert)
+// 🚀 5. INGRESO DE RATING Y RESEÑA (Blindado contra Spam)
 export const createRating = async (data: any) => {
   try {
-    let validUserId = null;
-    if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
-        validUserId = data.userId;
-    } else {
+    let validUserId = sanitizeText(data.userId) || null;
+    if (!validUserId || validUserId.length < 20) {
         const fallbackUser = await db.select().from(users).limit(1);
         if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
     }
 
+    const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
+
+    // 🛡️ REGLA DE NEGOCIO: Validar que este usuario NO haya calificado ya a este abogado
+    if (validUserId && targetReferenceId) {
+        const existingRating = await db.select()
+          .from(ratingTable)
+          .where(
+            and(
+              eq(ratingTable.referenceId, targetReferenceId),
+              eq(ratingTable.userId, validUserId)
+            )
+          )
+          .limit(1);
+
+        if (existingRating && existingRating.length > 0) {
+            throw new Error("El usuario ya ha publicado una reseña para este abogado.");
+        }
+    }
+
     const ratingPayload: any = {
-      rating: String(data.stars || data.rating || 5), 
+      rating: String(Number(data.stars || data.rating || 5)), 
       userId: validUserId,
     };
 
     if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'lawyers';
     else ratingPayload.type_entry = 'lawyers';
 
-    if ('referenceId' in ratingTable) ratingPayload.referenceId = data.reference_id || data.referenceId;
-    else ratingPayload.reference_id = data.reference_id || data.referenceId;
+    if ('referenceId' in ratingTable) ratingPayload.referenceId = targetReferenceId;
+    else ratingPayload.reference_id = targetReferenceId;
 
     const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
     const generatedRatingId = newRating[0].id;
 
     let savedComment = '';
-    const incomingText = data.comment || data.text || data.review;
+    const incomingText = sanitizeText(data.comment || data.text || data.review);
     
-    if (incomingText && incomingText.trim() !== '') {
+    if (incomingText && incomingText !== '') {
       const reviewPayload: any = {
         userId: validUserId
       };
@@ -321,7 +364,7 @@ export const createRating = async (data: any) => {
     };
 
   } catch (error: any) {
-    console.error("❌ Error CRÍTICO en createRating de Abogados:", error);
+    console.error("❌ Error CRÍTICO en createRating de Abogados:", error.message);
     throw new Error(`Error al crear la calificación: ${error.message}`);
   }
 };
@@ -329,44 +372,51 @@ export const createRating = async (data: any) => {
 // 🗑️ 6. ELIMINAR ABOGADO 
 export const deleteLawyer = async (id: string) => {
   try {
-    const deleted = await db.delete(lawyers).where(eq(lawyers.id, id)).returning();
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    const deleted = await db.delete(lawyers).where(eq(lawyers.id, cleanId)).returning();
     return deleted[0] || null;
   } catch (error: any) {
     throw new Error(`Error al eliminar el abogado: ${error.message}`);
   }
 };
 
-// 🔄 7. RENOVAR ABOGADO (Genera un nuevo pago y manda a revisión)
+// 🔄 7. RENOVAR ABOGADO (Seguro)
 export const renewLawyer = async (id: string, data: any) => {
   try {
-    if (!data.referenceCode || !data.paymentMethod) {
+    const cleanId = sanitizeText(id);
+    const refCode = sanitizeText(data.referenceCode);
+    const payMethod = sanitizeText(data.paymentMethod);
+
+    if (!refCode || !payMethod || !cleanId) {
       throw new Error("Se requiere el código de referencia y método de pago.");
     }
 
     return await db.transaction(async (tx) => {
-      // 1. Insertamos un NUEVO registro de pago para este mes
+      // 1. Insertamos un NUEVO registro de pago
       await tx.insert(payments).values({
         entityType: 'lawyer',
-        entityId: id,
-        userId: data.userId || null,
-        referenceCode: String(data.referenceCode).trim(), 
-        paymentMethod: String(data.paymentMethod).trim(), 
+        entityId: cleanId,
+        userId: sanitizeText(data.userId) || null,
+        referenceCode: refCode, 
+        paymentMethod: payMethod, 
         amount: "50.00", 
         durationDays: 30, 
         status: "pending"
       });
 
-      // 2. Regresamos el estado del abogado a "pendiente" para que lo apruebes
+      // 2. Regresamos el estado del abogado a "pendiente"
       const updated = await tx
         .update(lawyers)
         .set({ approved: false }) 
-        .where(eq(lawyers.id, id))
+        .where(eq(lawyers.id, cleanId))
         .returning();
         
       return {
          ...updated[0],
-         referenceCode: data.referenceCode,
-         paymentMethod: data.paymentMethod
+         referenceCode: refCode,
+         paymentMethod: payMethod
       };
     });
 

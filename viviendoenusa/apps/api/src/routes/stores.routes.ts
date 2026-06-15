@@ -6,7 +6,7 @@ import {
   updateStore, 
   deleteStore,
   createStoreReview // 🚀 Importamos la nueva función del controlador
-} from './controllers/stores.controller';
+} from '../controllers/stores.controller';
 
 const router = Router();
 

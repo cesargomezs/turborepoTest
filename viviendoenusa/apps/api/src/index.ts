@@ -22,16 +22,17 @@ import { db } from '@viviendoenusa/db';
 import { community, jobs, notifications, stores, typeDetail, users } from '@viviendoenusa/db/schema';
 import { eq } from 'drizzle-orm';
 
-import lawyerRoutes from './lawyers.routes';
-import communityRoutes from './community.routes';
-import donationsRoutes from './donations.routes';
-import eventsRoutes from  './events.routes';
-import storesRoutes from './stores.routes';
-import entrepreneurshipRoutes from './entrepreneurship.routes';
-import jobsRoutes from './jobs.routes';
-import supportRoutes from './support.routes';
-import notificationsRoutes from './notifications.routes';
-import paymentsRoutes from './payments.routes';
+import lawyerRoutes from './routes/lawyers.routes';
+import communityRoutes from './routes/community.routes';
+import donationsRoutes from './routes/donations.routes';
+import eventsRoutes from  './routes/events.routes';
+import storesRoutes from './routes/stores.routes';
+import entrepreneurshipRoutes from './routes/entrepreneurship.routes';
+import jobsRoutes from './routes/jobs.routes';
+import supportRoutes from './routes/support.routes';
+import notificationsRoutes from './routes/notifications.routes';
+import paymentsRoutes from './routes/payments.routes';
+import './cron/cron.jobs';
 
 const app = express();
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 // 🚀 Asegúrate de que los dos puntos (..) estén correctos según tus carpetas
-import { getDonations, createDonation, updateDonationStatus } from './controllers/donations.controller';
+import { getDonations, createDonation, updateDonationStatus } from '../controllers/donations.controller';
 
 const router = Router();
 

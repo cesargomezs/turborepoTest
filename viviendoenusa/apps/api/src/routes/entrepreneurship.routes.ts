@@ -6,7 +6,7 @@ import {
   updateEntrepreneurship, 
   deleteEntrepreneurship,
   createEntrepreneurshipReview // 🚀 1. Importamos la nueva función para reseñas
-} from './controllers/entrepreneurship.controller'; // Nota: Usa '../' si este archivo está dentro de la carpeta 'routes'
+} from '../controllers/entrepreneurship.controller'; // Nota: Usa '../' si este archivo está dentro de la carpeta 'routes'
 
 const router = Router();
 

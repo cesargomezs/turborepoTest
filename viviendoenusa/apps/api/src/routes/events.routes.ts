@@ -5,7 +5,7 @@ import {
     createEvent, 
     updateEvent, 
     deleteEvent 
-  } from './controllers/events.controller';
+  } from '../controllers/events.controller';
 const router = Router();
 
 // 🔍 GET: Obtener eventos (soporta ?zip=12345)

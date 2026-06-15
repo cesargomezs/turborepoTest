@@ -7,7 +7,7 @@ import {
   updateCommunityPost,
   deleteCommunityPost,
   handlePostVote // 🚀 Importamos nuestra nueva función de votos
-} from './controllers/community.controller';
+} from '../controllers/community.controller';
 
 const router = Router();
 

@@ -245,6 +245,7 @@ import {
     referenceId: text("reference_id"), 
     isRead: boolean("is_read").default(false).notNull(),
     // 🚀 LA CLAVE: Cuándo debe mostrarse en la App
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     visibleAt: timestamp("visible_at").defaultNow().notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   });

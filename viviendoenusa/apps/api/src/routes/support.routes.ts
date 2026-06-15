@@ -6,7 +6,7 @@ import {
   updateSupport, 
   deleteSupport,
   createSupportReview // 🚀 Importamos la nueva función del controlador
-} from './controllers/support.controller';
+} from '../controllers/support.controller';
 
 const router = Router();
 

@@ -67,7 +67,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         ))}
       </View>
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment} placeholder="Escribe tu opinión..." placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+        <TextInput value={comment} onChangeText={setComment} placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder || "Escribe tu opinión..."} placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
@@ -178,11 +178,18 @@ export default function LawyersScreen() {
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
 
+  // ESTADOS DE RENOVACIÓN DE PUBLICACIÓN
+  const [renewModalVisible, setRenewModalVisible] = useState(false);
+  const [lawyerToRenew, setLawyerToRenew] = useState<any>(null);
+  const [renewRefCode, setRenewRefCode] = useState('');
+  const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
+  const [isRenewing, setIsRenewing] = useState(false);
+
   const [pendingLawyers, setPendingLawyers] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
   const isZipValid = zipCode.length === 5;
-  const currentUserId = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
+  const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
@@ -229,16 +236,32 @@ export default function LawyersScreen() {
     }
   }, [isAdminMode]);
 
+  // LÓGICA DE ORDENAMIENTO MEJORADA: Los vencidos del dueño van primero
   const applyLocalFilters = (lawyersList: any[], areaName: string, lat: number, lng: number) => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
-    filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
+    
+    filtered.sort((a, b) => {
+      const aIsOwner = a.userId === currentUserId;
+      const aIsExpired = a.timepostEnd ? new Date(a.timepostEnd) < new Date() : false;
+      const aNeedsRenewal = aIsOwner && aIsExpired;
+
+      const bIsOwner = b.userId === currentUserId;
+      const bIsExpired = b.timepostEnd ? new Date(b.timepostEnd) < new Date() : false;
+      const bNeedsRenewal = bIsOwner && bIsExpired;
+
+      if (aNeedsRenewal && !bNeedsRenewal) return -1;
+      if (!aNeedsRenewal && bNeedsRenewal) return 1;
+
+      return getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng);
+    });
+
     return filtered;
   };
 
   const fetchAllPendingLawyers = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}`); 
+      const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`); 
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -258,7 +281,9 @@ export default function LawyersScreen() {
           totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
           status: item.approved ? 'approved' : 'pending',
           referenceCode: item.referenceCode,
-          paymentMethod: item.paymentMethod 
+          paymentMethod: item.paymentMethod,
+          userId: item.userId || item.user_id,
+          timepostEnd: item.timepostEnd || item.timepost_end
         }));
         setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
       }
@@ -272,7 +297,7 @@ export default function LawyersScreen() {
   const fetchLawyersData = async (searchZip: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}?zip=${searchZip.trim()}`);
+      const res = await fetch(`${API_BASE_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`);
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -292,7 +317,9 @@ export default function LawyersScreen() {
           totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
           status: item.approved ? 'approved' : 'pending',
           referenceCode: item.referenceCode,
-          paymentMethod: item.paymentMethod 
+          paymentMethod: item.paymentMethod,
+          userId: item.userId || item.user_id,
+          timepostEnd: item.timepostEnd || item.timepost_end
         }));
 
         const approved = mappedData.filter(s => s.status === 'approved');
@@ -400,6 +427,38 @@ export default function LawyersScreen() {
     if (!result.canceled) setFormImage(result.assets[0].uri);
   };
 
+  const handleRenewSubmit = async () => {
+    if (!renewRefCode.trim()) return Alert.alert((t.lawyerstab as any)?.noticeTitle || "Aviso", (t.lawyerstab as any)?.enterRefCode || "Ingresa el código de confirmación de pago.");
+    
+    setIsRenewing(true);
+    try {
+      const payload = {
+        referenceCode: renewRefCode,
+        paymentMethod: renewPayMethod,
+        userId: currentUserId
+      };
+
+      const res = await fetch(`${API_BASE_URL}/${lawyerToRenew.id}/renew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error();
+      
+      Alert.alert((t.lawyerstab as any)?.successTitle || "Éxito", (t.lawyerstab as any)?.renewSuccessMsg || "Tu renovación fue enviada y se encuentra pendiente de revisión del administrador.");
+      setRenewModalVisible(false);
+      setRenewRefCode('');
+      setLawyerToRenew(null);
+      handleSearch();
+
+    } catch (e) {
+      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.renewErrorMsg || "No se pudo enviar la renovación o el código ya fue utilizado.");
+    } finally {
+      setIsRenewing(false);
+    }
+  };
+
   const handlePublishLawyer = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5 || !formRefCode.trim()) {
       return Alert.alert((t.lawyerstab as any)?.alertmessage || "Completar campos obligatorios incluyendo pago");
@@ -429,7 +488,7 @@ export default function LawyersScreen() {
         });
 
         const uploadData = await uploadResponse.json();
-        if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
+        if (!uploadResponse.ok) throw new Error(uploadData.error || (t.lawyerstab as any)?.imageUploadError || "Error subiendo imagen");
         finalImageName = uploadData.identificadorArchivo;
       }
 
@@ -452,7 +511,7 @@ export default function LawyersScreen() {
         lat: lat, 
         lng: lng, 
         phone: fullPhone, 
-        userId: userMetadata?.id || userMetadata?.userId || currentUserId,
+        userId: currentUserId,
         approved: false,
         referenceCode: formRefCode,
         paymentMethod: formPayMethod,
@@ -482,7 +541,9 @@ export default function LawyersScreen() {
         phone: savedFromDB.phone,
         status: 'pending',
         referenceCode: formRefCode,
-        paymentMethod: formPayMethod
+        paymentMethod: formPayMethod,
+        userId: currentUserId,
+        timepostEnd: null
       };
       
       setPendingLawyers([newEntryLocal, ...pendingLawyers]);
@@ -497,7 +558,7 @@ export default function LawyersScreen() {
       Alert.alert((t.lawyerstab as any)?.sendnewsug || "Enviado con éxito, pendiente de revisión de pago");
 
     } catch (err: any) {
-      Alert.alert("Error", err.message || (t.communitytab as any)?.errorServer || "Error");
+      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", err.message || (t.communitytab as any)?.errorServer || "Error");
     } finally {
       setIsPublishing(false);
     }
@@ -510,7 +571,7 @@ export default function LawyersScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approved: true, durationMonths })
       });
-      if (!response.ok) throw new Error("Error en servidor");
+      if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError || "Error en servidor");
       
       const approvedLawyer = { ...lawyer, status: 'approved' };
       
@@ -528,20 +589,20 @@ export default function LawyersScreen() {
       }
       
       setPendingLawyers(pendingLawyers.filter(s => s.id !== lawyer.id));
-      Alert.alert("Aprobado", `El perfil es público por ${durationMonths} mes(es).`);
+      Alert.alert((t.lawyerstab as any)?.approvedTitle || "Aprobado", ((t.lawyerstab as any)?.approvedMsgPrefix || "El perfil es público por ") + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix || " mes(es)."));
     } catch (error) {
-      Alert.alert("Error", "No se pudo aprobar.");
+      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.approveError || "No se pudo aprobar.");
     }
   };
 
   const rejectLawyer = async (id: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error("Error en servidor");
+      if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError || "Error en servidor");
       setPendingLawyers(pendingLawyers.filter(e => e.id !== id));
-      Alert.alert("Rechazado", "Perfil eliminado.");
+      Alert.alert((t.lawyerstab as any)?.rejectedTitle || "Rechazado", (t.lawyerstab as any)?.rejectedMsg || "Perfil eliminado.");
     } catch (error) {
-      Alert.alert("Error", "No se pudo rechazar.");
+      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.rejectError || "No se pudo rechazar.");
     }
   };
 
@@ -549,8 +610,11 @@ export default function LawyersScreen() {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     const isPending = lawyer.status === 'pending';
 
+    const isOwner = lawyer.userId === currentUserId;
+    const isExpired = lawyer.timepostEnd ? new Date(lawyer.timepostEnd) < new Date() : false;
+
     const safeRating = Number(lawyer.rating) || 0;
-    const displayRating = safeRating > 0 ? safeRating.toFixed(1) : "Nuevo";
+    const displayRating = safeRating > 0 ? safeRating.toFixed(1) : ((t.lawyerstab as any)?.newLabel || "Nuevo");
 
     const reviewCount = lawyer.reviews?.length || lawyer.totalReviews || 0;
     let formattedCount = reviewCount.toString();
@@ -563,8 +627,20 @@ export default function LawyersScreen() {
       : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)');
 
     return (
-      <View style={{ borderRadius: 28, overflow: 'hidden' as 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border }}>
+      <View style={{ borderRadius: 28, overflow: 'hidden' as 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : Colors.border }}>
         
+        {isOwner && isExpired && !isPending && (
+          <View style={{ backgroundColor: 'rgba(255, 82, 82, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 82, 82, 0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <MaterialCommunityIcons name="alert-circle" size={20} color="#FF5252" />
+              <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>{(t.lawyerstab as any)?.expiredWarning || "Suscripción vencida. El público no puede verlo."}</ThemedText>
+            </View>
+            <TouchableOpacity onPress={() => { setLawyerToRenew(lawyer); setRenewModalVisible(true); }} style={{ backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 10 }}>
+              <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>{(t.lawyerstab as any)?.renewBtn || "Renovar"}</ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
           <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
             <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{lawyer.area?.toUpperCase()}</ThemedText>
@@ -577,7 +653,7 @@ export default function LawyersScreen() {
           </View>
         </View>
         
-        <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(lawyer)} style={{ width: '100%', height: 140 }}>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(lawyer)} style={{ width: '100%', height: 140, opacity: isExpired ? 0.6 : 1 }}>
           {lawyer.image && lawyer.image.length > 5 ? (
             <Image source={{ uri: lawyer.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           ) : (
@@ -594,7 +670,7 @@ export default function LawyersScreen() {
           </View>
         </TouchableOpacity>
         
-        <View style={{ padding: 15, paddingBottom: isPending ? 15 : 15 }}>
+        <View style={{ padding: 15, paddingBottom: isPending ? 15 : 15, opacity: isExpired ? 0.6 : 1 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <ThemedText style={{ fontWeight: '800', fontSize: 18, color: Colors.text }}>{lawyer.name}</ThemedText>
             {dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist} mi</ThemedText>}
@@ -604,18 +680,18 @@ export default function LawyersScreen() {
           
           <View style={{ gap: 8, marginTop: 15, opacity: isPending ? 0.5 : 1 }}>
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity onPress={() => !isPending && setSelectedReviews(lawyer)} disabled={isPending} style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
+              <TouchableOpacity onPress={() => !isPending && setSelectedReviews(lawyer)} disabled={isPending || isExpired} style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                  <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
                  <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
                     {(t.lawyerstab as any)?.reviews || 'Reseñas'} {reviewCount > 0 ? `(${formattedCount})` : ''}
                  </ThemedText>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => !isPending && openDirections(lawyer)} disabled={isPending} style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
+              <TouchableOpacity onPress={() => !isPending && openDirections(lawyer)} disabled={isPending || isExpired} style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
                 <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
                 <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.lawyerstab as any)?.route || 'Ruta'}</ThemedText>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${lawyer.phone}`)} disabled={isPending} style={{ width: '100%', height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
+            <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${lawyer.phone}`)} disabled={isPending || isExpired} style={{ width: '100%', height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
               <MaterialCommunityIcons name="phone" size={17} color={isDark ? '#FFB74D' : '#EF6C00'} />
               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{(t.lawyerstab as any)?.callbton || 'Llamada'}</ThemedText>
             </TouchableOpacity>
@@ -630,11 +706,9 @@ export default function LawyersScreen() {
   const PendingLawyerItem = ({ lawyer }: { lawyer: any }) => {
     const [selectedMonths, setSelectedMonths] = useState(1);
     
-    // 🚀 AQUI ESTÁ EL CAMBIO: Info de pago movida arriba de los botones de meses
     const adminControls = () => (
       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15 }}>
         
-        {/* Info de pago (Movid arriba) */}
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
            <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
            <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -651,8 +725,8 @@ export default function LawyersScreen() {
         </View>
         
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity onPress={() => rejectLawyer(lawyer.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText></TouchableOpacity>
-          <TouchableOpacity onPress={() => approveLawyerField(lawyer, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText></TouchableOpacity>
+          <TouchableOpacity onPress={() => rejectLawyer(lawyer.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}> {(t.genericbtn as any)?.rejectbtn || "Rechazar"}</ThemedText></TouchableOpacity>
+          <TouchableOpacity onPress={() => approveLawyerField(lawyer, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}> {(t.genericbtn as any)?.aprovedbtn || "Aprobar"}</ThemedText></TouchableOpacity>
         </View>
       </View>
     );
@@ -661,6 +735,52 @@ export default function LawyersScreen() {
 
   return (
     <View style={stylesUnified.container}>
+
+      {/* MODAL COMPACTO PARA RENOVAR SUSCRIPCIÓN VENCIDA */}
+      <Modal visible={renewModalVisible} animationType="fade" transparent statusBarTranslucent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isRenewing && setRenewModalVisible(false)} />
+          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 400 : '90%' }}>
+            <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', padding: 25, borderRadius: 24, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' }}>
+              {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+              
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
+                <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>{(t.lawyerstab as any)?.renewTitle || "Renovar Perfil"}</ThemedText>
+                <TouchableOpacity onPress={() => setRenewModalVisible(false)}>
+                  <MaterialCommunityIcons name="close" size={24} color={Colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
+                {((t.lawyerstab as any)?.renewDescPrefix || "Re-activa el perfil de ")}<ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText>{((t.lawyerstab as any)?.renewDescSuffix || " enviando el comprobante de tu nuevo pago de renovación mensual.")}
+              </ThemedText>
+              
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                {['Zelle', 'Venmo'].map((method) => (
+                  <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                    <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TextInput 
+                style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                placeholder={`# CONFIRMACION DE ${renewPayMethod}...`} 
+                placeholderTextColor={Colors.subtext}
+                value={renewRefCode} 
+                onChangeText={setRenewRefCode} 
+              />
+
+              <TouchableOpacity onPress={handleRenewSubmit} disabled={isRenewing}>
+                <LinearGradient colors={orangeGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                  {isRenewing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" style={{ marginRight: 8 }} />}
+                  <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t.lawyerstab as any)?.sendRenewBtn || "Enviar Renovación"}</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
       {/* MODAL DETALLE */}
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
@@ -692,7 +812,7 @@ export default function LawyersScreen() {
                   <View style={{ flexDirection: 'row', marginLeft: 15, alignItems: 'center' }}>
                     <MaterialCommunityIcons name="star" size={18} color="#FFB300" />
                     <ThemedText style={{ marginLeft: 5, fontWeight: '900', color: Colors.text, fontSize: 16 }}>
-                      {selectedDetail?.rating > 0 ? selectedDetail.rating.toFixed(1) : "Nuevo"}
+                      {selectedDetail?.rating > 0 ? selectedDetail.rating.toFixed(1) : ((t.lawyerstab as any)?.newLabel || "Nuevo")}
                     </ThemedText>
                   </View>
                 </View>
@@ -717,11 +837,26 @@ export default function LawyersScreen() {
                     />
                 </View>
 
-                <ThemedText style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: Colors.text }}>Acerca de</ThemedText>
+                <ThemedText style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: Colors.text }}>{(t.lawyerstab as any)?.aboutTitle || "Acerca de"}</ThemedText>
                 <ThemedText style={{ color: Colors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>{selectedDetail?.description}</ThemedText>
 
                 {selectedDetail?.status !== 'pending' && (
-                  <TouchableOpacity onPress={() => { setSelectedReviews(selectedDetail); setSelectedDetail(null); }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => { 
+                      // 🚀 VALIDACIÓN DESDE EL DETALLE: Comprobar si ya opinó sobre este abogado
+                      const hasReviewed = selectedDetail?.reviews?.some((r: any) => r.userId === currentUserId);
+                      if (hasReviewed) {
+                        return Alert.alert(
+                          (t.lawyerstab as any)?.noticeTitle || "Aviso", 
+                          (t.lawyerstab as any)?.alreadyReviewed || "Ya has escrito una reseña para este abogado."
+                        );
+                      }
+                      setSelectedReviews(selectedDetail); 
+                      setSelectedDetail(null); 
+                      setShowReviewInput(true);
+                    }} 
+                    style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
+                  >
                     <LinearGradient colors={orangeGradient} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                       <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.writingreview || 'Escribir mi opinión'}</ThemedText>
@@ -734,7 +869,7 @@ export default function LawyersScreen() {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL RESEÑAS */}
+      {/* MODAL RESEÑAS */}
       <Modal visible={!!selectedReviews} transparent animationType="slide" statusBarTranslucent>
         <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
@@ -752,7 +887,20 @@ export default function LawyersScreen() {
               </View>
               {!showReviewInput ? (
                 <View style={{ flex: 1 }}>
-                  <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      // 🚀 VALIDACIÓN DESDE EL LISTADO: Evita duplicar opiniones de un mismo usuario
+                      const hasReviewed = selectedReviews?.reviews?.some((r: any) => r.userId === currentUserId);
+                      if (hasReviewed) {
+                        return Alert.alert(
+                          (t.lawyerstab as any)?.noticeTitle || "Aviso", 
+                          (t.lawyerstab as any)?.alreadyReviewed || "Ya has escrito una reseña para este abogado."
+                        );
+                      }
+                      setShowReviewInput(true);
+                    }} 
+                    style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
+                  >
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.writingreview || 'Escribir reseña'}</ThemedText>
@@ -783,7 +931,7 @@ export default function LawyersScreen() {
                             typeEntry: 'lawyer',
                             rating: ratingNum,
                             review: commentStr,
-                            userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9"
+                            userId: currentUserId
                           };
 
                           const res = await fetch(`${API_BASE_URL}/rating`, {
@@ -798,7 +946,8 @@ export default function LawyersScreen() {
                           const newReviewFormatted = { 
                             id: fromDB.id || Date.now().toString(), 
                             stars: Number(ratingNum), 
-                            comment: commentStr 
+                            comment: commentStr,
+                            userId: currentUserId // Lo añadimos localmente para validar de inmediato sin recargar
                           };
 
                           const updatedReviews = [newReviewFormatted, ...(selectedReviews.reviews || [])];
@@ -816,9 +965,9 @@ export default function LawyersScreen() {
                           setResults(prev => prev.map(s => s.id === selectedReviews.id ? updatedLawyerObj : s));
                           setAllLawyers(prev => prev.map(s => s.id === selectedReviews.id ? updatedLawyerObj : s));
 
-                          Alert.alert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+                          Alert.alert((t.lawyerstab as any)?.thanksTitle || "¡Gracias!", (t.lawyerstab as any)?.reviewSuccessMsg || "Tu reseña ha sido publicada exitosamente.");
                         } catch (e) {
-                          Alert.alert("Error", "No se pudo conectar al servidor.");
+                          Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.serverConnectionError || "No se pudo conectar al servidor.");
                         } finally {
                           setShowReviewInput(false);
                         }
@@ -847,7 +996,7 @@ export default function LawyersScreen() {
                   {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{(t.lawyerstab as any)?.textphoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>{(t.lawyerstab as any)?.category || 'Área de Práctica'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>{(t.lawyerstab as any)?.label || 'Área de Práctica'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {PRACTICE_AREAS.map((cat, index) => {
                     if (index === 0) return null; 
@@ -858,6 +1007,7 @@ export default function LawyersScreen() {
                         {isActive ? (
                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                             <iconInfo.lib name={iconInfo.name} size={14} color="#FFF" style={{ marginRight: 6 }} />
+                            <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }} />
                             <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'capitalize' }}>{cat}</ThemedText>
                           </LinearGradient>
                         ) : (
@@ -894,9 +1044,9 @@ export default function LawyersScreen() {
                 </View>
 
                 <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>Verificación de Pago</ThemedText>
+                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>{(t.lawyerstab as any)?.paymentVerification || "Verificación de Pago"}</ThemedText>
                   <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18 }}>
-                    Para publicar tu perfil, realiza el pago de $50 USD mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                    {(t.lawyerstab as any)?.paymentInstructions || "Para publicar tu perfil, realiza el pago de $50 USD mediante Zelle o Venmo y escribe el código de confirmación aquí abajo."}
                   </ThemedText>
                   
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -1040,7 +1190,7 @@ export default function LawyersScreen() {
                       (!loading && zipCode.length === 5) ? (
                         <View style={{ flex: 1, alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
                           <MaterialCommunityIcons name="scale-balance" size={48} color={Colors.text} />
-                          <ThemedText style={{ marginTop: 10, color: Colors.text }}>No se encontraron abogados aquí.</ThemedText>
+                          <ThemedText style={{ marginTop: 10, color: Colors.text }}>{(t.lawyerstab as any)?.noLawyersFound || "No se encontraron abogados aquí."}</ThemedText>
                         </View>
                       ) : null
                     )}
@@ -1102,7 +1252,7 @@ export default function LawyersScreen() {
                           (!loading && zipCode.length === 5) ? (
                             <View style={{ flex: 1, alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
                               <MaterialCommunityIcons name="scale-balance" size={48} color={Colors.text} />
-                              <ThemedText style={{ marginTop: 10, color: Colors.text }}>No se encontraron abogados aquí.</ThemedText>
+                              <ThemedText style={{ marginTop: 10, color: Colors.text }}>{(t.lawyerstab as any)?.noLawyersFound || "No se encontraron abogados aquí."}</ThemedText>
                             </View>
                           ) : null
                         )}
@@ -1133,7 +1283,7 @@ export default function LawyersScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB para Sugerir Abogado (UNIVERSAL) */}
+      {/* FAB para Sugerir Abogado */}
       <TouchableOpacity style={{ position: 'absolute', right: 20, bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }} onPress={() => setModalVisible(true)}>
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="scale-balance" size={32} color="#FFF" />
