@@ -10,16 +10,35 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// 🛡️ BARRERA DE SANITIZACIÓN PARA OBJETOS: Limpia todos los textos de un payload
+const sanitizePayload = (data: any) => {
+  if (!data || typeof data !== 'object') return data;
+  const sanitizedData: any = {};
+  for (const key in data) {
+    if (typeof data[key] === 'string') {
+      sanitizedData[key] = sanitizeText(data[key]);
+    } else {
+      sanitizedData[key] = data[key];
+    }
+  }
+  return sanitizedData;
+};
+
 // 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado)
 export const getCommunityPosts = async (zip?: string) => {
   try {
+    const cleanZip = zip ? sanitizeText(String(zip)) : null;
 
     // 🛡️ BARRERA DE RENDIMIENTO: Si no hay ZIP válido, no tocamos la base de datos
-    if (!zip || zip.trim().length !== 5) {
+    if (!cleanZip || cleanZip.length !== 5) {
       return []; 
     }
-
-    const cleanZip = zip.trim();
     
     let query = db
       .select()
@@ -28,11 +47,8 @@ export const getCommunityPosts = async (zip?: string) => {
       .leftJoin(users, eq(reviews.userId, users.id)) 
       .$dynamic(); 
 
-    // 🚀 FILTRO INTELIGENTE DE ZIP CODE (A prueba de fallos de tipo numérico/texto)
-    if (zip && zip.trim().length === 5) {
-      const cleanZip = zip.trim();
-      query = query.where(sql`${community.zip}::text = ${cleanZip}`); 
-    }
+    // 🚀 FILTRO INTELIGENTE DE ZIP CODE
+    query = query.where(sql`${community.zip}::text = ${cleanZip}`); 
 
     // El ordenamiento se aplica siempre después del filtrado
     query = query.orderBy(desc(community.id));
@@ -116,12 +132,15 @@ export const getCommunityPosts = async (zip?: string) => {
 // 🔍 2. CONSULTA INDIVIDUAL
 export const getCommunityPostById = async (id: string) => {
   try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) return null;
+
     const rows = await db
       .select()
       .from(community)
       .leftJoin(reviews, eq(reviews.relationshipId, community.id))
       .leftJoin(users, eq(reviews.userId, users.id))
-      .where(eq(community.id, id));
+      .where(eq(community.id, cleanId));
 
     if (!rows || rows.length === 0) return null;
 
@@ -152,7 +171,7 @@ export const getCommunityPostById = async (id: string) => {
     const postVotes = await db
       .select()
       .from(countlikes)
-      .where(eq(targetColumn, id));
+      .where(eq(targetColumn, cleanId));
     
     postFinal.likes = postVotes.reduce((sum, v) => sum + (Number(v.likes) || 0), 0);
     postFinal.dislikes = postVotes.reduce((sum, v) => sum + (Number(v.dislikes) || 0), 0);
@@ -179,10 +198,13 @@ export const getCommunityPostById = async (id: string) => {
 // 📥 3. CREAR POST
 export const createCommunityPost = async (data: any) => {
   try {
-    if (data.imageUrl && data.imageUrl.startsWith('community/')) {
-      data.imageUrl = data.imageUrl.replace('community/', '');
+    // 🛡️ Sanitizamos absolutamente todo el cuerpo de la petición
+    const cleanPayload = sanitizePayload(data);
+
+    if (cleanPayload.imageUrl && cleanPayload.imageUrl.startsWith('community/')) {
+      cleanPayload.imageUrl = cleanPayload.imageUrl.replace('community/', '');
     }
-    const newPost = await db.insert(community).values(data).returning();
+    const newPost = await db.insert(community).values(cleanPayload).returning();
     return newPost[0];
   } catch (error: any) { 
     throw new Error(`Error al crear la publicación: ${error.message}`);
@@ -192,7 +214,10 @@ export const createCommunityPost = async (data: any) => {
 // 📥 4. CREAR COMENTARIO
 export const createCommunityReview = async (data: any) => {
   try {
-    const newReview = await db.insert(reviews).values(data).returning();
+    // 🛡️ Sanitizamos todo el cuerpo del comentario para evitar inyecciones en el hilo
+    const cleanPayload = sanitizePayload(data);
+
+    const newReview = await db.insert(reviews).values(cleanPayload).returning();
     return newReview[0];
   } catch (error: any) { 
     throw new Error(`Error al crear el comentario: ${error.message}`);
@@ -202,6 +227,11 @@ export const createCommunityReview = async (data: any) => {
 // 🔄 5. PROCESAR VOTO
 export const handlePostVote = async (postId: string, userId: string, voteType: 'like' | 'dislike') => {
   try {
+    const cleanPostId = sanitizeText(postId);
+    const cleanUserId = sanitizeText(userId);
+
+    if (!cleanPostId || !cleanUserId) throw new Error("Parámetros de voto inválidos");
+
     console.log("\n==========================================");
     console.log(`⚙️ [CTRL-VOTO] NUEVA PETICIÓN DE VOTO`);
     console.log("==========================================");
@@ -212,7 +242,7 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
     const votosPrevios = await db
       .select()
       .from(countlikes)
-      .where(and(eq(targetColumn, postId), eq(countlikes.userId, userId)));
+      .where(and(eq(targetColumn, cleanPostId), eq(countlikes.userId, cleanUserId)));
 
     const existingVote = votosPrevios.length > 0 ? votosPrevios[0] : null;
     const hasLiked = existingVote && existingVote.likes === 1;
@@ -224,7 +254,7 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
       } else if (hasDisliked) {
         await db.update(countlikes).set({ likes: 1, dislikes: 0 }).where(eq(countlikes.id, existingVote.id));
       } else {
-        await db.insert(countlikes).values({ [targetColName]: postId, userId: userId, likes: 1, dislikes: 0 } as any);
+        await db.insert(countlikes).values({ [targetColName]: cleanPostId, userId: cleanUserId, likes: 1, dislikes: 0 } as any);
       }
     } else if (voteType === 'dislike') {
       if (hasDisliked) {
@@ -232,11 +262,11 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
       } else if (hasLiked) {
         await db.update(countlikes).set({ likes: 0, dislikes: 1 }).where(eq(countlikes.id, existingVote.id));
       } else {
-        await db.insert(countlikes).values({ [targetColName]: postId, userId: userId, likes: 0, dislikes: 1 } as any);
+        await db.insert(countlikes).values({ [targetColName]: cleanPostId, userId: cleanUserId, likes: 0, dislikes: 1 } as any);
       }
     }
 
-    const allPostVotes = await db.select().from(countlikes).where(eq(targetColumn, postId));
+    const allPostVotes = await db.select().from(countlikes).where(eq(targetColumn, cleanPostId));
     let trueLikes = 0;
     let trueDislikes = 0;
     
@@ -246,7 +276,7 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
     });
 
     try {
-      await db.execute(sql`UPDATE community SET likes = ${trueLikes}, dislikes = ${trueDislikes} WHERE id = ${postId}`);
+      await db.execute(sql`UPDATE community SET likes = ${trueLikes}, dislikes = ${trueDislikes} WHERE id = ${cleanPostId}`);
     } catch(e: any) {}
 
     let finalUserVote = null;
@@ -269,7 +299,13 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
 // 🔄 6. ACTUALIZAR POST
 export const updateCommunityPost = async (id: string, data: any) => {
   try {
-    const updated = await db.update(community).set(data).where(eq(community.id, id)).returning();
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    // 🛡️ Sanitizamos antes de actualizar
+    const cleanPayload = sanitizePayload(data);
+
+    const updated = await db.update(community).set(cleanPayload).where(eq(community.id, cleanId)).returning();
     return updated[0] || null;
   } catch (error: any) { 
     throw new Error(`Error al actualizar la publicación: ${error.message}`);
@@ -279,7 +315,10 @@ export const updateCommunityPost = async (id: string, data: any) => {
 // 🗑️ 7. ELIMINAR POST
 export const deleteCommunityPost = async (id: string) => {
   try {
-    const deleted = await db.delete(community).where(eq(community.id, id)).returning();
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    const deleted = await db.delete(community).where(eq(community.id, cleanId)).returning();
     return deleted[0] || null;
   } catch (error: any) {
     throw new Error(`Error al eliminar la publicación: ${error.message}`);

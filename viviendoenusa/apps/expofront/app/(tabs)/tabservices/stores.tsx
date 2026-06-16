@@ -35,7 +35,7 @@ const COUNTRIES = [
 ];
 
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
-const API_STORES_URL = 'http://192.168.1.107:3000/stores';
+const API_STORES_URL = 'http://192.168.1.103:3000/stores';
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
@@ -403,7 +403,7 @@ export default function StoresScreen() {
 
         formData.append('imagen', { uri: formImage, name: filename, type } as any);
 
-        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/stores', {
+        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/stores', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },

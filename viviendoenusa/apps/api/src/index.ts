@@ -201,6 +201,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.listen(Number(port), "192.168.1.107", () => {
+app.listen(Number(port), "192.168.1.103", () => {
   console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port}`);
 });

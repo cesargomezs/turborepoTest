@@ -27,7 +27,7 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 
 // 📡 URL BASE FIJA
-const API_BASE_URL = 'http://192.168.1.107:3000/lawyers';
+const API_BASE_URL = 'http://192.168.1.103:3000/lawyers';
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -56,9 +56,9 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
     <View style={{ flex: 1, paddingVertical: 10 }}>
       <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
         <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{(t.lawyerstab as any)?.backBtn || 'Volver'}</ThemedText>
+        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{(t.lawyerstab as any)?.backBtn }</ThemedText>
       </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>{(t.lawyerstab as any)?.experience || 'Tu experiencia'}</ThemedText>
+      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>{(t.lawyerstab as any)?.experience }</ThemedText>
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
         {[1, 2, 3, 4, 5].map(s => (
           <TouchableOpacity key={s} onPress={() => setRating(s)}>
@@ -67,11 +67,11 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         ))}
       </View>
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment} placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder || "Escribe tu opinión..."} placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+        <TextInput value={comment} onChangeText={setComment} placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder } placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
-          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.publishBtn || 'Publicar'}</ThemedText>
+          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.publishBtn}</ThemedText>
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -148,7 +148,7 @@ export default function LawyersScreen() {
     : ['Todas', 'General', 'Inmigración', 'Familia', 'Accidentes', 'Laboral', 'Criminal', 'Pro Bono', 'Civil', 'Bienes Raíces'];
 
   const [zipCode, setZipCode] = useState('');
-  const [selectedArea, setSelectedArea] = useState(PRACTICE_AREAS[0] || 'Todas'); 
+  const [selectedArea, setSelectedArea] = useState(PRACTICE_AREAS[0]); 
   const [loading, setLoading] = useState(false);
   
   const [allLawyers, setAllLawyers] = useState<any[]>([]);
@@ -446,14 +446,14 @@ export default function LawyersScreen() {
 
       if (!res.ok) throw new Error();
       
-      Alert.alert((t.lawyerstab as any)?.successTitle || "Éxito", (t.lawyerstab as any)?.renewSuccessMsg || "Tu renovación fue enviada y se encuentra pendiente de revisión del administrador.");
+      Alert.alert((t.lawyerstab as any)?.successTitle , (t.lawyerstab as any)?.renewSuccessMsg );
       setRenewModalVisible(false);
       setRenewRefCode('');
       setLawyerToRenew(null);
       handleSearch();
 
     } catch (e) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.renewErrorMsg || "No se pudo enviar la renovación o el código ya fue utilizado.");
+      Alert.alert((t.lawyerstab as any)?.errorTitle , (t.lawyerstab as any)?.renewErrorMsg);
     } finally {
       setIsRenewing(false);
     }
@@ -461,7 +461,7 @@ export default function LawyersScreen() {
 
   const handlePublishLawyer = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5 || !formRefCode.trim()) {
-      return Alert.alert((t.lawyerstab as any)?.alertmessage || "Completar campos obligatorios incluyendo pago");
+      return Alert.alert((t.lawyerstab as any)?.alertmessage);
     }
     
     setIsPublishing(true);
@@ -471,7 +471,7 @@ export default function LawyersScreen() {
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
           setIsPublishing(false);
-          return Alert.alert((t.communitytab as any)?.imageInappropriateTittle || "Bloqueada", (t.communitytab as any)?.imageInappropriateDescription || "Imagen inválida");
+          return Alert.alert((t.communitytab as any)?.imageInappropriateTittle , (t.communitytab as any)?.imageInappropriateDescription );
         }
 
         const formData = new FormData();
@@ -481,7 +481,7 @@ export default function LawyersScreen() {
 
         formData.append('imagen', { uri: formImage, name: filename, type } as any);
 
-        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/lawyers', {
+        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/lawyers', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },
@@ -555,7 +555,7 @@ export default function LawyersScreen() {
         handleSearch();
       }
 
-      Alert.alert((t.lawyerstab as any)?.sendnewsug || "Enviado con éxito, pendiente de revisión de pago");
+      Alert.alert((t.lawyerstab as any)?.sendnewsug );
 
     } catch (err: any) {
       Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", err.message || (t.communitytab as any)?.errorServer || "Error");
@@ -589,20 +589,20 @@ export default function LawyersScreen() {
       }
       
       setPendingLawyers(pendingLawyers.filter(s => s.id !== lawyer.id));
-      Alert.alert((t.lawyerstab as any)?.approvedTitle || "Aprobado", ((t.lawyerstab as any)?.approvedMsgPrefix || "El perfil es público por ") + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix || " mes(es)."));
+      Alert.alert((t.lawyerstab as any)?.approvedTitle || "Aprobado", ((t.lawyerstab as any)?.approvedMsgPrefix ) + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix ));
     } catch (error) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.approveError || "No se pudo aprobar.");
+      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.approveError);
     }
   };
 
   const rejectLawyer = async (id: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError || "Error en servidor");
+      if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError);
       setPendingLawyers(pendingLawyers.filter(e => e.id !== id));
-      Alert.alert((t.lawyerstab as any)?.rejectedTitle || "Rechazado", (t.lawyerstab as any)?.rejectedMsg || "Perfil eliminado.");
+      Alert.alert((t.lawyerstab as any)?.rejectedTitle, (t.lawyerstab as any)?.rejectedMsg );
     } catch (error) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.rejectError || "No se pudo rechazar.");
+      Alert.alert((t.lawyerstab as any)?.errorTitle, (t.genericbtn as any)?.rejectError);
     }
   };
 
@@ -633,7 +633,7 @@ export default function LawyersScreen() {
           <View style={{ backgroundColor: 'rgba(255, 82, 82, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 82, 82, 0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
               <MaterialCommunityIcons name="alert-circle" size={20} color="#FF5252" />
-              <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>{(t.lawyerstab as any)?.expiredWarning || "Suscripción vencida. El público no puede verlo."}</ThemedText>
+              <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>{(t.lawyerstab as any)?.expiredWarning }</ThemedText>
             </View>
             <TouchableOpacity onPress={() => { setLawyerToRenew(lawyer); setRenewModalVisible(true); }} style={{ backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 10 }}>
               <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>{(t.lawyerstab as any)?.renewBtn || "Renovar"}</ThemedText>
@@ -683,17 +683,17 @@ export default function LawyersScreen() {
               <TouchableOpacity onPress={() => !isPending && setSelectedReviews(lawyer)} disabled={isPending || isExpired} style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                  <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
                  <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
-                    {(t.lawyerstab as any)?.reviews || 'Reseñas'} {reviewCount > 0 ? `(${formattedCount})` : ''}
+                    {(t.genericbtn as any)?.reviews } {reviewCount > 0 ? `(${formattedCount})` : ''}
                  </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => !isPending && openDirections(lawyer)} disabled={isPending || isExpired} style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
                 <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.lawyerstab as any)?.route || 'Ruta'}</ThemedText>
+                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.genericbtn as any)?.route }</ThemedText>
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${lawyer.phone}`)} disabled={isPending || isExpired} style={{ width: '100%', height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
               <MaterialCommunityIcons name="phone" size={17} color={isDark ? '#FFB74D' : '#EF6C00'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{(t.lawyerstab as any)?.callbton || 'Llamada'}</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{(t.genericbtn as any)?.callbton }</ThemedText>
             </TouchableOpacity>
           </View>
 
@@ -745,14 +745,14 @@ export default function LawyersScreen() {
               {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-                <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>{(t.lawyerstab as any)?.renewTitle || "Renovar Perfil"}</ThemedText>
+                <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>{(t.lawyerstab as any)?.renewTitle }</ThemedText>
                 <TouchableOpacity onPress={() => setRenewModalVisible(false)}>
                   <MaterialCommunityIcons name="close" size={24} color={Colors.text} />
                 </TouchableOpacity>
               </View>
 
               <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
-                {((t.lawyerstab as any)?.renewDescPrefix || "Re-activa el perfil de ")}<ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText>{((t.lawyerstab as any)?.renewDescSuffix || " enviando el comprobante de tu nuevo pago de renovación mensual.")}
+                {((t.lawyerstab as any)?.renewDescPrefix )}<ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText>{((t.lawyerstab as any)?.renewDescSuffix || " enviando el comprobante de tu nuevo pago de renovación mensual.")}
               </ThemedText>
               
               <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -774,7 +774,7 @@ export default function LawyersScreen() {
               <TouchableOpacity onPress={handleRenewSubmit} disabled={isRenewing}>
                 <LinearGradient colors={orangeGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
                   {isRenewing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" style={{ marginRight: 8 }} />}
-                  <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t.lawyerstab as any)?.sendRenewBtn || "Enviar Renovación"}</ThemedText>
+                  <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t.lawyerstab as any)?.sendRenewBtn }</ThemedText>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -812,7 +812,7 @@ export default function LawyersScreen() {
                   <View style={{ flexDirection: 'row', marginLeft: 15, alignItems: 'center' }}>
                     <MaterialCommunityIcons name="star" size={18} color="#FFB300" />
                     <ThemedText style={{ marginLeft: 5, fontWeight: '900', color: Colors.text, fontSize: 16 }}>
-                      {selectedDetail?.rating > 0 ? selectedDetail.rating.toFixed(1) : ((t.lawyerstab as any)?.newLabel || "Nuevo")}
+                      {selectedDetail?.rating > 0 ? selectedDetail.rating.toFixed(1) : ((t.lawyerstab as any)?.newLabel )}
                     </ThemedText>
                   </View>
                 </View>
@@ -837,7 +837,7 @@ export default function LawyersScreen() {
                     />
                 </View>
 
-                <ThemedText style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: Colors.text }}>{(t.lawyerstab as any)?.aboutTitle || "Acerca de"}</ThemedText>
+                <ThemedText style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: Colors.text }}>{(t.lawyerstab as any)?.aboutTitle }</ThemedText>
                 <ThemedText style={{ color: Colors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>{selectedDetail?.description}</ThemedText>
 
                 {selectedDetail?.status !== 'pending' && (
@@ -847,8 +847,8 @@ export default function LawyersScreen() {
                       const hasReviewed = selectedDetail?.reviews?.some((r: any) => r.userId === currentUserId);
                       if (hasReviewed) {
                         return Alert.alert(
-                          (t.lawyerstab as any)?.noticeTitle || "Aviso", 
-                          (t.lawyerstab as any)?.alreadyReviewed || "Ya has escrito una reseña para este abogado."
+                          (t.lawyerstab as any)?.noticeTitle, 
+                          (t.lawyerstab as any)?.alreadyReviewed 
                         );
                       }
                       setSelectedReviews(selectedDetail); 
@@ -859,7 +859,7 @@ export default function LawyersScreen() {
                   >
                     <LinearGradient colors={orangeGradient} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                       <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
-                      <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.writingreview || 'Escribir mi opinión'}</ThemedText>
+                      <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.writingreview }</ThemedText>
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
@@ -879,7 +879,7 @@ export default function LawyersScreen() {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
                 <View style={{ flex: 1 }}>
                     <ThemedText style={{ fontSize: 22, fontWeight: '900', color: Colors.text }}>{selectedReviews?.name}</ThemedText>
-                    <ThemedText style={{ fontWeight: '800' }}>{(t.lawyerstab as any)?.commutnityopini || 'Opiniones'}</ThemedText>
+                    <ThemedText style={{ fontWeight: '800' }}>{(t.lawyerstab as any)?.commutnityopini }</ThemedText>
                 </View>
                 <TouchableOpacity onPress={() => { setSelectedReviews(null); setShowReviewInput(false); }}>
                   <MaterialCommunityIcons name="close" size={28} color={Colors.text} />
@@ -893,8 +893,8 @@ export default function LawyersScreen() {
                       const hasReviewed = selectedReviews?.reviews?.some((r: any) => r.userId === currentUserId);
                       if (hasReviewed) {
                         return Alert.alert(
-                          (t.lawyerstab as any)?.noticeTitle || "Aviso", 
-                          (t.lawyerstab as any)?.alreadyReviewed || "Ya has escrito una reseña para este abogado."
+                          (t.lawyerstab as any)?.noticeTitle , 
+                          (t.lawyerstab as any)?.alreadyReviewed 
                         );
                       }
                       setShowReviewInput(true);
@@ -903,7 +903,7 @@ export default function LawyersScreen() {
                   >
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
-                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.writingreview || 'Escribir reseña'}</ThemedText>
+                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.writingreview }</ThemedText>
                     </LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
@@ -965,9 +965,9 @@ export default function LawyersScreen() {
                           setResults(prev => prev.map(s => s.id === selectedReviews.id ? updatedLawyerObj : s));
                           setAllLawyers(prev => prev.map(s => s.id === selectedReviews.id ? updatedLawyerObj : s));
 
-                          Alert.alert((t.lawyerstab as any)?.thanksTitle || "¡Gracias!", (t.lawyerstab as any)?.reviewSuccessMsg || "Tu reseña ha sido publicada exitosamente.");
+                          Alert.alert((t.lawyerstab as any)?.thanksTitle, (t.lawyerstab as any)?.reviewSuccessMsg );
                         } catch (e) {
-                          Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.serverConnectionError || "No se pudo conectar al servidor.");
+                          Alert.alert((t.lawyerstab as any)?.errorTitle, (t.lawyerstab as any)?.serverConnectionError);
                         } finally {
                           setShowReviewInput(false);
                         }
@@ -988,15 +988,15 @@ export default function LawyersScreen() {
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
-                <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>{(t.lawyerstab as any)?.suggest || 'Sugerir Abogado'}</ThemedText>
+                <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>{(t.lawyerstab as any)?.suggest}</ThemedText>
                 <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
               </View>
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{(t.lawyerstab as any)?.textphoto || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{(t.genericbtn as any)?.photo }</ThemedText></View>}
                 </TouchableOpacity>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>{(t.lawyerstab as any)?.label || 'Área de Práctica'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'capitalize'}}>{(t.lawyerstab as any)?.label}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {PRACTICE_AREAS.map((cat, index) => {
                     if (index === 0) return null; 
@@ -1021,10 +1021,10 @@ export default function LawyersScreen() {
                   })}
                 </ScrollView>
 
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.placeHoldname || 'Nombre'} placeholderTextColor={Colors.subtext} value={formName} onChangeText={setFormName} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.placeHoldAddress || 'Dirección'} placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={setFormAddress} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.messagezip || 'Código Postal'} placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.description || 'Descripción'} placeholderTextColor={Colors.subtext} value={formDesc} onChangeText={setFormDesc} multiline />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.placeHoldname } placeholderTextColor={Colors.subtext} value={formName} onChangeText={setFormName} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.placeHoldAddress } placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={setFormAddress} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.messagezip } placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.description } placeholderTextColor={Colors.subtext} value={formDesc} onChangeText={setFormDesc} multiline />
                 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform: 'capitalize'  }}>{(t.lawyerstab as any)?.phoneContacto || 'Teléfono'}</ThemedText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, overflow: 'hidden' }}>

@@ -37,7 +37,10 @@ export const translations = {
       tittleReview: "Revisión",   
       aprovedbtn: "Aprobar",
       rejectbtn: "Rechazar",
-      reviews: "Reseñas"
+      reviews: "Reseñas",
+      serverError: "Error en servidor",
+      callbton: "Llamada",
+      route: "Ruta"
     },
     genericlabel:{
       labelopinion:"Escribe tu opinión..."
@@ -129,7 +132,19 @@ export const translations = {
       approvedMsgSuffix: " mes(es).",
       rejectedTitle: "Rechazado",
       rejectedMsg: "Perfil eliminado.",
+      writingreview:"Escribir reseña",
+      commutnityopini: "Opiniones",
+      errorTitle: "Error",
+      alertmessage: "Completar campos obligatorios incluyendo pago",
+      sendnewsug: "Enviado con éxito, pendiente de revisión de pago",
+      approveError:"No se pudo aprobar.",
+      rejectError:"No se pudo rechazar.",
+      placeHoldname: "Nombre",
+      placeHoldAddress: "Dirección",
+      description: "Descripción"
+
       
+
     },
     communitytab: {
       labeltypepost: "Tipo de publicación",
@@ -158,7 +173,6 @@ export const translations = {
       messageempty: "Ingresa un código postal de 5 dígitos para conectar con la comunidad local.",
       messageNodatatitle: "No hay publicaciones",
       messageNodata: "¡Sé el primero en sugerir un abogado para esta zona!"
-
     },
     donationstab: {
         category: "Categorías",
@@ -331,7 +345,10 @@ export const translations = {
       tittleReview: "Review",
       aprovedbtn: "Approve",
       rejectbtn: "Reject",
-      reviews: "Reviews"
+      reviews: "Reviews",
+      serverError: "Server error",
+      callbton: "Call",
+      route: "Route"
     },
     genericlabel:{
       labelopinion:"Write your opinion..."
@@ -421,7 +438,18 @@ export const translations = {
       approvedMsgPrefix: "The profile is public for ",
       approvedMsgSuffix: " month(s).",
       rejectedTitle: "Rejected",
-      rejectedMsg: "Profile deleted."
+      rejectedMsg: "Profile deleted.",
+      writingreview:"Write a review",
+      commutnityopini: "Opinions",
+      errorTitle: "Error",
+      alertmessage: "Complete the required fields, including payment",
+      sendnewsug: "Successfully sent, pending payment review",
+      approveError:"It could not be approved.",
+      rejectError:"It could not be rejected.",
+      placeHoldname: "Name",
+      placeHoldAddress: "Address",
+      description: "Description"
+
 
     },
     communitytab: {

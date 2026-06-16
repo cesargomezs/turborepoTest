@@ -45,7 +45,7 @@ const COUNTRIES = [
 ];
 
 // 📡 URL BASE PARA LOS EVENTOS
-const API_EVENTS_URL = 'http://192.168.1.107:3000/events';
+const API_EVENTS_URL = 'http://192.168.1.103:3000/events';
 
 export default function EventsScreen() {
   const { t } = useTranslation();
@@ -117,6 +117,10 @@ export default function EventsScreen() {
   const [formTime, setFormTime] = useState(new Date());
   const [formTimeEnd, setFormTimeEnd] = useState(new Date());
   
+  // 🚀 ESTADOS PARA PAGO DE EVENTOS
+  const [formRefCode, setFormRefCode] = useState('');
+  const [formPayMethod, setFormPayMethod] = useState('Zelle');
+
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showTimeEndPicker, setShowTimeEndPicker] = useState(false);
@@ -125,18 +129,16 @@ export default function EventsScreen() {
   const [pendingEvents, setPendingEvents] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // Validación de formulario estricta
-  const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
+  // 🚀 Validación de formulario estricta (Incluyendo Pago)
+  const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage && formRefCode.trim());
 
-  // 🚀 FETCH EVENTOS ACTUALIZADO (Permite ignorar el Zip si es Admin)
+  // FETCH EVENTOS ACTUALIZADO
   const fetchEvents = async (searchZip?: string, forceAdminFetch: boolean = false) => {
-    // Si no somos admin y el zip es inválido, abortamos la petición (Regla original)
     if (!forceAdminFetch && (!searchZip || searchZip.trim().length !== 5)) return;
     
     try {
       setIsLoadingPosts(true);
       
-      // Si hay zip lo usamos, sino traemos TODOS (Modo Admin global)
       const url = (searchZip && searchZip.trim().length === 5) 
           ? `${API_EVENTS_URL}?zip=${searchZip.trim()}` 
           : API_EVENTS_URL;
@@ -160,6 +162,9 @@ export default function EventsScreen() {
             description: item.descriptionEven || '',
             image: item.imageEven || '',
             location: item.locationEven || '',
+            // 🚀 Mapeamos la info de pago si viene del backend
+            referenceCode: item.referenceCode,
+            paymentMethod: item.paymentMethod
           };
         });
 
@@ -176,7 +181,7 @@ export default function EventsScreen() {
     }
   };
 
-  // --- BOTÓN AUTOAJUSTABLE BASE TIENDAS ---
+  // BOTÓN AUTOAJUSTABLE BASE TIENDAS
   const ActionBtn = ({ icon, text, color, bgColor, onPress, minWidth = 100, disabled = false }: any) => (
     <TouchableOpacity 
       disabled={disabled} 
@@ -188,7 +193,6 @@ export default function EventsScreen() {
     </TouchableOpacity>
   );
 
-  // Auxiliares Web
   const formatDateForWeb = (date: Date) => date.toISOString().split('T')[0];
   const formatTimeForWeb = (date: Date) => {
     const hours = String(date.getHours()).padStart(2, '0');
@@ -245,7 +249,7 @@ export default function EventsScreen() {
     const trimmedZip = formZip.trim();
 
     if (!isFormValid) {
-        return triggerAlert("Atención", "Título, ubicación, ZIP Code, teléfono e imagen son obligatorios.");
+        return triggerAlert("Atención", "Título, ubicación, ZIP Code, teléfono, pago e imagen son obligatorios.");
     }
 
     if (isTextInappropriate(trimmedTitle) || isTextInappropriate(trimmedDesc) || isTextInappropriate(trimmedLoc)) {
@@ -273,7 +277,7 @@ export default function EventsScreen() {
         type 
       } as any);
 
-      const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/events', {
+      const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/events', {
         method: 'POST',
         body: formData,
         headers: { 'Accept': 'application/json' },
@@ -285,6 +289,7 @@ export default function EventsScreen() {
       const finalImageName = uploadData.identificadorArchivo; 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
 
+      // 🚀 INCLUIMOS DATOS DE PAGO EN EL PAYLOAD
       const newEntryPayload = {
         title: trimmedTitle, 
         categoryIdx: formCategoryIdx,
@@ -298,7 +303,9 @@ export default function EventsScreen() {
         phone: fullPhone, 
         contactMethod: formContactMethod,
         approved: false, // Por defecto se va a revisión
-        userId: userMetadata?.id || userMetadata?.userId || null
+        userId: userMetadata?.id || userMetadata?.userId || null,
+        referenceCode: formRefCode,
+        paymentMethod: formPayMethod
       };
 
       const response = await fetch(API_EVENTS_URL, {
@@ -318,7 +325,9 @@ export default function EventsScreen() {
         time: savedFromDB.timeStart,
         timeEnd: savedFromDB.timeEnd,
         description: savedFromDB.descriptionEven,
-        location: savedFromDB.locationEven
+        location: savedFromDB.locationEven,
+        referenceCode: formRefCode,
+        paymentMethod: formPayMethod
       };
 
       setPendingEvents(prev => [newEventLocal, ...prev]);
@@ -330,7 +339,7 @@ export default function EventsScreen() {
         fetchEvents(trimmedZip, isAdminMode);
       }
       
-      triggerAlert("¡Recibido!", "Tu evento ha sido enviado. Aparecerá en la lista una vez sea aprobado por el administrador.");
+      triggerAlert("¡Recibido!", "Tu evento ha sido enviado y el pago será revisado pronto.");
       
     } catch (err: any) {
       triggerAlert("Error", err.message || t.communitytab?.errorServer || "Error");
@@ -375,6 +384,7 @@ export default function EventsScreen() {
     setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormZip('');
     setFormPhone(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
     setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
+    setFormRefCode(''); setFormPayMethod('Zelle'); // Limpiar info pago
   };
 
   const filteredEvents = useMemo(() => 
@@ -409,7 +419,6 @@ export default function EventsScreen() {
                     onChangeText={(text) => {
                       setZipCode(text);
                       if (text.length < 5) {
-                        // 🚀 Si es Admin y borra el Zip, cargamos globales. Si no, vaciamos.
                         if (isAdminMode) {
                             fetchEvents('', true);
                         } else if (events.length > 0 || pendingEvents.length > 0) {
@@ -430,15 +439,12 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                {/* 🚀 BOTÓN ADMINISTRADOR */}
                 <TouchableOpacity onLongPress={() => {
                     const newAdminMode = !isAdminMode;
                     setIsAdminMode(newAdminMode);
                     if (newAdminMode) {
-                        // Al activar Admin, busca en DB (Globales si no hay Zip, filtrado si hay Zip)
                         fetchEvents(zipCode, true);
                     } else if (!zipCode || zipCode.length < 5) {
-                        // Al salir de Admin, si no había un Zip válido, vaciamos por seguridad
                         setEvents([]);
                         setPendingEvents([]);
                     }
@@ -518,7 +524,7 @@ export default function EventsScreen() {
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* CAJA DE APROBACIÓN ADMIN */}
+                    {/* 🚀 CAJA DE APROBACIÓN ADMIN CON VERIFICACIÓN DE PAGO */}
                     {isAdminMode && pendingEvents.length > 0 && (
                       <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
                         <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingEvents.length})</ThemedText>
@@ -536,17 +542,29 @@ export default function EventsScreen() {
                                categoryLabels={CATEGORIES_LABELS}
                                internalCategories={INTERNAL_CATEGORIES} 
                              />
-                             {/* BOTONES RECHAZAR Y APROBAR */}
-                             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
-                               <TouchableOpacity onPress={() => rejectEvent(ev.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                 <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
-                                 <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
-                               </TouchableOpacity>
-                               <TouchableOpacity onPress={() => approveEvent(ev)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                 <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                                 <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
-                               </TouchableOpacity>
+
+                             <View style={{ marginTop: -15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15, zIndex: 10, paddingHorizontal: 15 }}>
+                                {/* 🚀 CAJA DE INFORMACIÓN DE PAGO */}
+                                <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
+                                   <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
+                                   <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
+                                      Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{ev.referenceCode || 'N/A'}</ThemedText> ({ev.paymentMethod || 'Pago'})
+                                   </ThemedText>
+                                </View>
+
+                                {/* BOTONES RECHAZAR Y APROBAR */}
+                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
+                                  <TouchableOpacity onPress={() => rejectEvent(ev.id)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 }}>
+                                    <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+                                    <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity onPress={() => approveEvent(ev)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 }}>
+                                    <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+                                    <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
+                                  </TouchableOpacity>
+                                </View>
                              </View>
+
                           </View>
                         ))}
                       </View>
@@ -599,7 +617,7 @@ export default function EventsScreen() {
       {/* FAB - BOTÓN UNIVERSAL DE CREAR EVENTO */}
       <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}><LinearGradient colors={orangeGradient} style={{ flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-plus" size={28} color="#fff" /></LinearGradient></TouchableOpacity>
 
-      {/* MODAL CREAR EVENTO (FORMULARIO UNIFICADO TIPO TIENDAS) */}
+      {/* MODAL CREAR EVENTO CON PAGO */}
       <RNModal visible={isModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
@@ -626,7 +644,7 @@ export default function EventsScreen() {
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.typeEvent || 'TIPO'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20, paddingBottom: 6 }}>
                   {CATEGORIES_LABELS.map((catLabel: string, index: number) => {
-                    if (index === 0) return null; // Filtramos la primera (Todos)
+                    if (index === 0) return null; 
                     const isActive = formCategoryIdx === index;
                     const iconName = ICONS_ARRAY[index] || 'tag';
                     return (
@@ -751,6 +769,34 @@ export default function EventsScreen() {
                     style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
+                {/* 🚀 MÓDULO DE VERIFICACIÓN DE PAGO */}
+                <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>Verificación de Pago</ThemedText>
+                  <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>
+                    Para promocionar tu evento, realiza el pago de $50 USD mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                  </ThemedText>
+                  
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                    {['Zelle', 'Venmo'].map((method) => (
+                      <TouchableOpacity 
+                        key={method}
+                        onPress={() => setFormPayMethod(method)} 
+                        style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? Colors.accent : Colors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                      >
+                        <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TextInput 
+                    style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                    placeholder={`# CONFIRMACION DE ${formPayMethod}...`} 
+                    placeholderTextColor={Colors.subtext}
+                    value={formRefCode} 
+                    onChangeText={setFormRefCode} 
+                  />
+                </View>
+
                 {/* BOTÓN GUARDAR DINÁMICO */}
                 <TouchableOpacity onPress={handlePublishEvent} disabled={!isFormValid || isPublishing} style={{ alignSelf: 'center', marginTop: 10 }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
@@ -839,7 +885,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
   
-  // Verificamos si el evento está pendiente
   const isPending = !item.approved;
 
   return (
@@ -865,7 +910,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
       </View>
       
       <View style={{ width: '100%', height: 180, backgroundColor: 'transparent' }}>
-        {/* Blindaje Visual de Imagen */}
         {item.image && item.image.length > 5 ? (
           <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
         ) : (
@@ -891,7 +935,7 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
           <View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText></View>
         </View>
 
-        {/* BOTONES DE CONTACTO EN LA TARJETA (Se deshabilitan y bajan su opacidad si está pendiente) */}
+        {/* BOTONES DE CONTACTO EN LA TARJETA */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
           {item.phone && (
             <ActionBtn 

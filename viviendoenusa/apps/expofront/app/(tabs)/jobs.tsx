@@ -27,7 +27,7 @@ const validateComment = (text: string): boolean => {
 };
 
 // 📡 URL BASE PARA LOS EMPLEOS (Asegúrate de que esta sea tu IP actual)
-const API_JOBS_URL = 'http://192.168.1.107:3000/jobs';
+const API_JOBS_URL = 'http://192.168.1.103:3000/jobs';
 
 // --- BASE DE DATOS LOCAL DE CIUDADES ---
 const usCitiesData: Record<string, string[]> = {

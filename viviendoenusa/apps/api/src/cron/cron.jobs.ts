@@ -3,8 +3,8 @@ import { db } from "../../../../packages/db/src";
 import { lawyers, notifications } from "../../../../packages/db/src/schema";
 import { sql, eq, and } from 'drizzle-orm';
 
-// Esta tarea corre CADA MINUTO para pruebas (controlando duplicados por día)
-cron.schedule('* * * * *', async () => {
+// Esta tarea corre TODOS LOS DÍAS a las 00:00 (Medianoche)
+cron.schedule('0 0 * * *', async () => {
   console.log("⏰ [CRON] Buscando suscripciones vencidas o próximas a vencer...");
 
   try {

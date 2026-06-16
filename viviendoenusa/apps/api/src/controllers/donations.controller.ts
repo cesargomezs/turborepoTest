@@ -13,12 +13,35 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // El bucket correcto
 const NOMBRE_BUCKET = 'images'; 
 
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// 🛡️ BARRERA DE SANITIZACIÓN PARA OBJETOS: Limpia todos los textos de un payload
+const sanitizePayload = (data: any) => {
+  if (!data || typeof data !== 'object') return data;
+  const sanitizedData: any = {};
+  for (const key in data) {
+    if (typeof data[key] === 'string') {
+      sanitizedData[key] = sanitizeText(data[key]);
+    } else {
+      sanitizedData[key] = data[key];
+    }
+  }
+  return sanitizedData;
+};
+
 // 🔍 1. CONSULTA GENERAL
 export const getDonations = async (zip?: string) => {
   try {
-    if (!zip || zip.trim().length !== 5) return []; 
+    // 🛡️ Sanitizamos el código postal antes de procesarlo
+    const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
 
-    const cleanZip = zip.trim();
+    if (!cleanZipParam || cleanZipParam.length !== 5) return []; 
+
+    const cleanZip = cleanZipParam;
 
     let query = db
             .select()
@@ -82,21 +105,24 @@ export const getDonations = async (zip?: string) => {
 // 📥 2. CREAR DONACIÓN
 export const createDonation = async (data: any) => {
   try {
+    // 🛡️ Limpiamos toda la data entrante para evitar XSS en el título y descripción
+    const cleanData = sanitizePayload(data);
+
     const dbPayload: any = {
-      title: data.title || 'Sin título', 
-      categoryIdx: Number(data.categoryIdx || 1),
-      phone: data.phone || '',
-      zip: String(data.zip || '').trim(),
-      contactMethod: data.contactMethod || 'whatsapp',
+      title: cleanData.title || 'Sin título', 
+      categoryIdx: Number(cleanData.categoryIdx || 1),
+      phone: cleanData.phone || '',
+      zip: String(cleanData.zip || '').trim(),
+      contactMethod: cleanData.contactMethod || 'whatsapp',
       statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
       estate: 'active', 
-      descriptionDon: data.description || '',
-      locationDon: data.location || 'Rancho Cucamonga',
-      imageUrl: data.image ? data.image.replace('donations/', '') : '',
+      descriptionDon: cleanData.description || '',
+      locationDon: cleanData.location || 'Rancho Cucamonga',
+      imageUrl: cleanData.image ? cleanData.image.replace('donations/', '') : '',
     };
 
     const fallbackUser = await db.select().from(users).limit(1);
-    dbPayload.userId = data.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : null);
+    dbPayload.userId = cleanData.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : null);
 
     const newDonation = await db.insert(donations).values(dbPayload).returning();
     return newDonation[0];
@@ -109,11 +135,18 @@ export const createDonation = async (data: any) => {
 // 🔄 3. ACTUALIZAR ESTADO 
 export const updateDonationStatus = async (id: string, status: string) => {
   try {
+    // 🛡️ Sanitizamos el ID y el nuevo estado
+    const cleanId = sanitizeText(id);
+    const cleanStatus = sanitizeText(status) || 'active';
+
+    if (!cleanId) throw new Error("ID inválido");
+
     const updated = await db
       .update(donations)
-      .set({ estate: status || 'active' }) 
-      .where(eq(donations.id, id)) 
+      .set({ estate: cleanStatus }) 
+      .where(eq(donations.id, cleanId)) 
       .returning();
+      
     return updated[0] || null;
   } catch (error: any) { 
     console.error(`❌ Error al actualizar estado de ${id}:`, error);

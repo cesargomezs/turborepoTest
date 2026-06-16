@@ -14,7 +14,7 @@ export async function validarImagenEnServidor(uri: string): Promise<boolean> {
       type,
     });
 
-    const response = await fetch('http://192.168.1.107:3000/validate-nsfw', {
+    const response = await fetch('http://192.168.1.103:3000/validate-nsfw', {
       method: 'POST',
       body: formData,
       headers: {
