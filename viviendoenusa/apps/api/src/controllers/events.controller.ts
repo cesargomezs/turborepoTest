@@ -9,9 +9,9 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
-const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS (Obligada a retornar SIEMPRE un string para evitar TS2322)
+const sanitizeText = (str: any): string => {
+  if (!str || typeof str !== 'string') return '';
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -29,7 +29,7 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
-// 🔍 1. CONSULTA GENERAL CON PAGOS
+// 🔍 1. CONSULTA GENERAL CON PAGOS (Ahora ordenado por aprobación más reciente)
 export const getEvents = async (zip?: string) => {
   try {
     let query = db
@@ -39,13 +39,14 @@ export const getEvents = async (zip?: string) => {
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .$dynamic(); 
 
-    const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
+    const cleanZipParam = zip ? sanitizeText(String(zip)) : '';
 
     if (cleanZipParam && cleanZipParam.length === 5) {
       query = query.where(sql`${events.zip}::text = ${cleanZipParam}`); 
     }
 
-    query = query.orderBy(desc(events.id));
+    // 🚀 ORDENAMIENTO AÑADIDO: Los eventos aprobados más recientemente aparecen primero
+    query = query.orderBy(desc(events.timepostEnd));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -60,7 +61,7 @@ export const getEvents = async (zip?: string) => {
         const fileName = dbEvent.imageEven;
         let publicUrl = fileName; 
 
-        if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
+        if (fileName && typeof fileName === 'string' && fileName.trim() !== '' && !fileName.startsWith('http')) {
             const cleanName = fileName.replace('events/', '');
             const rutaArchivo = `events/${cleanName}`;
 
@@ -79,8 +80,8 @@ export const getEvents = async (zip?: string) => {
             ...dbEvent,
             imageEven: publicUrl, 
             ownerName: nombreUsuario,
-            referenceCode: dbPayment?.referenceCode || null,
-            paymentMethod: dbPayment?.paymentMethod || null,
+            referenceCode: dbPayment?.referenceCode || '',
+            paymentMethod: dbPayment?.paymentMethod || '',
         }; 
     }));
 
@@ -113,7 +114,7 @@ export const getEventById = async (id: string) => {
 
     let publicUrl = dbEvent.imageEven;
 
-    if (publicUrl && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
+    if (publicUrl && typeof publicUrl === 'string' && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
         const cleanName = publicUrl.replace('events/', '');
         const { data, error } = await supabase.storage
             .from(NOMBRE_BUCKET).createSignedUrl(`events/${cleanName}`, 3600);
@@ -127,8 +128,8 @@ export const getEventById = async (id: string) => {
         ...dbEvent,
         imageEven: publicUrl,
         ownerName: nombreUsuario,
-        referenceCode: dbPayment?.referenceCode || null,
-        paymentMethod: dbPayment?.paymentMethod || null,
+        referenceCode: dbPayment?.referenceCode || '',
+        paymentMethod: dbPayment?.paymentMethod || '',
     };
   } catch (error: any) {
     throw new Error(`Error al obtener el evento por ID: ${error.message}`);
@@ -141,7 +142,7 @@ export const createEvent = async (data: any) => {
     const cleanData = sanitizePayload(data);
 
     let cleanImage = cleanData.imageEven || '';
-    if (cleanImage.startsWith('events/')) {
+    if (typeof cleanImage === 'string' && cleanImage.startsWith('events/')) {
         cleanImage = cleanImage.replace('events/', '');
     }
 
@@ -155,7 +156,7 @@ export const createEvent = async (data: any) => {
           descriptionEven: cleanData.descriptionEven || '',
           imageEven: cleanImage,
           locationEven: cleanData.locationEven || '',
-          zip: cleanData.zip ? String(cleanData.zip).trim() : null,
+          zip: cleanData.zip ? String(cleanData.zip).trim() : '',
           estate: 'CA',
           phone: cleanData.phone || '',
           contactMethod: cleanData.contactMethod || 'whatsapp',
@@ -164,7 +165,7 @@ export const createEvent = async (data: any) => {
         };
 
         const fallbackUser = await db.select().from(users).limit(1);
-        payload.userId = cleanData.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : null);
+        payload.userId = cleanData.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : '');
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
@@ -179,7 +180,7 @@ export const createEvent = async (data: any) => {
             await tx.insert(payments).values({
               entityType: 'event', 
               entityId: newEvent.id,
-              userId: payload.userId,
+              userId: payload.userId as string, // Casteo explícito a string
               referenceCode: String(cleanData.referenceCode).trim(), 
               paymentMethod: String(cleanData.paymentMethod).trim(), 
               amount: "50.00", 
@@ -214,11 +215,16 @@ export const updateEvent = async (id: string, data: any) => {
 
     const cleanPayload = sanitizePayload(data);
 
-    if (cleanPayload.imageEven && cleanPayload.imageEven.startsWith('events/')) {
+    if (cleanPayload.imageEven && typeof cleanPayload.imageEven === 'string' && cleanPayload.imageEven.startsWith('events/')) {
         cleanPayload.imageEven = cleanPayload.imageEven.replace('events/', '');
     }
     
     return await db.transaction(async (tx) => {
+        // 🚀 ACTUALIZACIÓN DE FECHA: Reiniciamos createdAt al aprobar para saltar al top
+        if (cleanPayload.approved === true) {
+            cleanPayload.createdAt = new Date();
+        }
+
         const updated = await tx.update(events).set(cleanPayload).where(eq(events.id, cleanId)).returning();
         const event = updated[0];
 
@@ -246,6 +252,12 @@ export const updateEvent = async (id: string, data: any) => {
             const totalDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             if (totalDaysLeft >= 0) {
+                let safeUserId = event.userId;
+                if (!safeUserId) {
+                    const fallbackUser = await db.select().from(users).limit(1);
+                    safeUserId = fallbackUser.length > 0 ? fallbackUser[0].id : '';
+                }
+
                 const notifsToInsert = [];
                 let hasTodayNotification = false;
 
@@ -275,14 +287,18 @@ export const updateEvent = async (id: string, data: any) => {
                     }
 
                     if (shouldCreate) {
-                        notifsToInsert.push({
+                        const notifObj: any = {
                             title: "Recordatorio de Evento 📅",
                             description: message,
                             type: "event", 
-                            referenceId: String(event.id),
                             visibleAt: showDate, 
-                            userId: event.userId, 
-                        });
+                            userId: safeUserId as string, 
+                        };
+
+                        if ('referenceId' in notifications) notifObj.referenceId = String(event.id);
+                        else if ('reference_id' in notifications) notifObj.reference_id = String(event.id);
+
+                        notifsToInsert.push(notifObj);
                     }
                 }
 
@@ -290,19 +306,23 @@ export const updateEvent = async (id: string, data: any) => {
                 // Si el evento NO es hoy, forzamos la creación de una notificación "Instantánea" 
                 // para que el cliente vea que su pago funcionó de inmediato.
                 if (!hasTodayNotification) {
-                    notifsToInsert.push({
+                    const instantNotif: any = {
                         title: "¡Nuevo Evento Anunciado! 🎉",
                         description: `Se ha publicado: ${event.title}. ¡Revisa los detalles!`,
                         type: "event", 
-                        referenceId: String(event.id),
                         visibleAt: today, // 🚀 Se publica AHORA MISMO
-                        userId: event.userId, 
-                    });
+                        userId: safeUserId as string, 
+                    };
+
+                    if ('referenceId' in notifications) instantNotif.referenceId = String(event.id);
+                    else if ('reference_id' in notifications) instantNotif.reference_id = String(event.id);
+
+                    notifsToInsert.push(instantNotif);
                 }
 
                 if (notifsToInsert.length > 0) {
                     await tx.insert(notifications).values(notifsToInsert);
-                    console.log(`✅ ${notifsToInsert.length} notificaciones programadas (incluyendo la instantánea) para: ${event.title}`);
+                    console.log(`✅ ${notifsToInsert.length} notificaciones programadas para: ${event.title}`);
                 }
             }
         }

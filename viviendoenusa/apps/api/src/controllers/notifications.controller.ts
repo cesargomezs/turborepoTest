@@ -1,5 +1,5 @@
-import { db } from "../../../../packages/db/src"; // Ajusta la ruta a tu carpeta db
-import { notifications } from "../../../../packages/db/src/schema"; // Ajusta a tu schema
+import { db } from "../../../../packages/db/src"; 
+import { notifications } from "../../../../packages/db/src/schema"; 
 import { eq, desc, lte } from "drizzle-orm";
 
 // 🔍 OBTENER NOTIFICACIONES (Solo las que su 'visibleAt' ya se cumplió)
@@ -9,26 +9,40 @@ export const getNotifications = async () => {
 
     const list = await db.select()
       .from(notifications)
-      .where(lte(notifications.visibleAt, now)) // Solo traer las que ya pasaron la fecha visible
+      .where(lte(notifications.visibleAt, now)) 
       .orderBy(desc(notifications.visibleAt))
       .limit(20);
 
-    return list.map(notif => ({
-        id: notif.id,
-        title: notif.title,
-        description: notif.description,
-        type: notif.type,
-        referenceId: notif.referenceId,
-        read: notif.isRead,
-        time: new Date(notif.visibleAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) // O toLocaleDateString()
-    }));
+    // 🚀 BLINDAJE: Verificamos los nombres de las columnas y evitamos que un 'null' rompa el Date()
+    return list.map((notif: any) => {
+        const rawDate = notif.visibleAt || notif.visible_at || notif.createdAt || notif.created_at;
+        
+        let safeTime = '';
+        try {
+            if (rawDate) {
+                safeTime = new Date(rawDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        } catch (e) {
+            safeTime = 'N/A';
+        }
+
+        return {
+            id: notif.id,
+            title: notif.title || 'Notificación',
+            description: notif.description || '',
+            type: notif.type || 'alert',
+            referenceId: notif.referenceId || notif.reference_id || null, // Cobertura Drizzle
+            read: notif.isRead !== undefined ? notif.isRead : (notif.is_read || false), // Cobertura Drizzle
+            time: safeTime
+        };
+    });
   } catch (error: any) {
     console.error("❌ Error al obtener notificaciones:", error);
     throw new Error(`Error: ${error.message}`);
   }
 };
 
-// 👀 MARCAR COMO LEÍDA (Opcional, por si prefieres no borrarlas de inmediato)
+// 👀 MARCAR COMO LEÍDA 
 export const markNotificationAsRead = async (id: string) => {
     try {
         const updated = await db.update(notifications)

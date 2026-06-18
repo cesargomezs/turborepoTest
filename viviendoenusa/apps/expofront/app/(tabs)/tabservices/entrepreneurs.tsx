@@ -1034,7 +1034,7 @@ export default function EntrepreneurshipScreen() {
                     ? <Image source={{ uri: formImage }} style={S.formImagePreview} />
                     : <View style={{ alignItems: 'center' }}>
                         <MaterialCommunityIcons name="camera-plus" size={32} color={DC.subtext} />
-                        <ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'capitalize' }}>{t.entrepreneurshiptab?.businessphoto || 'FOTO'}</ThemedText>
+                        <ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'none' }}>{t.entrepreneurshiptab?.businessphoto || 'FOTO'}</ThemedText>
                       </View>
                   }
                 </TouchableOpacity>
@@ -1058,13 +1058,13 @@ export default function EntrepreneurshipScreen() {
                           <LinearGradient colors={OG} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                             <MaterialCommunityIcons name={iconName as any} size={13} color="#FFF" style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: '#FFF', fontSize: 12, fontWeight: '900' ,textTransform:'capitalize'}}>{catName}</ThemedText>
+                            <ThemedText style={{ color: '#FFF', fontSize: 12, fontWeight: '900' ,textTransform:'none'}}>{catName}</ThemedText>
                           </LinearGradient>
                         ) : (
                           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center',
                             paddingHorizontal: 14, backgroundColor: DC.categoryUnselected }}>
                             <MaterialCommunityIcons name={iconName as any} size={13} color={DC.iconInactive} style={{ marginRight: 5 }} />
-                            <ThemedText style={{ color: DC.iconInactive, fontSize: 12, fontWeight: '700'  ,textTransform:'capitalize'}}>{catName}</ThemedText>
+                            <ThemedText style={{ color: DC.iconInactive, fontSize: 12, fontWeight: '700'  ,textTransform:'none'}}>{catName}</ThemedText>
                           </View>
                         )}
                       </TouchableOpacity>

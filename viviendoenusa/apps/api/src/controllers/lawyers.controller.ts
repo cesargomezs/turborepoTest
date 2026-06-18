@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments } from "../../../../packages/db/src/schema"; 
+import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 
@@ -14,7 +14,7 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🔍 1. CONSULTA GENERAL
+// 🔍 1. CONSULTA GENERAL (Mapeo de descripción blindado y ORDENAMIENTO agregado)
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
@@ -30,6 +30,8 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         ? sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${currentUserId}`
         : sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW()`
     )
+    // 🚀 ORDENAMIENTO: Ordenamos por la fecha de creación/renovación (los más recientes primero)
+    .orderBy(desc(lawyers.createdAt))
     .$dynamic();
 
     const rows = await query;
@@ -75,6 +77,11 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         lawyer.rating = 0;
       }
 
+      // 🚀 BLINDAJE: Nos aseguramos de que el objeto lleve tanto 'description' como 'descriptionLawy'
+      const safeDescription = lawyer.description || lawyer.descriptionLawy || '';
+      lawyer.description = safeDescription;
+      lawyer.descriptionLawy = safeDescription;
+
       if (lawyer.imageUrl && lawyer.imageUrl.trim() !== '' && !lawyer.imageUrl.startsWith('http')) {
           const rutaArchivo = lawyer.imageUrl.startsWith('lawyers/') 
               ? lawyer.imageUrl : `lawyers/${lawyer.imageUrl}`;
@@ -91,12 +98,12 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 
     return finalResult;
   } catch (error: any) {
-    console.error("❌ Error en getLawyers con Ratings y Pagos:", error);
+    console.error("❌ Error en getLawyers:", error);
     return [];
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID 
+// 🔍 2. CONSULTA INDIVIDUAL POR ID (Mapeo de descripción blindado)
 export const getLawyerByIdWithReviews = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -137,6 +144,11 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       lawyerFinal.rating = lawyerFinal.totalRating;
     }
 
+    // 🚀 BLINDAJE: Forzamos la descripción en ambos formatos para la respuesta individual
+    const safeDescription = lawyerFinal.description || lawyerFinal.descriptionLawy || '';
+    lawyerFinal.description = safeDescription;
+    lawyerFinal.descriptionLawy = safeDescription;
+
     if (lawyerFinal.imageUrl && lawyerFinal.imageUrl.trim() !== '' && !lawyerFinal.imageUrl.startsWith('http')) {
         const rutaArchivo = lawyerFinal.imageUrl.startsWith('lawyers/') 
             ? lawyerFinal.imageUrl : `lawyers/${lawyerFinal.imageUrl}`;
@@ -158,7 +170,7 @@ export const getLawyerByIdWithReviews = async (id: string) => {
   }
 };
 
-// 📥 3. CREAR ABOGADO (Sanitizado)
+// 📥 3. CREAR ABOGADO
 export const createLawyer = async (data: any) => {
   try {
     let cleanImage = sanitizeText(data.imageUrl) || '';
@@ -168,6 +180,8 @@ export const createLawyer = async (data: any) => {
 
     return await db.transaction(async (tx) => {
       
+      const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
+
       const lawyerPayload: any = {
         nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
         area: sanitizeText(data.area) || 'General',
@@ -175,11 +189,13 @@ export const createLawyer = async (data: any) => {
         zip: sanitizeText(data.zip) || null,
         phone: sanitizeText(data.phone) || '',
         imageUrl: cleanImage,
-        descriptionLawy: sanitizeText(data.description || data.descriptionLawy) || '',
+        // 🚀 Guardamos en ambas propiedades para asegurar compatibilidad total con el esquema
+        description: safeDesc,
+        descriptionLawy: safeDesc,
         lat: data.lat ? Number(data.lat) : null,
         lng: data.lng ? Number(data.lng) : null,
         userId: sanitizeText(data.userId) || null,
-        approved: false // 🛡️ Siempre false al crear para forzar revisión manual
+        approved: false 
       };
       
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
@@ -200,7 +216,9 @@ export const createLawyer = async (data: any) => {
       return {
          ...newLawyer,
          referenceCode: data.referenceCode,
-         paymentMethod: data.paymentMethod
+         paymentMethod: data.paymentMethod,
+         description: safeDesc,
+         descriptionLawy: safeDesc
       };
     });
   } catch (error: any) { 
@@ -214,7 +232,7 @@ export const createLawyer = async (data: any) => {
   }
 };
 
-// 🔄 4. ACTUALIZAR ABOGADO (Con control estricto "Anti-Overposting")
+// 🔄 4. ACTUALIZAR ABOGADO
 export const updateLawyer = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
@@ -222,8 +240,8 @@ export const updateLawyer = async (id: string, data: any) => {
 
     return await db.transaction(async (tx) => {
       
-      // 🛡️ REGLA: Definir SOLO los campos que el usuario puede editar.
-      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl'];
+      // Añadimos explícitamente ambos nombres de descripción a los permitidos
+      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description', 'descriptionLawy'];
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
@@ -232,20 +250,24 @@ export const updateLawyer = async (id: string, data: any) => {
         }
       }
 
-      // La descripción la manejamos manual para mantener tu lógica de nombres dobles
-      if (data.description || data.descriptionLawy) {
-        updatePayload.descriptionLawy = sanitizeText(data.description || data.descriptionLawy);
+      // 🚀 Si viene una actualización de descripción, la inyectamos de forma segura en las dos variantes
+      if (data.description !== undefined || data.descriptionLawy !== undefined) {
+        const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionLawy);
+        updatePayload.description = safeDesc;
+        updatePayload.descriptionLawy = safeDesc;
       }
 
       if (data.imageUrl && typeof data.imageUrl === 'string' && data.imageUrl.startsWith('lawyers/')) {
         updatePayload.imageUrl = data.imageUrl.replace('lawyers/', '');
       }
 
-      // 🛡️ La lógica del administrador para aprobar no puede ser inyectada maliciosamente
       const isApproved = String(data.approved).toLowerCase() === 'true';
 
       if (isApproved) {
         updatePayload.approved = true; 
+        
+        // 🚀 ACTUALIZACIÓN DE FECHA: Reiniciamos createdAt para que salte al top de la lista
+        updatePayload.createdAt = new Date();
         
         let monthsToAdd = 1; 
         if (data.durationMonths) {
@@ -280,7 +302,25 @@ export const updateLawyer = async (id: string, data: any) => {
         .where(eq(lawyers.id, cleanId))
         .returning();
         
-      return updated[0] || null;
+      const lawyer = updated[0];
+
+      // GENERAR NOTIFICACIÓN GLOBAL Y CLICKEABLE AL APROBAR
+      if (isApproved && lawyer) {
+        const notifPayload: any = {
+            title: "¡Abogado Verificado! ⚖️",
+            description: `El abogado ${lawyer.nameLawy} ahora es parte de la red de servicios. ¡Visita su perfil!`,
+            type: "lawyer", 
+            visibleAt: new Date(), 
+            userId: lawyer.userId, // 🚀 FIX: Postgres exige que no sea null. Se lo asignamos al creador.
+        };
+
+        if ('referenceId' in notifications) notifPayload.referenceId = String(lawyer.id);
+        else if ('reference_id' in notifications) notifPayload.reference_id = String(lawyer.id);
+
+        await tx.insert(notifications).values(notifPayload);
+      }
+
+      return lawyer || null;
     });
 
   } catch (error: any) { 
@@ -289,7 +329,7 @@ export const updateLawyer = async (id: string, data: any) => {
   }
 };
 
-// 🚀 5. INGRESO DE RATING Y RESEÑA (Blindado contra Spam)
+// 🚀 5. INGRESO DE RATING Y RESEÑA
 export const createRating = async (data: any) => {
   try {
     let validUserId = sanitizeText(data.userId) || null;
@@ -300,7 +340,6 @@ export const createRating = async (data: any) => {
 
     const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
 
-    // 🛡️ REGLA DE NEGOCIO: Validar que este usuario NO haya calificado ya a este abogado
     if (validUserId && targetReferenceId) {
         const existingRating = await db.select()
           .from(ratingTable)
@@ -353,8 +392,8 @@ export const createRating = async (data: any) => {
           reviewPayload.type_detail_id = '035118eb-612e-41a2-ac95-b4f339b4e388';
       }
 
-      const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
-      savedComment = newReview[0].comment || '';
+      const reviewRows = await db.insert(reviewsTable).values(reviewPayload).returning();
+      savedComment = reviewRows[0].comment || '';
     }
 
     return {
@@ -382,7 +421,7 @@ export const deleteLawyer = async (id: string) => {
   }
 };
 
-// 🔄 7. RENOVAR ABOGADO (Seguro)
+// 🔄 7. RENOVAR ABOGADO
 export const renewLawyer = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
@@ -394,7 +433,6 @@ export const renewLawyer = async (id: string, data: any) => {
     }
 
     return await db.transaction(async (tx) => {
-      // 1. Insertamos un NUEVO registro de pago
       await tx.insert(payments).values({
         entityType: 'lawyer',
         entityId: cleanId,
@@ -406,7 +444,6 @@ export const renewLawyer = async (id: string, data: any) => {
         status: "pending"
       });
 
-      // 2. Regresamos el estado del abogado a "pendiente"
       const updated = await tx
         .update(lawyers)
         .set({ approved: false }) 

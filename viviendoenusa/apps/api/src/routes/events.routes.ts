@@ -9,7 +9,7 @@ import {
 
 const router = Router();
 
-// 🔍 GET: Obtener eventos (soporta ?zip=12345)
+// 🔍 GET: Obtener eventos (soporta filtrado por código postal ?zip=12345)
 router.get('/', async (req, res) => {
   try {
     const zipCode = req.query.zip as string; 
@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 🔍 GET: Obtener un evento por ID
+// 🚀 GET: Obtener un evento por ID (¡ESTA ES LA RUTA QUE USA LA NOTIFICACIÓN!)
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -32,6 +32,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Evento no encontrado' });
     }
     
+    // Si lo encuentra, lo devuelve al frontend para abrir el Modal expandido
     return res.json(event);
   } catch (error: any) {
     console.error(`❌ Error en GET /events/${req.params.id}:`, error.message);
@@ -39,12 +40,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 📥 POST: Crear nuevo evento (Y registrar el pago)
+// 📥 POST: Crear nuevo evento (Y registrar el pago en pendiente)
 router.post('/', async (req, res) => {
   try {
-    // Excelente log para ver qué envía la App Móvil
-    console.log("📦 Datos recibidos POST /events:", JSON.stringify(req.body, null, 2));
-    
     const newEvent = await createEvent(req.body);
     return res.status(201).json(newEvent);
   } catch (error: any) {
@@ -53,7 +51,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 🔄 PUT: Actualizar/Aprobar un evento (Y generar notificaciones)
+// 🔄 PUT: Actualizar/Aprobar un evento (Y disparar Notificaciones Programadas/Instantáneas)
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params; 
@@ -70,7 +68,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// 🗑️ DELETE: Eliminar un evento
+// 🗑️ DELETE: Eliminar un evento (Sirve también para rechazar en revisión)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;

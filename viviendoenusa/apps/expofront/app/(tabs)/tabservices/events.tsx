@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, memo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter } from 'expo-router'; 
+import { useRouter, useLocalSearchParams } from 'expo-router'; 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -44,7 +44,7 @@ const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
 
-// 📡 URL BASE PARA LOS EVENTOS
+// 📡 URL BASE PARA LOS EVENTOS CONECTADA AL BACKEND
 const API_EVENTS_URL = 'http://192.168.1.103:3000/events';
 
 export default function EventsScreen() {
@@ -55,10 +55,13 @@ export default function EventsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const stylesUnified = useUnifiedCardStyles();
-  
-  
+
+  // 🚀 EXTRACCIÓN DEL PARÁMETRO DE NOTIFICACIÓN
+  const params = useLocalSearchParams();
+  const rawNotifId = params.openEventId || params.id || params.referenceId;
+  const eventIdFromNotif = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
+
   const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
-  const currentUserName = 'Cesar'; 
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
   
   const isWeb = Platform.OS === 'web';
@@ -69,7 +72,6 @@ export default function EventsScreen() {
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'];
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
-  // COLORES UNIFICADOS BASE TIENDAS
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#607D8B',
@@ -86,27 +88,26 @@ export default function EventsScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : height * 0.69);
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // --- TRADUCCIÓN DE CATEGORÍAS ---
   const rawCategories = t.eventstab?.categoriesList;
   const CATEGORIES_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_CATEGORIES.length
       ? rawCategories 
       : INTERNAL_CATEGORIES;
 
-  // --- ESTADOS ---
+  // --- ESTADOS PRINCIPALES ---
   const [zipCode, setZipCode] = useState('');
   const [events, setEvents] = useState<any[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); // 0 = 'Todos'
+  const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
-  // --- ESTADOS FORMULARIO Y ADMIN ---
+  // --- ESTADOS FORMULARIO ---
   const [isPublishing, setIsPublishing] = useState(false);
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formCategoryIdx, setFormCategoryIdx] = useState(1); // 1 = 'Social'
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formLocation, setFormLocation] = useState('');
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState('');
@@ -117,7 +118,6 @@ export default function EventsScreen() {
   const [formTime, setFormTime] = useState(new Date());
   const [formTimeEnd, setFormTimeEnd] = useState(new Date());
   
-  // 🚀 ESTADOS PARA PAGO DE EVENTOS
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
 
@@ -125,20 +125,87 @@ export default function EventsScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showTimeEndPicker, setShowTimeEndPicker] = useState(false);
 
-  // Estados Admin
   const [pendingEvents, setPendingEvents] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // 🚀 Validación de formulario estricta (Incluyendo Pago)
+  // 🚀 Rastreador para evitar que la notificación se procese en un loop infinito
+  const lastProcessedNotifId = useRef<string | null>(null);
+
   const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage && formRefCode.trim());
 
-  // FETCH EVENTOS ACTUALIZADO
+  // 🚀 LÓGICA HÍBRIDA MEJORADA: AUTO-ABRIR DETALLE Y POBLAR FONDO (UX/UI)
+  useEffect(() => {
+    if (eventIdFromNotif) {
+      // 1. BLINDAJE: Limpiamos espacios o saltos de línea ocultos que causan el Timeout falso
+      const cleanEventId = String(eventIdFromNotif).trim();
+      
+      if (cleanEventId !== lastProcessedNotifId.current) {
+        lastProcessedNotifId.current = cleanEventId;
+        console.log("🔥 Evento detectado desde notificación:", cleanEventId);
+        
+        const localMatch = events.find(e => String(e.id) === cleanEventId);
+        
+        if (localMatch) {
+          console.log("✅ Evento encontrado en memoria local. Abriendo modal...");
+          setSelectedEventDetails(localMatch);
+        } else {
+          const fetchSpecificEvent = async () => {
+            try {
+              // 2. Usamos el ID totalmente limpio para la ruta
+              const res = await fetch(`${API_EVENTS_URL}/${cleanEventId}`);
+              
+              if (res.ok) {
+                const data = await res.json();
+                
+                let formattedDate = '';
+                try {
+                  formattedDate = new Date(data.dateEvent).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                } catch(e) { formattedDate = 'Fecha N/A'; }
+
+                const eventMapped = {
+                  ...data,
+                  category: INTERNAL_CATEGORIES[data.categoryIdx] || 'Social',
+                  date: formattedDate,
+                  time: data.timeStart || 'N/A',
+                  timeEnd: data.timeEnd || 'N/A',
+                  description: data.descriptionEven || '',
+                  image: data.imageEven || '',
+                  location: data.locationEven || '',
+                };
+
+                console.log("✅ Evento traído del backend con éxito. Abriendo modal...");
+                setSelectedEventDetails(eventMapped); 
+
+                // 🚀 MAGIA DE UX: Poner el ZIP en el input y traer toda la cartelera de fondo
+                if (data.zip && String(data.zip).length === 5) {
+                  setZipCode(String(data.zip));
+                  fetchEvents(String(data.zip), isAdminMode);
+                }
+
+              } else {
+                console.log(`⚠️ El evento específico no se encontró en la base de datos (Error ${res.status})`);
+              }
+            } catch (e) {
+              console.error("❌ Error haciendo fetch al ID del evento:", e);
+            }
+          };
+          fetchSpecificEvent();
+        }
+      }
+    }
+  }, [eventIdFromNotif]); 
+
+  // 🚀 LIMPIEZA TOTAL AL CERRAR EL MODAL
+  const handleCloseDetailModal = () => {
+    setSelectedEventDetails(null);
+    router.setParams({ openEventId: '', id: '', referenceId: '' });
+  };
+
   const fetchEvents = async (searchZip?: string, forceAdminFetch: boolean = false) => {
     if (!forceAdminFetch && (!searchZip || searchZip.trim().length !== 5)) return;
     
     try {
       setIsLoadingPosts(true);
-      
       const url = (searchZip && searchZip.trim().length === 5) 
           ? `${API_EVENTS_URL}?zip=${searchZip.trim()}` 
           : API_EVENTS_URL;
@@ -162,7 +229,6 @@ export default function EventsScreen() {
             description: item.descriptionEven || '',
             image: item.imageEven || '',
             location: item.locationEven || '',
-            // 🚀 Mapeamos la info de pago si viene del backend
             referenceCode: item.referenceCode,
             paymentMethod: item.paymentMethod
           };
@@ -181,7 +247,6 @@ export default function EventsScreen() {
     }
   };
 
-  // BOTÓN AUTOAJUSTABLE BASE TIENDAS
   const ActionBtn = ({ icon, text, color, bgColor, onPress, minWidth = 100, disabled = false }: any) => (
     <TouchableOpacity 
       disabled={disabled} 
@@ -259,37 +324,41 @@ export default function EventsScreen() {
 
     setIsPublishing(true);
     try {
-      const esSegura = await validarImagenEnServidor(formImage);
-      if (!esSegura) {
-        setIsPublishing(false);
-        triggerAlert(t.communitytab?.imageInappropriateTittle || "Bloqueada", t.communitytab?.imageInappropriateDescription || "Imagen inválida");
-        return;
+      let finalImageName = '';
+      if (formImage) {
+        const esSegura = await validarImagenEnServidor(formImage);
+        if (!esSegura) {
+          setIsPublishing(false);
+          triggerAlert(t.communitytab?.imageInappropriateTittle || "Bloqueada", t.communitytab?.imageInappropriateDescription || "Imagen inválida");
+          return;
+        }
+
+        const formData = new FormData();
+        const filename = formImage.split('/').pop() || 'evento.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        if (Platform.OS === 'web') {
+          const responseBlob = await fetch(formImage);
+          const blob = await responseBlob.blob();
+          formData.append('imagen', blob as any, filename);
+        } else {
+          formData.append('imagen', { uri: formImage, name: filename, type } as any);
+        }
+
+        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/events', {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' },
+        });
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
+        finalImageName = uploadData.identificadorArchivo; 
       }
 
-      const formData = new FormData();
-      const filename = formImage!.split('/').pop() || 'imagen.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image/jpeg`;
-
-      formData.append('imagen', { 
-        uri: formImage, 
-        name: filename, 
-        type 
-      } as any);
-
-      const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/events', {
-        method: 'POST',
-        body: formData,
-        headers: { 'Accept': 'application/json' },
-      });
-
-      const uploadData = await uploadResponse.json();
-      if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
-      
-      const finalImageName = uploadData.identificadorArchivo; 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
 
-      // 🚀 INCLUIMOS DATOS DE PAGO EN EL PAYLOAD
       const newEntryPayload = {
         title: trimmedTitle, 
         categoryIdx: formCategoryIdx,
@@ -302,7 +371,7 @@ export default function EventsScreen() {
         zip: trimmedZip, 
         phone: fullPhone, 
         contactMethod: formContactMethod,
-        approved: false, // Por defecto se va a revisión
+        approved: false, 
         userId: userMetadata?.id || userMetadata?.userId || null,
         referenceCode: formRefCode,
         paymentMethod: formPayMethod
@@ -384,7 +453,7 @@ export default function EventsScreen() {
     setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormZip('');
     setFormPhone(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
     setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
-    setFormRefCode(''); setFormPayMethod('Zelle'); // Limpiar info pago
+    setFormRefCode(''); setFormPayMethod('Zelle'); 
   };
 
   const filteredEvents = useMemo(() => 
@@ -449,7 +518,7 @@ export default function EventsScreen() {
                         setPendingEvents([]);
                     }
                 }}>
-                  <MaterialCommunityIcons name="calendar-star" size={32} color={isAdminMode ? Colors.accent : Colors.accenticon} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
+                  <MaterialCommunityIcons name="calendar-star" size={40} color={isAdminMode ? Colors.accent : Colors.accenticon} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
                 </TouchableOpacity>
               </View>
 
@@ -524,7 +593,7 @@ export default function EventsScreen() {
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* 🚀 CAJA DE APROBACIÓN ADMIN CON VERIFICACIÓN DE PAGO */}
+                    {/* SECCIÓN ADMIN */}
                     {isAdminMode && pendingEvents.length > 0 && (
                       <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
                         <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingEvents.length})</ThemedText>
@@ -544,7 +613,6 @@ export default function EventsScreen() {
                              />
 
                              <View style={{ marginTop: -15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15, zIndex: 10, paddingHorizontal: 15 }}>
-                                {/* 🚀 CAJA DE INFORMACIÓN DE PAGO */}
                                 <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
                                    <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
                                    <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -552,7 +620,6 @@ export default function EventsScreen() {
                                    </ThemedText>
                                 </View>
 
-                                {/* BOTONES RECHAZAR Y APROBAR */}
                                 <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
                                   <TouchableOpacity onPress={() => rejectEvent(ev.id)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 }}>
                                     <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
@@ -564,7 +631,6 @@ export default function EventsScreen() {
                                   </TouchableOpacity>
                                 </View>
                              </View>
-
                           </View>
                         ))}
                       </View>
@@ -614,7 +680,7 @@ export default function EventsScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB - BOTÓN UNIVERSAL DE CREAR EVENTO */}
+      {/* FAB - NUEVO EVENTO */}
       <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}><LinearGradient colors={orangeGradient} style={{ flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-plus" size={28} color="#fff" /></LinearGradient></TouchableOpacity>
 
       {/* MODAL CREAR EVENTO CON PAGO */}
@@ -635,12 +701,10 @@ export default function EventsScreen() {
               
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 
-                {/* IMAGEN */}
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border, backgroundColor: Colors.inputBg }}>
                   {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight:'800', fontSize:11, marginTop:8}}>{t.eventstab?.photoEvent || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
 
-                {/* CATEGORÍA */}
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.typeEvent || 'TIPO'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20, paddingBottom: 6 }}>
                   {CATEGORIES_LABELS.map((catLabel: string, index: number) => {
@@ -652,12 +716,12 @@ export default function EventsScreen() {
                         {isActive ? (
                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                             <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
-                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'capitalize' }}>{catLabel}</ThemedText>
+                            <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'none' }}>{catLabel}</ThemedText>
                           </LinearGradient>
                         ) : (
                           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
                             <MaterialCommunityIcons name={iconName as any} size={14} color={Colors.iconInactive} style={{ marginRight: 6 }} />
-                            <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600',textTransform:'capitalize' }}>{catLabel}</ThemedText>
+                            <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600',textTransform:'none' }}>{catLabel}</ThemedText>
                           </View>
                         )}
                       </TouchableOpacity>
@@ -665,7 +729,6 @@ export default function EventsScreen() {
                   })}
                 </ScrollView>
                 
-                {/* FECHA */}
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.dateEvent || 'FECHA'}</ThemedText>
                 {isWeb ? (
                   <View style={{ position: 'relative', display: 'flex', alignItems: 'center', marginBottom: 15 }}>
@@ -688,7 +751,6 @@ export default function EventsScreen() {
                   </View>
                 )}
 
-                {/* TIEMPO (HORAS) */}
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.timeEvent || 'HORA'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   {isWeb ? (
@@ -733,15 +795,13 @@ export default function EventsScreen() {
                   </View>
                 )}
 
-                {/* TEXTOS Y LOCALIZACIÓN */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'capitalize' }}>{t.eventstab?.informationevent || 'Información'}</ThemedText>
-                <TextInput value={formTitle} onChangeText={setFormTitle} placeholder={t.eventstab?.nameEvent || 'Nombre'}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formLocation} onChangeText={setFormLocation} placeholder={t.eventstab?.addressEvent || 'Dirección'} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'none' }}>{t.eventstab?.informationevent || 'Información'}</ThemedText>
+                <TextInput value={formTitle} onChangeText={setFormTitle} autoCapitalize="words" placeholder={t.eventstab?.nameEvent || 'Nombre'}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formLocation} onChangeText={setFormLocation} autoCapitalize="words" placeholder={t.eventstab?.addressEvent || 'Dirección'} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formDescription} onChangeText={setFormDescription} placeholder={t.eventstab?.detailsEvent || 'Detalles'} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formDescription} onChangeText={setFormDescription} autoCapitalize="sentences" placeholder={t.eventstab?.detailsEvent || 'Detalles'} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 
-                {/* MÉTODO DE CONTACTO Y PREFIJO UNIFICADO */}
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'capitalize'}}>{t.eventstab?.typeContact || 'Contacto'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'none'}}>{t.eventstab?.typeContact || 'Contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : Colors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : Colors.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : Colors.subtext} style={{ marginRight: 8 }} />
@@ -769,7 +829,6 @@ export default function EventsScreen() {
                     style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                {/* 🚀 MÓDULO DE VERIFICACIÓN DE PAGO */}
                 <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                   <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>Verificación de Pago</ThemedText>
                   <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>
@@ -794,10 +853,10 @@ export default function EventsScreen() {
                     placeholderTextColor={Colors.subtext}
                     value={formRefCode} 
                     onChangeText={setFormRefCode} 
+                    autoCapitalize="characters"
                   />
                 </View>
 
-                {/* BOTÓN GUARDAR DINÁMICO */}
                 <TouchableOpacity onPress={handlePublishEvent} disabled={!isFormValid || isPublishing} style={{ alignSelf: 'center', marginTop: 10 }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <>
@@ -813,15 +872,17 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
-      {/* MODAL DETALLE EXPANDIDO */}
+      {/* 🚀 MODAL DETALLE EXPANDIDO CON FUNCIÓN DE CIERRE LIMPIO */}
       <RNModal visible={!!selectedEventDetails} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setSelectedEventDetails(null)} />
+          
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={handleCloseDetailModal} />
+          
           <View style={{ width: '92%', height: '80%', borderRadius: 35, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: Colors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={{ width: '100%', height: 240, backgroundColor: 'transparent' }}>
-               {selectedEventDetails?.image && selectedEventDetails?.image.length > 5 ? (
+               {selectedEventDetails?.image && (selectedEventDetails?.image as string).length > 5 ? (
                  <Image source={{ uri: selectedEventDetails?.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                ) : (
                  <View style={{ width: '100%', height: '100%', backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
@@ -830,7 +891,10 @@ export default function EventsScreen() {
                )}
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={{ position: 'absolute', width: '100%', height: 80 }} />
             </View>
-            <TouchableOpacity onPress={() => setSelectedEventDetails(null)} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, padding: 6, zIndex: 10 }}><MaterialCommunityIcons name="close" size={24} color="#FFF" /></TouchableOpacity>
+            
+            <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, padding: 6, zIndex: 10 }}>
+              <MaterialCommunityIcons name="close" size={24} color="#FFF" />
+            </TouchableOpacity>
             
             <ScrollView style={{ padding: 25 }}>
               <View style={{flexDirection:'row', alignItems:'center', marginBottom:10}}>
@@ -847,7 +911,6 @@ export default function EventsScreen() {
               <View style={{height:1, backgroundColor:Colors.border, marginVertical:20}} />
               <ThemedText style={{color:Colors.text, lineHeight:22, fontSize:15}}>{selectedEventDetails?.description}</ThemedText>
               
-              {/* BOTONES ACCIÓN DETALLE */}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 25 }}>
                 {selectedEventDetails?.phone && (
                   <ActionBtn 
@@ -893,7 +956,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
         onPress={() => onOpen(item)} 
         style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
     >
-      {/* Banner de Pendiente de Revisión */}
       {isPending && (
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
@@ -910,7 +972,7 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
       </View>
       
       <View style={{ width: '100%', height: 180, backgroundColor: 'transparent' }}>
-        {item.image && item.image.length > 5 ? (
+        {item.image && (item.image as string).length > 5 ? (
           <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
         ) : (
           <View style={{ width: '100%', height: '100%', backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
@@ -924,7 +986,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
              {t.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
            </ThemedText>
          </View>
-
       </View>
       
       <View style={{ padding: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.01)' }}>
@@ -935,7 +996,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
           <View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText></View>
         </View>
 
-        {/* BOTONES DE CONTACTO EN LA TARJETA */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
           {item.phone && (
             <ActionBtn 
@@ -962,7 +1022,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
             bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
            />
         </View>
-
       </View>
     </TouchableOpacity>
   );

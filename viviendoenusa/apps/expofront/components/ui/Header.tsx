@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useState, useEffect } from 'react'; // 🚀 Asegúrate de importar useEffect
+import { useState, useEffect } from 'react'; 
 import { 
   View, Image, Platform, TouchableOpacity, Modal, StyleSheet, Pressable, ScrollView, KeyboardAvoidingView 
 } from 'react-native';
@@ -17,6 +17,7 @@ import { useTranslation } from '../../hooks/useTranslation';
 
 // 📡 URL BASE PARA LAS NOTIFICACIONES (Asegúrate de que esta sea tu IP correcta)
 const API_NOTIFICATIONS_URL = 'http://192.168.1.103:3000/notifications';
+
 
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
@@ -74,7 +75,8 @@ export default function Header({ title }: { title?: string }) {
       case 'job': return { name: 'briefcase', color: '#4CAF50' }; 
       case 'store': return { name: 'store', color: '#FFB300' }; 
       case 'alert': return { name: 'alert-circle', color: '#FF5F6D' }; 
-      case 'event': return { name: 'calendar', color: '#9C27B0' }; // 🚀 Icono para eventos
+      case 'event': return { name: 'calendar', color: '#9C27B0' }; 
+      case 'lawyer': return { name: 'scale-balance', color: '#FF5F6D' }; // 🚀 Ícono para abogados
       default: return { name: 'bell', color: Colors[theme].text };
     }
   };
@@ -101,7 +103,7 @@ export default function Header({ title }: { title?: string }) {
       if (notif.type === 'job') {
         router.navigate({ 
             pathname: '/jobs', 
-            params: { openJobId: notif.referenceId } // Mandamos el ID real de referencia
+            params: { openJobId: notif.referenceId } 
         }); 
       } else if (notif.type === 'store') {
         router.navigate({ 
@@ -111,15 +113,19 @@ export default function Header({ title }: { title?: string }) {
       } else if (notif.type === 'community' ) {
         router.navigate({
             pathname: '/tabservices/community',
-            params: { openEventId: notif.referenceId } // 🚀 Parámetro para abrir el evento
+            params: { openEventId: notif.referenceId } 
         }); 
       } else if (notif.type === 'event') {
         router.navigate({
             pathname: '/tabservices/events',
-            params: { openEventId: notif.referenceId } // 🚀 Parámetro para abrir el evento
+            params: { openEventId: notif.referenceId } 
+        }); 
+      } else if (notif.type === 'lawyer') { // 🚀 AGREGADO: Redirección para Abogados
+        router.navigate({
+            pathname: '/tabservices/lawyers', // Ajusta esta ruta si tu archivo está en una carpeta distinta
+            params: { id: notif.referenceId } 
         }); 
       }
-
     }, 300); 
   };
 
