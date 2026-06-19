@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter } from 'expo-router'; 
+import { useRouter, useLocalSearchParams } from 'expo-router'; 
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,7 +35,8 @@ const COUNTRIES = [
 ];
 
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
-const API_STORES_URL = 'http://192.168.1.103:3000/stores';
+const API_STORES_URL = 'http://192.168.252.243:3000/stores';
+const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs';
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
@@ -43,7 +44,7 @@ const validateComment = (text: string): boolean => {
 };
 
 const openDirections = (store: any) => {
-  const label = encodeURIComponent(store.name);
+  const label = encodeURIComponent(store.name || store.nameStores);
   const url = Platform.select({
     ios: `maps:0,0?q=${label}@${store.lat},${store.lng}`,
     android: `geo:0,0?q=${store.lat},${store.lng}(${label})`,
@@ -92,7 +93,15 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         ))}
       </View>
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput value={comment} onChangeText={setComment} placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+        <TextInput 
+          value={comment} 
+          onChangeText={setComment} 
+          placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} 
+          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
+          multiline 
+          autoCapitalize="sentences"
+          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+        />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
@@ -103,10 +112,91 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
+// 🚀 COMPONENTE: MODAL DE RENOVACIÓN DE TIENDA
+const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS }: any) => {
+  const [renewRefCode, setRenewRefCode] = useState('');
+  const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
+  const [isRenewing, setIsRenewing] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setRenewRefCode('');
+      setRenewPayMethod('Zelle');
+    }
+  }, [visible]);
+
+  const handleRenewSubmit = async () => {
+    if (!renewRefCode.trim()) return Alert.alert("Aviso", "Ingresa el código de confirmación de pago.");
+    
+    setIsRenewing(true);
+    try {
+      const payload = { referenceCode: renewRefCode, paymentMethod: renewPayMethod, userId: currentUserId };
+      const res = await fetch(`${API_STORES_URL}/${storeToRenew.id}/renew`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error();
+      Alert.alert("Éxito", "Solicitud de renovación enviada. Será verificada pronto.");
+      onSuccess();
+    } catch (e) {
+      Alert.alert("Error", "No se pudo procesar la renovación.");
+    } finally {
+      setIsRenewing(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isRenewing && onClose()} />
+        <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: isLargeWeb ? 400 : '90%', backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', padding: 25, borderRadius: 24, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' }}>
+            {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
+              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>Renovar Negocio</ThemedText>
+              <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
+              Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{storeToRenew?.name || storeToRenew?.nameStores}</ThemedText> realizando el pago de ${currentTariff} USD y enviando el comprobante aquí abajo.
+            </ThemedText>
+            
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+              {['Zelle', 'Venmo'].map((method) => (
+                <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                  <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput 
+              style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+              placeholder={`# CONFIRMACION DE ${renewPayMethod}...`} placeholderTextColor={Colors.subtext}
+              value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
+            />
+
+            <TouchableOpacity onPress={handleRenewSubmit} disabled={isRenewing}>
+              <LinearGradient colors={orangeGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                {isRenewing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" style={{ marginRight: 8 }} />}
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Enviar Renovación</ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+});
+
 export default function StoresScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  
+  const params = useLocalSearchParams();
+  const rawNotifId = params.id || params.storeId || params.referenceId || params.reference_id || params.openEventId;
+  const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
+
   const mapRef = useRef<MapView>(null); 
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
@@ -141,12 +231,10 @@ export default function StoresScreen() {
     ? rawCategories
     : ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'];
 
-  // --- ESTADOS ---
   const [zipCode, setZipCode] = useState('');
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [loading, setLoading] = useState(false);
   
-  // Listas de datos
   const [allStores, setAllStores] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]); 
   
@@ -159,7 +247,9 @@ export default function StoresScreen() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
 
-  // --- ESTADOS SUGERIR NEGOCIO ---
+  const [renewModalVisible, setRenewModalVisible] = useState(false);
+  const [storeToRenew, setStoreToRenew] = useState<any>(null);
+
   const [isModalVisible, setModalVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
@@ -170,15 +260,146 @@ export default function StoresScreen() {
   const [formPhone, setFormPhone] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
+
+  const [formRefCode, setFormRefCode] = useState('');
+  const [formPayMethod, setFormPayMethod] = useState('Zelle');
+
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
+  const [currentTariff, setCurrentTariff] = useState<string>("50.00");
+
+  const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
   const isZipValid = zipCode.length === 5;
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // --- OBTENER UBICACIÓN INICIAL ---
+  const isFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage && formRefCode.trim());
+
+  const resetForm = () => {
+    setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
+    setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); 
+    setFormRefCode(''); setFormPayMethod('Zelle'); 
+  };
+
+  useEffect(() => {
+    const fetchTariff = async () => {
+      try {
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Store`);
+        if (res.ok) {
+          const tariffsData = await res.json();
+          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
+            setCurrentTariff(tariffsData[0].price);
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo cargar la tarifa dinámica", e);
+      }
+    };
+    fetchTariff();
+  }, []);
+
+  const fetchStoresData = async (searchZip: string) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`);
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        const mappedData = data.map(item => ({
+          id: item.id,
+          name: item.nameStores || item.name || 'Sin nombre',
+          description: item.descriptionStores || item.description || '',
+          address: item.addressStores || item.address || '',
+          categoryId: item.categoryId || 0,
+          zip: item.zip,
+          image: item.imageStores || item.image || '',
+          lat: Number(item.lat) || 34.0934,
+          lng: Number(item.lng) || -117.5847,
+          phone: item.phone || '',
+          rating: Number(item.rating) || 0,
+          reviews: Array.isArray(item.reviews) ? item.reviews : [],
+          totalReviews: Number(item.totalReviews) || 0,
+          status: item.approved ? 'approved' : 'pending',
+          ownerName: item.ownerName,
+          referenceCode: item.referenceCode,
+          paymentMethod: item.paymentMethod,
+          userId: item.userId || item.user_id,
+          timepostEnd: item.timepostEnd || item.timepost_end
+        }));
+
+        const approved = mappedData.filter(s => s.status === 'approved');
+        setAllStores(approved);
+        
+        if (!isAdminMode) {
+          setPendingStores(mappedData.filter(s => s.status === 'pending'));
+        }
+        return approved;
+      }
+      return [];
+    } catch (e) {
+      console.error("Error", e);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🚀 LÓGICA DE NOTIFICACIÓN CORREGIDA (Mapeo asegurado)
+  const lastProcessedNotifId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (notificationId) {
+      const cleanNotifId = String(notificationId).trim();
+
+      if (cleanNotifId !== lastProcessedNotifId.current) {
+        lastProcessedNotifId.current = cleanNotifId;
+        
+        const localMatch = allStores.find(l => String(l.id) === cleanNotifId) || pendingStores.find(l => String(l.id) === cleanNotifId);
+
+        if (localMatch) {
+          setSelectedDetail(localMatch);
+        } else {
+          const fetchSpecificStore = async () => {
+            try {
+              const res = await fetch(`${API_STORES_URL}/${cleanNotifId}`);
+              if (res.ok) {
+                const data = await res.json();
+                
+                // 🚀 FIX CRÍTICO: Aseguramos el mapeo de variables para el Modal
+                const mappedStore = {
+                  ...data,
+                  name: data.nameStores || data.name || 'Sin nombre',
+                  address: data.addressStores || data.address || '',
+                  description: data.descriptionStores || data.description || '',
+                  image: data.imageStores || data.image || data.imageUrl || '',
+                  lat: Number(data.lat) || 34.0934,
+                  lng: Number(data.lng) || -117.5847,
+                };
+
+                setSelectedDetail(mappedStore); 
+
+                if (data.zip && String(data.zip).length === 5) {
+                  setZipCode(String(data.zip));
+                  handleSearch(undefined, String(data.zip));
+                }
+              }
+            } catch (e) {
+              console.error("❌ Error Fetch notificación de Tienda:", e);
+            }
+          };
+          fetchSpecificStore();
+        }
+      }
+    }
+  }, [notificationId]);
+
+  const handleCloseDetailModal = () => {
+    setSelectedDetail(null);
+    router.setParams({ id: '', storeId: '', referenceId: '', reference_id: '', openEventId: '' });
+  };
+
   const getCurrentLocation = async (isManual = false) => {
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -199,7 +420,6 @@ export default function StoresScreen() {
     }
   }, []);
 
-  // 🚀 EFECTO PARA MODO ADMIN: Cargar TODOS los pendientes al activarlo
   useEffect(() => {
     if (isAdminMode) {
       fetchAllPendingStores();
@@ -212,29 +432,42 @@ export default function StoresScreen() {
     }
   }, [isAdminMode]);
 
-  // --- RE-FILTRAR RESULTADOS LOCALMENTE ---
   const applyLocalFilters = (storesList: any[], categoryIdx: number, lat: number, lng: number) => {
     let filtered = (categoryIdx === 0) ? [...storesList] : storesList.filter(l => Number(l.categoryId) === categoryIdx);
-    filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
+    
+    filtered.sort((a, b) => {
+      const aIsOwner = a.userId === currentUserId;
+      const aIsExpired = a.timepostEnd ? new Date(a.timepostEnd) < new Date() : false;
+      const aNeedsRenewal = aIsOwner && aIsExpired;
+
+      const bIsOwner = b.userId === currentUserId;
+      const bIsExpired = b.timepostEnd ? new Date(b.timepostEnd) < new Date() : false;
+      const bNeedsRenewal = bIsOwner && bIsExpired;
+
+      if (aNeedsRenewal && !bNeedsRenewal) return -1;
+      if (!aNeedsRenewal && bNeedsRenewal) return 1;
+
+      return getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng);
+    });
+
     return filtered;
   };
 
-  // 🚀 FETCH GLOBAL DE PENDIENTES (Sin filtrar por ZIP)
   const fetchAllPendingStores = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}`); 
+      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`); 
       const data = await res.json();
       
       if (Array.isArray(data)) {
         const mappedData = data.map(item => ({
           id: item.id,
-          name: item.nameStores || 'Sin nombre',
-          description: item.descriptionStores || '',
-          address: item.addressStores || '',
+          name: item.nameStores || item.name || 'Sin nombre',
+          description: item.descriptionStores || item.description || '',
+          address: item.addressStores || item.address || '',
           categoryId: item.categoryId || 0,
           zip: item.zip,
-          image: item.imageStores || '',
+          image: item.imageStores || item.image || '',
           lat: Number(item.lat) || 34.0934,
           lng: Number(item.lng) || -117.5847,
           phone: item.phone || '',
@@ -242,62 +475,25 @@ export default function StoresScreen() {
           reviews: Array.isArray(item.reviews) ? item.reviews : [],
           totalReviews: Number(item.totalReviews) || 0,
           status: item.approved ? 'approved' : 'pending',
-          ownerName: item.ownerName
+          ownerName: item.ownerName,
+          referenceCode: item.referenceCode, 
+          paymentMethod: item.paymentMethod,
+          userId: item.userId || item.user_id,
+          timepostEnd: item.timepostEnd || item.timepost_end
         }));
         setPendingStores(mappedData.filter(s => s.status === 'pending'));
       }
     } catch (e) {
-      console.error("Error obteniendo pendientes globales:", e);
+      console.error("Error", e);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- FETCH DESDE EL BACKEND POR ZONA ---
-  const fetchStoresData = async (searchZip: string) => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}`);
-      const data = await res.json();
-      
-      if (Array.isArray(data)) {
-        const mappedData = data.map(item => ({
-          id: item.id,
-          name: item.nameStores || 'Sin nombre',
-          description: item.descriptionStores || '',
-          address: item.addressStores || '',
-          categoryId: item.categoryId || 0,
-          zip: item.zip,
-          image: item.imageStores || '',
-          lat: Number(item.lat) || 34.0934,
-          lng: Number(item.lng) || -117.5847,
-          phone: item.phone || '',
-          rating: Number(item.rating) || 0,
-          reviews: Array.isArray(item.reviews) ? item.reviews : [],
-          totalReviews: Number(item.totalReviews) || 0,
-          status: item.approved ? 'approved' : 'pending',
-          ownerName: item.ownerName
-        }));
+  const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string) => {
+    const targetZip = forcedZip || zipCode;
+    if (targetZip.length !== 5) return;
 
-        const approved = mappedData.filter(s => s.status === 'approved');
-        setAllStores(approved);
-        
-        if (!isAdminMode) {
-          setPendingStores(mappedData.filter(s => s.status === 'pending'));
-        }
-        return approved;
-      }
-      return [];
-    } catch (e) {
-      console.error("Error obteniendo tiendas:", e);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = async (forcedCategoryIdx?: number) => {
-    if (!isZipValid) return;
     const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
     setIsFilteredByMap(false);
 
@@ -305,7 +501,7 @@ export default function StoresScreen() {
     let lng = userLocation ? userLocation.longitude : -117.5847;
 
     try {
-      const geo = await Location.geocodeAsync(zipCode);
+      const geo = await Location.geocodeAsync(targetZip);
       if (geo.length > 0) {
         lat = geo[0].latitude;
         lng = geo[0].longitude;
@@ -318,7 +514,7 @@ export default function StoresScreen() {
     
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
-    const approvedStores = await fetchStoresData(zipCode);
+    const approvedStores = await fetchStoresData(targetZip);
     const filtered = applyLocalFilters(approvedStores, categoryToSearch, lat, lng);
     
     setResults(filtered);
@@ -369,7 +565,7 @@ export default function StoresScreen() {
   const handleShare = async (store: any) => {
     if (!store) return;
     try {
-      await Share.share({ message: t.storestab?.sharemessage + ` ${store.name}\n${store.description}` });
+      await Share.share({ message: t.storestab?.sharemessage + ` ${store.name || store.nameStores}\n${store.description || store.descriptionStores}` });
     } catch (error) { console.log(error); }
   };
 
@@ -382,8 +578,8 @@ export default function StoresScreen() {
   };
 
   const handlePublishStore = async () => {
-    if (!formName.trim() || !formAddress.trim() || formZip.length < 5) {
-      return Alert.alert(t.storestab?.alertmessage || "Completar campos");
+    if (!isFormValid) {
+      return Alert.alert("Atención", "Completar nombre, ubicación, foto y código de pago son obligatorios.");
     }
     
     setIsPublishing(true);
@@ -401,9 +597,15 @@ export default function StoresScreen() {
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-        formData.append('imagen', { uri: formImage, name: filename, type } as any);
+        if (Platform.OS === 'web') {
+          const responseBlob = await fetch(formImage as string);
+          const blob = await responseBlob.blob();
+          formData.append('imagen', blob as any, filename);
+        } else {
+          formData.append('imagen', { uri: formImage as string, name: filename, type } as any);
+        }
 
-        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/stores', {
+        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/stores', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },
@@ -433,8 +635,10 @@ export default function StoresScreen() {
         lat: lat, 
         lng: lng, 
         phone: fullPhone, 
-        userId: userMetadata?.id || userMetadata?.userId || null,
-        approved: false 
+        userId: currentUserId,
+        approved: false,
+        referenceCode: formRefCode,
+        paymentMethod: formPayMethod 
       };
 
       const response = await fetch(API_STORES_URL, {
@@ -458,41 +662,54 @@ export default function StoresScreen() {
         reviews: [],
         totalReviews: 0,
         phone: savedFromDB.phone,
-        status: 'pending'
+        status: 'pending',
+        referenceCode: formRefCode,
+        paymentMethod: formPayMethod,
+        userId: currentUserId,
+        timepostEnd: null
       };
       
       setPendingStores([newEntryLocal, ...pendingStores]);
       setModalVisible(false);
-      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1);
+      resetForm();
       
       if (!zipCode || zipCode.length < 5) {
         setZipCode(formZip);
-        handleSearch();
+        handleSearch(undefined, formZip);
       }
 
       Alert.alert(t.storestab?.sendnewsug || "Enviado con éxito, pendiente de aprobación");
 
     } catch (err: any) {
-      Alert.alert("Error", err.message || t.communitytab?.errorServer || "Error");
+      Alert.alert("Error", err.message || "Error");
     } finally {
       setIsPublishing(false);
     }
   };
 
-  // --- ADMINISTRADOR: APROBAR Y RECHAZAR ---
-  const approveStore = async (store: any) => {
+  const approveStore = async (store: any, durationMonths: number) => {
     try {
       const response = await fetch(`${API_STORES_URL}/${store.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved: true })
+        body: JSON.stringify({ approved: true, durationMonths })
       });
       if (!response.ok) throw new Error("Error en servidor");
       
-      const approvedStore = { ...store, status: 'approved' };
+      const updatedStoreFromServer = await response.json();
+      
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + durationMonths);
+
+      const approvedStore = { 
+        ...store, 
+        ...updatedStoreFromServer,
+        status: 'approved',
+        timepostEnd: updatedStoreFromServer.timepostEnd || updatedStoreFromServer.timepost_end || futureDate.toISOString() 
+      };
       
       if (store.zip === zipCode) {
-        const newAllStores = [approvedStore, ...allStores];
+        const newAllStores = [approvedStore, ...allStores.filter(s => s.id !== store.id)];
         setAllStores(newAllStores); 
         
         if (showMarkers || isZipValid) {
@@ -505,7 +722,7 @@ export default function StoresScreen() {
       }
       
       setPendingStores(pendingStores.filter(s => s.id !== store.id));
-      Alert.alert("Aprobado", "El negocio es ahora público.");
+      Alert.alert("Aprobado", `El negocio ha sido aprobado exitosamente por ${durationMonths} meses.`);
     } catch (error) {
       Alert.alert("Error", "No se pudo aprobar.");
     }
@@ -522,12 +739,18 @@ export default function StoresScreen() {
     }
   };
 
-  const StoreCard = ({ store }: { store: any }) => {
+  const StoreCard = ({ store, renderAdminControls }: { store: any, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
     const isPending = store.status === 'pending';
+    const isOwner = store.userId === currentUserId;
+    
+    const isExpired = (store.timepostEnd && new Date(store.timepostEnd).getFullYear() > 1970) 
+        ? new Date(store.timepostEnd) < new Date() 
+        : false;
+    
+    const fadeCard = isExpired && !isPending;
 
-    // 🚀 LÓGICA DE PROGRAMACIÓN DEFENSIVA PARA RATING Y CONTADOR (COMO LAWYERS)
     const safeRating = Number(store.rating) || 0;
     const displayRating = safeRating > 0 ? safeRating.toFixed(1) : "Nuevo";
 
@@ -537,95 +760,157 @@ export default function StoresScreen() {
       formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
     }
 
+    const cardBgColor = isPending 
+      ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.9)')
+      : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)');
+
     return (
-      <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: isPending ? '#FFB74D' : DynamicColors.border }}>
-        {isPending && (
-          <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
-              <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
+      <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : DynamicColors.border }}>
+        
+        {isPending && isOwner && (
+          <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+            <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
+            <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>En revisión. Será publicado pronto.</ThemedText>
           </View>
         )}
+
+        {isOwner && isExpired && !isPending && (
+          <View style={{ backgroundColor: 'rgba(255, 82, 82, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 82, 82, 0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <MaterialCommunityIcons name="alert-circle" size={20} color="#FF5252" />
+              <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>Tu publicación ha expirado.</ThemedText>
+            </View>
+            <TouchableOpacity onPress={() => { setStoreToRenew(store); setRenewModalVisible(true); }} style={{ backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 10 }}>
+              <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>Renovar</ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
           <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
             <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
             <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
-            <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>
-              {displayRating}
-            </ThemedText>
+            <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{displayRating}</ThemedText>
           </View>
         </View>
-        <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140 }}>
+
+        <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140, opacity: fadeCard ? 0.6 : 1 }}>
           {store.image && store.image.length > 5 ? (
             <Image source={{ uri: store.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           ) : (
-            <View style={{ width: '100%', height: '100%', backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ width: '100%', height: '100%', backgroundColor: isDark ? '#333' : '#E0E0E0', justifyContent: 'center', alignItems: 'center' }}>
               <MaterialCommunityIcons name="image-off-outline" size={40} color={DynamicColors.subtext} />
             </View>
           )}
-          
           <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
             <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
-              {t.genericbtn?.viewdetail || 'Ver detalle'}
-            </ThemedText>
+            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>Ver detalle</ThemedText>
           </View>
         </TouchableOpacity>
-        <View style={{ padding: 15 }}>
+
+        <View style={{ padding: 15, opacity: fadeCard ? 0.6 : 1 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{store.name}</ThemedText>
+            <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{store.name || store.nameStores}</ThemedText>
             {dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist} mi</ThemedText>}
           </View>
-          {store.address && (
+          {(store.address || store.addressStores) && (
              <ThemedText style={{ fontSize: 13, color: '#FF5F6D', fontWeight: 'bold', marginTop: 4 }}>
-                 <MaterialCommunityIcons name="map-marker-outline" size={12}/> {store.address}
+                 <MaterialCommunityIcons name="map-marker-outline" size={12}/> {store.address || store.addressStores}
              </ThemedText>
           )}
-          <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6 }} numberOfLines={isPending ? undefined : 2}>{store.description}</ThemedText>
+          <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6 }} numberOfLines={isPending ? undefined : 2}>{store.description || store.descriptionStores}</ThemedText>
+          
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
-            <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
+            <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
-               {/* 🚀 CONTADOR DE RESEÑAS SEGURO EN EL BOTÓN */}
                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
-                  {t.storestab?.reviews || 'Reseñas'} {reviewCount > 0 ? `(${formattedCount})` : ''}
+                  Reseñas {reviewCount > 0 ? `(${formattedCount})` : ''}
                </ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
+            <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
               <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.storestab?.route || 'Cómo llegar'}</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>Cómo llegar</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${store.phone}`)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
+            <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${store.phone}`)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
               <MaterialCommunityIcons name="phone" size={17} color={isDark ? '#FFB74D' : '#EF6C00'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.storestab?.callbton || 'Llamar'}</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>Llamar</ThemedText>
             </TouchableOpacity>
           </View>
+
+          {renderAdminControls && renderAdminControls()}
         </View>
       </View>
     );
   };
 
+  const PendingStoreItem = ({ store }: { store: any }) => {
+    const [selectedMonths, setSelectedMonths] = useState(1);
+    
+    const adminControls = () => (
+      <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
+        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
+           <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
+           <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
+              Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{store.referenceCode || 'N/A'}</ThemedText> ({store.paymentMethod || 'Pago'})
+           </ThemedText>
+        </View>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
+          {[1, 3, 6, 12].map(m => (
+            <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
+               <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+        
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText></TouchableOpacity>
+          <TouchableOpacity onPress={() => approveStore(store, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText></TouchableOpacity>
+        </View>
+      </View>
+    );
+
+    return <StoreCard store={store} renderAdminControls={adminControls} />;
+  };
+
   return (
     <View style={stylesUnified.container}>
+
+      {/* MODAL DE RENOVACIÓN */}
+      <RenewStoreModal 
+        visible={renewModalVisible} 
+        onClose={() => setRenewModalVisible(false)} 
+        onSuccess={() => { setRenewModalVisible(false); handleSearch(); }} 
+        storeToRenew={storeToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
+        t={t} isDark={isDark} Colors={DynamicColors} orangeGradient={orangeGradient} 
+        isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} 
+      />
 
       {/* MODAL DETALLE */}
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setSelectedDetail(null)} />
+          
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleCloseDetailModal} />
+          
           <View style={{ width: '90%', height: '75%', borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={{ width: '100%', height: 240 }}>
                {selectedDetail?.image && selectedDetail?.image.length > 5 ? (
                  <Image source={{ uri: selectedDetail?.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                ) : (
-                 <View style={{ width: '100%', height: '100%', backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+                 <View style={{ width: '100%', height: '100%', backgroundColor: isDark ? '#333' : '#E0E0E0', justifyContent: 'center', alignItems: 'center' }}>
                    <MaterialCommunityIcons name="image-off-outline" size={40} color={DynamicColors.subtext} />
                  </View>
                )}
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={StyleSheet.absoluteFill} />
                <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="share-variant" size={22} color="#FFF" /></TouchableOpacity>
-               <TouchableOpacity onPress={() => setSelectedDetail(null)} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="close" size={24} color="#FFF" /></TouchableOpacity>
+               
+               <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}>
+                 <MaterialCommunityIcons name="close" size={24} color="#FFF" />
+               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ padding: 25 }}>
@@ -642,19 +927,26 @@ export default function StoresScreen() {
                     </ThemedText>
                   </View>
                 </View>
-                <ThemedText style={{ fontSize: 24, fontWeight: '900', marginVertical: 10, color: DynamicColors.text }}>{selectedDetail?.name}</ThemedText>
-                {selectedDetail?.address && <ThemedText style={{ color: '#FF5F6D', fontWeight:'700', marginBottom:10 }}>{selectedDetail.address}</ThemedText>}
+                <ThemedText style={{ fontSize: 24, fontWeight: '900', marginVertical: 10, color: DynamicColors.text }}>
+                    {selectedDetail?.name || selectedDetail?.nameStores || 'Sin nombre'}
+                </ThemedText>
+                {(selectedDetail?.address || selectedDetail?.addressStores) && (
+                    <ThemedText style={{ color: '#FF5F6D', fontWeight:'700', marginBottom:10 }}>
+                        {selectedDetail?.address || selectedDetail?.addressStores}
+                    </ThemedText>
+                )}
                 <View style={{height:1, backgroundColor:DynamicColors.border, marginVertical:20}} />
-                <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>{selectedDetail?.description}</ThemedText>
+                <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>
+                    {selectedDetail?.description || selectedDetail?.descriptionStores}
+                </ThemedText>
 
-                {/* 🚀 BOTONES DE ACCIÓN PARA ADMINISTRADOR DENTRO DEL DETALLE */}
                 {isAdminMode && selectedDetail?.status === 'pending' && (
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                        <TouchableOpacity onPress={() => { rejectStore(selectedDetail.id); setSelectedDetail(null); }} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                        <TouchableOpacity onPress={() => { rejectStore(selectedDetail.id); handleCloseDetailModal(); }} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
                             <MaterialCommunityIcons name="close-circle" size={18} color="#FFF" />
                             <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>Rechazar</ThemedText>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => { approveStore(selectedDetail); setSelectedDetail(null); }} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                        <TouchableOpacity onPress={() => { approveStore(selectedDetail, 1); handleCloseDetailModal(); }} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
                             <MaterialCommunityIcons name="check-circle" size={18} color="#FFF" />
                             <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>Aprobar</ThemedText>
                         </TouchableOpacity>
@@ -675,7 +967,7 @@ export default function StoresScreen() {
               {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
                 <View style={{ flex: 1 }}>
-                    <ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name}</ThemedText>
+                    <ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name || selectedStore?.nameStores}</ThemedText>
                     <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>{t.storestab?.commutnityopini || 'Opiniones'}</ThemedText>
                 </View>
                 <TouchableOpacity onPress={() => { setSelectedStore(null); setShowReviewInput(false); }}>
@@ -714,7 +1006,7 @@ export default function StoresScreen() {
                            reference_id: selectedStore.id,
                            stars: ratingNum,
                            comment: commentStr,
-                           userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9"
+                           userId: currentUserId
                          };
 
                          const res = await fetch(`${API_STORES_URL}/reviews`, {
@@ -774,8 +1066,8 @@ export default function StoresScreen() {
                 <View style={{ width: 24 }} />
               </View>
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
-                <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
+                <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }}>
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
                 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none'}}>{t.storestab?.category || 'Categoría'}</ThemedText>
@@ -802,10 +1094,43 @@ export default function StoresScreen() {
                   })}
                 </ScrollView>
 
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.placeHoldname || 'Nombre'} value={formName} onChangeText={setFormName} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.placeHoldAddress || 'Dirección'} value={formAddress} onChangeText={setFormAddress} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.messagezip || 'Código Postal'} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.storestab?.description || 'Descripción'} value={formDesc} onChangeText={setFormDesc} multiline />
+                <TextInput 
+                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  placeholderTextColor={DynamicColors.subtext} 
+                  placeholder={t.storestab?.placeHoldname || 'Nombre'} 
+                  value={formName} 
+                  onChangeText={setFormName} 
+                  autoCapitalize="words" 
+                />
+                
+                <TextInput 
+                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  placeholderTextColor={DynamicColors.subtext} 
+                  placeholder={t.storestab?.placeHoldAddress || 'Dirección'} 
+                  value={formAddress} 
+                  onChangeText={setFormAddress} 
+                  autoCapitalize="words" 
+                />
+                
+                <TextInput 
+                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  placeholderTextColor={DynamicColors.subtext} 
+                  placeholder={t.storestab?.messagezip || 'Código Postal'} 
+                  value={formZip} 
+                  onChangeText={setFormZip} 
+                  keyboardType="numeric" 
+                  maxLength={5} 
+                />
+                
+                <TextInput 
+                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  placeholderTextColor={DynamicColors.subtext} 
+                  placeholder={t.storestab?.description || 'Descripción'} 
+                  value={formDesc} 
+                  onChangeText={setFormDesc} 
+                  multiline 
+                  autoCapitalize="sentences" 
+                />
                 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none'  }}>{t.storestab?.phoneContacto || 'Teléfono'}</ThemedText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
@@ -820,16 +1145,46 @@ export default function StoresScreen() {
                   </TouchableOpacity>
                   <TextInput value={formPhone} onChangeText={setFormPhone}
                     placeholder="(909) 000-0000"
+                    placeholderTextColor={DynamicColors.subtext}
                     keyboardType="phone-pad"
                     style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                <TouchableOpacity onPress={handlePublishStore} disabled={isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
-                  <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
-                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{t.storestab?.sendbutton || 'Enviar'}</ThemedText>
+                <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
+                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
+                  
+                  <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: DynamicColors.text }}>
+                    Para promocionar tu negocio, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                  </ThemedText>
+                  
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                    {['Zelle', 'Venmo'].map((method) => (
+                      <TouchableOpacity 
+                        key={method}
+                        onPress={() => setFormPayMethod(method)} 
+                        style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                      >
+                        <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TextInput 
+                    style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                    placeholder={`# CONFIRMACION DE ${formPayMethod}...`} 
+                    placeholderTextColor={DynamicColors.subtext}
+                    value={formRefCode} 
+                    onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ alignSelf: 'center', marginTop: 10 }}>
+                  <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.storestab?.sendbutton || 'Enviar'}</ThemedText></>}
                   </LinearGradient>
                 </TouchableOpacity>
+
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
@@ -844,7 +1199,6 @@ export default function StoresScreen() {
             
             <View style={stylesUnified.cardContent}>
               
-              {/* HEADER CON BUSCADOR INTEGRADO */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>
                   <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
@@ -870,7 +1224,7 @@ export default function StoresScreen() {
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
                   <TouchableOpacity onLongPress={() => { setIsAdminMode(!isAdminMode); }}>
-                    <MaterialCommunityIcons name="store-plus-outline" size={32} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
+                    <MaterialCommunityIcons name="store-plus-outline" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -878,24 +1232,11 @@ export default function StoresScreen() {
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   
-                  {/* ADMIN VERIFICACIÓN MÓVIL */}
                   {isAdminMode && pendingStores.length > 0 && (
                     <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.storestab?.verify || 'Verificar'} ({pendingStores.length})</ThemedText>
+                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
                       {pendingStores.map(store => (
-                        <View key={store.id} style={{ marginBottom: 15 }}>
-                           <StoreCard store={store} />
-                           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
-                            <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
-                                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => approveStore(store)} style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                              <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
+                        <PendingStoreItem key={store.id} store={store} />
                       ))}
                     </View>
                   )}
@@ -998,21 +1339,9 @@ export default function StoresScreen() {
                       
                       {isAdminMode && pendingStores.length > 0 && (
                         <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.storestab?.verify || 'Verificar'} ({pendingStores.length})</ThemedText>
+                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
                           {pendingStores.map(store => (
-                            <View key={store.id} style={{ marginBottom: 15 }}>
-                               <StoreCard store={store} />
-                               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
-                                 <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                   <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
-                                   <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
-                                 </TouchableOpacity>
-                                 <TouchableOpacity onPress={() => approveStore(store)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                   <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                                   <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
-                                 </TouchableOpacity>
-                               </View>
-                            </View>
+                            <PendingStoreItem key={store.id} store={store} />
                           ))}
                         </View>
                       )}
@@ -1065,7 +1394,7 @@ export default function StoresScreen() {
       </ScrollView>
 
       {/* FAB para Sugerir Negocio (UNIVERSAL) */}
-      <TouchableOpacity style={{ position: 'absolute', right: 20, bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }} onPress={() => setModalVisible(true)}>
+      <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="store-plus-outline" size={32} color="#FFF" />
         </LinearGradient>

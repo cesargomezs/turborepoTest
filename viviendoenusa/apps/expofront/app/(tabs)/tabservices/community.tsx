@@ -77,7 +77,7 @@ const getRelativeTime = (dateString: string | Date) => {
 };
 
 // 📡 URL BASE PARA LA COMUNIDAD CONECTADA A TU EXPRESS
-const API_COMMUNITY_URL = 'http://192.168.1.103:3000/community'; 
+const API_COMMUNITY_URL = 'http://192.168.252.243:3000/community'; 
 
 export default function CommunityScreen() {
   const { t } = useTranslation();
@@ -255,7 +255,7 @@ export default function CommunityScreen() {
           type 
         } as any);
 
-        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/community', {
+        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/community', {
           method: 'POST',
           body: formData,
           headers: { 

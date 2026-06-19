@@ -26,19 +26,14 @@ import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 
-const API_BASE_URL = 'http://192.168.1.103:3000/lawyers';
+const API_BASE_URL = 'http://192.168.252.243:3000/lawyers';
+const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
   return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
-};
-
-// 🚀 FUNCIÓN: Fuerza primera mayúscula, resto minúscula
-const formatSentenceCase = (text: string) => {
-  if (!text) return "";
-  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 };
 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
@@ -104,10 +99,11 @@ const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
         <TextInput 
           value={comment} 
-          onChangeText={(text) => setComment(formatSentenceCase(text))} 
+          onChangeText={setComment} 
           placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder } 
           placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
           multiline 
+          autoCapitalize="sentences"
           style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
         />
       </View>
@@ -120,7 +116,7 @@ const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
   );
 });
 
-const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets }: any) => {
+const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets }: any) => {
   const [renewRefCode, setRenewRefCode] = useState('');
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
@@ -165,7 +161,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
             </View>
 
             <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
-              {((t.lawyerstab as any)?.renewDescPrefix )}<ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText>{((t.lawyerstab as any)?.renewDescSuffix || " enviando el comprobante de tu nuevo pago de renovación mensual.")}
+              Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariff} USD y enviando el comprobante aquí abajo.
             </ThemedText>
             
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -179,7 +175,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
             <TextInput 
               style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
               placeholder={`# CONFIRMACION DE ${renewPayMethod}...`} placeholderTextColor={Colors.subtext}
-              value={renewRefCode} onChangeText={setRenewRefCode} autoCapitalize="characters"
+              value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
             />
 
             <TouchableOpacity onPress={handleRenewSubmit} disabled={isRenewing}>
@@ -195,7 +191,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   );
 });
 
-const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets }: any) => {
+const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets }: any) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -250,7 +246,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/lawyers', {
+        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/lawyers', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
         
@@ -300,18 +296,15 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
         <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && onClose()} />
         
-        {/* 🚀 FIX: iOS Modal anclado al fondo y que sube limpio con el teclado */}
-        <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ flex: 1, justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
-          <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', width: isLargeWeb ? 550 : '100%', maxHeight: '90%', borderColor: Colors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden', paddingBottom: isIOS ? insets.bottom : 0 }}>
+        <KeyboardAvoidingView behavior={isIOS ? "padding" : undefined} style={{ flex: 1, justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
+          <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', flexShrink: 1, maxHeight: isLargeWeb ? 'auto' : '80%', borderColor: Colors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden', paddingBottom: isIOS ? insets.bottom : 0 }}>
             {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
-            
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
               <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>{(t.lawyerstab as any)?.suggest}</ThemedText>
               <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
-            
-            <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 20 }}>
+            <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}>
               <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border }}>
                 {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{(t.genericbtn as any)?.photo }</ThemedText></View>}
               </TouchableOpacity>
@@ -345,7 +338,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t
                 placeholder={(t.lawyerstab as any)?.placeHoldname } 
                 placeholderTextColor={Colors.subtext} 
                 value={formName} 
-                onChangeText={(text) => setFormName(formatSentenceCase(text))} 
+                onChangeText={setFormName} 
                 autoCapitalize="words"
               />
               <TextInput 
@@ -353,7 +346,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t
                 placeholder={(t.lawyerstab as any)?.placeHoldAddress } 
                 placeholderTextColor={Colors.subtext} 
                 value={formAddress} 
-                onChangeText={(text) => setFormAddress(formatSentenceCase(text))} 
+                onChangeText={setFormAddress} 
                 autoCapitalize="words"
               />
               <TextInput 
@@ -369,7 +362,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t
                 placeholder={(t.lawyerstab as any)?.description } 
                 placeholderTextColor={Colors.subtext} 
                 value={formDesc} 
-                onChangeText={(text) => setFormDesc(formatSentenceCase(text))} 
+                onChangeText={setFormDesc} 
                 multiline 
                 autoCapitalize="sentences"
               />
@@ -392,8 +385,9 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t
 
               <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                 <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>{(t.lawyerstab as any)?.paymentVerification || "Verificación de Pago"}</ThemedText>
+                
                 <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18 }}>
-                  {(t.lawyerstab as any)?.paymentInstructions || "Para publicar tu perfil, realiza el pago de $50 USD mediante Zelle o Venmo y escribe el código de confirmación aquí abajo."}
+                  Para publicar tu perfil, realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
                 </ThemedText>
                 
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -407,7 +401,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, t
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                   placeholder={`# CONFIRMACION DE ${formPayMethod}...`} placeholderTextColor={Colors.subtext}
-                  value={formRefCode} onChangeText={setFormRefCode} autoCapitalize="characters"
+                  value={formRefCode} onChangeText={(text) => setFormRefCode(text.toUpperCase())} autoCapitalize="characters"
                 />
               </View>
 
@@ -430,7 +424,6 @@ export default function LawyersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  // 🚀 BLINDAJE: Atrapamos cualquier formato o nombre en el que viaje el ID
   const rawNotifId = params.id || params.lawyerId || params.referenceId || params.reference_id || params.openEventId;
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
 
@@ -493,6 +486,9 @@ export default function LawyersScreen() {
 
   const [pendingLawyers, setPendingLawyers] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
+  
+  // 🚀 TARIFA DINÁMICA POR DEFECTO 50.00
+  const [currentTariff, setCurrentTariff] = useState<string>("50.00");
 
   const isZipValid = zipCode.length === 5;
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
@@ -501,7 +497,25 @@ export default function LawyersScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // 🚀 LÓGICA REACTIVA: Asegurar que los resultados SIEMPRE estén sincronizados
+  // 🚀 FETCH CORRECTO CON QUERY PARAMS: typeCode=Lawyers
+  useEffect(() => {
+    const fetchTariff = async () => {
+      try {
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Lawyers`);
+        if (res.ok) {
+          const tariffsData = await res.json();
+          // El backend ya lo filtró, debería ser el primer elemento si existe
+          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
+            setCurrentTariff(tariffsData[0].price);
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo cargar la tarifa dinámica en el front, usando $50.00 por defecto");
+      }
+    };
+    fetchTariff();
+  }, []);
+
   useEffect(() => {
     if (!isFilteredByMap) {
       const lat = userLocation ? userLocation.latitude : 34.0934;
@@ -511,7 +525,6 @@ export default function LawyersScreen() {
     }
   }, [allLawyers, selectedArea, userLocation, isFilteredByMap]);
 
-  // 🚀 LÓGICA HÍBRIDA: AUTO-ABRIR Y POBLAR FONDO (UX)
   const lastProcessedNotifId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -522,14 +535,12 @@ export default function LawyersScreen() {
         lastProcessedNotifId.current = cleanNotifId;
         console.log("🔥 ID de Abogado recibido desde notificación:", cleanNotifId);
         
-        // 1. Búsqueda local primero
         const localMatch = allLawyers.find(l => String(l.id) === cleanNotifId) || pendingLawyers.find(l => String(l.id) === cleanNotifId);
 
         if (localMatch) {
           console.log("✅ Abogado encontrado en memoria local. Abriendo perfil...");
           setSelectedDetail(localMatch);
         } else {
-          // 2. Si no, Fetch al backend
           const fetchSpecificLawyer = async () => {
             try {
               const res = await fetch(`${API_BASE_URL}/${cleanNotifId}`);
@@ -538,11 +549,9 @@ export default function LawyersScreen() {
                 console.log("✅ Abogado encontrado en la BD. Abriendo perfil...");
                 setSelectedDetail(data); 
 
-                // 🚀 FIX UX: POBLAR FONDO AUTOMÁTICAMENTE
                 if (data.zip && String(data.zip).length === 5) {
                   setZipCode(String(data.zip));
-                  // Esto trae a todos los de esa zona. El useEffect reactivo los va a pintar en pantalla.
-                  fetchLawyersData(String(data.zip));
+                  handleSearch(undefined, String(data.zip));
                 }
               } else {
                 console.log(`⚠️ El abogado no se encontró (Error ${res.status})`);
@@ -557,7 +566,6 @@ export default function LawyersScreen() {
     }
   }, [notificationId]);
 
-  // 🚀 CIERRE LIMPIO DE LA URL
   const handleCloseDetailModal = () => {
     setSelectedDetail(null);
     router.setParams({ id: '', lawyerId: '', referenceId: '', reference_id: '', openEventId: '' });
@@ -730,7 +738,6 @@ export default function LawyersScreen() {
     
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
-    // Llamamos la DB y el UseEffect actualiza `results` automáticamente.
     await fetchLawyersData(targetZip);
     setMapKey(k => k + 1);
   };
@@ -973,7 +980,7 @@ export default function LawyersScreen() {
         visible={renewModalVisible} 
         onClose={() => setRenewModalVisible(false)} 
         onSuccess={() => { setRenewModalVisible(false); handleSearch(); }} 
-        lawyerToRenew={lawyerToRenew} currentUserId={currentUserId} 
+        lawyerToRenew={lawyerToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
         t={t} isDark={isDark} Colors={Colors} orangeGradient={orangeGradient} 
         isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} 
         insets={insets}
@@ -990,7 +997,7 @@ export default function LawyersScreen() {
             handleSearch(undefined, formZip);
           }
         }} 
-        currentUserId={currentUserId} t={t} isDark={isDark} Colors={Colors} 
+        currentUserId={currentUserId} currentTariff={currentTariff} t={t} isDark={isDark} Colors={Colors} 
         orangeGradient={orangeGradient} isLargeWeb={isLargeWeb} isAndroid={isAndroid} 
         isIOS={isIOS} PRACTICE_AREAS={PRACTICE_AREAS} 
         insets={insets}
@@ -1397,7 +1404,8 @@ export default function LawyersScreen() {
       </ScrollView>
 
       {/* FAB para Sugerir Abogado */}
-      <TouchableOpacity style={{ position: 'absolute', right: 20, bottom: isIOS ? insets.bottom + 65 : 85, zIndex: 99, elevation: 99 }} onPress={() => setModalVisible(true)}>
+      <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
+      
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="scale-balance" size={32} color="#FFF" />
         </LinearGradient>

@@ -45,7 +45,8 @@ const COUNTRIES = [
 ];
 
 // 📡 URL BASE PARA LOS EVENTOS CONECTADA AL BACKEND
-const API_EVENTS_URL = 'http://192.168.1.103:3000/events';
+const API_EVENTS_URL = 'http://192.168.252.243:3000/events';
+const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
 
 export default function EventsScreen() {
   const { t } = useTranslation();
@@ -93,7 +94,6 @@ export default function EventsScreen() {
       ? rawCategories 
       : INTERNAL_CATEGORIES;
 
-  // --- ESTADOS PRINCIPALES ---
   const [zipCode, setZipCode] = useState('');
   const [events, setEvents] = useState<any[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
@@ -103,7 +103,6 @@ export default function EventsScreen() {
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
-  // --- ESTADOS FORMULARIO ---
   const [isPublishing, setIsPublishing] = useState(false);
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -128,15 +127,63 @@ export default function EventsScreen() {
   const [pendingEvents, setPendingEvents] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // 🚀 Rastreador para evitar que la notificación se procese en un loop infinito
+  // 🚀 TARIFA INICIAL DE RESPALDO
+  const [currentTariff, setCurrentTariff] = useState<string>("120.00");
+
   const lastProcessedNotifId = useRef<string | null>(null);
 
   const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage && formRefCode.trim());
 
-  // 🚀 LÓGICA HÍBRIDA MEJORADA: AUTO-ABRIR DETALLE Y POBLAR FONDO (UX/UI)
+  // 🚀 FETCH INFALIBLE TOTALMENTE CORREGIDO
+  /*useEffect(() => {
+    const fetchTariff = async () => {
+      try {
+        // Quitamos el query param para que nos devuelva todo el arreglo y filtrar nosotros
+        const res = await fetch(API_TARIFFS_URL);
+        if (res.ok) {
+          const result = await res.json();
+          const tariffsData = Array.isArray(result) ? result : (result.data || []);
+          
+          const eventTariff = tariffsData.find((t: any) => {
+            const code = String(t.typeCode || t.type_code || '').toLowerCase();
+            const refId = String(t.referenceId || t.reference_id || '');
+            
+            // ✅ FIX: 'event' TODO EN MINÚSCULAS porque le hicimos toLowerCase() arriba
+            return code.includes('event') || refId === '6c4f4076-0ccf-4f26-97c8-abe139796066';
+          });
+
+          if (eventTariff && eventTariff.price) {
+            setCurrentTariff(String(eventTariff.price));
+            console.log("💰 Tarifa correcta cargada:", eventTariff.price);
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo cargar la tarifa dinámica", e);
+      }
+    };
+    fetchTariff();
+  }, []);*/
+  useEffect(() => {
+    const fetchTariff = async () => {
+      try {
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Event`);
+        if (res.ok) {
+          const tariffsData = await res.json();
+          //console.log("Tarifas obtenidas:", tariffsData);
+          // El backend ya lo filtró, debería ser el primer elemento si existe
+          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
+            setCurrentTariff(tariffsData[0].price);
+          }
+        }
+      } catch (e) {
+        console.warn("💰 No se pudo cargar la tarifa dinámica", e);
+      }
+    };
+    fetchTariff();
+  }, []);
+
   useEffect(() => {
     if (eventIdFromNotif) {
-      // 1. BLINDAJE: Limpiamos espacios o saltos de línea ocultos que causan el Timeout falso
       const cleanEventId = String(eventIdFromNotif).trim();
       
       if (cleanEventId !== lastProcessedNotifId.current) {
@@ -151,7 +198,6 @@ export default function EventsScreen() {
         } else {
           const fetchSpecificEvent = async () => {
             try {
-              // 2. Usamos el ID totalmente limpio para la ruta
               const res = await fetch(`${API_EVENTS_URL}/${cleanEventId}`);
               
               if (res.ok) {
@@ -176,7 +222,6 @@ export default function EventsScreen() {
                 console.log("✅ Evento traído del backend con éxito. Abriendo modal...");
                 setSelectedEventDetails(eventMapped); 
 
-                // 🚀 MAGIA DE UX: Poner el ZIP en el input y traer toda la cartelera de fondo
                 if (data.zip && String(data.zip).length === 5) {
                   setZipCode(String(data.zip));
                   fetchEvents(String(data.zip), isAdminMode);
@@ -195,7 +240,6 @@ export default function EventsScreen() {
     }
   }, [eventIdFromNotif]); 
 
-  // 🚀 LIMPIEZA TOTAL AL CERRAR EL MODAL
   const handleCloseDetailModal = () => {
     setSelectedEventDetails(null);
     router.setParams({ openEventId: '', id: '', referenceId: '' });
@@ -346,7 +390,7 @@ export default function EventsScreen() {
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/events', {
+        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/events', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },
@@ -831,8 +875,10 @@ export default function EventsScreen() {
 
                 <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                   <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>Verificación de Pago</ThemedText>
+                  
+                  {/* 🚀 TEXTO DINÁMICO CON LA TARIFA */}
                   <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>
-                    Para promocionar tu evento, realiza el pago de $50 USD mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                    Para promocionar tu evento, realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
                   </ThemedText>
                   
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -847,12 +893,13 @@ export default function EventsScreen() {
                     ))}
                   </View>
 
+                  {/* 🚀 FIX: Forzar input a mayúsculas */}
                   <TextInput 
                     style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                     placeholder={`# CONFIRMACION DE ${formPayMethod}...`} 
                     placeholderTextColor={Colors.subtext}
                     value={formRefCode} 
-                    onChangeText={setFormRefCode} 
+                    onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
                     autoCapitalize="characters"
                   />
                 </View>

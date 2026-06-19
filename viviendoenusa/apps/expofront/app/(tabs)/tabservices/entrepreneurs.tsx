@@ -29,7 +29,7 @@ const validateComment = (text: string): boolean =>
   !BANNED_WORDS.some((w: string) => text.toLowerCase().includes(w.toLowerCase()));
 
 // 📡 URL BASE PARA LOS EMPRENDIMIENTOS
-const API_ENTREPRENEURSHIP_URL = 'http://192.168.1.103:3000/entrepreneurship';
+const API_ENTREPRENEURSHIP_URL = 'http://192.168.252.243:3000/entrepreneurship';
 
 // --- TIPOS ---
 type Review = {
@@ -390,7 +390,7 @@ export default function EntrepreneurshipScreen() {
 
         formData.append('imagen', { uri: formImage, name: filename, type } as any);
 
-        const uploadResponse = await fetch('http://192.168.1.103:3000/api/subir-imagen-optimizada/entrepreneurship', {
+        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/entrepreneurship', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },
@@ -732,7 +732,7 @@ export default function EntrepreneurshipScreen() {
 
       {/* FAB - BOTÓN FLOTANTE UNIVERSAL */}
       <TouchableOpacity onPress={() => setFormVisible(true)}
-        style={[S.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+       style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
         <LinearGradient colors={OG}
           style={{ flex: 1, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
           <MaterialCommunityIcons name="lightbulb-multiple-outline" size={30} color="#fff" />

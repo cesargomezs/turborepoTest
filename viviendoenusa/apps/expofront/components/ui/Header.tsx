@@ -16,8 +16,7 @@ import { setLanguage } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation'; 
 
 // 📡 URL BASE PARA LAS NOTIFICACIONES (Asegúrate de que esta sea tu IP correcta)
-const API_NOTIFICATIONS_URL = 'http://192.168.1.103:3000/notifications';
-
+const API_NOTIFICATIONS_URL = 'http://192.168.252.243:3000/notifications';
 
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
@@ -34,7 +33,7 @@ export default function Header({ title }: { title?: string }) {
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
 
-  // 🚀 ESTADO PARA LAS NOTIFICACIONES (Inicia vacío, se llenará del backend)
+  // 🚀 ESTADO PARA LAS NOTIFICACIONES
   const [notifications, setNotifications] = useState<any[]>([]);
   
   const languages = [
@@ -56,11 +55,9 @@ export default function Header({ title }: { title?: string }) {
     }
   };
 
-  // Cargar notificaciones al montar el Header y establecer un intervalo de refresco (opcional)
   useEffect(() => {
     fetchNotifications();
     
-    // Refrescar cada minuto para que el usuario reciba notificaciones sin tener que recargar la app
     const interval = setInterval(() => {
       fetchNotifications();
     }, 60000); 
@@ -76,7 +73,8 @@ export default function Header({ title }: { title?: string }) {
       case 'store': return { name: 'store', color: '#FFB300' }; 
       case 'alert': return { name: 'alert-circle', color: '#FF5F6D' }; 
       case 'event': return { name: 'calendar', color: '#9C27B0' }; 
-      case 'lawyer': return { name: 'scale-balance', color: '#FF5F6D' }; // 🚀 Ícono para abogados
+      case 'lawyer': return { name: 'scale-balance', color: '#FF5F6D' }; 
+      case 'support': return { name: 'heart-pulse', color: '#FF5F6D' }; // 🚀 Ícono para Soporte
       default: return { name: 'bell', color: Colors[theme].text };
     }
   };
@@ -89,10 +87,10 @@ export default function Header({ title }: { title?: string }) {
     // 2. Ocultar visualmente en el frontend
     setNotifications(prev => prev.filter(n => n.id !== notif.id));
 
-    // 3. Avisar al backend que la borre (o marque como leída, según tu ruta)
+    // 3. Avisar al backend que la borre
     try {
       await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, {
-        method: 'DELETE', // o 'PUT' si decides solo cambiar 'read: true' en tu backend
+        method: 'DELETE',
       });
     } catch (error) {
       console.error("Error al borrar notificación:", error);
@@ -108,7 +106,7 @@ export default function Header({ title }: { title?: string }) {
       } else if (notif.type === 'store') {
         router.navigate({ 
             pathname: '/tabservices/stores', 
-            params: { openStoreId: notif.referenceId }
+            params: { id: notif.referenceId } 
         }); 
       } else if (notif.type === 'community' ) {
         router.navigate({
@@ -120,9 +118,14 @@ export default function Header({ title }: { title?: string }) {
             pathname: '/tabservices/events',
             params: { openEventId: notif.referenceId } 
         }); 
-      } else if (notif.type === 'lawyer') { // 🚀 AGREGADO: Redirección para Abogados
+      } else if (notif.type === 'lawyer') { 
         router.navigate({
-            pathname: '/tabservices/lawyers', // Ajusta esta ruta si tu archivo está en una carpeta distinta
+            pathname: '/tabservices/lawyers', 
+            params: { id: notif.referenceId } 
+        }); 
+      } else if (notif.type === 'support') { // 🚀 AGREGADO: Redirección para Support
+        router.navigate({
+            pathname: '/tabservices/support', 
             params: { id: notif.referenceId } 
         }); 
       }
@@ -156,7 +159,7 @@ export default function Header({ title }: { title?: string }) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity 
             onPress={() => {
-                fetchNotifications(); // 🚀 Refresca cuando abre el modal por si hubo cambios
+                fetchNotifications(); 
                 setNotifModalVisible(true);
             }}
             activeOpacity={0.7}
@@ -272,7 +275,7 @@ export default function Header({ title }: { title?: string }) {
                         <ThemedText style={{ fontSize: 13, color: isDark ? '#B0BEC5' : '#546E7A', marginTop: 4, lineHeight: 18 }}>
                           {notif.description}
                         </ThemedText>
-                        <ThemedText style={{ fontSize: 11, color: isDark ? '#78909C' : '#90A4AE', marginTop: 8, fontWeight: 'bold' }}>
+                        <ThemedText style={{ fontSize: 11,  marginTop: 8, fontWeight: 'bold' }}>
                           {notif.time}
                         </ThemedText>
                       </View>

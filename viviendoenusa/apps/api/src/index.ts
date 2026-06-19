@@ -32,6 +32,7 @@ import jobsRoutes from './routes/jobs.routes';
 import supportRoutes from './routes/support.routes';
 import notificationsRoutes from './routes/notifications.routes';
 import paymentsRoutes from './routes/payments.routes';
+import tarrifsRoutes from './routes/tariffs.routes';
 import './cron/cron.jobs';
 
 const app = express();
@@ -74,6 +75,7 @@ app.use('/jobs',jobsRoutes);
 app.use('/support', supportRoutes);
 app.use('/notifications', notificationsRoutes);
 app.use('/payments', paymentsRoutes);
+app.use('/tariffs', tarrifsRoutes);
 
 // --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (DINÁMICO Y SEGURO) ---
 app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {
@@ -201,6 +203,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.listen(Number(port), "192.168.1.103", () => {
+app.listen(Number(port), "192.168.252.243", () => {
   console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port}`);
 });

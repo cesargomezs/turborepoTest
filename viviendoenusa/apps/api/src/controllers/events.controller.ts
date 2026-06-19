@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { events, users, notifications, payments } from "../../../../packages/db/src/schema"; 
+import { events, users, notifications, payments, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,7 +9,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS (Obligada a retornar SIEMPRE un string para evitar TS2322)
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any): string => {
   if (!str || typeof str !== 'string') return '';
   return str.replace(/<[^>]*>?/gm, '').trim();
@@ -29,14 +29,41 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
-// 🔍 1. CONSULTA GENERAL CON PAGOS (Ahora ordenado por aprobación más reciente)
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+const getCurrentEventPrice = async () => {
+  try {
+    const currentYear = new Date().getFullYear().toString();
+
+    const activeTariff = await db.select({ price: tariffs.price })
+    .from(tariffs)
+    // 🚀 FIX CRÍTICO: Forzamos el ::text para que Postgres no rechace el cruce UUID vs TEXT
+    .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
+    .where(
+      and(
+        sql`${typeDetail.typeCode} ILIKE 'Event%'`, 
+        eq(tariffs.isActive, true),
+        eq(tariffs.planType, currentYear) 
+      )
+    )
+    .limit(1);
+
+    if (activeTariff && activeTariff.length > 0 && activeTariff[0].price) {
+      return activeTariff[0].price;
+    }
+  } catch (error) {
+    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $120.00 por defecto");
+  }
+  return "50.00";
+};
+
+// 🔍 1. CONSULTA GENERAL CON PAGOS
 export const getEvents = async (zip?: string) => {
   try {
     let query = db
       .select()
       .from(events)
       .leftJoin(users, eq(events.userId, users.id)) 
-      .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
+      .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'Event')))
       .$dynamic(); 
 
     const cleanZipParam = zip ? sanitizeText(String(zip)) : '';
@@ -45,7 +72,6 @@ export const getEvents = async (zip?: string) => {
       query = query.where(sql`${events.zip}::text = ${cleanZipParam}`); 
     }
 
-    // 🚀 ORDENAMIENTO AÑADIDO: Los eventos aprobados más recientemente aparecen primero
     query = query.orderBy(desc(events.timepostEnd));
 
     const rows = await query;
@@ -169,7 +195,7 @@ export const createEvent = async (data: any) => {
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
-        // 🚀 INSERCIÓN EN TABLA DE PAGOS
+        // 🚀 INSERCIÓN EN TABLA DE PAGOS (Dinámica)
         if (cleanData.referenceCode && cleanData.paymentMethod) {
             
             const today = new Date();
@@ -177,13 +203,16 @@ export const createEvent = async (data: any) => {
             const diffTime = eventDate.getTime() - today.getTime();
             const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
+            // 💰 Obtenemos el precio desde la tabla tariffs para la categoría Events
+            const currentPrice = await getCurrentEventPrice();
+
             await tx.insert(payments).values({
               entityType: 'event', 
               entityId: newEvent.id,
-              userId: payload.userId as string, // Casteo explícito a string
+              userId: payload.userId as string, 
               referenceCode: String(cleanData.referenceCode).trim(), 
               paymentMethod: String(cleanData.paymentMethod).trim(), 
-              amount: "50.00", 
+              amount: currentPrice, // 🚀 Guardado del precio consultado
               durationDays: daysLeft, 
               timepost_end: eventDate,
               status: "pending"
@@ -234,10 +263,14 @@ export const updateEvent = async (id: string, data: any) => {
         if (cleanPayload.approved === true) {
             const expirationDate = event.dateEvent ? new Date(event.dateEvent) : new Date();
 
+            // 💰 Nos aseguramos que el pago refleje la tarifa correcta al momento de la aprobación
+            const currentPrice = await getCurrentEventPrice();
+
             await tx.update(payments)
                 .set({ 
                     status: 'approved', 
                     approvedAt: new Date(), 
+                    amount: currentPrice, // 🚀 Por seguridad re-grabamos el monto oficial
                     timepost_end: expirationDate 
                 })
                 .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));

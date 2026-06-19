@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Alert, Share, ColorValue, ActivityIndicator,
@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useLocalSearchParams, useRouter, useSegments } from 'expo-router'; 
+import { useRouter, useGlobalSearchParams } from 'expo-router'; 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
@@ -26,8 +26,9 @@ const validateComment = (text: string): boolean => {
   return !BANNED_WORDS.some((word: string) => lowerText.includes(word.toLowerCase()));
 };
 
-// 📡 URL BASE PARA LOS EMPLEOS (Asegúrate de que esta sea tu IP actual)
-const API_JOBS_URL = 'http://192.168.1.103:3000/jobs';
+// 📡 URL BASE PARA LOS EMPLEOS Y TARIFAS
+const API_JOBS_URL = 'http://192.168.252.243:3000/jobs';
+const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs';
 
 // --- BASE DE DATOS LOCAL DE CIUDADES ---
 const usCitiesData: Record<string, string[]> = {
@@ -39,7 +40,6 @@ const STATES = Object.keys(usCitiesData);
 
 const COUNTRY_CODES = [{ code: '+1', flag: '🇺🇸' }];
 
-// Diccionarios simples para empatar filtros bilingües
 const CATEGORY_MAP: Record<string, string[]> = {
   'Bodega': ['Bodega', 'Warehouse'],
   'Construcción': ['Construcción', 'Construction'],
@@ -49,24 +49,103 @@ const CATEGORY_MAP: Record<string, string[]> = {
   'Tecnología': ['Tecnología', 'Technology']
 };
 
+// 🚀 COMPONENTE: MODAL DE RENOVACIÓN DE EMPLEO
+const RenewJobModal = memo(({ visible, onClose, onSuccess, jobToRenew, currentUserId, currentTariff, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS }: any) => {
+  const [renewRefCode, setRenewRefCode] = useState('');
+  const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
+  const [isRenewing, setIsRenewing] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setRenewRefCode('');
+      setRenewPayMethod('Zelle');
+    }
+  }, [visible]);
+
+  const handleRenewSubmit = async () => {
+    if (!renewRefCode.trim()) return Alert.alert("Aviso", "Ingresa el código de confirmación de pago.");
+    
+    setIsRenewing(true);
+    try {
+      const payload = { referenceCode: renewRefCode, paymentMethod: renewPayMethod, userId: currentUserId };
+      const res = await fetch(`${API_JOBS_URL}/${jobToRenew.id}/renew`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error();
+      Alert.alert("Éxito", "Solicitud de renovación enviada. Será verificada pronto.");
+      onSuccess();
+    } catch (e) {
+      Alert.alert("Error", "No se pudo procesar la renovación.");
+    } finally {
+      setIsRenewing(false);
+    }
+  };
+
+  return (
+    <RNModal visible={visible} animationType="fade" transparent statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isRenewing && onClose()} />
+        <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: isLargeWeb ? 400 : '90%', backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', padding: 25, borderRadius: 24, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' }}>
+            {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
+              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>Renovar Vacante</ThemedText>
+              <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
+              Renueva la vacante de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{jobToRenew?.title}</ThemedText> realizando el pago de ${currentTariff} USD y enviando el comprobante aquí abajo.
+            </ThemedText>
+            
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+              {['Zelle', 'Venmo'].map((method) => (
+                <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                  <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput 
+              style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+              placeholder={`# CONFIRMACION DE ${renewPayMethod}...`} placeholderTextColor={Colors.subtext}
+              value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
+            />
+
+            <TouchableOpacity onPress={handleRenewSubmit} disabled={isRenewing}>
+              <LinearGradient colors={orangeGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                {isRenewing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" style={{ marginRight: 8 }} />}
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Enviar Renovación</ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </RNModal>
+  );
+});
+
+
 export default function JobsScreen() {
   const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  // 🚀 1. AQUÍ ATRAPAMOS EL PARÁMETRO DE LA NOTIFICACIÓN
-  const { openJobId } = useLocalSearchParams();
+  // 🚀 LECTURA GLOBAL DE PARÁMETROS PARA NOTIFICACIONES
+  const paramsGlobal = useGlobalSearchParams();
+  const rawNotifId = paramsGlobal.openJobId || paramsGlobal.id || paramsGlobal.jobId;
+  const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
+
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark'; 
   
-  // 🚀 BLINDAJE REDUX
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   
   const currentUser = userMetadata?.name || userMetadata?.firstName || 'Cesar Gomez';
+  const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
-  // --- MANEJO SEGURO DE TRADUCCIONES ---
   const jobstabData = (t.jobstab as any) || {};
   
   const JOB_CATEGORIES = jobstabData.jobCategories || [
@@ -86,7 +165,6 @@ export default function JobsScreen() {
 
   const styles = useUnifiedCardStyles();
 
-  // --- LÓGICA DE DIMENSIONES ---
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
@@ -103,7 +181,7 @@ export default function JobsScreen() {
     accenticon: isDark ? '#4FC3F7' : '#0080B5',
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-    cardBg:             isDark ? 'rgba(255,255,255,0.05)'   : 'rgba(255,255,255,0.45)',
+    cardBg:  isDark ? 'rgba(255,255,255,0.05)'   : 'rgba(255,255,255,0.45)',
     iconInactive: isDark ? '#E0E0E0' : '#666666',
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
@@ -118,14 +196,12 @@ export default function JobsScreen() {
   const [pendingJobs, setPendingJobs] = useState<any[]>([]); 
   const [isAdminMode, setIsAdminMode] = useState(false); 
 
-  // Estados de Filtro Principales
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [availabilityFilter, setAvailabilityFilter] = useState<'open' | 'closed'>('open'); 
   const [filterTitle, setFilterTitle] = useState<string>('Todos'); 
   const [filterShift, setFilterShift] = useState<string>('Todos'); 
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   
-  // Filtros de Ubicación (Doble Nivel)
   const [filterState, setFilterState] = useState<string>('California');
   const [filterLocations, setFilterLocations] = useState<string[]>([]); 
   
@@ -133,6 +209,14 @@ export default function JobsScreen() {
   const [isModalVisible, setModalVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishView, setPublishView] = useState<'form' | 'city' | 'country'>('form');
+
+  const [renewModalVisible, setRenewModalVisible] = useState(false);
+  const [jobToRenew, setJobToRenew] = useState<any>(null);
+
+  // 🚀 ESTADOS DE PAGO
+  const [currentTariff, setCurrentTariff] = useState<string>("750.00");
+  const [formRefCode, setFormRefCode] = useState('');
+  const [formPayMethod, setFormPayMethod] = useState('Zelle');
 
   const [newJob, setNewJob] = useState<{
       title: string; company: string; category: string; description: string; 
@@ -153,8 +237,25 @@ export default function JobsScreen() {
   const [selectedJobDetail, setSelectedJobDetail] = useState<any>(null); 
   const [reviewForm, setReviewForm] = useState({ visible: false, text: '', rating: 0, isAnonymous: false });
 
-  // 🚀 LÓGICA DE ASYNC STORAGE PARA EMPLEOS GUARDADOS
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
+
+  // 🚀 FETCH TARIFA
+  useEffect(() => {
+    const fetchTariff = async () => {
+      try {
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Jobs`);
+        if (res.ok) {
+          const tariffsData = await res.json();
+          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
+            setCurrentTariff(tariffsData[0].price);
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo cargar la tarifa dinámica", e);
+      }
+    };
+    fetchTariff();
+  }, []);
 
   useEffect(() => {
     const loadSavedJobs = async () => {
@@ -170,47 +271,11 @@ export default function JobsScreen() {
     loadSavedJobs();
   }, []);
 
-  // Este useEffect llama al fetch cuando entras a la pantalla
-  useEffect(() => {
-    fetchJobsData();
-  }, []);
-
-  // 🚀 2. AQUÍ AGREGAS EL NUEVO USEEFFECT PARA EL DEEP LINKING DE LA NOTIFICACIÓN
-  useEffect(() => {
-    if (openJobId && jobs.length > 0) {
-      console.log("🔍 Buscando empleo con ID:", openJobId);
-      const jobToOpen = jobs.find(job => String(job.id) === String(openJobId));
-      
-      if (jobToOpen) {
-        setSelectedJobDetail(jobToOpen);
-      }
-    }
-  }, [openJobId, jobs]);
-  
-
-  const toggleSaveJob = async (id: string) => {
-    try {
-      let newSavedList;
-      if (savedJobs.includes(id)) {
-        newSavedList = savedJobs.filter(j => j !== id);
-        triggerAlert("Eliminado", "Empleo eliminado de tus guardados.");
-      } else {
-        newSavedList = [...savedJobs, id];
-        triggerAlert("Guardado", "Empleo guardado exitosamente.");
-      }
-      
-      setSavedJobs(newSavedList);
-      await AsyncStorage.setItem('@saved_jobs', JSON.stringify(newSavedList));
-    } catch (error) {
-      console.error("Error guardando el empleo", error);
-    }
-  };
-
-  // --- OBTENER EMPLEOS (FETCH SIN ZIP) ---
+  // --- OBTENER EMPLEOS (CON PARÁMETROS COMPLETOS) ---
   const fetchJobsData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_JOBS_URL}`);
+      const res = await fetch(`${API_JOBS_URL}?userId=${currentUserId}`);
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -230,7 +295,7 @@ export default function JobsScreen() {
           return {
             id: item.id,
             userName: item.ownerName || item.userNameId || 'Anónimo',
-            userId: item.userId,
+            userId: item.userId || item.user_id,
             title: item.title || item.nameJobs || 'Sin Título',
             company: item.company || '',
             category: item.category || 'Otros',
@@ -248,6 +313,9 @@ export default function JobsScreen() {
             description: item.descriptionJob || '',
             status: item.approved ? 'approved' : 'pending',
             isOpen: item.isOpen,
+            referenceCode: item.referenceCode,
+            paymentMethod: item.paymentMethod,
+            timepostEnd: item.timepostEnd || item.timepost_end,
             displayTime: new Date(item.createdAt).toLocaleDateString()
           };
         });
@@ -260,6 +328,81 @@ export default function JobsScreen() {
       console.error("Error al obtener empleos:", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobsData();
+  }, [currentUserId]);
+
+  // 🚀 LÓGICA BLINDADA DE APERTURA AUTOMÁTICA DESDE NOTIFICACIÓN
+  const lastProcessedNotifId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!notificationId) {
+      lastProcessedNotifId.current = null;
+      return;
+    }
+
+    const cleanNotifId = String(notificationId).trim();
+
+    if (cleanNotifId && cleanNotifId !== lastProcessedNotifId.current) {
+      lastProcessedNotifId.current = cleanNotifId;
+      
+      router.setParams({ id: '', openJobId: '', jobId: '' });
+
+      const localMatch = jobs.find(j => String(j.id) === cleanNotifId) || pendingJobs.find(j => String(j.id) === cleanNotifId);
+
+      if (localMatch) {
+        setSelectedJobDetail(localMatch);
+      } else {
+        const fetchSpecificJob = async () => {
+          try {
+            const res = await fetch(`${API_JOBS_URL}/${cleanNotifId}`);
+            if (res.ok) {
+              const data = await res.json();
+              
+              const mappedJob = {
+                ...data,
+                title: data.title || data.nameJobs || 'Sin Título',
+                description: data.descriptionJob || data.description || '',
+                state: data.stateCountry || 'California',
+                contactMethod: data.contactMethod ? 'whatsapp' : 'call',
+                shifts: data.shifts ? data.shifts.split(',').map((s: string) => s.trim()) : [],
+              };
+
+              setSelectedJobDetail(mappedJob); 
+            }
+          } catch (e) {
+            console.error("❌ Error Fetch notificación de Job:", e);
+          }
+        };
+        fetchSpecificJob();
+      }
+    }
+  }, [notificationId, jobs, pendingJobs]);
+
+  const handleCloseDetailModal = () => {
+    setSelectedJobDetail(null);
+    lastProcessedNotifId.current = null;
+    router.setParams({ id: '', openJobId: '', jobId: '' });
+  };
+
+  const toggleSaveJob = async (id: string) => {
+    try {
+      let newSavedList;
+      if (savedJobs.includes(id)) {
+        newSavedList = savedJobs.filter(j => j !== id);
+        triggerAlert("Eliminado", "Empleo eliminado de tus guardados.");
+      } else {
+        newSavedList = [...savedJobs, id];
+        triggerAlert("Guardado", "Empleo guardado exitosamente.");
+      }
+      
+      setSavedJobs(newSavedList);
+      await AsyncStorage.setItem('@saved_jobs', JSON.stringify(newSavedList));
+    } catch (error) {
+      console.error("Error guardando el empleo", error);
     }
   };
 
@@ -302,9 +445,10 @@ export default function JobsScreen() {
       }
   };
 
+  // 🚀 PUBLICAR CON VERIFICACIÓN DE PAGO
   const handlePublishJob = async () => {
-    if (!newJob.title || !newJob.company || !newJob.city || !newJob.description || !newJob.phone || newJob.shifts.length === 0 || !newJob.salaryMin) {
-      triggerAlert("Campos Incompletos", "Por favor completa el título, empresa, estado, ciudad, salario mínimo, turno(s), descripción y el número de contacto.");
+    if (!newJob.title || !newJob.company || !newJob.city || !newJob.description || !newJob.phone || newJob.shifts.length === 0 || !newJob.salaryMin || !formRefCode.trim()) {
+      triggerAlert("Campos Incompletos", "Por favor completa todos los campos, incluyendo el código de confirmación de pago.");
       return;
     }
     if (!validateComment(newJob.description)) {
@@ -332,7 +476,9 @@ export default function JobsScreen() {
         isOpen: true,
         userId: userMetadata?.id || null,
         userNameId: currentUser,
-        imageRute: '' 
+        imageRute: '',
+        referenceCode: formRefCode,
+        paymentMethod: formPayMethod 
       };
 
       const res = await fetch(API_JOBS_URL, {
@@ -346,6 +492,9 @@ export default function JobsScreen() {
       fetchJobsData(); 
       setModalVisible(false);
       setNewJob({ title: '', company: '', category: 'Bodega', description: '', contactMethod: 'whatsapp', phoneCode: '+1', phone: '', shifts: [], salaryMin: '', salaryMax: '', state: 'California', city: '' });
+      setFormRefCode('');
+      setFormPayMethod('Zelle');
+
       triggerAlert("¡Recibido!", "Tu empleo ha sido publicado/enviado exitosamente y está pendiente de aprobación.");
     } catch (e) {
       triggerAlert("Error", "No se pudo publicar el empleo. Revisa tu conexión.");
@@ -354,23 +503,30 @@ export default function JobsScreen() {
     }
   };
 
-  const handleApproveJob = async (id: string) => {
+  // 🚀 APROBAR CON MESES
+  const handleApproveJob = async (id: string, durationMonths: number) => {
     try {
       const res = await fetch(`${API_JOBS_URL}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved: true })
+        body: JSON.stringify({ approved: true, durationMonths })
       });
 
       if (!res.ok) throw new Error("No se pudo aprobar");
 
       const jobToApprove = pendingJobs.find(job => job.id === id);
       if (jobToApprove) {
+        
+        const futureDate = new Date();
+        futureDate.setMonth(futureDate.getMonth() + durationMonths);
+
         jobToApprove.status = 'approved';
+        jobToApprove.timepostEnd = futureDate.toISOString();
+        
         setJobs(prev => [jobToApprove, ...prev]);
         setPendingJobs(prev => prev.filter(job => job.id !== id));
       }
-      triggerAlert("Aprobado", "La oferta de empleo ahora es pública.");
+      triggerAlert("Aprobado", `La oferta de empleo ahora es pública por ${durationMonths} meses.`);
     } catch (e) {
       triggerAlert("Error", "Ocurrió un error al aprobar la oferta.");
     }
@@ -412,7 +568,6 @@ export default function JobsScreen() {
     }).catch(err => console.log(err));
   };
 
-  // 🚀 LÓGICA DE ENVÍO DE RESEÑA: Siempre enviamos el ID real para validación y el flag isAnonymous
   const handleSubmitReview = async () => {
       if (!reviewForm.text.trim() || reviewForm.rating === 0) {
           triggerAlert("Incompleto", "Por favor ingresa un comentario y selecciona la cantidad de estrellas.");
@@ -424,16 +579,15 @@ export default function JobsScreen() {
       }
 
       try {
-        // SIEMPRE enviamos tu ID real o el ID por defecto para que la validación anti-spam funcione
         const idParaEnviar = userMetadata?.id || userMetadata?.uid || 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
 
         const payload = {
           reference_id: selectedCompany.id,
           stars: reviewForm.rating,
           comment: reviewForm.text,
-          userId: idParaEnviar, // Siempre el Real
+          userId: idParaEnviar, 
           userName: currentUser,
-          isAnonymous: reviewForm.isAnonymous // 🚀 Le decimos al backend si debe esconderlo
+          isAnonymous: reviewForm.isAnonymous 
         };
 
         const res = await fetch(`${API_JOBS_URL}/reviews`, {
@@ -442,7 +596,6 @@ export default function JobsScreen() {
           body: JSON.stringify(payload)
         });
 
-        // Atrapamos el error ALREADY_REVIEWED
         if (!res.ok) {
            const errorData = await res.json().catch(() => ({}));
            if (errorData.message === "ALREADY_REVIEWED" || res.status === 400) {
@@ -453,12 +606,11 @@ export default function JobsScreen() {
 
         const savedReview = await res.json();
         
-        // Mapeamos la respuesta
         const newReviewFormatted = { 
           id: savedReview.id || Date.now(), 
           text: savedReview.comment || reviewForm.text, 
           stars: Number(savedReview.stars || reviewForm.rating), 
-          userName: savedReview.userName // El backend ya retorna "Anónimo" o el nombre real aquí
+          userName: savedReview.userName 
         };
         
         let newAverage = 0;
@@ -517,8 +669,64 @@ export default function JobsScreen() {
           ? filterLocations[0] 
           : `${filterLocations.length} ${jobstabData.filter === 'Filter' ? 'cities' : 'ciudades'}`;
 
+  // 🚀 NUEVO COMPONENTE ADMIN
+  const PendingJobItem = ({ job }: { job: any }) => {
+    const [selectedMonths, setSelectedMonths] = useState(1);
+    
+    return (
+        <View style={{ marginBottom: 15 }}>
+            <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: '#FFB74D' }}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedJobDetail(job)}>
+                    <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
+                        <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
+                        <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
+                    </View>
+                    <View style={{ padding: 15 }}>
+                        <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
+                        <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginTop: 4, fontWeight: 'bold' }}>{job.company}</ThemedText>
+                    </View>
+                </TouchableOpacity>
+
+                {/* Controles de Admin con Ref y Meses */}
+                <View style={{ marginTop: 5, borderTopWidth: 1, borderTopColor: DynamicColors.border, padding: 15 }}>
+                    <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
+                        <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
+                        <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
+                            Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{job.referenceCode || 'N/A'}</ThemedText> ({job.paymentMethod || 'Pago'})
+                        </ThemedText>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
+                        {[1, 3, 6, 12].map(m => (
+                            <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
+                                <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                    
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <TouchableOpacity onPress={() => handleRejectJob(job.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText></TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleApproveJob(job.id, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText></TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
+      
+      {/* 🚀 MODAL RENOVACIÓN */}
+      <RenewJobModal 
+        visible={renewModalVisible} 
+        onClose={() => setRenewModalVisible(false)} 
+        onSuccess={() => { setRenewModalVisible(false); fetchJobsData(); }} 
+        jobToRenew={jobToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
+        isDark={isDark} Colors={DynamicColors} orangeGradient={orangeGradient} 
+        isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} 
+      />
+
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[styles.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border }}>
@@ -526,15 +734,12 @@ export default function JobsScreen() {
 
             <View style={styles.cardContent}>
               
-              {/* --- CABECERA UNIFICADA EN UNA SOLA LÍNEA --- */}
               <View style={[styles.headerRow, { marginBottom: 15, justifyContent: 'space-between', alignItems: 'center' }]}>
                 
-                {/* Botón Volver */}
                 <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4, zIndex: 10 }}>
                   <MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} />
                 </TouchableOpacity>
 
-                {/* Filtro de Disponibilidad REDUCIDO */}
                 <View style={{ flex: 1, alignItems: 'center', marginHorizontal: 4 }}>
                     <View style={{ flexDirection: 'row', backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: DynamicColors.border }}>
                         <TouchableOpacity onPress={() => setAvailabilityFilter('open')} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: availabilityFilter === 'open' ? DynamicColors.accent : 'transparent' }}>
@@ -546,7 +751,6 @@ export default function JobsScreen() {
                     </View>
                 </View>
 
-                {/* 🚀 BOTONES DERECHOS: Guardados, Refrescar y Admin */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)} style={{ padding: 0 }}>
                       <MaterialCommunityIcons 
@@ -564,7 +768,6 @@ export default function JobsScreen() {
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
                 
-                {/* MENU LATERAL WEB (FILTROS) */}
                 {isLargeWeb && (
                   <View style={styles.webSidebar}>
                     <ScrollView showsVerticalScrollIndicator={false}>
@@ -610,40 +813,11 @@ export default function JobsScreen() {
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
                   
-                  {/* --- ADMIN PENDING JOBS --- */}
                   {isAdminMode && pendingJobs.length > 0 && (
                     <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
                       <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Verificar ({pendingJobs.length})</ThemedText>
                       {pendingJobs.map(job => (
-                        <View key={job.id} style={{ marginBottom: 15 }}>
-                          <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: '#FFB74D' }}>
-                            <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedJobDetail(job)}>
-                                <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
-                                    <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
-                                    <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
-                                </View>
-                                <View style={{ padding: 15 }}>
-                                  <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
-                                  <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginTop: 4, fontWeight: 'bold' }}>{job.company}</ThemedText>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
-                                     <MaterialCommunityIcons name="arrow-expand" size={14} color={DynamicColors.accent} />
-                                     <ThemedText style={{ fontSize: 12, color: DynamicColors.accent, fontWeight: 'bold', marginLeft: 4 }}>Ver detalle completo</ThemedText>
-                                  </View>
-                                </View>
-                            </TouchableOpacity>
-                          </View>
-                          
-                          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -10, zIndex: 10, paddingRight: 15, gap: 10 }}>
-                            <TouchableOpacity onPress={() => handleRejectJob(job.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
-                                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleApproveJob(job.id)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                              <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
+                        <PendingJobItem key={job.id} job={job} />
                       ))}
                     </View>
                   )}
@@ -710,7 +884,6 @@ export default function JobsScreen() {
                       </TouchableOpacity>
                   </View>
 
-                  {/* FEED EMPLEOS */}
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     {filteredJobs.length === 0 ? (
                        <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
@@ -726,9 +899,28 @@ export default function JobsScreen() {
                         if (reviewCount >= 1000) {
                           formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
                         }
+                        
+                        const isOwner = job.userId === currentUserId || job.userName === currentUser;
+                        const isExpired = (job.timepostEnd && new Date(job.timepostEnd).getFullYear() > 1970) 
+                            ? new Date(job.timepostEnd) < new Date() 
+                            : false;
+                        
+                        const fadeCard = (!job.isOpen || isExpired);
 
                         return (
-                          <View key={job.id} style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: DynamicColors.border, opacity: job.isOpen ? 1 : 0.65 }}>
+                          <View key={job.id} style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: (isExpired) ? '#FFB74D' : DynamicColors.border, opacity: fadeCard ? 0.65 : 1 }}>
+                            
+                            {isOwner && isExpired && (
+                              <View style={{ backgroundColor: 'rgba(255, 82, 82, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 82, 82, 0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                  <MaterialCommunityIcons name="alert-circle" size={20} color="#FF5252" />
+                                  <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>Tu publicación ha expirado.</ThemedText>
+                                </View>
+                                <TouchableOpacity onPress={() => { setJobToRenew(job); setRenewModalVisible(true); }} style={{ backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 10 }}>
+                                  <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>Renovar</ThemedText>
+                                </TouchableOpacity>
+                              </View>
+                            )}
 
                             <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedJobDetail(job)}>
                               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
@@ -781,15 +973,15 @@ export default function JobsScreen() {
                             </TouchableOpacity>
 
                             <View style={{ padding: 15, paddingTop: 0 }}>
-                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15, marginTop: 5, paddingBottom: (job.userName === currentUser || job.userId === userMetadata?.id) ? 10 : 0 }}>
-                                  <TouchableOpacity onPress={() => setSelectedCompany(job)} style={{ flex: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: DynamicColors.inputBg }}>
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15, marginTop: 5, paddingBottom: isOwner ? 10 : 0 }}>
+                                  <TouchableOpacity onPress={() => setSelectedCompany(job)} disabled={isExpired} style={{ flex: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: DynamicColors.inputBg }}>
                                     <MaterialCommunityIcons name="comment-text-outline" size={16} color={DynamicColors.text} />
                                     <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: DynamicColors.text }}>
                                       Reseñas {reviewCount > 0 ? `(${formattedCount})` : ''}
                                     </ThemedText>
                                   </TouchableOpacity>
 
-                                  <TouchableOpacity onPress={() => handleContact(job.contactMethod as 'whatsapp'|'call', job.phoneCode, job.phone)} disabled={!job.isOpen} style={{ flex: 2, minWidth: 140, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: job.contactMethod === 'whatsapp' ? 'rgba(76, 175, 80, 0.15)' : (isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'), opacity: !job.isOpen ? 0.4 : 1 }}>
+                                  <TouchableOpacity onPress={() => handleContact(job.contactMethod as 'whatsapp'|'call', job.phoneCode, job.phone)} disabled={!job.isOpen || isExpired} style={{ flex: 2, minWidth: 140, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: job.contactMethod === 'whatsapp' ? 'rgba(76, 175, 80, 0.15)' : (isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD')}}>
                                   <MaterialCommunityIcons name={job.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={16} color={job.contactMethod === 'whatsapp' ? "#4CAF50" : (isDark ? '#4FC3F7' : '#1976D2')} />
                                   <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: job.contactMethod === 'whatsapp' ? "#4CAF50" : (isDark ? '#4FC3F7' : '#1976D2') }}>
                                       {job.contactMethod === 'whatsapp' ? 'WhatsApp' : 'Llamar'}
@@ -797,7 +989,7 @@ export default function JobsScreen() {
                                   </TouchableOpacity>
                               </View>
 
-                              {(job.userName === currentUser || job.userId === userMetadata?.id) && (
+                              {isOwner && (
                                   <View style={{ flexDirection: 'row', justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 10 }}>
                                   <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.1)' : 'rgba(76, 175, 80, 0.1)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 12 }}>
                                       <MaterialCommunityIcons name={job.isOpen ? "briefcase-off" : "briefcase-check"} size={16} color={job.isOpen ? "#FF5252" : "#4CAF50"} />
@@ -820,7 +1012,7 @@ export default function JobsScreen() {
         </View>
       </ScrollView>
 
-      <TouchableOpacity onPress={() => { setPublishView('form'); setModalVisible(true); }} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99 }]}>
+      <TouchableOpacity onPress={() => { setPublishView('form'); setModalVisible(true); }} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
         <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}>
           <MaterialCommunityIcons name="briefcase-plus" size={28} color="#fff" />
         </LinearGradient>
@@ -829,7 +1021,9 @@ export default function JobsScreen() {
       <RNModal visible={!!selectedJobDetail} transparent animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setSelectedJobDetail(null)} />
+          
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleCloseDetailModal} />
+          
           <View style={{ width: '90%', maxHeight: '80%', borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
@@ -846,7 +1040,7 @@ export default function JobsScreen() {
                         />
                     </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => setSelectedJobDetail(null)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
+                <TouchableOpacity onPress={handleCloseDetailModal} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
                     <MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} />
                 </TouchableOpacity>
             </View>
@@ -1013,7 +1207,15 @@ export default function JobsScreen() {
                             );
                         })}
                     </ScrollView>
-                    <TextInput value={newJob.title} onChangeText={t => setNewJob({...newJob, title: t})} placeholder="Escribe o elige un puesto arriba..." placeholderTextColor="#999" style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+
+                    <TextInput 
+                      value={newJob.title} 
+                      onChangeText={t => setNewJob({...newJob, title: t})} 
+                      placeholder="Escribe o elige un puesto arriba..." 
+                      placeholderTextColor="#999" 
+                      autoCapitalize="words"
+                      style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                    />
 
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>ESTADO *</ThemedText>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}} contentContainerStyle={{gap: 8}}>
@@ -1048,7 +1250,14 @@ export default function JobsScreen() {
                     </View>
 
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>EMPRESA / CONTRATISTA *</ThemedText>
-                    <TextInput value={newJob.company} onChangeText={t => setNewJob({...newJob, company: t})} placeholder="Nombre del negocio o persona" placeholderTextColor="#999" style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                    <TextInput 
+                      value={newJob.company} 
+                      onChangeText={t => setNewJob({...newJob, company: t})} 
+                      placeholder="Nombre del negocio o persona" 
+                      placeholderTextColor="#999" 
+                      autoCapitalize="words"
+                      style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                    />
 
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>PAGO POR HORA (USD) *</ThemedText>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
@@ -1119,10 +1328,48 @@ export default function JobsScreen() {
                     </View>
 
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>DESCRIPCIÓN *</ThemedText>
-                    <TextInput value={newJob.description} onChangeText={t => setNewJob({...newJob, description: t})} placeholder="Requisitos, habilidades necesarias..." placeholderTextColor="#999" multiline style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, height: 100, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                    <TextInput 
+                      value={newJob.description} 
+                      onChangeText={t => setNewJob({...newJob, description: t})} 
+                      placeholder="Requisitos, habilidades necesarias..." 
+                      placeholderTextColor="#999" 
+                      multiline 
+                      autoCapitalize="sentences"
+                      style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, height: 100, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                    />
+
+                    {/* 🚀 VERIFICACIÓN DE PAGO AGREGADA EN EL MODAL */}
+                    <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
+                      <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
+                      
+                      <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: DynamicColors.text }}>
+                        Para publicar esta vacante, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                      </ThemedText>
+                      
+                      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                        {['Zelle', 'Venmo'].map((method) => (
+                          <TouchableOpacity 
+                            key={method}
+                            onPress={() => setFormPayMethod(method)} 
+                            style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                          >
+                            <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <TextInput 
+                        style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                        placeholder={`# CONFIRMACION DE ${formPayMethod}...`} 
+                        placeholderTextColor={DynamicColors.subtext}
+                        value={formRefCode} 
+                        onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
+                        autoCapitalize="characters"
+                      />
+                    </View>
 
                     <TouchableOpacity onPress={handlePublishJob} disabled={isPublishing}>
-                      <LinearGradient colors={(!newJob.title || !newJob.description || !newJob.phone || !newJob.company || !newJob.city || newJob.shifts.length === 0 || !newJob.salaryMin) ? disabledGradient : orangeGradient} style={{ height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
+                      <LinearGradient colors={(!newJob.title || !newJob.description || !newJob.phone || !newJob.company || !newJob.city || newJob.shifts.length === 0 || !newJob.salaryMin || !formRefCode.trim()) ? disabledGradient : orangeGradient} style={{ height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
                         {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Enviar a Revisión</ThemedText>}
                       </LinearGradient>
                     </TouchableOpacity>
@@ -1285,7 +1532,9 @@ export default function JobsScreen() {
                             value={reviewForm.text}
                             onChangeText={t => setReviewForm(prev => ({...prev, text: t}))}
                             placeholder="Describe tu experiencia trabajando aquí..."
+                            placeholderTextColor={DynamicColors.subtext}
                             multiline
+                            autoCapitalize="sentences"
                             style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 12, padding: 15, color: DynamicColors.text, minHeight: 80, textAlignVertical: 'top', marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }}
                         />
 

@@ -1,133 +1,156 @@
 import { db } from "../../../../packages/db/src"; 
-// 🚀 1. Importamos las tablas 'rating' y 'reviews' con sus alias de seguridad
-import { stores, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql } from "drizzle-orm"; 
-import { createClient } from '@supabase/supabase-js';
+import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and } from "drizzle-orm";
+import { createClient } from '@supabase/supabase-js'; 
 
-// 🚀 Inicializamos Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🔍 1. CONSULTA GENERAL (Con doble JOIN para Ratings y Reviews)
-export const getStores = async (zip?: string) => {
+// 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
+const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+const getCurrentStorePrice = async () => {
   try {
-    let query = db
-      .select()
-      .from(stores)
-      .leftJoin(users, eq(stores.userId, users.id)) 
-      // 🚀 PRIMER JOIN: Traemos las estrellas
-      .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id)) 
-      // 🚀 SEGUNDO JOIN: Traemos el texto de la reseña enlazado al rating
-      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-      .$dynamic(); 
+    // Obtener el año actual dinámicamente (ej: "2024")
+    const currentYear = new Date().getFullYear().toString();
 
-    if (zip && zip.trim().length === 5) {
-      const cleanZip = zip.trim();
-      query = query.where(sql`${stores.zip}::text = ${cleanZip}`); 
+    const activeTariff = await db.select({ price: tariffs.price })
+    .from(tariffs)
+    .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
+    .where(
+      and(
+        sql`${typeDetail.typeCode} ILIKE 'Store%'`, 
+        eq(tariffs.isActive, true),
+        eq(tariffs.planType, currentYear) 
+      )
+    )
+    .limit(1);
+
+    if (activeTariff && activeTariff.length > 0 && activeTariff[0].price) {
+      return activeTariff[0].price;
     }
+  } catch (error) {
+    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $50.00 por defecto");
+  }
+  return "50.00";
+};
 
-    query = query.orderBy(desc(stores.createdAt));
+// 🔍 1. CONSULTA GENERAL
+export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
+  try {
+    const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+
+    let query = db
+    .select()
+    .from(stores)
+    .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
+    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+    .leftJoin(payments, and(eq(payments.entityId, stores.id), eq(payments.entityType, 'store')))
+    .where(
+      currentUserId 
+        ? sql`${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${currentUserId}`
+        : sql`${stores.approved} = false OR ${stores.timepostEnd} > NOW()`
+    )
+    .orderBy(desc(stores.createdAt))
+    .$dynamic();
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
-    // 🚀 AGRUPAMOS LAS RESEÑAS POR TIENDA
-    const itemsMap = new Map<string, any>();
+    const storesMap = new Map<string, any>();
 
     for (const row of rows) {
-      const itemId = row.stores.id;
+      const storeId = row.stores.id;
 
-      if (!itemsMap.has(itemId)) {
-        const dbUser = row.users;
-        itemsMap.set(itemId, {
+      if (!storesMap.has(storeId)) {
+        storesMap.set(storeId, {
           ...row.stores,
-          ownerName: dbUser?.name  || 'Usuario Anónimo',
+          referenceCode: row.payments?.referenceCode || null,
+          paymentMethod: row.payments?.paymentMethod || null,
           reviews: [], 
-          rating: 0 // Inicializado en 0 para evitar el 5.0 fantasma
+          totalRating: 0,
+          totalReviews: 0
         });
       }
 
-      // Si hay un rating válido, agregamos la reseña mapeando el texto al frontend
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
-        itemsMap.get(itemId).reviews.push({
+        storesMap.get(storeId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
-           comment: commentText, 
+           comment: commentText,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
     }
 
-    const finalStores = await Promise.all(Array.from(itemsMap.values()).map(async (item) => {
-        // 🧮 Calcular promedio de estrellas real en el Backend
-        if (item.reviews.length > 0) {
-            const totalStars = item.reviews.reduce((sum: number, r: any) => sum + (Number(r.stars) || 0), 0);
-            item.rating = totalStars / item.reviews.length;
-            item.totalReviews = item.reviews.length; // Enviamos el contador real
-        } else {
-            item.rating = 0;
-            item.totalReviews = 0;
-        }
+    const finalResult = await Promise.all(Array.from(storesMap.values()).map(async (store: any) => {
+      store.totalReviews = store.reviews.length;
 
-        const fileName = item.imageStores;
-        let publicUrl = fileName; 
+      if (store.totalReviews > 0) {
+        const sum = store.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+        store.totalRating = Math.round((sum / store.totalReviews) * 10) / 10;
+        store.rating = store.totalRating; 
+      } else {
+        store.totalRating = 0;
+        store.rating = 0;
+      }
 
-        if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
-            const cleanName = fileName.replace('stores/', '');
-            const rutaArchivo = `stores/${cleanName}`;
+      const safeDescription = store.description || store.descriptionStores || '';
+      store.description = safeDescription;
+      store.descriptionStores = safeDescription;
 
-            const { data, error } = await supabase.storage
-                .from(NOMBRE_BUCKET)
-                .createSignedUrl(rutaArchivo, 3600); 
+      if (store.imageStores && store.imageStores.trim() !== '' && !store.imageStores.startsWith('http')) {
+          const rutaArchivo = store.imageStores.startsWith('stores/') 
+              ? store.imageStores : `stores/${store.imageStores}`;
 
-            if (!error && data?.signedUrl) {
-                publicUrl = data.signedUrl;
-            } else if (error) {
-                console.warn(`⚠️ Error firmando imagen de tienda ${item.id}:`, error.message);
-            }
-        }
+          const { data, error } = await supabase
+              .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
 
-        return { 
-            ...item,
-            imageStores: publicUrl
-        }; 
+          if (!error && data) {
+              return { ...store, image: data.signedUrl, imageStores: data.signedUrl }; 
+          }
+      }
+      return { ...store, image: store.imageStores }; 
     }));
 
-    return finalStores;
-  } catch (error) {
+    return finalResult;
+  } catch (error: any) {
     console.error("❌ Error en getStores:", error);
     return [];
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID (Actualizado con Reviews para la vista detalle)
+// 🔍 2. CONSULTA INDIVIDUAL POR ID
 export const getStoreById = async (id: string) => {
   try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) return null;
+
     const rows = await db
       .select()
       .from(stores)
-      .leftJoin(users, eq(stores.userId, users.id))
       .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .where(eq(stores.id, id));
-
+      .where(eq(stores.id, cleanId));
+  
     if (!rows || rows.length === 0) return null;
-
-    const dbStore = rows[0].stores;
-    const dbUser = rows[0].users;
-    const nombreUsuario = dbUser?.name || 'Usuario Anónimo';
-
+  
     const storeFinal: any = {
-        ...dbStore,
-        ownerName: nombreUsuario,
-        reviews: [],
-        rating: 0,
-        totalReviews: 0
+      ...rows[0].stores, 
+      reviews: [],
+      totalRating: 0,
+      totalReviews: 0           
     };
 
     for (const row of rows) {
@@ -142,140 +165,269 @@ export const getStoreById = async (id: string) => {
       }
     }
 
-    if (storeFinal.reviews.length > 0) {
-      const totalStars = storeFinal.reviews.reduce((sum: number, r: any) => sum + r.stars, 0);
-      storeFinal.rating = totalStars / storeFinal.reviews.length;
-      storeFinal.totalReviews = storeFinal.reviews.length;
+    storeFinal.totalReviews = storeFinal.reviews.length;
+    if (storeFinal.totalReviews > 0) {
+      const sum = storeFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+      storeFinal.totalRating = Math.round((sum / storeFinal.totalReviews) * 10) / 10;
+      storeFinal.rating = storeFinal.totalRating;
     }
 
-    let publicUrl = storeFinal.imageStores;
+    const safeDescription = storeFinal.description || storeFinal.descriptionStores || '';
+    storeFinal.description = safeDescription;
+    storeFinal.descriptionStores = safeDescription;
 
-    if (publicUrl && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
-        const cleanName = publicUrl.replace('stores/', '');
-        const { data, error } = await supabase.storage
-            .from(NOMBRE_BUCKET).createSignedUrl(`stores/${cleanName}`, 3600);
+    if (storeFinal.imageStores && storeFinal.imageStores.trim() !== '' && !storeFinal.imageStores.startsWith('http')) {
+        const rutaArchivo = storeFinal.imageStores.startsWith('stores/') 
+            ? storeFinal.imageStores : `stores/${storeFinal.imageStores}`;
+
+        const { data, error } = await supabase
+            .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
             
-        if (!error && data?.signedUrl) {
-            publicUrl = data.signedUrl;
+        if (!error && data) {
+            storeFinal.image = data.signedUrl;
+            storeFinal.imageStores = data.signedUrl;
+        }
+    } else {
+        storeFinal.image = storeFinal.imageStores;
+    }
+
+    return storeFinal;
+  } catch (error: any) {
+    throw new Error(`Error al obtener el negocio por ID: ${error.message}`);
+  }
+};
+
+// 📥 3. CREAR NEGOCIO
+export const createStore = async (data: any) => {
+  try {
+    let cleanImage = sanitizeText(data.imageStores) || '';
+    if (cleanImage.startsWith('stores/')) {
+      cleanImage = cleanImage.replace('stores/', '');
+    }
+
+    return await db.transaction(async (tx) => {
+      
+      const safeDesc = sanitizeText(data.description || data.descriptionStores) || '';
+
+      const storePayload: any = {
+        nameStores: sanitizeText(data.nameStores || data.name) || 'Sin nombre',
+        categoryId: sanitizeText(data.categoryId) || 'General',
+        addressStores: sanitizeText(data.addressStores || data.address) || '',
+        zip: sanitizeText(data.zip) || null,
+        phone: sanitizeText(data.phone) || '',
+        imageStores: cleanImage,
+        descriptionStores: safeDesc,
+        lat: data.lat ? Number(data.lat) : null,
+        lng: data.lng ? Number(data.lng) : null,
+        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        approved: false 
+      };
+      
+      const [newStore] = await tx.insert(stores).values(storePayload).returning();
+
+      if (data.referenceCode && data.paymentMethod) {
+        const basePrice = await getCurrentStorePrice();
+
+        await tx.insert(payments).values({
+          entityType: 'store',
+          entityId: newStore.id,
+          userId: storePayload.userId,
+          referenceCode: sanitizeText(data.referenceCode) || '', 
+          paymentMethod: sanitizeText(data.paymentMethod) || '', 
+          amount: basePrice, 
+          durationDays: 30, 
+          status: "pending"
+        });
+      }
+
+      return {
+         ...newStore,
+         referenceCode: data.referenceCode,
+         paymentMethod: data.paymentMethod,
+         description: safeDesc,
+         descriptionStores: safeDesc
+      };
+    });
+  } catch (error: any) { 
+    console.error("❌ Error en createStore:", error);
+    
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
+       throw new Error("Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único.");
+    }
+
+    throw new Error(`Error al crear el negocio: ${error.message}`);
+  }
+};
+
+// 🔄 4. ACTUALIZAR NEGOCIO
+export const updateStore = async (id: string, data: any) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    return await db.transaction(async (tx) => {
+      
+      const allowedFields = ['nameStores', 'categoryId', 'addressStores', 'zip', 'phone', 'lat', 'lng', 'imageStores', 'descriptionStores'];
+      const updatePayload: any = {};
+      
+      for (const key of allowedFields) {
+        if (data[key] !== undefined) {
+           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+        }
+      }
+
+      if (data.description !== undefined || data.descriptionStores !== undefined) {
+        const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionStores);
+        updatePayload.descriptionStores = safeDesc;
+      }
+
+      if (data.imageStores && typeof data.imageStores === 'string' && data.imageStores.startsWith('stores/')) {
+        updatePayload.imageStores = data.imageStores.replace('stores/', '');
+      }
+
+      const isApproved = String(data.approved).toLowerCase() === 'true';
+
+      if (isApproved) {
+        updatePayload.approved = true; 
+        updatePayload.createdAt = new Date();
+        
+        let monthsToAdd = 1; 
+        if (data.durationMonths) {
+          const parsedMonths = Number(data.durationMonths);
+          if (!isNaN(parsedMonths)) {
+            monthsToAdd = parsedMonths;
+          }
+        }
+        
+        const expirationDate = new Date();
+        expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
+        
+        updatePayload.timepostEnd = expirationDate; 
+
+        const basePriceString = await getCurrentStorePrice();
+        const basePriceNum = Number(basePriceString) || 50; 
+        const totalAmount = (monthsToAdd * basePriceNum).toFixed(2); 
+
+        const daysToAdd = monthsToAdd * 30; 
+
+        await tx.update(payments)
+          .set({ 
+             status: "approved", 
+             approvedAt: new Date(), 
+             durationDays: daysToAdd, 
+             amount: totalAmount, 
+             timepost_end: expirationDate 
+          })
+          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'store')));
+      }
+
+      const updated = await tx
+        .update(stores)
+        .set(updatePayload) 
+        .where(eq(stores.id, cleanId))
+        .returning();
+        
+      const store = updated[0];
+
+      if (isApproved && store) {
+        const notifPayload: any = {
+            title: "¡Negocio Verificado! 🏪",
+            description: `El negocio ${store.nameStores} ahora es parte de la red de servicios. ¡Visita su perfil!`,
+            type: "store", 
+            visibleAt: new Date(), 
+            userId: store.userId || TEMP_USER_ID, 
+        };
+
+        if ('referenceId' in notifications) notifPayload.referenceId = String(store.id);
+        else if ('reference_id' in notifications) notifPayload.reference_id = String(store.id);
+
+        await tx.insert(notifications).values(notifPayload);
+      }
+
+      return store || null;
+    });
+
+  } catch (error: any) { 
+    console.error("❌ Error en updateStore:", error);
+    throw new Error(`Error al actualizar el negocio: ${error.message}`);
+  }
+};
+
+// 🚀 5. INGRESO DE RATING Y RESEÑA
+export const createStoreReview = async (data: any) => {
+  try {
+    let validUserId = sanitizeText(data.userId) || null;
+    if (!validUserId || validUserId.length < 20) {
+        validUserId = TEMP_USER_ID; 
+    }
+
+    const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
+
+    if (validUserId && targetReferenceId) {
+        const existingRating = await db.select()
+          .from(ratingTable)
+          .where(
+            and(
+              eq(ratingTable.referenceId, targetReferenceId),
+              eq(ratingTable.userId, validUserId)
+            )
+          )
+          .limit(1);
+
+        if (existingRating && existingRating.length > 0) {
+            throw new Error("El usuario ya ha publicado una reseña para este negocio.");
         }
     }
 
-    storeFinal.imageStores = publicUrl;
-    return storeFinal;
-  } catch (error: any) {
-    throw new Error(`Error al obtener la tienda por ID: ${error.message}`);
-  }
-};
-
-// 📥 3. CREAR TIENDA
-export const createStore = async (data: any) => {
-  try {
-    let cleanImage = data.imageStores || '';
-    if (cleanImage.startsWith('stores/')) {
-        cleanImage = cleanImage.replace('stores/', '');
-    }
-
-    const payload: any = {
-      nameStores: data.nameStores || 'Sin nombre',
-      descriptionStores: data.descriptionStores || '',
-      addressStores: data.addressStores || '',
-      categoryId: data.categoryId || null, 
-      zip: data.zip ? String(data.zip).trim() : null,
-      estate: 'CA',
-      imageStores: cleanImage,
-      lat: data.lat ? Number(data.lat) : null,
-      lng: data.lng ? Number(data.lng) : null,
-      phone: data.phone || '',
-      statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
-      approved: data.approved !== undefined ? data.approved : false, 
-      rating: 0, // Iniciamos en 0 neto
-    };
-
-    const fallbackUser = await db.select().from(users).limit(1);
-    payload.userId = data.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : null);
-
-    const newStore = await db.insert(stores).values(payload).returning();
-    return newStore[0];
-  } catch (error: any) { 
-    console.error("❌ Error en createStore:", error);
-    throw new Error(`Error al crear la tienda: ${error.message}`);
-  }
-};
-
-// 🔄 4. ACTUALIZAR TIENDA
-export const updateStore = async (id: string, data: any) => {
-  try {
-    if (data.imageStores && data.imageStores.startsWith('stores/')) {
-        data.imageStores = data.imageStores.replace('stores/', '');
-    }
-    const updated = await db.update(stores).set(data).where(eq(stores.id, id)).returning();
-    return updated[0] || null;
-  } catch (error: any) { 
-    throw new Error(`Error al actualizar la tienda: ${error.message}`);
-  }
-};
-
-// 🗑️ 5. ELIMINAR TIENDA
-export const deleteStore = async (id: string) => {
-  try {
-    const deleted = await db.delete(stores).where(eq(stores.id, id)).returning();
-    return deleted[0] || null;
-  } catch (error: any) {
-    throw new Error(`Error al eliminar la tienda: ${error.message}`);
-  }
-};
-
-// 📥 6. CREAR RESEÑA PARA TIENDA (NUEVO - INSERCIÓN DOBLE)
-export const createStoreReview = async (data: any) => {
-  try {
-    let validUserId = null;
-    if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
-        validUserId = data.userId;
-    } else {
-        const fallbackUser = await db.select().from(users).limit(1);
-        if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
-    }
-
-    // --- PASO A: GUARDAR LAS ESTRELLAS EN 'rating' ---
     const ratingPayload: any = {
-      rating: String(data.stars || 5), 
+      rating: String(Number(data.stars || data.rating || 5)), 
       userId: validUserId,
     };
 
     if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'stores';
     else ratingPayload.type_entry = 'stores';
 
-    if ('referenceId' in ratingTable) ratingPayload.referenceId = data.reference_id || data.referenceId;
-    else ratingPayload.reference_id = data.reference_id || data.referenceId;
+    if ('referenceId' in ratingTable) ratingPayload.referenceId = targetReferenceId;
+    else ratingPayload.reference_id = targetReferenceId;
 
     const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
     const generatedRatingId = newRating[0].id;
 
-    // --- PASO B: GUARDAR EL TEXTO EN 'reviews' ---
     let savedComment = '';
+    const incomingText = sanitizeText(data.comment || data.text || data.review);
     
-    if (data.comment && data.comment.trim() !== '') {
+    if (incomingText && incomingText !== '') {
       const reviewPayload: any = {
         userId: validUserId
       };
 
-      if ('review' in reviewsTable) reviewPayload.review = data.comment;
-      else if ('text' in reviewsTable) reviewPayload.text = data.comment;
-      else reviewPayload.comment = data.comment;
+      if ('review' in reviewsTable) reviewPayload.review = incomingText;
+      else if ('text' in reviewsTable) reviewPayload.text = incomingText;
+      else reviewPayload.comment = incomingText;
 
       if ('relationshipId' in reviewsTable) reviewPayload.relationshipId = generatedRatingId;
       else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
       else reviewPayload.rating_id = generatedRatingId;
+      
+      const typeCodeRecord = await db.select({ id: typeDetail.id })
+        .from(typeDetail)
+        .where(sql`${typeDetail.typeCode} = 'Store' OR ${typeDetail.typeCode} = 'Stores'`)
+        .limit(1);
 
-      // Usamos un identificador estático genérico para agrupar en módulos de ser necesario
-      if ('typeDetailId' in reviewsTable) {
-          reviewPayload.typeDetailId = '31a06434-8ed8-45d2-b95f-65bd314bc021';
-      } else {
-          reviewPayload.type_detail_id = '31a06434-8ed8-45d2-b95f-65bd314bc021';
+      if (!typeCodeRecord || typeCodeRecord.length === 0) {
+        throw new Error("Error en la Base de Datos: La categoría 'Store' no existe en la tabla typeDetail.");
       }
 
-      const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
-      savedComment = newReview[0].comment || '';
+      const typeDetailIdResolved = typeCodeRecord[0].id;
+
+      if ('typeDetailId' in reviewsTable) {
+          reviewPayload.typeDetailId = typeDetailIdResolved;
+      } else {
+          reviewPayload.type_detail_id = typeDetailIdResolved;
+      }
+
+      const reviewRows = await db.insert(reviewsTable).values(reviewPayload).returning();
+      savedComment = reviewRows[0].comment || '';
     }
 
     return {
@@ -284,8 +436,68 @@ export const createStoreReview = async (data: any) => {
       comment: savedComment
     };
 
+  } catch (error: any) {
+    console.error("❌ Error CRÍTICO en createStoreReview:", error.message);
+    throw new Error(`Error al crear la calificación: ${error.message}`);
+  }
+};
+
+// 🗑️ 6. ELIMINAR NEGOCIO 
+export const deleteStore = async (id: string) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    const deleted = await db.delete(stores).where(eq(stores.id, cleanId)).returning();
+    return deleted[0] || null;
+  } catch (error: any) {
+    throw new Error(`Error al eliminar el negocio: ${error.message}`);
+  }
+};
+
+// 🔄 7. RENOVAR NEGOCIO
+export const renewStore = async (id: string, data: any) => {
+  try {
+    const cleanId = sanitizeText(id);
+    const refCode = sanitizeText(data.referenceCode);
+    const payMethod = sanitizeText(data.paymentMethod);
+
+    if (!refCode || !payMethod || !cleanId) {
+      throw new Error("Se requiere el código de referencia y método de pago.");
+    }
+
+    return await db.transaction(async (tx) => {
+      const basePrice = await getCurrentStorePrice();
+
+      await tx.insert(payments).values({
+        entityType: 'store',
+        entityId: cleanId,
+        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        referenceCode: refCode, 
+        paymentMethod: payMethod, 
+        amount: basePrice, 
+        durationDays: 30, 
+        status: "pending"
+      });
+
+      const updated = await tx
+        .update(stores)
+        .set({ approved: false }) 
+        .where(eq(stores.id, cleanId))
+        .returning();
+        
+      return {
+         ...updated[0],
+         referenceCode: refCode,
+         paymentMethod: payMethod
+      };
+    });
+
   } catch (error: any) { 
-    console.error("❌ Error CRÍTICO en createStoreReview (Doble Insert):", error);
-    throw new Error(`Error al crear la reseña de la tienda: ${error.message}`);
+    console.error("❌ Error en renewStore:", error);
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
+       throw new Error("Ese código de referencia de pago ya fue utilizado en otra transacción.");
+    }
+    throw new Error(`Error al renovar el negocio: ${error.message}`);
   }
 };

@@ -5,107 +5,108 @@ import {
     createLawyer, 
     updateLawyer, 
     deleteLawyer,
-    renewLawyer,
-    createRating
+    createRating,
+    renewLawyer
 } from '../controllers/lawyers.controller';
 
 const router = Router();
 
-// 🔍 GET: Obtener todos los abogados (Soporta filtrado por ?zip=12345 y ?userId=...)
+// 🔍 GET: Obtener todos los abogados (soporta filtro por código postal y por usuario)
 router.get('/', async (req, res) => {
   try {
-    const zipCode = req.query.zip as string; 
-    const userId = req.query.userId as string;
+    const zip = req.query.zip as string;
+    const userId = req.query.userId as string; // Para el panel de control (mis abogados)
     
-    const lawyersList = await getLawyers(zipCode, userId);
-    return res.json(lawyersList);
+    const list = await getLawyers(zip, userId);
+    return res.status(200).json(list);
   } catch (error: any) {
     console.error("❌ Error en GET /lawyers:", error.message);
-    return res.status(500).json({ error: 'Error interno del servidor al obtener abogados' });
+    return res.status(500).json({ error: error.message });
   }
 });
 
-// 🚀 GET: Obtener un abogado específico (¡ESTA ES LA RUTA QUE USA LA NOTIFICACIÓN!)
+// 🔍 GET: Obtener un abogado específico por ID (incluyendo sus reseñas)
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const lawyer = await getLawyerByIdWithReviews(id);
-    
+    const lawyer = await getLawyerByIdWithReviews(req.params.id);
     if (!lawyer) {
-      return res.status(404).json({ error: 'Abogado no encontrado' });
+      return res.status(404).json({ error: "Abogado no encontrado" });
     }
-    
-    return res.json(lawyer);
+    return res.status(200).json(lawyer);
   } catch (error: any) {
-    console.error(`❌ Error en GET /lawyers/${req.params.id}:`, error.message);
-    return res.status(500).json({ error: 'Error al obtener el abogado' });
+    console.error("❌ Error en GET /lawyers/:id :", error.message);
+    return res.status(500).json({ error: error.message });
   }
 });
 
-// 📥 POST: Crear nuevo abogado (Y registrar el pago inicial)
+// 📥 POST: Crear un nuevo registro de abogado (con o sin pago)
 router.post('/', async (req, res) => {
   try {
     const newLawyer = await createLawyer(req.body);
     return res.status(201).json(newLawyer);
   } catch (error: any) {
     console.error("❌ Error en POST /lawyers:", error.message);
+    // Manejo especial para el código de Zelle duplicado
+    if (error.message.includes("utilizado") || error.message.includes("unique")) {
+       return res.status(409).json({ error: error.message });
+    }
     return res.status(400).json({ error: error.message });
   }
 });
 
-// ⭐ POST: Crear una nueva calificación/reseña
-router.post('/rating', async (req, res) => {
-    try {
-      const newRating = await createRating(req.body);
-      return res.status(201).json(newRating);
-    } catch (error: any) {
-      console.error("❌ Error en POST /lawyers/rating:", error.message);
-      return res.status(400).json({ error: error.message });
-    }
-});
-
-// 🔄 POST: Renovar un abogado vencido (Registra nuevo pago)
-router.post('/:id/renew', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const renewedLawyer = await renewLawyer(id, req.body);
-      return res.status(200).json(renewedLawyer);
-    } catch (error: any) {
-      console.error(`❌ Error en POST /lawyers/${req.params.id}/renew:`, error.message);
-      return res.status(400).json({ error: error.message });
-    }
-});
-
-// 🔄 PUT: Actualizar/Aprobar un abogado (Y disparar Notificación Global)
+// 🔄 PUT: Actualizar un abogado (Aprobar y calcular tarifa dinámica)
 router.put('/:id', async (req, res) => {
   try {
-    const { id } = req.params; 
-    const updatedLawyer = await updateLawyer(id, req.body);
-    
+    const updatedLawyer = await updateLawyer(req.params.id, req.body);
     if (!updatedLawyer) {
-       return res.status(404).json({ error: 'Abogado no encontrado o no se pudo actualizar' });
+      return res.status(404).json({ error: "Abogado no encontrado o no se pudo actualizar" });
     }
-    
-    return res.json(updatedLawyer);
+    return res.status(200).json(updatedLawyer);
   } catch (error: any) {
-    console.error(`❌ Error en PUT /lawyers/${req.params.id}:`, error.message);
+    console.error("❌ Error en PUT /lawyers/:id :", error.message);
     return res.status(400).json({ error: error.message });
   }
 });
 
-// 🗑️ DELETE: Eliminar un abogado (Para rechazar solicitudes o limpiar BD)
+// ⭐ POST: Crear una reseña/calificación para un abogado
+router.post('/rating', async (req, res) => {
+  try {
+    const newRating = await createRating(req.body);
+    return res.status(201).json(newRating);
+  } catch (error: any) {
+    console.error("❌ Error en POST /lawyers/rating:", error.message);
+    // Manejo especial si el usuario ya reseñó
+    if (error.message.includes("ya ha publicado")) {
+        return res.status(409).json({ error: error.message });
+    }
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// 🔄 POST: Renovar un abogado expirado (Genera nuevo pago)
+router.post('/:id/renew', async (req, res) => {
+  try {
+    const renewedLawyer = await renewLawyer(req.params.id, req.body);
+    return res.status(200).json(renewedLawyer);
+  } catch (error: any) {
+    console.error("❌ Error en POST /lawyers/:id/renew :", error.message);
+    if (error.message.includes("utilizado") || error.message.includes("unique")) {
+       return res.status(409).json({ error: error.message });
+    }
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// 🗑️ DELETE: Eliminar un abogado
 router.delete('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const deletedLawyer = await deleteLawyer(id);
-    
+    const deletedLawyer = await deleteLawyer(req.params.id);
     if (!deletedLawyer) {
-      return res.status(404).json({ error: 'Abogado no encontrado para eliminar' });
+      return res.status(404).json({ error: "Abogado no encontrado" });
     }
-    
-    return res.json({ message: 'Abogado eliminado correctamente', lawyer: deletedLawyer });
+    return res.status(200).json({ message: "Abogado eliminado correctamente", lawyer: deletedLawyer });
   } catch (error: any) {
-    console.error(`❌ Error en DELETE /lawyers/${req.params.id}:`, error.message);
+    console.error("❌ Error en DELETE /lawyers/:id :", error.message);
     return res.status(400).json({ error: error.message });
   }
 });

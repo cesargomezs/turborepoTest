@@ -250,7 +250,7 @@ import {
     createdAt: timestamp("created_at").defaultNow().notNull(),
   });
 
-  // 💰 TABLA MAESTRA DE PAGOS MANUALES (Y FUTURO STRIPE)
+  // 13. 💰 TABLA MAESTRA DE PAGOS MANUALES (Y FUTURO STRIPE)
 export const payments = pgTable("payments", {
   id: uuid("id").primaryKey().defaultRandom(),
   // 🚀 REFERENCIA POLIMÓRFICA
@@ -269,6 +269,18 @@ export const payments = pgTable("payments", {
   approvedAt: timestamp("approved_at"),
 });
   
+  // 14. 💰 TABLA MAESTRA DE TARIFAS POR REFERENCIA (Y FUTURO STRIPE)
+export const tariffs = pgTable('tariffs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  referenceId: text("reference_id"),  // Ej: 'lawyer', 'event', 'entrepreneur'
+  planType: text('plan_type').notNull(),     // Ej: 'monthly', 'annual', 'one_time'
+  price: numeric('price', { precision: 10, scale: 2 }).notNull(), // Ej: 50.00, 100.00
+  description: text('description'),          // Ej: 'Suscripción Anual para Eventos'
+  isActive: boolean('is_active').default(true), // Para apagar planes viejos sin borrarlos
+  userId: uuid("user_id").references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
   // ==========================================
   // 2. CONFIGURACIÓN DE RELACIONES (Drizzle Relations)
   // ==========================================

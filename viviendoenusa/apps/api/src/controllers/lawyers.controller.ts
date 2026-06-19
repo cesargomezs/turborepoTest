@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications } from "../../../../packages/db/src/schema"; 
+import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 
@@ -8,13 +8,45 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
+// 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
+const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🔍 1. CONSULTA GENERAL (Mapeo de descripción blindado y ORDENAMIENTO agregado)
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+// 🚀 CORRECCIÓN: Ahora filtra por el año actual en el campo 'plan_type'
+const getCurrentLawyerPrice = async () => {
+  try {
+    // Obtener el año actual dinámicamente (ej: "2024")
+    const currentYear = new Date().getFullYear().toString();
+
+    const activeTariff = await db.select({ price: tariffs.price })
+    .from(tariffs)
+    // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
+    .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
+    .where(
+      and(
+        sql`${typeDetail.typeCode} ILIKE 'Lawyer%'`, 
+        eq(tariffs.isActive, true),
+        eq(tariffs.planType, currentYear) 
+      )
+    )
+    .limit(1);
+
+    if (activeTariff && activeTariff.length > 0 && activeTariff[0].price) {
+      return activeTariff[0].price;
+    }
+  } catch (error) {
+    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $50.00 por defecto");
+  }
+  return "50.00";
+};
+
+// 🔍 1. CONSULTA GENERAL
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
@@ -30,7 +62,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         ? sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${currentUserId}`
         : sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW()`
     )
-    // 🚀 ORDENAMIENTO: Ordenamos por la fecha de creación/renovación (los más recientes primero)
     .orderBy(desc(lawyers.createdAt))
     .$dynamic();
 
@@ -77,7 +108,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         lawyer.rating = 0;
       }
 
-      // 🚀 BLINDAJE: Nos aseguramos de que el objeto lleve tanto 'description' como 'descriptionLawy'
       const safeDescription = lawyer.description || lawyer.descriptionLawy || '';
       lawyer.description = safeDescription;
       lawyer.descriptionLawy = safeDescription;
@@ -103,7 +133,7 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID (Mapeo de descripción blindado)
+// 🔍 2. CONSULTA INDIVIDUAL POR ID
 export const getLawyerByIdWithReviews = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -144,7 +174,6 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       lawyerFinal.rating = lawyerFinal.totalRating;
     }
 
-    // 🚀 BLINDAJE: Forzamos la descripción en ambos formatos para la respuesta individual
     const safeDescription = lawyerFinal.description || lawyerFinal.descriptionLawy || '';
     lawyerFinal.description = safeDescription;
     lawyerFinal.descriptionLawy = safeDescription;
@@ -189,25 +218,26 @@ export const createLawyer = async (data: any) => {
         zip: sanitizeText(data.zip) || null,
         phone: sanitizeText(data.phone) || '',
         imageUrl: cleanImage,
-        // 🚀 Guardamos en ambas propiedades para asegurar compatibilidad total con el esquema
         description: safeDesc,
         descriptionLawy: safeDesc,
         lat: data.lat ? Number(data.lat) : null,
         lng: data.lng ? Number(data.lng) : null,
-        userId: sanitizeText(data.userId) || null,
+        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         approved: false 
       };
       
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
       if (data.referenceCode && data.paymentMethod) {
+        const basePrice = await getCurrentLawyerPrice();
+
         await tx.insert(payments).values({
           entityType: 'lawyer',
           entityId: newLawyer.id,
           userId: lawyerPayload.userId,
           referenceCode: sanitizeText(data.referenceCode) || '', 
           paymentMethod: sanitizeText(data.paymentMethod) || '', 
-          amount: "50.00", 
+          amount: basePrice, 
           durationDays: 30, 
           status: "pending"
         });
@@ -240,7 +270,6 @@ export const updateLawyer = async (id: string, data: any) => {
 
     return await db.transaction(async (tx) => {
       
-      // Añadimos explícitamente ambos nombres de descripción a los permitidos
       const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description', 'descriptionLawy'];
       const updatePayload: any = {};
       
@@ -250,7 +279,6 @@ export const updateLawyer = async (id: string, data: any) => {
         }
       }
 
-      // 🚀 Si viene una actualización de descripción, la inyectamos de forma segura en las dos variantes
       if (data.description !== undefined || data.descriptionLawy !== undefined) {
         const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionLawy);
         updatePayload.description = safeDesc;
@@ -265,8 +293,6 @@ export const updateLawyer = async (id: string, data: any) => {
 
       if (isApproved) {
         updatePayload.approved = true; 
-        
-        // 🚀 ACTUALIZACIÓN DE FECHA: Reiniciamos createdAt para que salte al top de la lista
         updatePayload.createdAt = new Date();
         
         let monthsToAdd = 1; 
@@ -282,15 +308,18 @@ export const updateLawyer = async (id: string, data: any) => {
         
         updatePayload.timepostEnd = expirationDate; 
 
+        const basePriceString = await getCurrentLawyerPrice();
+        const basePriceNum = Number(basePriceString) || 50; 
+        const totalAmount = (monthsToAdd * basePriceNum).toFixed(2); 
+
         const daysToAdd = monthsToAdd * 30; 
-        const totalAmount = (monthsToAdd * 50).toFixed(2); 
 
         await tx.update(payments)
           .set({ 
              status: "approved", 
              approvedAt: new Date(), 
              durationDays: daysToAdd, 
-             amount: totalAmount,
+             amount: totalAmount, 
              timepost_end: expirationDate 
           })
           .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')));
@@ -304,14 +333,13 @@ export const updateLawyer = async (id: string, data: any) => {
         
       const lawyer = updated[0];
 
-      // GENERAR NOTIFICACIÓN GLOBAL Y CLICKEABLE AL APROBAR
       if (isApproved && lawyer) {
         const notifPayload: any = {
             title: "¡Abogado Verificado! ⚖️",
             description: `El abogado ${lawyer.nameLawy} ahora es parte de la red de servicios. ¡Visita su perfil!`,
             type: "lawyer", 
             visibleAt: new Date(), 
-            userId: lawyer.userId, // 🚀 FIX: Postgres exige que no sea null. Se lo asignamos al creador.
+            userId: lawyer.userId || TEMP_USER_ID, 
         };
 
         if ('referenceId' in notifications) notifPayload.referenceId = String(lawyer.id);
@@ -334,8 +362,7 @@ export const createRating = async (data: any) => {
   try {
     let validUserId = sanitizeText(data.userId) || null;
     if (!validUserId || validUserId.length < 20) {
-        const fallbackUser = await db.select().from(users).limit(1);
-        if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
+        validUserId = TEMP_USER_ID; 
     }
 
     const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
@@ -386,10 +413,21 @@ export const createRating = async (data: any) => {
       else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
       else reviewPayload.rating_id = generatedRatingId;
       
+      const typeCodeRecord = await db.select({ id: typeDetail.id })
+        .from(typeDetail)
+        .where(sql`${typeDetail.typeCode} = 'Lawyers' OR ${typeDetail.typeCode} = 'Lawyers'`)
+        .limit(1);
+
+      if (!typeCodeRecord || typeCodeRecord.length === 0) {
+        throw new Error("Error en la Base de Datos: La categoría 'Lawyers' no existe en la tabla typeDetail.");
+      }
+
+      const typeDetailIdResolved = typeCodeRecord[0].id;
+
       if ('typeDetailId' in reviewsTable) {
-          reviewPayload.typeDetailId = '035118eb-612e-41a2-ac95-b4f339b4e388';
+          reviewPayload.typeDetailId = typeDetailIdResolved;
       } else {
-          reviewPayload.type_detail_id = '035118eb-612e-41a2-ac95-b4f339b4e388';
+          reviewPayload.type_detail_id = typeDetailIdResolved;
       }
 
       const reviewRows = await db.insert(reviewsTable).values(reviewPayload).returning();
@@ -433,13 +471,15 @@ export const renewLawyer = async (id: string, data: any) => {
     }
 
     return await db.transaction(async (tx) => {
+      const basePrice = await getCurrentLawyerPrice();
+
       await tx.insert(payments).values({
         entityType: 'lawyer',
         entityId: cleanId,
-        userId: sanitizeText(data.userId) || null,
+        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         referenceCode: refCode, 
         paymentMethod: payMethod, 
-        amount: "50.00", 
+        amount: basePrice, 
         durationDays: 30, 
         status: "pending"
       });

@@ -1,134 +1,155 @@
 import { db } from "../../../../packages/db/src"; 
-// 🚀 1. Importamos la nueva tabla 'support' y las tablas de opiniones con alias de seguridad
-import { support, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql } from "drizzle-orm"; 
-import { createClient } from '@supabase/supabase-js';
+import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and } from "drizzle-orm";
+import { createClient } from '@supabase/supabase-js'; 
 
-// 🚀 Inicializamos Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🔍 1. CONSULTA GENERAL (Con doble JOIN para Ratings y Reviews)
-export const getSupports = async (zip?: string) => {
+// 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
+const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+const getCurrentSupportPrice = async () => {
   try {
-    let query = db
-      .select()
-      .from(support)
-      .leftJoin(users, eq(support.userId, users.id)) 
-      // 🚀 PRIMER JOIN: Traemos las estrellas
-      .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id)) 
-      // 🚀 SEGUNDO JOIN: Traemos el texto de la reseña enlazado al rating
-      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-      .$dynamic(); 
+    const currentYear = new Date().getFullYear().toString();
 
-    if (zip && zip.trim().length === 5) {
-      const cleanZip = zip.trim();
-      query = query.where(sql`${support.zip}::text = ${cleanZip}`); 
+    const activeTariff = await db.select({ price: tariffs.price })
+    .from(tariffs)
+    .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
+    .where(
+      and(
+        sql`${typeDetail.typeCode} ILIKE 'Support%'`, 
+        eq(tariffs.isActive, true),
+        eq(tariffs.planType, currentYear) 
+      )
+    )
+    .limit(1);
+
+    if (activeTariff && activeTariff.length > 0 && activeTariff[0].price) {
+      return activeTariff[0].price;
     }
+  } catch (error) {
+    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $50.00 por defecto");
+  }
+  return "50.00";
+};
 
-    query = query.orderBy(desc(support.createdAt));
+// 🔍 1. CONSULTA GENERAL
+export const getSupports = async (rawZip?: string | number, currentUserId?: string) => {
+  try {
+    const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+
+    let query = db
+    .select()
+    .from(support)
+    .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
+    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+    .leftJoin(payments, and(eq(payments.entityId, support.id), eq(payments.entityType, 'support')))
+    .where(
+      currentUserId 
+        ? sql`${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${currentUserId}`
+        : sql`${support.approved} = false OR ${support.timepostEnd} > NOW()`
+    )
+    .orderBy(desc(support.createdAt))
+    .$dynamic();
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
-    // 🚀 AGRUPAMOS LAS RESEÑAS POR ELEMENTO DE SOPORTE
-    const itemsMap = new Map<string, any>();
+    const supportsMap = new Map<string, any>();
 
     for (const row of rows) {
-      const itemId = row.support.id;
+      const supportId = row.support.id;
 
-      if (!itemsMap.has(itemId)) {
-        const dbUser = row.users;
-        itemsMap.set(itemId, {
+      if (!supportsMap.has(supportId)) {
+        supportsMap.set(supportId, {
           ...row.support,
-          ownerName: dbUser?.name || 'Usuario Anónimo',
+          referenceCode: row.payments?.referenceCode || null,
+          paymentMethod: row.payments?.paymentMethod || null,
           reviews: [], 
-          rating: 0 // Inicializado en 0 neto para el Front-End
+          totalRating: 0,
+          totalReviews: 0
         });
       }
 
-      // Si hay un rating válido, agregamos la reseña mapeando el texto de forma segura
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
-        itemsMap.get(itemId).reviews.push({
+        supportsMap.get(supportId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
-           comment: commentText, 
+           comment: commentText,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
     }
 
-    const finalSupports = await Promise.all(Array.from(itemsMap.values()).map(async (item) => {
-        // 🧮 Calcular promedio de estrellas real en el Backend (Programación defensiva)
-        if (item.reviews.length > 0) {
-            const totalStars = item.reviews.reduce((sum: number, r: any) => sum + (Number(r.stars) || 0), 0);
-            item.rating = totalStars / item.reviews.length;
-            item.totalReviews = item.reviews.length; // Contador de reseñas real enviado al Front
-        } else {
-            item.rating = 0;
-            item.totalReviews = 0;
-        }
+    const finalResult = await Promise.all(Array.from(supportsMap.values()).map(async (supportItem: any) => {
+      supportItem.totalReviews = supportItem.reviews.length;
 
-        const fileName = item.imageSupp;
-        let publicUrl = fileName; 
+      if (supportItem.totalReviews > 0) {
+        const sum = supportItem.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+        supportItem.totalRating = Math.round((sum / supportItem.totalReviews) * 10) / 10;
+        supportItem.rating = supportItem.totalRating; 
+      } else {
+        supportItem.totalRating = 0;
+        supportItem.rating = 0;
+      }
 
-        // 🚀 Firma de imagen en Supabase (Carpeta 'support/')
-        if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
-            const cleanName = fileName.replace('support/', '');
-            const rutaArchivo = `support/${cleanName}`;
+      const safeDescription = supportItem.description || supportItem.descriptionSupp || '';
+      supportItem.description = safeDescription;
+      supportItem.descriptionSupp = safeDescription;
 
-            const { data, error } = await supabase.storage
-                .from(NOMBRE_BUCKET)
-                .createSignedUrl(rutaArchivo, 3600); 
+      if (supportItem.imageSupp && supportItem.imageSupp.trim() !== '' && !supportItem.imageSupp.startsWith('http')) {
+          const rutaArchivo = supportItem.imageSupp.startsWith('support/') 
+              ? supportItem.imageSupp : `support/${supportItem.imageSupp}`;
 
-            if (!error && data?.signedUrl) {
-                publicUrl = data.signedUrl;
-            } else if (error) {
-                console.warn(`⚠️ Error firmando imagen de soporte ${item.id}:`, error.message);
-            }
-        }
+          const { data, error } = await supabase
+              .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
 
-        return { 
-            ...item,
-            imageSupp: publicUrl
-        }; 
+          if (!error && data) {
+              return { ...supportItem, image: data.signedUrl, imageSupp: data.signedUrl }; 
+          }
+      }
+      return { ...supportItem, image: supportItem.imageSupp }; 
     }));
 
-    return finalSupports;
-  } catch (error) {
+    return finalResult;
+  } catch (error: any) {
     console.error("❌ Error en getSupports:", error);
     return [];
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID (Con soporte para detalles completos y opiniones)
+// 🔍 2. CONSULTA INDIVIDUAL POR ID
 export const getSupportById = async (id: string) => {
   try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) return null;
+
     const rows = await db
       .select()
       .from(support)
-      .leftJoin(users, eq(support.userId, users.id))
       .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .where(eq(support.id, id));
-
+      .where(eq(support.id, cleanId));
+  
     if (!rows || rows.length === 0) return null;
-
-    const dbSupport = rows[0].support;
-    const dbUser = rows[0].users;
-    const nombreUsuario = dbUser?.name || 'Usuario Anónimo';
-
+  
     const supportFinal: any = {
-        ...dbSupport,
-        ownerName: nombreUsuario,
-        reviews: [],
-        rating: 0,
-        totalReviews: 0
+      ...rows[0].support, 
+      reviews: [],
+      totalRating: 0,
+      totalReviews: 0           
     };
 
     for (const row of rows) {
@@ -143,148 +164,269 @@ export const getSupportById = async (id: string) => {
       }
     }
 
-    if (supportFinal.reviews.length > 0) {
-      const totalStars = supportFinal.reviews.reduce((sum: number, r: any) => sum + r.stars, 0);
-      supportFinal.rating = totalStars / supportFinal.reviews.length;
-      supportFinal.totalReviews = supportFinal.reviews.length;
+    supportFinal.totalReviews = supportFinal.reviews.length;
+    if (supportFinal.totalReviews > 0) {
+      const sum = supportFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+      supportFinal.totalRating = Math.round((sum / supportFinal.totalReviews) * 10) / 10;
+      supportFinal.rating = supportFinal.totalRating;
     }
 
-    let publicUrl = supportFinal.imageSupp;
+    const safeDescription = supportFinal.description || supportFinal.descriptionSupp || '';
+    supportFinal.description = safeDescription;
+    supportFinal.descriptionSupp = safeDescription;
 
-    if (publicUrl && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
-        const cleanName = publicUrl.replace('support/', '');
-        const { data, error } = await supabase.storage
-            .from(NOMBRE_BUCKET).createSignedUrl(`support/${cleanName}`, 3600);
+    if (supportFinal.imageSupp && supportFinal.imageSupp.trim() !== '' && !supportFinal.imageSupp.startsWith('http')) {
+        const rutaArchivo = supportFinal.imageSupp.startsWith('support/') 
+            ? supportFinal.imageSupp : `support/${supportFinal.imageSupp}`;
+
+        const { data, error } = await supabase
+            .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
             
-        if (!error && data?.signedUrl) {
-            publicUrl = data.signedUrl;
+        if (!error && data) {
+            supportFinal.image = data.signedUrl;
+            supportFinal.imageSupp = data.signedUrl;
+        }
+    } else {
+        supportFinal.image = supportFinal.imageSupp;
+    }
+
+    return supportFinal;
+  } catch (error: any) {
+    throw new Error(`Error al obtener el contacto de apoyo por ID: ${error.message}`);
+  }
+};
+
+// 📥 3. CREAR CONTACTO DE APOYO
+export const createSupport = async (data: any) => {
+  try {
+    let cleanImage = sanitizeText(data.imageSupp) || '';
+    if (cleanImage.startsWith('support/')) {
+      cleanImage = cleanImage.replace('support/', '');
+    }
+
+    return await db.transaction(async (tx) => {
+      
+      const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
+
+      const supportPayload: any = {
+        nameSupp: sanitizeText(data.nameSupp || data.name) || 'Sin nombre',
+        categoryId: sanitizeText(data.categoryId) || '0',
+        addressSupp: sanitizeText(data.addressSupp || data.address) || '',
+        zip: sanitizeText(data.zip) || null,
+        phone: sanitizeText(data.phone) || '',
+        imageSupp: cleanImage,
+        descriptionSupp: safeDesc,
+        lat: data.lat ? Number(data.lat) : null,
+        lng: data.lng ? Number(data.lng) : null,
+        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        approved: false 
+      };
+      
+      const [newSupport] = await tx.insert(support).values(supportPayload).returning();
+
+      if (data.referenceCode && data.paymentMethod) {
+        const basePrice = await getCurrentSupportPrice();
+
+        await tx.insert(payments).values({
+          entityType: 'support',
+          entityId: newSupport.id,
+          userId: supportPayload.userId,
+          referenceCode: sanitizeText(data.referenceCode) || '', 
+          paymentMethod: sanitizeText(data.paymentMethod) || '', 
+          amount: basePrice, 
+          durationDays: 30, 
+          status: "pending"
+        });
+      }
+
+      return {
+         ...newSupport,
+         referenceCode: data.referenceCode,
+         paymentMethod: data.paymentMethod,
+         description: safeDesc,
+         descriptionSupp: safeDesc
+      };
+    });
+  } catch (error: any) { 
+    console.error("❌ Error en createSupport:", error);
+    
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
+       throw new Error("Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único.");
+    }
+
+    throw new Error(`Error al crear el contacto de apoyo: ${error.message}`);
+  }
+};
+
+// 🔄 4. ACTUALIZAR CONTACTO DE APOYO
+export const updateSupport = async (id: string, data: any) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    return await db.transaction(async (tx) => {
+      
+      const allowedFields = ['nameSupp', 'categoryId', 'addressSupp', 'zip', 'phone', 'lat', 'lng', 'imageSupp', 'descriptionSupp'];
+      const updatePayload: any = {};
+      
+      for (const key of allowedFields) {
+        if (data[key] !== undefined) {
+           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+        }
+      }
+
+      if (data.description !== undefined || data.descriptionSupp !== undefined) {
+        const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionSupp);
+        updatePayload.descriptionSupp = safeDesc;
+      }
+
+      if (data.imageSupp && typeof data.imageSupp === 'string' && data.imageSupp.startsWith('support/')) {
+        updatePayload.imageSupp = data.imageSupp.replace('support/', '');
+      }
+
+      const isApproved = String(data.approved).toLowerCase() === 'true';
+
+      if (isApproved) {
+        updatePayload.approved = true; 
+        updatePayload.createdAt = new Date();
+        
+        let monthsToAdd = 1; 
+        if (data.durationMonths) {
+          const parsedMonths = Number(data.durationMonths);
+          if (!isNaN(parsedMonths)) {
+            monthsToAdd = parsedMonths;
+          }
+        }
+        
+        const expirationDate = new Date();
+        expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
+        
+        updatePayload.timepostEnd = expirationDate; 
+
+        const basePriceString = await getCurrentSupportPrice();
+        const basePriceNum = Number(basePriceString) || 50; 
+        const totalAmount = (monthsToAdd * basePriceNum).toFixed(2); 
+
+        const daysToAdd = monthsToAdd * 30; 
+
+        await tx.update(payments)
+          .set({ 
+             status: "approved", 
+             approvedAt: new Date(), 
+             durationDays: daysToAdd, 
+             amount: totalAmount, 
+             timepost_end: expirationDate 
+          })
+          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'support')));
+      }
+
+      const updated = await tx
+        .update(support)
+        .set(updatePayload) 
+        .where(eq(support.id, cleanId))
+        .returning();
+        
+      const supportItem = updated[0];
+
+      if (isApproved && supportItem) {
+        const notifPayload: any = {
+            title: "¡Nuevo Contacto de Apoyo Verificado! 🤝",
+            description: `El contacto ${supportItem.nameSupp} ahora es parte de la red de apoyo. ¡Visita su perfil!`,
+            type: "support", 
+            visibleAt: new Date(), 
+            userId: supportItem.userId || TEMP_USER_ID, 
+        };
+
+        if ('referenceId' in notifications) notifPayload.referenceId = String(supportItem.id);
+        else if ('reference_id' in notifications) notifPayload.reference_id = String(supportItem.id);
+
+        await tx.insert(notifications).values(notifPayload);
+      }
+
+      return supportItem || null;
+    });
+
+  } catch (error: any) { 
+    console.error("❌ Error en updateSupport:", error);
+    throw new Error(`Error al actualizar el contacto de apoyo: ${error.message}`);
+  }
+};
+
+// 🚀 5. INGRESO DE RATING Y RESEÑA
+export const createSupportReview = async (data: any) => {
+  try {
+    let validUserId = sanitizeText(data.userId) || null;
+    if (!validUserId || validUserId.length < 20) {
+        validUserId = TEMP_USER_ID; 
+    }
+
+    const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
+
+    if (validUserId && targetReferenceId) {
+        const existingRating = await db.select()
+          .from(ratingTable)
+          .where(
+            and(
+              eq(ratingTable.referenceId, targetReferenceId),
+              eq(ratingTable.userId, validUserId)
+            )
+          )
+          .limit(1);
+
+        if (existingRating && existingRating.length > 0) {
+            throw new Error("El usuario ya ha publicado una reseña para este contacto de apoyo.");
         }
     }
 
-    supportFinal.imageSupp = publicUrl;
-    return supportFinal;
-  } catch (error: any) {
-    throw new Error(`Error al obtener el soporte por ID: ${error.message}`);
-  }
-};
-
-// 📥 3. CREAR REGISTRO DE SOPORTE
-export const createSupport = async (data: any) => {
-  try {
-    let cleanImage = data.imageSupp || '';
-    if (cleanImage.startsWith('support/')) {
-        cleanImage = cleanImage.replace('support/', '');
-    }
-
-    // 🚀 BLINDAJE DE UUID PARA EL USER_ID
-    let validUserId = null;
-    if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
-        validUserId = data.userId;
-    } else {
-        const fallbackUser = await db.select().from(users).limit(1);
-        if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
-    }
-
-    const payload: any = {
-      nameSupp: data.nameSupp || 'Sin nombre',
-      descriptionSupp: data.descriptionSupp || '',
-      addressSupp: data.addressSupp || '',
-      categoryId: data.categoryId ? Number(data.categoryId) : null, 
-      zip: data.zip ? String(data.zip).trim() : null,
-      estate: data.estate || 'CA',
-      imageSupp: cleanImage,
-      lat: data.lat ? Number(data.lat) : null,
-      lng: data.lng ? Number(data.lng) : null,
-      phone: data.phone || '',
-      approved: data.approved !== undefined ? data.approved : false, 
-      userId: validUserId,
-      rating: 0, // Forzamos 0 neto inicial
-    };
-
-    console.log("📤 Payload listo para insertar en soporte:", payload);
-
-    const newSupport = await db.insert(support).values(payload).returning();
-    return newSupport[0];
-  } catch (error: any) { 
-    console.error("❌ Error en createSupport:", error);
-    throw new Error(`Error al crear el registro de soporte: ${error.message}`);
-  }
-};
-
-// 🔄 4. ACTUALIZAR SOPORTE
-export const updateSupport = async (id: string, data: any) => {
-  try {
-    if (data.imageSupp && data.imageSupp.startsWith('support/')) {
-        data.imageSupp = data.imageSupp.replace('support/', '');
-    }
-    const updated = await db.update(support).set(data).where(eq(support.id, id)).returning();
-    return updated[0] || null;
-  } catch (error: any) { 
-    throw new Error(`Error al actualizar el soporte: ${error.message}`);
-  }
-};
-
-// 🗑️ 5. ELIMINAR SOPORTE
-export const deleteSupport = async (id: string) => {
-  try {
-    const deleted = await db.delete(support).where(eq(support.id, id)).returning();
-    return deleted[0] || null;
-  } catch (error: any) {
-    throw new Error(`Error al eliminar el soporte: ${error.message}`);
-  }
-};
-
-// 📥 6. CREAR RESEÑA (INSERCIÓN DOBLE)
-export const createSupportReview = async (data: any) => {
-  try {
-    let validUserId = null;
-    if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
-        validUserId = data.userId;
-    } else {
-        const fallbackUser = await db.select().from(users).limit(1);
-        if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
-    }
-
-    // --- PASO A: GUARDAR LAS ESTRELLAS EN 'rating' ---
     const ratingPayload: any = {
-      rating: String(data.stars || 5), 
+      rating: String(Number(data.stars || data.rating || 5)), 
       userId: validUserId,
     };
 
     if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'support';
     else ratingPayload.type_entry = 'support';
 
-    if ('referenceId' in ratingTable) ratingPayload.referenceId = data.reference_id || data.referenceId;
-    else ratingPayload.reference_id = data.reference_id || data.referenceId;
+    if ('referenceId' in ratingTable) ratingPayload.referenceId = targetReferenceId;
+    else ratingPayload.reference_id = targetReferenceId;
 
     const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
     const generatedRatingId = newRating[0].id;
 
-    // --- PASO B: GUARDAR EL TEXTO EN 'reviews' ---
     let savedComment = '';
+    const incomingText = sanitizeText(data.comment || data.text || data.review);
     
-    if (data.comment && data.comment.trim() !== '') {
+    if (incomingText && incomingText !== '') {
       const reviewPayload: any = {
         userId: validUserId
       };
 
-      if ('review' in reviewsTable) reviewPayload.review = data.comment;
-      else if ('text' in reviewsTable) reviewPayload.text = data.comment;
-      else reviewPayload.comment = data.comment;
+      if ('review' in reviewsTable) reviewPayload.review = incomingText;
+      else if ('text' in reviewsTable) reviewPayload.text = incomingText;
+      else reviewPayload.comment = incomingText;
 
       if ('relationshipId' in reviewsTable) reviewPayload.relationshipId = generatedRatingId;
       else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
       else reviewPayload.rating_id = generatedRatingId;
+      
+      const typeCodeRecord = await db.select({ id: typeDetail.id })
+        .from(typeDetail)
+        .where(sql`${typeDetail.typeCode} ILIKE 'Support%'`)
+        .limit(1);
 
-      // Asignamos un UUID estático específico para identificar este módulo en la tabla intermedia
-      if ('typeDetailId' in reviewsTable) {
-          reviewPayload.typeDetailId = '64fef850-9510-4591-87e9-f354dd54a533';
-      } else {
-          reviewPayload.type_detail_id = '64fef850-9510-4591-87e9-f354dd54a533';
+      if (!typeCodeRecord || typeCodeRecord.length === 0) {
+        throw new Error("Error en la Base de Datos: La categoría 'Support' no existe en la tabla typeDetail.");
       }
 
-      const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
-      savedComment = newReview[0].comment || '';
+      const typeDetailIdResolved = typeCodeRecord[0].id;
+
+      if ('typeDetailId' in reviewsTable) {
+          reviewPayload.typeDetailId = typeDetailIdResolved;
+      } else {
+          reviewPayload.type_detail_id = typeDetailIdResolved;
+      }
+
+      const reviewRows = await db.insert(reviewsTable).values(reviewPayload).returning();
+      savedComment = reviewRows[0].comment || '';
     }
 
     return {
@@ -293,8 +435,68 @@ export const createSupportReview = async (data: any) => {
       comment: savedComment
     };
 
+  } catch (error: any) {
+    console.error("❌ Error CRÍTICO en createSupportReview:", error.message);
+    throw new Error(`Error al crear la calificación: ${error.message}`);
+  }
+};
+
+// 🗑️ 6. ELIMINAR CONTACTO DE APOYO
+export const deleteSupport = async (id: string) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    const deleted = await db.delete(support).where(eq(support.id, cleanId)).returning();
+    return deleted[0] || null;
+  } catch (error: any) {
+    throw new Error(`Error al eliminar el contacto de apoyo: ${error.message}`);
+  }
+};
+
+// 🔄 7. RENOVAR CONTACTO DE APOYO
+export const renewSupport = async (id: string, data: any) => {
+  try {
+    const cleanId = sanitizeText(id);
+    const refCode = sanitizeText(data.referenceCode);
+    const payMethod = sanitizeText(data.paymentMethod);
+
+    if (!refCode || !payMethod || !cleanId) {
+      throw new Error("Se requiere el código de referencia y método de pago.");
+    }
+
+    return await db.transaction(async (tx) => {
+      const basePrice = await getCurrentSupportPrice();
+
+      await tx.insert(payments).values({
+        entityType: 'support',
+        entityId: cleanId,
+        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        referenceCode: refCode, 
+        paymentMethod: payMethod, 
+        amount: basePrice, 
+        durationDays: 30, 
+        status: "pending"
+      });
+
+      const updated = await tx
+        .update(support)
+        .set({ approved: false }) 
+        .where(eq(support.id, cleanId))
+        .returning();
+        
+      return {
+         ...updated[0],
+         referenceCode: refCode,
+         paymentMethod: payMethod
+      };
+    });
+
   } catch (error: any) { 
-    console.error("❌ Error CRÍTICO en createSupportReview (Doble Insert):", error);
-    throw new Error(`Error al crear la reseña del módulo de soporte: ${error.message}`);
+    console.error("❌ Error en renewSupport:", error);
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
+       throw new Error("Ese código de referencia de pago ya fue utilizado en otra transacción.");
+    }
+    throw new Error(`Error al renovar el contacto de apoyo: ${error.message}`);
   }
 };
