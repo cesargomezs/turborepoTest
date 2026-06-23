@@ -24,7 +24,7 @@ const getCurrentLawyerPrice = async () => {
     // Obtener el año actual dinámicamente (ej: "2024")
     const currentYear = new Date().getFullYear().toString();
 
-    const activeTariff = await db.select({ price: tariffs.price })
+    const activeTariff = await db.select({ price: tariffs.priceBasic })
     .from(tariffs)
     // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 

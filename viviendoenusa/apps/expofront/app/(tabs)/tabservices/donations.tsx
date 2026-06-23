@@ -45,7 +45,7 @@ const INTERNAL_IDS = ['all', 'clothes', 'furniture', 'food', 'others'];
 const ICONS_ARRAY = ['apps', 'tshirt-crew', 'sofa', 'food-apple', 'dots-horizontal-circle'];
 
 // 📡 URL BASE PARA LAS DONACIONES
-const API_DONATIONS_URL = 'http://192.168.252.243:3000/donations';
+const API_DONATIONS_URL = 'http://192.168.1.108:3000/donations';
 
 // --- 2. COMPONENTE PRINCIPAL ---
 export default function DonationsScreen() {
@@ -199,7 +199,7 @@ export default function DonationsScreen() {
         type 
       } as any);
 
-      const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/donations', {
+      const uploadResponse = await fetch('http://192.168.1.108:3000/api/subir-imagen-optimizada/donations', {
         method: 'POST',
         body: formData,
         headers: { 'Accept': 'application/json' },

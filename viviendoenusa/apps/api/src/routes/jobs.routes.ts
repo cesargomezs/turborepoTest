@@ -5,115 +5,79 @@ import {
   createJob, 
   updateJob, 
   deleteJob,
-  createJobReview,
-  renewJob // 🚀 Importamos la nueva función para renovar
+  createJobReview
 } from '../controllers/jobs.controller';
 
 const router = Router();
 
-// 🔍 GET: Obtener todas las ofertas de empleo (Soporta ?zip=12345 y ?userId=...)
+// 🔍 GET: Obtener todas las ofertas de empleo
 router.get('/', async (req, res) => {
   try {
     const zipCode = req.query.zip as string; 
-    const currentUserId = req.query.userId as string; // 🚀 Capturamos userId para identificar al dueño
-    
+    const currentUserId = req.query.userId as string; 
     const jobsList = await getJobs(zipCode, currentUserId);
     return res.status(200).json(jobsList);
   } catch (error: any) {
     console.error("❌ Error en GET /jobs:", error.message);
-    return res.status(500).json({ error: 'Error interno del servidor al obtener las ofertas de empleo' });
+    return res.status(500).json({ error: 'Error interno al obtener ofertas' });
   }
 });
 
-// 📥 POST: Crear nueva oferta de empleo
+// 📥 POST: Crear vacante (Ahora auto-aprobada si la empresa es Premium)
 router.post('/', async (req, res) => {
   try {
     const newJob = await createJob(req.body);
     return res.status(201).json(newJob);
   } catch (error: any) {
-    console.error("❌ Error en POST /jobs:", error.message);
-    
-    // 🚀 BLINDAJE: Manejo especial para el código de Zelle/Venmo duplicado
     if (error.message.includes("utilizado") || error.message.includes("unique")) {
        return res.status(409).json({ error: error.message });
     }
-    
     return res.status(400).json({ error: error.message });
   }
 });
 
-// 🚀 POST: Crear nueva reseña/opinión para una empresa
-// IMPORTANTE: Va ANTES de las rutas con :id para blindar el enrutamiento de Express
+// ⭐ POST: Crear reseña (Bloqueo inteligente por compañía)
 router.post('/reviews', async (req, res) => {
   try {
     const newReview = await createJobReview(req.body);
     return res.status(201).json(newReview);
   } catch (error: any) {
-    console.error("❌ Error en POST /jobs/reviews:", error.message);
-    return res.status(400).json({ error: error.message });
-  }
-});
-
-// 🔄 POST: Renovar Vacante de Empleo (Pago adicional)
-// IMPORTANTE: Va antes del GET /:id genérico
-router.post('/:id/renew', async (req, res) => {
-  try {
-    const renewedJob = await renewJob(req.params.id, req.body);
-    return res.status(200).json(renewedJob);
-  } catch (error: any) {
-    console.error(`❌ Error en POST /jobs/${req.params.id}/renew:`, error.message);
-    if (error.message.includes("utilizado") || error.message.includes("unique")) {
-       return res.status(409).json({ error: error.message });
+    if (error.message === "ALREADY_REVIEWED") {
+       return res.status(409).json({ error: "Ya calificaste a esta empresa anteriormente." });
     }
     return res.status(400).json({ error: error.message });
   }
 });
 
-// 🔍 GET: Obtener una oferta de empleo específica por ID
+// 🔍 GET: Obtener una vacante específica
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const item = await getJobById(id);
-    if (!item) {
-      return res.status(404).json({ error: 'Oferta de empleo no encontrada' });
-    }
+    const item = await getJobById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Oferta no encontrada' });
     return res.status(200).json(item);
   } catch (error: any) {
-    console.error(`❌ Error en GET /jobs/${req.params.id}:`, error.message);
-    return res.status(500).json({ error: 'Error al obtener la oferta de empleo' });
+    return res.status(500).json({ error: error.message });
   }
 });
 
-// 🔄 PUT: Actualizar oferta de empleo (Ideal para aprobación, meses dinámicos y procesar pagos)
+// 🔄 PUT: Actualizar vacante
 router.put('/:id', async (req, res) => {
   try {
-    const { id } = req.params; 
-    const updatedJob = await updateJob(id, req.body);
-    
-    if (!updatedJob) {
-       return res.status(404).json({ error: 'Oferta de empleo no encontrada o no se pudo actualizar' });
-    }
-    
+    const updatedJob = await updateJob(req.params.id, req.body);
+    if (!updatedJob) return res.status(404).json({ error: 'Oferta no encontrada' });
     return res.status(200).json(updatedJob);
   } catch (error: any) {
-    console.error(`❌ Error en PUT /jobs/${req.params.id}:`, error.message);
     return res.status(400).json({ error: error.message });
   }
 });
 
-// 🗑️ DELETE: Eliminar oferta de empleo
+// 🗑️ DELETE: Eliminar vacante
 router.delete('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const deletedJob = await deleteJob(id);
-    
-    if (!deletedJob) {
-      return res.status(404).json({ error: 'Oferta de empleo no encontrada' });
-    }
-    
-    return res.status(200).json({ message: 'Oferta de empleo eliminada correctamente', job: deletedJob });
+    const deletedJob = await deleteJob(req.params.id);
+    if (!deletedJob) return res.status(404).json({ error: 'Oferta no encontrada' });
+    return res.status(200).json({ message: 'Oferta eliminada correctamente' });
   } catch (error: any) {
-    console.error(`❌ Error en DELETE /jobs/${req.params.id}:`, error.message);
     return res.status(400).json({ error: error.message });
   }
 });

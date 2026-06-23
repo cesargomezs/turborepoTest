@@ -23,7 +23,7 @@ const getCurrentStorePrice = async () => {
     // Obtener el año actual dinámicamente (ej: "2024")
     const currentYear = new Date().getFullYear().toString();
 
-    const activeTariff = await db.select({ price: tariffs.price })
+    const activeTariff = await db.select({ price: tariffs.priceBasic })
     .from(tariffs)
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
     .where(

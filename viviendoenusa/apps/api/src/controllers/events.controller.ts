@@ -34,7 +34,7 @@ const getCurrentEventPrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
 
-    const activeTariff = await db.select({ price: tariffs.price })
+    const activeTariff = await db.select({ price: tariffs.priceBasic })
     .from(tariffs)
     // 🚀 FIX CRÍTICO: Forzamos el ::text para que Postgres no rechace el cruce UUID vs TEXT
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 

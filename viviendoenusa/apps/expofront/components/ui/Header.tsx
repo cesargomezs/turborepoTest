@@ -15,8 +15,8 @@ import { useMockDispatch, useMockSelector } from '../../redux/slices';
 import { setLanguage } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation'; 
 
-// 📡 URL BASE PARA LAS NOTIFICACIONES (Asegúrate de que esta sea tu IP correcta)
-const API_NOTIFICATIONS_URL = 'http://192.168.252.243:3000/notifications';
+// 📡 URL BASE PARA LAS NOTIFICACIONES
+const API_NOTIFICATIONS_URL = 'http://192.168.1.108:3000/notifications';
 
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
@@ -24,7 +24,6 @@ export default function Header({ title }: { title?: string }) {
   const isDark = theme === 'dark';
   
   const router = useRouter(); 
-  const { openJobId } = useLocalSearchParams();
   const dispatch = useMockDispatch();
   
   const { t } = useTranslation();
@@ -57,7 +56,6 @@ export default function Header({ title }: { title?: string }) {
 
   useEffect(() => {
     fetchNotifications();
-    
     const interval = setInterval(() => {
       fetchNotifications();
     }, 60000); 
@@ -74,20 +72,16 @@ export default function Header({ title }: { title?: string }) {
       case 'alert': return { name: 'alert-circle', color: '#FF5F6D' }; 
       case 'event': return { name: 'calendar', color: '#9C27B0' }; 
       case 'lawyer': return { name: 'scale-balance', color: '#FF5F6D' }; 
-      case 'support': return { name: 'heart-pulse', color: '#FF5F6D' }; // 🚀 Ícono para Soporte
+      case 'support': return { name: 'heart-pulse', color: '#FF5F6D' }; 
       default: return { name: 'bell', color: Colors[theme].text };
     }
   };
 
-  // 🚀 FUNCIÓN DE NAVEGACIÓN Y BORRADO (Conectada al Backend)
+  // 🚀 FUNCIÓN DE NAVEGACIÓN Y BORRADO
   const handleNotificationPress = async (notif: any) => {
-    // 1. Ocultar el modal inmediatamente para que se sienta rápido
     setNotifModalVisible(false);
-
-    // 2. Ocultar visualmente en el frontend
     setNotifications(prev => prev.filter(n => n.id !== notif.id));
 
-    // 3. Avisar al backend que la borre
     try {
       await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, {
         method: 'DELETE',
@@ -96,37 +90,23 @@ export default function Header({ title }: { title?: string }) {
       console.error("Error al borrar notificación:", error);
     }
 
-    // 4. Redirigir enviando el ID como parámetro
     setTimeout(() => {
-      if (notif.type === 'job') {
+      // 🚀 DICCIONARIO DE RUTAS (Más limpio y seguro que usar muchos if/else)
+      const routes: Record<string, { path: string, param: string }> = {
+        'job': { path: '/jobs', param: 'openJobId' },
+        'store': { path: '/tabservices/stores', param: 'id' },
+        'community': { path: '/tabservices/community', param: 'openEventId' },
+        'event': { path: '/tabservices/events', param: 'openEventId' },
+        'lawyer': { path: '/tabservices/lawyers', param: 'id' },
+        'support': { path: '/tabservices/support', param: 'id' },
+      };
+
+      const target = routes[notif.type];
+      
+      if (target) {
         router.navigate({ 
-            pathname: '/jobs', 
-            params: { openJobId: notif.referenceId } 
-        }); 
-      } else if (notif.type === 'store') {
-        router.navigate({ 
-            pathname: '/tabservices/stores', 
-            params: { id: notif.referenceId } 
-        }); 
-      } else if (notif.type === 'community' ) {
-        router.navigate({
-            pathname: '/tabservices/community',
-            params: { openEventId: notif.referenceId } 
-        }); 
-      } else if (notif.type === 'event') {
-        router.navigate({
-            pathname: '/tabservices/events',
-            params: { openEventId: notif.referenceId } 
-        }); 
-      } else if (notif.type === 'lawyer') { 
-        router.navigate({
-            pathname: '/tabservices/lawyers', 
-            params: { id: notif.referenceId } 
-        }); 
-      } else if (notif.type === 'support') { // 🚀 AGREGADO: Redirección para Support
-        router.navigate({
-            pathname: '/tabservices/support', 
-            params: { id: notif.referenceId } 
+            pathname: target.path as any, 
+            params: { [target.param]: notif.referenceId } 
         }); 
       }
     }, 300); 
@@ -159,7 +139,7 @@ export default function Header({ title }: { title?: string }) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity 
             onPress={() => {
-                fetchNotifications(); 
+                fetchNotifications();
                 setNotifModalVisible(true);
             }}
             activeOpacity={0.7}
@@ -226,7 +206,6 @@ export default function Header({ title }: { title?: string }) {
       <Modal animationType="slide" transparent={true} visible={notifModalVisible} onRequestClose={() => setNotifModalVisible(false)}>
         <View style={styles.notifModalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNotifModalVisible(false)} />
-          
           <View style={[
             styles.notifModalContent, 
             { 
@@ -267,7 +246,6 @@ export default function Header({ title }: { title?: string }) {
                       <View style={[styles.notifIconWrapper, { backgroundColor: `${iconConfig.color}20` }]}>
                         <MaterialCommunityIcons name={iconConfig.name as any} size={22} color={iconConfig.color} />
                       </View>
-                      
                       <View style={{ flex: 1, paddingLeft: 12 }}>
                         <ThemedText style={{ fontSize: 15, fontWeight: !notif.read ? 'bold' : '600' }}>
                           {notif.title}
@@ -379,7 +357,7 @@ const styles = StyleSheet.create({
   },
   notifModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)', 
     justifyContent: 'flex-end', 
   },
   notifModalContent: {

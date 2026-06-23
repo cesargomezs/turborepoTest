@@ -31,8 +31,8 @@ const ICONS_ARRAY = ['apps', 'heart-pulse', 'brain', 'hand-heart', 'dots-horizon
 const CATEGORIES_LIST = ['Todos', 'Psicólogos Pro-Bono', 'Mentores Locales', 'Grupos de Apoyo', 'Otros'];
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
-const API_SUPPORT_URL = 'http://192.168.252.243:3000/support';
-const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs';
+const API_SUPPORT_URL = 'http://192.168.1.108:3000/support';
+const API_TARIFFS_URL = 'http://192.168.1.108:3000/tariffs';
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
@@ -626,7 +626,7 @@ export default function SupportScreen() {
           formData.append('imagen', { uri: formImage as string, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/support', {
+        const uploadResponse = await fetch('http://192.168.1.108:3000/api/subir-imagen-optimizada/support', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },

@@ -26,8 +26,8 @@ import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 
-const API_BASE_URL = 'http://192.168.252.243:3000/lawyers';
-const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
+const API_BASE_URL = 'http://192.168.1.108:3000/lawyers';
+const API_TARIFFS_URL = 'http://192.168.1.108:3000/tariffs'; 
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -246,7 +246,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/lawyers', {
+        const uploadResponse = await fetch('http://192.168.1.108:3000/api/subir-imagen-optimizada/lawyers', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
         

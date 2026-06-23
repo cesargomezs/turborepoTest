@@ -232,6 +232,7 @@ import {
     lng: doublePrecision("lng"),
     timepostEnd: timestamp("timepost_end").defaultNow(),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    companyId: uuid('company_id').references(() => companies.id), // Nuevo campo opcional
     createdAt: timestamp("created_at").defaultNow(),
     approved: boolean("approved").default(false),
   });
@@ -270,7 +271,7 @@ export const payments = pgTable("payments", {
 });
   
   // 14. 💰 TABLA MAESTRA DE TARIFAS POR REFERENCIA (Y FUTURO STRIPE)
-export const tariffs = pgTable('tariffs', {
+/*export const tariffs = pgTable('tariffs', {
   id: uuid('id').defaultRandom().primaryKey(),
   referenceId: text("reference_id"),  // Ej: 'lawyer', 'event', 'entrepreneur'
   planType: text('plan_type').notNull(),     // Ej: 'monthly', 'annual', 'one_time'
@@ -279,6 +280,44 @@ export const tariffs = pgTable('tariffs', {
   isActive: boolean('is_active').default(true), // Para apagar planes viejos sin borrarlos
   userId: uuid("user_id").references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+});*/
+export const tariffs = pgTable("tariffs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  referenceId: uuid("reference_id"),
+  planType: text("plan_type"), 
+  description: text('description'),          // Ej: 'Suscripción Anual para Eventos'
+  // 🚀 TUS 3 NUEVAS COLUMNAS DE PRECIOS:
+  priceBasic: text("price_basic").default("50.00"), 
+  pricePremium: text("price_premium").default("99.00"), 
+  priceUnlimited: text("price_unlimited").default("149.00"), 
+  userId: uuid("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  isActive: boolean("is_active").default(true),
+});
+
+
+ // 15. TABLA: COMPANIES (Empresas de servicios, tiendas, etc. que pueden pagar por destacar su perfil)
+
+ export const companies = pgTable('companies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: "cascade" }).notNull(),
+  // Información pública de la empresa
+  name: text('name').notNull(),
+  ein: text('ein'), 
+  phoneCode: text('phone_code').default('+1'),
+  phone: text('phone').notNull(),
+  contactMethod: text('contact_method').default('whatsapp'), // 'whatsapp' o 'call'
+  email: text('email'),
+  website: text('website'),
+  logoUrl: text('logo_url'),
+  // 🚀 Control de Suscripción (SaaS)
+  isVerified: boolean('is_verified').default(false), // Check azul
+  premiumPlan: text('premium_plan').default('free'), // 'free', 'basic', 'unlimited'
+  status: text('status').default('pending'), // 'pending', 'approved', 'expired'
+  timepostEnd: timestamp('timepost_end'), // Fecha en la que caduca la suscripción
+  // Auditoría
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
   // ==========================================

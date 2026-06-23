@@ -1,63 +1,37 @@
 import { db } from "../../../../packages/db/src"; 
-import { jobs, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
+import { jobs, users, rating as ratingTable, reviews as reviewsTable, notifications, tariffs, typeDetail, companies } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const NOMBRE_BUCKET = 'images'; 
 
-// 🚀 ID OFICIAL PARA USUARIO ANÓNIMO EN LA BD (Evita errores de Foreign Key)
 const ANON_UUID = "bb50c6a4-d284-4cdd-8263-cf6b4a74de25";
+const TEMP_USER_ID = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
-const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+const sanitizeText = (str: any): string => {
+  if (typeof str !== 'string') return '';
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
-const getCurrentJobPrice = async () => {
-  try {
-    const currentYear = new Date().getFullYear().toString();
-
-    const activeTariff = await db.select({ price: tariffs.price })
-    .from(tariffs)
-    .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
-    .where(
-      and(
-        sql`${typeDetail.typeCode} ILIKE 'Job%'`, 
-        eq(tariffs.isActive, true),
-        eq(tariffs.planType, currentYear) 
-      )
-    )
-    .limit(1);
-
-    if (activeTariff && activeTariff.length > 0 && activeTariff[0].price) {
-      return activeTariff[0].price;
-    }
-  } catch (error) {
-    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN para Empleos, usando $50.00 por defecto");
-  }
-  return "50.00";
-};
-
-// 🔍 1. CONSULTA GENERAL (Feed de Empleos)
+// 🔍 1. CONSULTA GENERAL (Candado de Empresa Aprobada Integrado)
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
   try {
-    const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const zip = rawZip ? sanitizeText(String(rawZip)) : '';
 
     let query = db
     .select()
     .from(jobs)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, jobs.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    .leftJoin(payments, and(eq(payments.entityId, jobs.id), eq(payments.entityType, 'job')))
+    .leftJoin(users, eq(ratingTable.userId, users.id))
+    .leftJoin(companies, eq(jobs.companyId, companies.id))
     .where(
+      // 🚀 MAGIA: Si el usuario es el dueño, la ve. Si no, DEBE estar abierta y la empresa APROBADA.
       currentUserId 
-        ? sql`${jobs.approved} = false OR ${jobs.timepostEnd} > NOW() OR ${jobs.userId} = ${currentUserId}`
-        : sql`${jobs.approved} = false OR ${jobs.timepostEnd} > NOW()`
+        ? sql`${jobs.userId} = ${currentUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL))`
+        : sql`${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)`
     )
     .orderBy(desc(jobs.createdAt))
     .$dynamic();
@@ -77,8 +51,9 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
       if (!jobsMap.has(jobId)) {
         jobsMap.set(jobId, {
           ...row.jobs,
-          referenceCode: row.payments?.referenceCode || null,
-          paymentMethod: row.payments?.paymentMethod || null,
+          company: row.companies?.name || row.jobs.company,
+          isCompanyVerified: row.companies?.isVerified || false,
+          companyPlan: row.companies?.premiumPlan || 'free',
           reviews: [], 
           totalRating: 0,
           totalReviews: 0
@@ -86,14 +61,15 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
       }
 
       if (row.rating && row.rating.id) {
-        // 🚀 FIX TS: Compatibilidad con diferentes nombres de columna en reviews
         const commentText = row.reviews ? (row.reviews as any).review || (row.reviews as any).text || (row.reviews as any).comment || '' : '';
+        const reviewUserId = row.reviews ? (row.reviews as any).userId : null;
+        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name || 'Anónimo');
 
         jobsMap.get(jobId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
-           userName: 'Anónimo', // 🚀 FIX TS: Forzamos el valor ya que no está en el esquema de reviews
+           userName: reviewerName, 
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -125,7 +101,6 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
   }
 };
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID
 export const getJobById = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -136,15 +111,17 @@ export const getJobById = async (id: string) => {
       .from(jobs)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, jobs.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .leftJoin(payments, and(eq(payments.entityId, jobs.id), eq(payments.entityType, 'job')))
+      .leftJoin(users, eq(ratingTable.userId, users.id))
+      .leftJoin(companies, eq(jobs.companyId, companies.id))
       .where(eq(jobs.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
   
     const jobFinal: any = {
       ...rows[0].jobs, 
-      referenceCode: rows[0].payments?.referenceCode || null,
-      paymentMethod: rows[0].payments?.paymentMethod || null,
+      company: rows[0].companies?.name || rows[0].jobs.company,
+      isCompanyVerified: rows[0].companies?.isVerified || false,
+      companyPlan: rows[0].companies?.premiumPlan || 'free',
       reviews: [],
       totalRating: 0,
       totalReviews: 0           
@@ -152,14 +129,15 @@ export const getJobById = async (id: string) => {
 
     for (const row of rows) {
       if (row.rating && row.rating.id) {
-        // 🚀 FIX TS
         const commentText = row.reviews ? (row.reviews as any).review || (row.reviews as any).text || (row.reviews as any).comment || '' : '';
+        const reviewUserId = row.reviews ? (row.reviews as any).userId : null;
+        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name || 'Anónimo');
 
         jobFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          userName: 'Anónimo', // 🚀 FIX TS
+          userName: reviewerName,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -182,71 +160,59 @@ export const getJobById = async (id: string) => {
   }
 };
 
-// 📥 3. CREAR VACANTE DE EMPLEO
 export const createJob = async (data: any) => {
   try {
     return await db.transaction(async (tx) => {
       
-      const safeDesc = sanitizeText(data.descriptionJob || data.description) || '';
+      const safeDesc = sanitizeText(data.descriptionJob || data.description);
+      const companyId = sanitizeText(data.companyId);
+
+      if (!companyId) throw new Error("Debes seleccionar una empresa registrada para publicar un empleo.");
 
       const jobPayload: any = {
         nameJobs: sanitizeText(data.nameJobs || data.title) || 'Sin título',
         title: sanitizeText(data.title || data.nameJobs) || 'Sin título',
-        company: sanitizeText(data.company) || '',
+        company: sanitizeText(data.company),
+        companyId: companyId, 
         category: sanitizeText(data.category) || 'Otros',
         stateCountry: sanitizeText(data.stateCountry || data.state) || 'California',
-        city: sanitizeText(data.city) || '',
-        zip: sanitizeText(data.zip) || '',
+        city: sanitizeText(data.city),
+        zip: sanitizeText(data.zip),
         contactMethod: data.contactMethod === true || data.contactMethod === 'whatsapp',
         phoneCode: sanitizeText(data.phoneCode) || '+1',
-        phone: sanitizeText(data.phone) || '',
-        shifts: sanitizeText(data.shifts) || '',
-        salaryMin: sanitizeText(data.salaryMin) || '',
-        salaryMax: sanitizeText(data.salaryMax) || '',
+        phone: sanitizeText(data.phone),
+        shifts: sanitizeText(data.shifts),
+        salaryMin: sanitizeText(data.salaryMin),
+        salaryMax: sanitizeText(data.salaryMax),
         descriptionJob: safeDesc,
         isOpen: data.isOpen !== undefined ? data.isOpen : true,
-        userId: sanitizeText(data.userId) || ANON_UUID, 
+        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         userNameId: sanitizeText(data.userNameId || data.userName) || 'Anónimo',
-        approved: false 
+        approved: true, 
       };
-      
+
       const [newJob] = await tx.insert(jobs).values(jobPayload).returning();
 
-      if (data.referenceCode && data.paymentMethod) {
-        const basePrice = await getCurrentJobPrice();
-
-        await tx.insert(payments).values({
-          entityType: 'job',
-          entityId: newJob.id,
-          userId: jobPayload.userId,
-          referenceCode: sanitizeText(data.referenceCode) || '', 
-          paymentMethod: sanitizeText(data.paymentMethod) || '', 
-          amount: basePrice, 
-          durationDays: 30, 
-          status: "pending"
-        });
-      }
+      await tx.insert(notifications).values({
+        title: "¡Nueva Oferta de Empleo! 💼",
+        description: `${jobPayload.company} busca: ${jobPayload.title}. ¡Aplica ya!`,
+        type: "job", 
+        visibleAt: new Date(), 
+        userId: jobPayload.userId || TEMP_USER_ID, 
+        referenceId: String(newJob.id)
+      });
 
       return {
          ...newJob,
-         referenceCode: data.referenceCode,
-         paymentMethod: data.paymentMethod,
          description: safeDesc,
          descriptionJob: safeDesc
       };
     });
   } catch (error: any) { 
-    console.error("❌ Error en createJob:", error);
-    
-    if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
-       throw new Error("Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único.");
-    }
-
     throw new Error(`Error al crear la oferta de empleo: ${error.message}`);
   }
 };
 
-// 🔄 4. ACTUALIZAR VACANTE
 export const updateJob = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
@@ -254,7 +220,7 @@ export const updateJob = async (id: string, data: any) => {
 
     return await db.transaction(async (tx) => {
       
-      const allowedFields = ['nameJobs', 'title', 'company', 'category', 'stateCountry', 'city', 'zip', 'contactMethod', 'phoneCode', 'phone', 'shifts', 'salaryMin', 'salaryMax', 'descriptionJob', 'isOpen'];
+      const allowedFields = ['nameJobs', 'title', 'company', 'companyId', 'category', 'stateCountry', 'city', 'zip', 'contactMethod', 'phoneCode', 'phone', 'shifts', 'salaryMin', 'salaryMax', 'descriptionJob', 'isOpen'];
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
@@ -268,113 +234,59 @@ export const updateJob = async (id: string, data: any) => {
         updatePayload.descriptionJob = safeDesc;
       }
 
-      const isApproved = String(data.approved).toLowerCase() === 'true';
-
-      if (isApproved) {
-        updatePayload.approved = true; 
-        updatePayload.createdAt = new Date();
-        
-        let monthsToAdd = 1; 
-        if (data.durationMonths) {
-          const parsedMonths = Number(data.durationMonths);
-          if (!isNaN(parsedMonths)) {
-            monthsToAdd = parsedMonths;
-          }
-        }
-        
-        const expirationDate = new Date();
-        expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
-        
-        updatePayload.timepostEnd = expirationDate; 
-
-        const basePriceString = await getCurrentJobPrice();
-        const basePriceNum = Number(basePriceString) || 50; 
-        const totalAmount = (monthsToAdd * basePriceNum).toFixed(2); 
-
-        const daysToAdd = monthsToAdd * 30; 
-
-        await tx.update(payments)
-          .set({ 
-             status: "approved", 
-             approvedAt: new Date(), 
-             durationDays: daysToAdd, 
-             amount: totalAmount, 
-             timepost_end: expirationDate 
-          })
-          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'job')));
-      }
-
       const updated = await tx
         .update(jobs)
         .set(updatePayload) 
         .where(eq(jobs.id, cleanId))
         .returning();
         
-      const jobItem = updated[0];
-
-      if (isApproved && jobItem) {
-        const notifPayload: any = {
-            title: "¡Nueva Oferta de Empleo! 💼",
-            description: `${jobItem.company} busca: ${jobItem.title || jobItem.nameJobs}. ¡Aplica ya!`,
-            type: "job", 
-            visibleAt: new Date(), 
-            userId: jobItem.userId || ANON_UUID, 
-        };
-
-        if ('referenceId' in notifications) notifPayload.referenceId = String(jobItem.id);
-        else if ('reference_id' in notifications) notifPayload.reference_id = String(jobItem.id);
-
-        await tx.insert(notifications).values(notifPayload);
-      }
-
-      return jobItem || null;
+      return updated[0] || null;
     });
 
   } catch (error: any) { 
-    console.error("❌ Error en updateJob:", error);
     throw new Error(`Error al actualizar la oferta de empleo: ${error.message}`);
   }
 };
 
-// 🚀 5. INGRESO DE RATING Y RESEÑA
 export const createJobReview = async (data: any) => {
   try {
-    let validUserId = sanitizeText(data.userId) || null;
+    const realUserId = sanitizeText(data.userId) || TEMP_USER_ID; 
+    const targetJobId = sanitizeText(data.reference_id || data.referenceId);
+
+    if (!targetJobId) throw new Error("No se envió el ID de la vacante.");
+
+    const targetJob = await db.select({ companyId: jobs.companyId }).from(jobs).where(eq(jobs.id, targetJobId)).limit(1);
     
-    // Si es anónimo o no mandó ID válido, le asignamos el ID oficial del anónimo.
-    if (!validUserId || validUserId.length < 20 || data.isAnonymous === true) {
-        validUserId = ANON_UUID; 
+    if (!targetJob || targetJob.length === 0 || !targetJob[0].companyId) {
+        throw new Error("No se pudo asociar la vacante a una compañía válida.");
     }
+    const resolvedCompanyId = targetJob[0].companyId;
 
-    const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
+    const existingRating = await db.select({ id: ratingTable.id })
+      .from(ratingTable)
+      .innerJoin(jobs, eq(ratingTable.referenceId, jobs.id))
+      .where(
+        and(
+          eq(ratingTable.userId, realUserId),
+          eq(jobs.companyId, resolvedCompanyId)
+        )
+      )
+      .limit(1);
 
-    // ANTI-DUPLICADOS (Saltamos chequeo si es el usuario Anónimo)
-    if (validUserId && validUserId !== ANON_UUID && targetReferenceId) {
-        const existingRating = await db.select()
-          .from(ratingTable)
-          .where(
-            and(
-              eq(ratingTable.referenceId, targetReferenceId),
-              eq(ratingTable.userId, validUserId)
-            )
-          )
-          .limit(1);
-
-        if (existingRating && existingRating.length > 0) {
-            throw new Error("ALREADY_REVIEWED");
-        }
+    if (existingRating && existingRating.length > 0) {
+        throw new Error("ALREADY_REVIEWED");
     }
 
     const ratingPayload: any = {
       rating: String(Number(data.stars || data.rating || 5)), 
-      userId: validUserId,
+      userId: realUserId, 
     };
 
     if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'jobs';
     else ratingPayload.type_entry = 'jobs';
 
-    if ('referenceId' in ratingTable) ratingPayload.referenceId = targetReferenceId;
-    else ratingPayload.reference_id = targetReferenceId;
+    if ('referenceId' in ratingTable) ratingPayload.referenceId = targetJobId;
+    else ratingPayload.reference_id = targetJobId;
 
     const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
     const generatedRatingId = newRating[0].id;
@@ -382,10 +294,11 @@ export const createJobReview = async (data: any) => {
     let savedComment = '';
     const incomingText = sanitizeText(data.comment || data.text || data.review);
     
+    const reviewUserId = data.isAnonymous === true ? ANON_UUID : realUserId;
+    let assignedUserName = 'Anónimo'; 
+
     if (incomingText && incomingText !== '') {
-      const reviewPayload: any = {
-        userId: validUserId
-      };
+      const reviewPayload: any = { userId: reviewUserId };
 
       if ('review' in reviewsTable) reviewPayload.review = incomingText;
       else if ('text' in reviewsTable) reviewPayload.text = incomingText;
@@ -395,45 +308,35 @@ export const createJobReview = async (data: any) => {
       else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
       else reviewPayload.rating_id = generatedRatingId;
       
-      const typeCodeRecord = await db.select({ id: typeDetail.id })
-        .from(typeDetail)
-        .where(sql`${typeDetail.typeCode} ILIKE 'Job%'`)
-        .limit(1);
-
-      if (!typeCodeRecord || typeCodeRecord.length === 0) {
-        throw new Error("Error en la Base de Datos: La categoría 'Jobs' no existe en la tabla typeDetail.");
-      }
+      const typeCodeRecord = await db.select({ id: typeDetail.id }).from(typeDetail).where(sql`${typeDetail.typeCode} ILIKE 'Job%'`).limit(1);
+      if (!typeCodeRecord || typeCodeRecord.length === 0) throw new Error("Error en la BD: La categoría 'Jobs' no existe.");
 
       const typeDetailIdResolved = typeCodeRecord[0].id;
+      if ('typeDetailId' in reviewsTable) reviewPayload.typeDetailId = typeDetailIdResolved;
+      else reviewPayload.type_detail_id = typeDetailIdResolved;
 
-      if ('typeDetailId' in reviewsTable) {
-          reviewPayload.typeDetailId = typeDetailIdResolved;
-      } else {
-          reviewPayload.type_detail_id = typeDetailIdResolved;
-      }
-
-      // 🚀 FIX TS: Retiramos userName de la carga a BD ya que Drizzle no lo reconoce en el esquema actual de reviews.
-      
       const reviewRows = await db.insert(reviewsTable).values(reviewPayload).returning();
-      // 🚀 FIX TS para leer compatibilidad de columnas
       savedComment = (reviewRows[0] as any).comment || (reviewRows[0] as any).text || (reviewRows[0] as any).review || '';
     }
 
-    // Devolvemos el nombre en la respuesta JSON para que el frontend lo pinte.
+    if (data.isAnonymous !== true) {
+      const userObj = await db.select({ name: users.name }).from(users).where(eq(users.id, realUserId)).limit(1);
+      if (userObj.length > 0 && userObj[0].name) assignedUserName = userObj[0].name;
+      else assignedUserName = sanitizeText(data.userName) || 'Cesar Gomez';
+    }
+
     return {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
-      userName: data.isAnonymous === true ? 'Anónimo' : sanitizeText(data.userName) || 'Anónimo'
+      userName: assignedUserName 
     };
 
   } catch (error: any) {
-    console.error("❌ Error CRÍTICO en createJobReview:", error.message);
     throw new Error(error.message || "Error al crear la calificación");
   }
 };
 
-// 🗑️ 6. ELIMINAR OFERTA DE EMPLEO
 export const deleteJob = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -443,52 +346,5 @@ export const deleteJob = async (id: string) => {
     return deleted[0] || null;
   } catch (error: any) {
     throw new Error(`Error al eliminar la oferta de empleo: ${error.message}`);
-  }
-};
-
-// 🔄 7. RENOVAR OFERTA DE EMPLEO
-export const renewJob = async (id: string, data: any) => {
-  try {
-    const cleanId = sanitizeText(id);
-    const refCode = sanitizeText(data.referenceCode);
-    const payMethod = sanitizeText(data.paymentMethod);
-
-    if (!refCode || !payMethod || !cleanId) {
-      throw new Error("Se requiere el código de referencia y método de pago.");
-    }
-
-    return await db.transaction(async (tx) => {
-      const basePrice = await getCurrentJobPrice();
-
-      await tx.insert(payments).values({
-        entityType: 'job',
-        entityId: cleanId,
-        userId: sanitizeText(data.userId) || ANON_UUID, 
-        referenceCode: refCode, 
-        paymentMethod: payMethod, 
-        amount: basePrice, 
-        durationDays: 30, 
-        status: "pending"
-      });
-
-      const updated = await tx
-        .update(jobs)
-        .set({ approved: false }) 
-        .where(eq(jobs.id, cleanId))
-        .returning();
-        
-      return {
-         ...updated[0],
-         referenceCode: refCode,
-         paymentMethod: payMethod
-      };
-    });
-
-  } catch (error: any) { 
-    console.error("❌ Error en renewJob:", error);
-    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
-       throw new Error("Ese código de referencia de pago ya fue utilizado en otra transacción.");
-    }
-    throw new Error(`Error al renovar la oferta de empleo: ${error.message}`);
   }
 };
