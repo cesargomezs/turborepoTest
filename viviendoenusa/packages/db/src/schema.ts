@@ -283,13 +283,14 @@ export const payments = pgTable("payments", {
 });*/
 export const tariffs = pgTable("tariffs", {
   id: uuid("id").primaryKey().defaultRandom(),
-  referenceId: uuid("reference_id"),
+  referenceId: text("reference_id"),
   planType: text("plan_type"), 
   description: text('description'),          // Ej: 'Suscripción Anual para Eventos'
-  // 🚀 TUS 3 NUEVAS COLUMNAS DE PRECIOS:
-  priceBasic: text("price_basic").default("50.00"), 
-  pricePremium: text("price_premium").default("99.00"), 
-  priceUnlimited: text("price_unlimited").default("149.00"), 
+  //🚀 PRECIOS CORREGIDOS: Ahora la BD sabe que son números reales
+  priceCoupon: numeric("coupon", { precision: 10, scale: 2 }).default("0.00"),
+  priceBasic: numeric("price_basic", { precision: 10, scale: 2 }).default("50.00"), 
+  pricePremium: numeric("price_premium", { precision: 10, scale: 2 }).default("99.00"), 
+  priceUnlimited: numeric("price_unlimited", { precision: 10, scale: 2 }).default("149.00"),
   userId: uuid("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   isActive: boolean("is_active").default(true),

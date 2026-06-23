@@ -27,9 +27,9 @@ const validateComment = (text: string): boolean => {
   return !BANNED_WORDS.some((word: string) => lowerText.includes(word.toLowerCase()));
 };
 
-const API_JOBS_URL = 'http://192.168.1.108:3000/jobs';
-const API_COMPANIES_URL = 'http://192.168.1.108:3000/companies';
-const API_TARIFFS_URL = 'http://192.168.1.108:3000/tariffs';
+const API_JOBS_URL = 'http://192.168.252.243:3000/jobs';
+const API_COMPANIES_URL = 'http://192.168.252.243:3000/companies';
+const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs';
 
 const usCitiesData: Record<string, string[]> = {
   "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
@@ -113,6 +113,11 @@ export default function JobsScreen() {
   //comp.premiumPlan
 
   const planStyles: any = {
+    coupon: {
+      selected: '#EA8D2D', // Coral vibrante (Mantenido, es un excelente color)
+      unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)',
+      text: (isDark: boolean) => isDark ? '#FFF' : '#333',
+    },
     basic: {
       selected: '#FF5F6D', // Coral vibrante (Mantenido, es un excelente color)
       unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)',
@@ -153,7 +158,7 @@ export default function JobsScreen() {
   const [publishView, setPublishView] = useState<'form' | 'city' | 'country' | 'company_list' | 'create_company'>('form');
 
   const [userCompanies, setUserCompanies] = useState<any[]>([]);
-  const [companyTariffs, setCompanyTariffs] = useState({ basic: '50.00', premium: '99.00', unlimited: '149.00' });
+  const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' });
   
   const [newCompanyForm, setNewCompanyForm] = useState({ 
     name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'basic'
@@ -192,6 +197,7 @@ export default function JobsScreen() {
           const tariffsData = await res.json();
           if (tariffsData && tariffsData.length > 0) {
             setCompanyTariffs({
+              coupon: tariffsData[0].priceCoupon || '0.00',
               basic: tariffsData[0].priceBasic || '50.00',
               premium: tariffsData[0].pricePremium || '99.00',
               unlimited: tariffsData[0].priceUnlimited || '149.00'
@@ -453,7 +459,7 @@ export default function JobsScreen() {
           formData.append('imagen', { uri: newCompanyForm.logoUri, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.108:3000/api/subir-imagen-optimizada/companies', {
+        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/companies', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
         
@@ -736,7 +742,7 @@ export default function JobsScreen() {
                 </View>
             </View>
             {comp.ein && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext }}>EIN/Tax ID: {comp.ein}</ThemedText>}
-            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginTop: 2 }}>Contacto: {comp.phoneCode} {comp.phone}</ThemedText>
+            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginTop: 2 }}>{t.jobstab.contact} {comp.phoneCode} {comp.phone}</ThemedText>
             
             <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.12)', padding: 10, borderRadius: 12, marginVertical: 12, borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.4)' }}>
                 <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', textAlign: 'center' }}>
@@ -747,7 +753,7 @@ export default function JobsScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
                 {[1, 3, 6, 12].map(m => (
                     <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
-                        <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m} Meses</ThemedText>
+                        <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m} M</ThemedText>
                     </TouchableOpacity>
                 ))}
             </View>
@@ -790,7 +796,7 @@ export default function JobsScreen() {
                       <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={24} color={showSavedOnly ? DynamicColors.accent : DynamicColors.text} style={{opacity: showSavedOnly ? 1 : 0.6}}/>
                   </TouchableOpacity>
                   <TouchableOpacity onLongPress={() => setIsAdminMode(!isAdminMode)} style={{ padding: 0 }}>
-                      <MaterialCommunityIcons name="briefcase-search" size={30} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.3}}/>
+                      <MaterialCommunityIcons name="briefcase-search" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.3}}/>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -909,7 +915,7 @@ export default function JobsScreen() {
                         <TouchableOpacity onPress={() => setShowTitlePickerModal(true)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: filterTitle !== 'Todos' && filterTitle !== 'All' ? 'rgba(255, 95, 109, 0.1)' : DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: filterTitle !== 'Todos' && filterTitle !== 'All' ? DynamicColors.accent : DynamicColors.border, paddingHorizontal: 15, height: 48 }}>
                             <MaterialCommunityIcons name="briefcase-outline" size={18} color={filterTitle !== 'Todos' && filterTitle !== 'All' ? DynamicColors.accent : DynamicColors.subtext} style={{ marginRight: 8 }} />
                             <ThemedText style={{ flex: 1, color: filterTitle === 'Todos' || filterTitle === 'All' ? DynamicColors.subtext : DynamicColors.accent, fontWeight: 'bold', fontSize: 13 }}>
-                                {filterTitle === 'Todos' || filterTitle === 'All' ? `Cualquier Puesto en ${activeFilter}` : filterTitle}
+                                {filterTitle === 'Todos' || filterTitle === 'All' ? t.jobstab.anycity+` ${activeFilter}` : filterTitle}
                             </ThemedText>
                             <MaterialCommunityIcons name="chevron-down" size={18} color={filterTitle !== 'Todos' && filterTitle !== 'All' ? DynamicColors.accent : DynamicColors.subtext} />
                         </TouchableOpacity>
@@ -919,7 +925,7 @@ export default function JobsScreen() {
                        <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                          <MaterialCommunityIcons name="briefcase-variant-off" size={56} color={DynamicColors.subtext} />
                          <ThemedText style={{ color: DynamicColors.subtext, marginTop: 14, fontWeight: 'bold', textAlign: 'center', paddingHorizontal: 20 }}>
-                           {showSavedOnly ? "Aún no has guardado ninguna vacante." : "No se encontraron empleos con estos filtros."}
+                           {showSavedOnly ? t.jobstab.savevacancy : t.jobstab.novacancy}
                          </ThemedText>
                        </View>
                     ) : (
@@ -971,11 +977,11 @@ export default function JobsScreen() {
                                           <MaterialCommunityIcons name="briefcase-search" size={20} color={DynamicColors.accent} style={{marginRight: 10}} />
                                           <View style={{flex: 1}}>
                                               <ThemedText style={{ fontSize: 13, color: DynamicColors.text, fontWeight: '800', flexShrink: 1 }}>
-                                                  Tiene <ThemedText style={{color: DynamicColors.accent, fontWeight: '900'}}>{job.groupedCount} vacantes</ThemedText> activas
+                                                  {t.jobstab.hadvacan} <ThemedText style={{color: DynamicColors.accent, fontWeight: '900'}}>{job.groupedCount} {t.jobstab.vacancys}</ThemedText> {t.jobstab.vacancys}
                                               </ThemedText>
                                           </View>
                                           <View style={{backgroundColor: DynamicColors.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, marginLeft: 10}}>
-                                              <ThemedText style={{color: '#FFF', fontWeight: '900', fontSize: 11}}>VER TODAS</ThemedText>
+                                              <ThemedText style={{color: '#FFF', fontWeight: '900', fontSize: 11}}>{t.jobstab.viewall}</ThemedText>
                                           </View>
                                       </LinearGradient>
                                   </TouchableOpacity>
@@ -985,13 +991,13 @@ export default function JobsScreen() {
                               <View style={{ flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
                                   <TouchableOpacity onPress={() => setSelectedCompany(job)} style={{ flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)' }}>
                                     <MaterialCommunityIcons name="comment-text-outline" size={18} color={DynamicColors.text} />
-                                    <ThemedText style={{ marginLeft: 8, fontSize: 13, fontWeight: '800', color: DynamicColors.text }}>Reseñas ({formattedCount})</ThemedText>
+                                    <ThemedText style={{ marginLeft: 8, fontSize: 13, fontWeight: '800', color: DynamicColors.text }}>{t.genericbtn.reviews} ({formattedCount})</ThemedText>
                                   </TouchableOpacity>
 
                                   <TouchableOpacity onPress={() => handleContact('call', job.phoneCode, job.phone)} disabled={!job.isOpen} style={{ flex: 1.1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: '#E3F2FD', opacity: !job.isOpen ? 0.4 : 1 }}>
                                     <MaterialCommunityIcons name="phone" size={18} color="#1976D2" />
                                     <ThemedText style={{ marginLeft: 8, fontSize: 13, fontWeight: '800', color: '#1976D2' }}>
-                                        Llamar
+                                        {t.genericbtn.call}
                                     </ThemedText>
                                   </TouchableOpacity>
                               </View>
@@ -1000,7 +1006,7 @@ export default function JobsScreen() {
                               {isOwner && (
                                   <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ width: '100%', marginTop: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.5)' : 'rgba(76, 175, 80, 0.5)', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.05)' : 'rgba(76, 175, 80, 0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                                       <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={18} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 8}} />
-                                      <ThemedText style={{ color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: '900', fontSize: 13, textTransform: 'uppercase' }}>{job.isOpen ? "Cerrar Vacante" : "Reabrir Vacante"}</ThemedText>
+                                      <ThemedText style={{ color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: '900', fontSize: 13, textTransform: 'uppercase' }}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
                                   </TouchableOpacity>
                               )}
                             </View>
@@ -1053,26 +1059,26 @@ export default function JobsScreen() {
                   {selectedCompanyProfile?.website && (
                       <TouchableOpacity onPress={() => Linking.openURL(selectedCompanyProfile.website.startsWith('http') ? selectedCompanyProfile.website : `https://${selectedCompanyProfile.website}`)} style={{ flex: 1, paddingVertical: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                            <MaterialCommunityIcons name="web" size={16} color={DynamicColors.accent} style={{marginRight: 4}} />
-                           <ThemedText style={{ fontWeight: 'bold', fontSize: 13 }} numberOfLines={1}>Web</ThemedText>
+                           <ThemedText style={{ fontWeight: 'bold', fontSize: 13 }} numberOfLines={1}>{t.genericbtn.web}</ThemedText>
                       </TouchableOpacity>
                   )}
                   {selectedCompanyProfile?.email && (
                       <TouchableOpacity onPress={() => Linking.openURL(`mailto:${selectedCompanyProfile.email}`)} style={{ flex: 1, paddingVertical: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                            <MaterialCommunityIcons name="email-outline" size={16} color={DynamicColors.accent} style={{marginRight: 4}} />
-                           <ThemedText style={{ fontWeight: 'bold', fontSize: 13 }} numberOfLines={1}>Correo</ThemedText>
+                           <ThemedText style={{ fontWeight: 'bold', fontSize: 13 }} numberOfLines={1}>{t.genericbtn.email}</ThemedText>
                       </TouchableOpacity>
                   )}
                   <TouchableOpacity onPress={() => handleContact('call', selectedCompanyProfile?.phoneCode, selectedCompanyProfile?.phone)} style={{ flex: 1, paddingVertical: 12, backgroundColor: 'rgba(33, 150, 243, 0.1)', borderRadius: 16, borderWidth: 1, borderColor: '#2196F3', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="phone" size={16} color="#2196F3" style={{marginRight: 4}} />
-                       <ThemedText style={{ fontWeight: 'bold', color: '#2196F3', fontSize: 13 }} numberOfLines={1}>Llamar</ThemedText>
+                       <ThemedText style={{ fontWeight: 'bold', color: '#2196F3', fontSize: 13 }} numberOfLines={1}>{t.genericbtn.callbton}</ThemedText>
                   </TouchableOpacity>
               </View>
 
-              <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, paddingHorizontal: 10 }}>Vacantes Activas ({activeCount})</ThemedText>
+              <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, paddingHorizontal: 10 }}>{t.jobstab.vacancyactive} ({activeCount})</ThemedText>
               
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 10 }}>
                   {companyJobs.length === 0 ? (
-                      <ThemedText style={{ textAlign: 'center', opacity: 0.6, marginTop: 20 }}>No hay vacantes disponibles en este momento.</ThemedText>
+                      <ThemedText style={{ textAlign: 'center', opacity: 0.6, marginTop: 20 }}>{t.jobstab.novacancy}</ThemedText>
                   ) : (
                       companyJobs.map((job: any) => {
                           const isJobOwner = job.userId === currentUserId;
@@ -1096,7 +1102,7 @@ export default function JobsScreen() {
                               {isJobOwner && (
                                   <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ borderTopWidth: 1, borderColor: DynamicColors.border, paddingTop: 12, marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
                                       <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={16} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 6}} />
-                                      <ThemedText style={{color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase'}}>{job.isOpen ? "Cerrar Vacante" : "Reabrir Vacante"}</ThemedText>
+                                      <ThemedText style={{color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase'}}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
                                   </TouchableOpacity>
                               )}
                           </View>
@@ -1176,13 +1182,13 @@ export default function JobsScreen() {
 
                 <View style={{height:1, backgroundColor:DynamicColors.border, marginVertical:15}} />
 
-                <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, textTransform: 'uppercase' }}>Descripción de la Vacante</ThemedText>
+                <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, textTransform: 'uppercase' }}>{t.jobstab.descriptionoffert}</ThemedText>
                 <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 25 }}>{selectedJobDetail?.description}</ThemedText>
 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 20 }}>
                     <TouchableOpacity onPress={() => { setSelectedJobDetail(null); setTimeout(() => setSelectedCompany(selectedJobDetail), 300); }} style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: DynamicColors.inputBg }}>
                         <MaterialCommunityIcons name="star" size={18} color="#FFB300" />
-                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>Ver Reseñas</ThemedText>
+                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.viewreviews}</ThemedText>
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={() => handleContact('call', selectedJobDetail?.phoneCode, selectedJobDetail?.phone)} disabled={!selectedJobDetail?.isOpen} style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: '#E3F2FD', opacity: !selectedJobDetail?.isOpen ? 0.4 : 1 }}>
@@ -1212,7 +1218,7 @@ export default function JobsScreen() {
                          <TouchableOpacity onPress={() => setPublishView('form')} style={{ paddingRight: 15 }}>
                              <MaterialCommunityIcons name="arrow-left" size={28} color={DynamicColors.text} />
                          </TouchableOpacity>
-                         <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>Elige la Ciudad en {newJob.state}</ThemedText>
+                         <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.choisecity} {newJob.state}</ThemedText>
                      </View>
                      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
                          <View style={{ flexDirection: 'column', gap: 10 }}>
@@ -1256,7 +1262,7 @@ export default function JobsScreen() {
                              <TouchableOpacity onPress={() => setPublishView('form')} style={{ paddingRight: 15 }}>
                                  <MaterialCommunityIcons name="arrow-left" size={28} color={DynamicColors.text} />
                              </TouchableOpacity>
-                             <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>Tus Empresas</ThemedText>
+                             <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.yourcompanies}</ThemedText>
                          </View>
                          <TouchableOpacity onPress={() => setPublishView('create_company')}>
                              <MaterialCommunityIcons name="plus-circle" size={28} color={DynamicColors.accent} />
@@ -1267,9 +1273,9 @@ export default function JobsScreen() {
                          {userCompanies.length === 0 ? (
                              <View style={{ alignItems: 'center', marginTop: 40, opacity: 0.6 }}>
                                  <MaterialCommunityIcons name="domain-off" size={48} color={DynamicColors.text} />
-                                 <ThemedText style={{ textAlign: 'center', marginTop: 15 }}>No tienes empresas registradas.</ThemedText>
+                                 <ThemedText style={{ textAlign: 'center', marginTop: 15 }}>{t.jobstab.nocompanieregister}</ThemedText>
                                  <TouchableOpacity onPress={() => setPublishView('create_company')} style={{ marginTop: 20, backgroundColor: DynamicColors.inputBg, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: DynamicColors.border }}>
-                                     <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.accent }}>+ Registrar Empresa</ThemedText>
+                                     <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.accent }}>+ {t.jobstab.registerlabelcomp}</ThemedText>
                                  </TouchableOpacity>
                              </View>
                          ) : (
@@ -1331,12 +1337,12 @@ export default function JobsScreen() {
                          <TouchableOpacity onPress={() => setPublishView('company_list')} style={{ paddingRight: 15 }}>
                              <MaterialCommunityIcons name="arrow-left" size={28} color={DynamicColors.text} />
                          </TouchableOpacity>
-                         <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>Registrar Empresa</ThemedText>
+                         <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.registerlabelcomp}</ThemedText>
                      </View>
 
                      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                          <ThemedText style={{ fontSize: 14, marginBottom: 20 }}>
-                             Registra tu empresa para acceder al plan corporativo y publicar vacantes.
+                             {t.jobstab.registrecompanie}
                          </ThemedText>
 
                          <View style={{ alignItems: 'center', marginBottom: 20 }}>
@@ -1352,7 +1358,7 @@ export default function JobsScreen() {
                              </TouchableOpacity>
                          </View>
 
-                         <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>NOMBRE COMERCIAL *</ThemedText>
+                         <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.namecompanies}</ThemedText>
                          <TextInput 
                              value={newCompanyForm.name} 
                              onChangeText={t => setNewCompanyForm({...newCompanyForm, name: t})} 
@@ -1362,7 +1368,7 @@ export default function JobsScreen() {
                              style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                          />
 
-                         <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>TAX ID / EIN (Opcional)</ThemedText>
+                         <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.labeltaxid}</ThemedText>
                          <TextInput 
                              value={newCompanyForm.ein} 
                              onChangeText={t => setNewCompanyForm({...newCompanyForm, ein: t})} 
@@ -1377,7 +1383,7 @@ export default function JobsScreen() {
                              keyboardType="email-address" 
                              autoCapitalize="none"
                              autoCorrect={false}
-                             placeholder="Correo electrónico corporativo..." 
+                             placeholder={t.jobstab.labeleamil}
                              placeholderTextColor="#999" 
                              style={{ backgroundColor: DynamicColors.inputBg, padding: 15, borderRadius: 12, marginBottom: 12, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                          />
@@ -1387,14 +1393,15 @@ export default function JobsScreen() {
                              keyboardType="url" 
                              autoCapitalize="none"
                              autoCorrect={false}
-                             placeholder="Sitio Web (Ej. www.empresa.com)..." 
+                             placeholder="Web (Ej. www.empresa.com)..." 
                              placeholderTextColor="#999" 
                              style={{ backgroundColor: DynamicColors.inputBg, padding: 15, borderRadius: 12, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                          />
 
-                         <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 10 }}>SELECCIONA TU PLAN *</ThemedText>
+                         <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 10 }}>{t.jobstab.labelplan}</ThemedText>
                          <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                              {[
+                                 { id: 'coupon', name: 'Cupón', price: companyTariffs.coupon, desc: 'Cupón o periodod de prueba.' },
                                  { id: 'basic', name: 'Básico', price: companyTariffs.basic, desc: 'Ideal para independientes y PyMEs.' },
                                  { id: 'premium', name: 'Premium', price: companyTariffs.premium, desc: 'Mayor visibilidad y hasta 5 publicaciones activas.' },
                                  { id: 'unlimited', name: 'Ilimitado', price: companyTariffs.unlimited, desc: 'Acceso VIP, recluta todo el año sin límites.' }
@@ -1426,7 +1433,7 @@ export default function JobsScreen() {
                              )})}
                          </View>
 
-                         <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>TELÉFONO DE LA EMPRESA *</ThemedText>
+                         <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.labeltelcompanie}</ThemedText>
                          <View style={{ flexDirection: 'row', backgroundColor: DynamicColors.inputBg, borderRadius: 14, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden', marginBottom: 25 }}>
                              <TouchableOpacity onPress={() => setPublishView('country')} style={{ paddingHorizontal: 15, justifyContent: 'center', borderRightWidth: 1, borderRightColor: DynamicColors.border, flexDirection: 'row', alignItems: 'center' }}>
                                  <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>{COUNTRY_CODES.find(c => c.code === newCompanyForm.phoneCode)?.flag} {newCompanyForm.phoneCode}</ThemedText>
@@ -1445,7 +1452,7 @@ export default function JobsScreen() {
                          <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
                             <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
                             <ThemedText style={{ fontSize: 13, marginBottom: 12, color: DynamicColors.text }}>
-                                Para registrar la empresa, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[newCompanyForm.premiumPlan]} USD</ThemedText> mediante Zelle o Venmo y escribe el código abajo.
+                                {t.jobstab.labelregistercomp1}<ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[newCompanyForm.premiumPlan]} USD</ThemedText> {t.jobstab.labelregistercomp2}  
                             </ThemedText>
                             
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -1460,12 +1467,12 @@ export default function JobsScreen() {
                                 ))}
                             </View>
 
-                            <TextInput style={{ padding: 14, borderRadius: 12, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text }} placeholder={`# CONFIRMACIÓN DE ${formPayMethod}...`} placeholderTextColor="#999" value={formRefCode} onChangeText={t => setFormRefCode(t.toUpperCase())} />
+                            <TextInput style={{ padding: 14, borderRadius: 12, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text }} placeholder={t.jobstab.placehoderreference+`${formPayMethod}...`} placeholderTextColor="#999" value={formRefCode} onChangeText={t => setFormRefCode(t.toUpperCase())} />
                          </View>
 
                          <TouchableOpacity onPress={handleRegisterCompany} disabled={isCreatingCompany}>
                              <LinearGradient colors={isCreatingCompany || !newCompanyForm.name || !newCompanyForm.phone || !formRefCode.trim() ? disabledGradient : orangeGradient} style={{ height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
-                                 {isCreatingCompany ? <ActivityIndicator color="#FFF" /> : <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Pagar y Registrar Empresa</ThemedText>}
+                                 {isCreatingCompany ? <ActivityIndicator color="#FFF" /> : <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>{t.jobstab.labelpaycomp}</ThemedText>}
                              </LinearGradient>
                          </TouchableOpacity>
                      </ScrollView>
@@ -1473,7 +1480,7 @@ export default function JobsScreen() {
               ) : (
               <>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 25, marginBottom: 10 }}>
-                    <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>Publicar Oferta de Empleo</ThemedText>
+                    <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.labeljobs}</ThemedText>
                     <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} /></TouchableOpacity>
                   </View>
 
@@ -1489,15 +1496,15 @@ export default function JobsScreen() {
                               </LinearGradient>
                           ) : (
                               <View style={{ flex: 1, flexDirection:'row', alignItems:'center', paddingHorizontal: 14, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}>
-                                  <MaterialCommunityIcons name={cat.icon as any} size={16} color={DynamicColors.iconInactive} style={{marginRight:6}} />
-                                  <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 13, fontWeight: 'bold' }}>{cat.id}</ThemedText>
+                                  <MaterialCommunityIcons name={cat.icon as any} size={16} style={{marginRight:6}} />
+                                  <ThemedText style={{ fontSize: 13, fontWeight: 'bold' }}>{cat.id}</ThemedText>
                               </View>
                           )}
                         </TouchableOpacity>
                       ))}
                     </View>
 
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>TÍTULO DEL PUESTO *</ThemedText>
+                    <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.titlejobs}</ThemedText>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 10}} contentContainerStyle={{gap: 8}}>
                         {(SUGGESTED_TITLES[newJob.category] || SUGGESTED_TITLES['Todos'] || []).map((suggestion: string) => {
                             const isSelected = newJob.title === suggestion;
@@ -1521,13 +1528,13 @@ export default function JobsScreen() {
                     <TextInput 
                       value={newJob.title} 
                       onChangeText={t => setNewJob({...newJob, title: t})} 
-                      placeholder="Escribe o elige un puesto arriba..." 
+                      placeholder={t.jobstab.writejob}
                       placeholderTextColor="#999" 
                       autoCapitalize="words"
                       style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, color: DynamicColors.text, marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                     />
 
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>ESTADO *</ThemedText>
+                    <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.state}</ThemedText>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}} contentContainerStyle={{gap: 8}}>
                         {STATES.map(st => {
                             const isSelected = newJob.state === st;
@@ -1547,19 +1554,19 @@ export default function JobsScreen() {
                         })}
                     </ScrollView>
 
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>CIUDAD *</ThemedText>
+                    <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.city}</ThemedText>
                     <View style={{ zIndex: 50, marginBottom: 20 }}>
                         <TouchableOpacity 
                             onPress={() => setPublishView('city')} 
                             style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, borderWidth: 1, borderColor: DynamicColors.border }}>
                             <ThemedText style={{ flex: 1, color: newJob.city ? DynamicColors.text : '#999', fontSize: 14 }}>
-                                {newJob.city || 'Seleccionar Ciudad...'}
+                                {newJob.city || t.jobstab.labelcity}
                             </ThemedText>
                             <MaterialCommunityIcons name="chevron-down" size={20} color={DynamicColors.subtext} />
                         </TouchableOpacity>
                     </View>
 
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>EMPRESA *</ThemedText>
+                    <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.companie}</ThemedText>
                     <TouchableOpacity 
                         onPress={() => { fetchUserCompanies(); setPublishView('company_list'); }} 
                         style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 15, borderWidth: 1, borderColor: newJob.companyId ? DynamicColors.accent : DynamicColors.border, marginBottom: 20, flexDirection: 'row', alignItems: 'center' }}>
@@ -1568,32 +1575,32 @@ export default function JobsScreen() {
                             {newJob.companyId ? (
                                 <>
                                     <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.accent, fontSize: 16 }}>{newJob.company}</ThemedText>
-                                    <ThemedText style={{ color: DynamicColors.subtext, fontSize: 12, marginTop: 4 }}>
-                                        📞 {newJob.phoneCode} {newJob.phone} • Llamada
+                                    <ThemedText style={{ fontSize: 13, marginTop: 4 }}>
+                                        📞 {newJob.phoneCode} {newJob.phone} • {t.genericbtn.callbton}
                                     </ThemedText>
                                 </>
                             ) : (
                                 <ThemedText style={{ color: DynamicColors.subtext, fontSize: 14, fontWeight: 'bold' }}>
-                                    Toca para Seleccionar o Registrar...
+                                    {t.jobstab.labeljobselec}
                                 </ThemedText>
                             )}
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={20} color={DynamicColors.subtext} />
                     </TouchableOpacity>
 
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>PAGO POR HORA (USD) *</ThemedText>
+                    <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.labelvalue}</ThemedText>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 14, borderWidth: 1, borderColor: DynamicColors.border, paddingHorizontal: 15 }}>
-                            <ThemedText style={{ color: DynamicColors.subtext, fontWeight: 'bold', marginRight: 8 }}>$</ThemedText>
-                            <TextInput value={newJob.salaryMin} onChangeText={t => setNewJob({...newJob, salaryMin: t})} keyboardType="numeric" placeholder="Mínimo" placeholderTextColor="#999" style={{ flex: 1, paddingVertical: 15, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                            <ThemedText style={{ fontWeight: 'bold', marginRight: 8 }}>$</ThemedText>
+                            <TextInput value={newJob.salaryMin} onChangeText={t => setNewJob({...newJob, salaryMin: t})} keyboardType="numeric" placeholder={t.jobstab.labelmin} placeholderTextColor="#999" style={{ flex: 1, paddingVertical: 15, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                         </View>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 14, borderWidth: 1, borderColor: DynamicColors.border, paddingHorizontal: 15 }}>
-                            <ThemedText style={{ color: DynamicColors.subtext, fontWeight: 'bold', marginRight: 8 }}>$</ThemedText>
-                            <TextInput value={newJob.salaryMax} onChangeText={t => setNewJob({...newJob, salaryMax: t})} keyboardType="numeric" placeholder="Máximo (Opcional)" placeholderTextColor="#999" style={{ flex: 1, paddingVertical: 15, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                            <ThemedText style={{ fontWeight: 'bold', marginRight: 8 }}>$</ThemedText>
+                            <TextInput value={newJob.salaryMax} onChangeText={t => setNewJob({...newJob, salaryMax: t})} keyboardType="numeric" placeholder={t.jobstab.labelmax} placeholderTextColor="#999" style={{ flex: 1, paddingVertical: 15, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                         </View>
                     </View>
 
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>TURNOS DISPONIBLES *</ThemedText>
+                    <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.shitfdispooued}</ThemedText>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                         {SHIFT_OPTIONS.map(shift => {
                             const isSelected = newJob.shifts.includes(shift);
@@ -1606,8 +1613,8 @@ export default function JobsScreen() {
                                         </LinearGradient>
                                     ) : (
                                         <View style={{ flex: 1, flexDirection:'row', alignItems:'center', paddingHorizontal: 14, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}>
-                                            <MaterialCommunityIcons name="circle-outline" size={14} color={DynamicColors.iconInactive} style={{marginRight:6}} />
-                                            <ThemedText style={{ color: DynamicColors.iconInactive, fontSize: 12, fontWeight: 'bold' }}>{shift}</ThemedText>
+                                            <MaterialCommunityIcons name="circle-outline" size={14} style={{marginRight:6}} />
+                                            <ThemedText style={{ fontSize: 12, fontWeight: 'bold' }}>{shift}</ThemedText>
                                         </View>
                                     )}
                                 </TouchableOpacity>
@@ -1615,11 +1622,11 @@ export default function JobsScreen() {
                         })}
                     </View>
 
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>DESCRIPCIÓN *</ThemedText>
+                    <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.descripcion}</ThemedText>
                     <TextInput 
                       value={newJob.description} 
                       onChangeText={t => setNewJob({...newJob, description: t})} 
-                      placeholder="Requisitos, habilidades necesarias..." 
+                      placeholder={t.jobstab.labeljobreq} 
                       placeholderTextColor="#999" 
                       multiline 
                       autoCapitalize="sentences"
@@ -1628,7 +1635,7 @@ export default function JobsScreen() {
 
                     <TouchableOpacity onPress={handlePublishJob} disabled={isPublishing}>
                       <LinearGradient colors={(!newJob.title || !newJob.companyId || !newJob.city || newJob.shifts.length === 0 || !newJob.salaryMin) ? disabledGradient : orangeGradient} style={{ height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
-                        {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Publicar Oferta</ThemedText>}
+                        {isPublishing ? <ActivityIndicator color="#fff" /> : <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{t.jobstab.publishoffert}</ThemedText>}
                       </LinearGradient>
                     </TouchableOpacity>
                   </ScrollView>
@@ -1645,14 +1652,14 @@ export default function JobsScreen() {
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowTitlePickerModal(false)} />
               <View style={{ width: 300, maxHeight: height * 0.7, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden' }}>
                   {!isAndroid && <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-                  <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: DynamicColors.text }}>Filtrar por Puesto</ThemedText>
+                  <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: DynamicColors.text }}>{t.jobstab.filterjob}</ThemedText>
                   
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
                       <View style={{ flexDirection: 'column', gap: 10 }}>
                           <TouchableOpacity 
                               style={{ padding: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: filterTitle === 'Todos' ? DynamicColors.accent : DynamicColors.border }} 
                               onPress={() => { setFilterTitle('Todos'); setShowTitlePickerModal(false); }}>
-                              <ThemedText style={{ fontWeight: 'bold', color: filterTitle === 'Todos' ? DynamicColors.accent : DynamicColors.text }}>Todos los puestos</ThemedText>
+                              <ThemedText style={{ fontWeight: 'bold', color: filterTitle === 'Todos' ? DynamicColors.accent : DynamicColors.text }}>{t.jobstab.alljob}</ThemedText>
                           </TouchableOpacity>
                           {availableTitles.map((title, index) => (
                               <TouchableOpacity 
@@ -1673,11 +1680,11 @@ export default function JobsScreen() {
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowShiftPickerModal(false)} />
               <View style={{ width: 280, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden' }}>
                   {!isAndroid && <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-                  <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: DynamicColors.text }}>Filtrar por Turno</ThemedText>
+                  <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: DynamicColors.text }}>{t.jobstab.filtershift}</ThemedText>
                   
                   <View style={{ flexDirection: 'column', gap: 10 }}>
                       <TouchableOpacity style={{ padding: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: filterShift === 'Todos' ? DynamicColors.accent : DynamicColors.border }} onPress={() => { setFilterShift('Todos'); setShowShiftPickerModal(false); }}>
-                          <ThemedText style={{ fontWeight: 'bold', color: filterShift === 'Todos' ? DynamicColors.accent : DynamicColors.text }}>Todos los turnos</ThemedText>
+                          <ThemedText style={{ fontWeight: 'bold', color: filterShift === 'Todos' ? DynamicColors.accent : DynamicColors.text }}>{t.jobstab.allshifts}</ThemedText>
                       </TouchableOpacity>
                       {SHIFT_OPTIONS.map((shift, index) => (
                           <TouchableOpacity key={index} style={{ padding: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: filterShift === shift ? DynamicColors.accent : DynamicColors.border }} onPress={() => { setFilterShift(shift); setShowShiftPickerModal(false); }}>
@@ -1696,13 +1703,13 @@ export default function JobsScreen() {
                   {!isAndroid && <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
                   
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                      <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: DynamicColors.text }}>Filtro de Ubicación</ThemedText>
+                      <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.filterlocation}</ThemedText>
                       <TouchableOpacity onPress={() => setShowLocationPickerModal(false)}>
                           <MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} />
                       </TouchableOpacity>
                   </View>
                   
-                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.subtext, marginBottom: 8, textTransform: 'uppercase' }}>1. Selecciona el Estado</ThemedText>
+                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold',  marginBottom: 8, textTransform: 'uppercase' }}>{t.jobstab.selectstate}</ThemedText>
                   <View style={{ height: 45, marginBottom: 15 }}>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                           {STATES.map(st => {
@@ -1719,14 +1726,14 @@ export default function JobsScreen() {
                       </ScrollView>
                   </View>
 
-                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.subtext, marginBottom: 8, textTransform: 'uppercase' }}>2. Selecciona las Ciudades</ThemedText>
+                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' }}>{t.jobstab.selectcity}</ThemedText>
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
                       <View style={{ flexDirection: 'column', gap: 10 }}>
                           <TouchableOpacity 
                               style={{ padding: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: filterLocations.length === 0 ? DynamicColors.accent : DynamicColors.border }} 
                               onPress={() => setFilterLocations([])}>
                               <MaterialCommunityIcons name={filterLocations.length === 0 ? "radiobox-marked" : "radiobox-blank"} size={20} color={filterLocations.length === 0 ? DynamicColors.accent : DynamicColors.iconInactive} style={{ marginRight: 10 }} />
-                              <ThemedText style={{ fontWeight: 'bold', color: filterLocations.length === 0 ? DynamicColors.accent : DynamicColors.text }}>Todas en {filterState}</ThemedText>
+                              <ThemedText style={{ fontWeight: 'bold', color: filterLocations.length === 0 ? DynamicColors.accent : DynamicColors.text }}>{t.jobstab.allin}{filterState}</ThemedText>
                           </TouchableOpacity>
 
                           {(usCitiesData[filterState] || []).map((city, index) => {
@@ -1747,7 +1754,7 @@ export default function JobsScreen() {
                   {filterLocations.length > 0 && (
                       <TouchableOpacity onPress={() => setShowLocationPickerModal(false)} style={{ marginTop: 15 }}>
                           <LinearGradient colors={orangeGradient} style={{ height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}>
-                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Aplicar Filtros</ThemedText>
+                              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>{t.jobstab.aplifilter}</ThemedText>
                           </LinearGradient>
                       </TouchableOpacity>
                   )}
@@ -1779,7 +1786,7 @@ export default function JobsScreen() {
                 
                 {reviewForm.visible ? (
                     <View style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 16, padding: 15, marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border }}>
-                        <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 10 }}>Califica a la empresa</ThemedText>
+                        <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 10 }}>{t.jobstab.ratigcompanie}</ThemedText>
                         
                         <View style={{ flexDirection: 'row', marginBottom: 15, gap: 5 }}>
                             {[1, 2, 3, 4, 5].map(star => (
@@ -1792,7 +1799,7 @@ export default function JobsScreen() {
                         <TextInput
                             value={reviewForm.text}
                             onChangeText={t => setReviewForm(prev => ({...prev, text: t}))}
-                            placeholder="Describe tu experiencia trabajando aquí..."
+                            placeholder={t.jobstab.labeldescribe}
                             placeholderTextColor={DynamicColors.subtext}
                             multiline
                             autoCapitalize="sentences"
@@ -1801,22 +1808,22 @@ export default function JobsScreen() {
 
                         <TouchableOpacity onPress={() => setReviewForm(prev => ({...prev, isAnonymous: !prev.isAnonymous}))} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
                             <MaterialCommunityIcons name={reviewForm.isAnonymous ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={DynamicColors.accent} />
-                            <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>Publicar como Anónimo</ThemedText>
+                            <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.labelanonimous}</ThemedText>
                         </TouchableOpacity>
 
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                             <TouchableOpacity onPress={() => setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false })} style={{ flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', backgroundColor: DynamicColors.categoryUnselected }}>
-                                <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>Cancelar</ThemedText>
+                                <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.cancel}</ThemedText>
                             </TouchableOpacity>
                             <TouchableOpacity onPress={handleSubmitReview} style={{ flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', backgroundColor: DynamicColors.accent }}>
-                                <ThemedText style={{ fontWeight: 'bold', color: '#FFF' }}>Publicar</ThemedText>
+                                <ThemedText style={{ fontWeight: 'bold', color: '#FFF' }}>{t.jobstab.publish}</ThemedText>
                             </TouchableOpacity>
                         </View>
                     </View>
                 ) : (
                     <TouchableOpacity onPress={() => setReviewForm(prev => ({...prev, visible: true}))} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255, 95, 109, 0.1)', padding: 14, borderRadius: 14, marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.accent }}>
                         <MaterialCommunityIcons name="pencil-plus-outline" size={20} color={DynamicColors.accent} />
-                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.accent }}>Escribir una reseña</ThemedText>
+                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.accent }}>{t.jobstab.writereview}</ThemedText>
                     </TouchableOpacity>
                 )}
 
@@ -1835,7 +1842,7 @@ export default function JobsScreen() {
                         </View>
                     ))
                 ) : (
-                    !reviewForm.visible && <ThemedText style={{ textAlign: 'center', fontSize:13, marginTop: 20, fontWeight: 'bold' }}>Esta empresa aún no tiene reseñas. ¡Sé el primero!</ThemedText>
+                    !reviewForm.visible && <ThemedText style={{ textAlign: 'center', fontSize:13, marginTop: 20, fontWeight: 'bold' }}>{t.jobstab.firtsreview}</ThemedText>
                 )}
               </ScrollView>
             </View>

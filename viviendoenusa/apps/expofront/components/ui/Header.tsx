@@ -16,7 +16,7 @@ import { setLanguage } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation'; 
 
 // 📡 URL BASE PARA LAS NOTIFICACIONES
-const API_NOTIFICATIONS_URL = 'http://192.168.1.108:3000/notifications';
+const API_NOTIFICATIONS_URL = 'http://192.168.252.243:3000/notifications';
 
 export default function Header({ title }: { title?: string }) {
   const theme = useColorScheme() ?? 'light';
