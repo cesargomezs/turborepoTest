@@ -44,10 +44,65 @@ export const translations = {
       call: "Llamar",
       email: "Correo",
       web: " Web",
-      route: "Ruta"
+      route: "Ruta",
+      sendrequest:"Enviar Solicitud",
+      verify:"Verificar",
+      viewall: "Ver todos",
+      results: "resultados",
+
+      
     },
     genericlabel:{
-      labelopinion:"Escribe tu opinión..."
+      labelopinion:"Escribe tu opinión...",
+      labelsendreq: "Solicitud Enviada",
+      labelerrorsend:"Error al enviar la solicitud.",
+      labelerrorserver:"Error en servidor",
+      labelerrorconection:"No se pudo conectar al servidor.",
+      labelmessajeaprov:"El contacto ha sido aprobado exitosamente por",
+      labelaprov:"Aprobado",
+      labelmonth:"mes(es).",
+      labelaproval:"No se pudo aprobar.",
+      labelreject:"Rechazado",
+      labeldeletecontac:"Contacto eliminado.",
+      labelnoreject: "No se pudo rechazar.",
+      labelaprovaladmin:"Pendiente de aprobación (Admin)",
+      labelviewdetail:"Ver detalle",
+      labelme:" mi",
+      lableplan:"Plan ",
+      labelaprovedplan:"Aprobar Plan",
+      labelexperien:"Experiencias y Opiniones",
+      labelshareexper:"Compartir experiencia",
+      labelreviewthanks:"¡Gracias!",
+      labelreviewexp:"Tu reseña ha sido publicada exitosamente.",
+      labeljoinred:"Unirse a la Red",
+      labelcatergory:"Categoría",   
+      labelnameprof: "Nombre del Profesional / Mentor",
+      labelcityaddres:"Ciudad o Dirección",
+      labelzipcde:"Código Postal",
+      lablelespecia:"Especialidad o cómo ayudas...",
+      labelphonecont:"Teléfono de Contacto",
+      labelcheckpay:"Verificación de Pago",
+      labelmessagepay:"Para promocionar tu perfil de apoyo, realiza el pago de {amount} mediante Zelle y escribe el código de confirmación aquí abajo.",
+      labelconfirmpay:"# CONFIRMACION DE ",
+      labelcategorys:"Categorías",
+      labelinapro:"Comentario inapropiado",
+      labelfields:"Debes completar todos los campos obligatorios.",
+      labelcontacsupp:"Te recomiendo este contacto de apoyo",
+      labelerrorsave:"Error ocurrido guardando",
+      labelerrorimage:"Error subiendo imagen",
+      labelerrorimageinapro:"Imagen inválida o inapropiada",
+      labelcodepostal:"Código postal...",
+
+    },
+    categoryplan: {
+      coupon: "Cupón",
+      basic: "Básico",
+      premium: "Premium",
+      unlimited: "Ilimitado",
+      coupondesc: "Cupón o periodo de prueba.",
+      basicdesc: "Ideal para profesionales independientes.",
+      premiumdesc: "Mayor visibilidad en los resultados.",
+      unlimiteddesc: "Prioridad máxima y soporte VIP.",
     },
     hometab: {
         registerhome: "Regístrarme",
@@ -146,9 +201,6 @@ export const translations = {
       placeHoldname: "Nombre",
       placeHoldAddress: "Dirección",
       description: "Descripción"
-
-      
-
     },
     communitytab: {
       labeltypepost: "Tipo de publicación",
@@ -375,6 +427,9 @@ export const translations = {
       subCategories: ['Salud', 'Alimentos', 'Asesoría Legal', 'Apoyo Emocional', 'Otros'],
       contactSupport: "Contactar Red de Apoyo",
       support_btn_title: "Red de Apoyo",
+      labelcheck:"Revisaremos la información para agregarla a la Red de Apoyo.",
+      phone:"Línea de Crisis 988",
+      labelphone:"Atención en español 24/7"
     },
     
 
@@ -403,7 +458,7 @@ export const translations = {
       resultone: "Result found",
       resultdomore: "Results found",
       viewallresults: "View all results",
-      photo:"Foto",
+      photo:"Photo",
       choisephoto: "Photo",
       sendsuggestion: "Send Suggestion",
       tittleReview: "Review",
@@ -415,10 +470,66 @@ export const translations = {
       call: "Call",
       email: "Email",
       web: " Web",
-      route: "Route"
+      route: "Route",
+      sendrequest:"Send Request" ,
+      verify:"Verify",
+      viewall: "View all",
+      results: "results"
+
+      
+
     },
     genericlabel:{
-      labelopinion:"Write your opinion..."
+      labelopinion:"Write your opinion...",
+      labelsendreq: "Request Sent",
+      labelerrorsend:"Error sending request.",
+      labelerrorserver:"Server error",
+      labelerrorconection:"No connection to the server.",
+      labelmessajeaprov:"The contact has been successfully approved by",
+      labelaprov:"Approved",
+      labelmonth:"month(s).",
+      labelaproval:"Could not be approved.",
+      labelreject:"Rejected",
+      labeldeletecontac:"Contact deleted.",
+      labelnoreject: "Could not be rejected.",
+      labelaprovaladmin:"Pending approval (Admin)",
+      labelviewdetail:"View details",
+      labelme:" my",
+      lableplan:"Plan ",
+      labelaprovedplan:"Approve Plan",
+      labelexperien:"Experiences and Opinions",
+      labelshareexper:"Share experience",
+      labelreviewthanks:"Thank you!",
+      labelreviewexp:"Your review has been successfully published.",
+      labeljoinred:"Join the Network",
+      labelcatergory:"Category",
+      labelnameprof: "Professional / Mentor Name",
+      labelcityaddres:"City or Address",
+      labelzipcde:"ZIP Code",
+      lablelespecia:"Specialty or how you help...",
+      labelphonecont:"Contact Phone Number",
+      labelcheckpay:"Payment Verification",
+      labelmessagepay:"To promote your support profile, make a payment of {amount} via Zelle and write the confirmation code below.",
+      labelconfirmpay:"# CONFIRMATION OF ",
+      labelcategorys:"Categories",
+      labelinapro:"Inappropriate comment",
+      labelfields:"You must complete all required fields.",
+      labelcontacsupp:"I recommend this support contact",
+      labelerrorsave:"Error occurred saving",
+      labelerrorimage:"Error uploading image",
+      labelerrorimageinapro:"Invalid or inappropriate image",
+      labelcodepostal: "ZIP code...",
+      
+    },
+    categoryplan: {
+      coupon: "Coupon",
+      basic: "Basic",
+      premium: "Premium",
+      unlimited: "Unlimited",
+      coupondesc: "Coupon or trial period.",
+      basicdesc: "Ideal for independent professionals.",
+      premiumdesc: "Greater visibility in search results.",
+      unlimiteddesc: "Maximum priority and VIP support.",
     },
     hometab: {
         registerhome: "Register",
@@ -747,6 +858,9 @@ export const translations = {
       subCategories: ['Health', 'Food', 'Legal Advice', 'Emotional Support', 'Other'],
       contactSupport: "Contact Support Network",
       support_btn_title: "Support Network",
+      labelcheck:"We will review the information to add it to the Support Network.",
+      phone:"Crisis Line 988",
+      labelphone:"Spanish support 24/7"
     }
   }
 };

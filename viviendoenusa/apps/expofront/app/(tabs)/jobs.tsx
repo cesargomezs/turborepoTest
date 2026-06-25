@@ -158,7 +158,7 @@ export default function JobsScreen() {
   const [publishView, setPublishView] = useState<'form' | 'city' | 'country' | 'company_list' | 'create_company'>('form');
 
   const [userCompanies, setUserCompanies] = useState<any[]>([]);
-  const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' });
+  const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '155.00' });
   
   const [newCompanyForm, setNewCompanyForm] = useState({ 
     name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'basic'
@@ -192,15 +192,15 @@ export default function JobsScreen() {
   useEffect(() => {
     const fetchTariff = async () => {
       try {
-        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Company`);
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Jobs`);
         if (res.ok) {
           const tariffsData = await res.json();
           if (tariffsData && tariffsData.length > 0) {
             setCompanyTariffs({
-              coupon: tariffsData[0].priceCoupon || '0.00',
-              basic: tariffsData[0].priceBasic || '50.00',
-              premium: tariffsData[0].pricePremium || '99.00',
-              unlimited: tariffsData[0].priceUnlimited || '149.00'
+              coupon: tariffsData[0].coupon ,
+              basic: tariffsData[0].basic ,
+              premium: tariffsData[0].premium ,
+              unlimited: tariffsData[0].unlimited 
             });
           }
         }

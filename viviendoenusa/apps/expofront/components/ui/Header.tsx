@@ -104,9 +104,12 @@ export default function Header({ title }: { title?: string }) {
       const target = routes[notif.type];
       
       if (target) {
+        // 🚀 FIX: Aseguramos tomar el ID ya sea camelCase o snake_case desde el Backend
+        const targetId = notif.referenceId || notif.reference_id || notif.id;
+
         router.navigate({ 
             pathname: target.path as any, 
-            params: { [target.param]: notif.referenceId } 
+            params: { [target.param]: targetId } 
         }); 
       }
     }, 300); 

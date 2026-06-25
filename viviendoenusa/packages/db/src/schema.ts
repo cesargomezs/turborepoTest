@@ -89,6 +89,7 @@ import {
     phone: text("phone"),
     imageUrl: text("image_url"),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    premiumPlan: text('premium_plan').default('free'), // 'free', 'basic', 'unlimited'
     createdAt: timestamp("created_at").defaultNow(),
     description: text("description"),
     timepostEnd: timestamp("timepost_end").defaultNow(),
@@ -141,6 +142,7 @@ import {
     contactMethod: text("contact_method"),
     statusId: uuid("status_id").references(() => typeDetail.id, { onDelete: "set null" }),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    premiumPlan: text('premium_plan').default('free'), // 'free', 'basic', 'unlimited'
     timepostEnd: timestamp("timepost_end").defaultNow(),
     approved: boolean("approved").default(false),
   });
@@ -159,6 +161,7 @@ import {
     lng: doublePrecision("lng"),
     phone: text("phone"),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    premiumPlan: text('premium_plan').default('free'), // 'free', 'basic', 'unlimited'
     createdAt: timestamp("created_at").defaultNow(),
     statusId: uuid("status_id").references(() => typeDetail.id, { onDelete: "set null" }),
     timepostEnd: timestamp("timepost_end").defaultNow(),
@@ -198,6 +201,7 @@ import {
     lng: doublePrecision("lng"),
     phone: text("phone"),
     timepostEnd: timestamp("timepost_end").defaultNow(),
+    premiumPlan: text('premium_plan').default('free'), // 'free', 'basic', 'unlimited'
     approved: boolean("approved").default(false),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),

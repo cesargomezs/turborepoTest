@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
 import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, ConsoleLogWriter } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -17,7 +17,7 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail (Se mantiene)
 const getCurrentSupportPrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
@@ -75,6 +75,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           ...row.support,
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
+          premiumPlan: row.support.premiumPlan || 'basic', // 🚀 Asegurar envío
           reviews: [], 
           totalRating: 0,
           totalReviews: 0
@@ -147,6 +148,7 @@ export const getSupportById = async (id: string) => {
   
     const supportFinal: any = {
       ...rows[0].support, 
+      premiumPlan: rows[0].support.premiumPlan || 'basic', // 🚀 Asegurar envío
       reviews: [],
       totalRating: 0,
       totalReviews: 0           
@@ -196,7 +198,7 @@ export const getSupportById = async (id: string) => {
   }
 };
 
-// 📥 3. CREAR CONTACTO DE APOYO
+// 📥 3. CREAR CONTACTO DE APOYO (AJUSTE EN EL PAYLOAD)
 export const createSupport = async (data: any) => {
   try {
     let cleanImage = sanitizeText(data.imageSupp) || '';
@@ -207,6 +209,7 @@ export const createSupport = async (data: any) => {
     return await db.transaction(async (tx) => {
       
       const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
+      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; // 🚀 Asegura el plan default
 
       const supportPayload: any = {
         nameSupp: sanitizeText(data.nameSupp || data.name) || 'Sin nombre',
@@ -219,13 +222,15 @@ export const createSupport = async (data: any) => {
         lat: data.lat ? Number(data.lat) : null,
         lng: data.lng ? Number(data.lng) : null,
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        premiumPlan: planSeleccionado, 
+        couponCode: sanitizeText(data.couponCode) || '', // 🚀 Recibir cupón
         approved: false 
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
 
       if (data.referenceCode && data.paymentMethod) {
-        const basePrice = await getCurrentSupportPrice();
+        const basePrice = await getCurrentSupportPrice(); // En un futuro puedes mandar el precio real de DB
 
         await tx.insert(payments).values({
           entityType: 'support',
@@ -266,7 +271,7 @@ export const updateSupport = async (id: string, data: any) => {
 
     return await db.transaction(async (tx) => {
       
-      const allowedFields = ['nameSupp', 'categoryId', 'addressSupp', 'zip', 'phone', 'lat', 'lng', 'imageSupp', 'descriptionSupp'];
+      const allowedFields = ['nameSupp', 'categoryId', 'addressSupp', 'zip', 'phone', 'lat', 'lng', 'imageSupp', 'descriptionSupp', 'premiumPlan', 'couponCode']; // 🚀 Campos Permitidos
       const updatePayload: any = {};
       
       for (const key of allowedFields) {

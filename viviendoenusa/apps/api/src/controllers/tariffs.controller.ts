@@ -18,12 +18,17 @@ export const getTariffs = async (typeCode?: string, onlyActive: boolean = true) 
         id: tariffs.id,
         referenceId: tariffs.referenceId,
         planType: tariffs.planType,
-        price: tariffs.priceBasic,
+        //price: tariffs.priceBasic,
+        coupon: tariffs.priceCoupon,
+        basic: tariffs.priceBasic,
+        premium: tariffs.pricePremium,
+        unlimited: tariffs.priceUnlimited,    
         description: tariffs.description,
         isActive: tariffs.isActive,
         createdAt: tariffs.createdAt,
         userId: tariffs.userId,
         typeCode: typeDetail.typeCode 
+
     })
     .from(tariffs)
     .leftJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`)

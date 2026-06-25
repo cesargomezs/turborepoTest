@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions, Animated, Easing,
@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useGlobalSearchParams } from 'expo-router'; 
+import { useRouter, useLocalSearchParams } from 'expo-router'; 
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,12 +27,36 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
+// 🚀 Categorías de Soporte
 const ICONS_ARRAY = ['apps', 'heart-pulse', 'brain', 'hand-heart', 'dots-horizontal'];
 const CATEGORIES_LIST = ['Todos', 'Psicólogos Pro-Bono', 'Mentores Locales', 'Grupos de Apoyo', 'Otros'];
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
-const API_SUPPORT_URL = 'http://192.168.252.243:3000/support';
+const API_STORES_URL = 'http://192.168.252.243:3000/support';
 const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs';
+
+const planStyles: any = {
+  coupon: {
+    selected: '#EA8D2D', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)',
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333',
+  },
+  basic: {
+    selected: '#FF5F6D', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)',
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333',
+  },
+  premium: {
+    selected: '#F5A623', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333',
+  },
+  unlimited: {
+    selected: '#10B981', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333', 
+  }
+};
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
@@ -40,7 +64,7 @@ const validateComment = (text: string): boolean => {
 };
 
 const openDirections = (store: any) => {
-  const label = encodeURIComponent(store.name || store.nameSupp);
+  const label = encodeURIComponent(store.name);
   const url = Platform.select({
     ios: `maps:0,0?q=${label}@${store.lat},${store.lng}`,
     android: `geo:0,0?q=${store.lat},${store.lng}(${label})`,
@@ -50,7 +74,6 @@ const openDirections = (store: any) => {
 };
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
   const R = 3958.8;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -66,7 +89,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 
   const handlePrePublish = () => {
     if (!validateComment(comment)) {
-      const msg = "Comentario inapropiado";
+      const msg = t.genericlabel.labelinapro;
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert("Error", msg);
       return;
     }
@@ -88,15 +111,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         ))}
       </View>
       <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput 
-          value={comment} 
-          onChangeText={setComment} 
-          placeholder={"Escribe tu opinión..."} 
-          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
-          multiline 
-          autoCapitalize="sentences"
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-        />
+        <TextInput value={comment} onChangeText={setComment} placeholder={"Escribe tu opinión..."} placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
@@ -107,91 +122,14 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
-// 🚀 COMPONENTE: MODAL DE RENOVACIÓN DE APOYO
-const RenewSupportModal = memo(({ visible, onClose, onSuccess, storeToRenew, currentUserId, currentTariff, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS }: any) => {
-  const [renewRefCode, setRenewRefCode] = useState('');
-  const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
-  const [isRenewing, setIsRenewing] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      setRenewRefCode('');
-      setRenewPayMethod('Zelle');
-    }
-  }, [visible]);
-
-  const handleRenewSubmit = async () => {
-    if (!renewRefCode.trim()) return Alert.alert("Aviso", "Ingresa el código de confirmación de pago.");
-    
-    setIsRenewing(true);
-    try {
-      const payload = { referenceCode: renewRefCode, paymentMethod: renewPayMethod, userId: currentUserId };
-      const res = await fetch(`${API_SUPPORT_URL}/${storeToRenew.id}/renew`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error();
-      Alert.alert("Éxito", "Solicitud de renovación enviada. Será verificada pronto.");
-      onSuccess();
-    } catch (e) {
-      Alert.alert("Error", "No se pudo procesar la renovación.");
-    } finally {
-      setIsRenewing(false);
-    }
-  };
-
-  return (
-    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isRenewing && onClose()} />
-        <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ width: isLargeWeb ? 400 : '90%', backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', padding: 25, borderRadius: 24, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' }}>
-            {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>Renovar Contacto</ThemedText>
-              <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
-            </View>
-
-            <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
-              Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{storeToRenew?.name || storeToRenew?.nameSupp}</ThemedText> realizando el pago de ${currentTariff} USD y enviando el comprobante aquí abajo.
-            </ThemedText>
-            
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-              {['Zelle', 'Venmo'].map((method) => (
-                <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
-                  <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TextInput 
-              style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-              placeholder={`# CONFIRMACION DE ${renewPayMethod}...`} placeholderTextColor={Colors.subtext}
-              value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
-            />
-
-            <TouchableOpacity onPress={handleRenewSubmit} disabled={isRenewing}>
-              <LinearGradient colors={orangeGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
-                {isRenewing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" style={{ marginRight: 8 }} />}
-                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Enviar Renovación</ThemedText>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
-  );
-});
-
-
 export default function SupportScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-
-  // 🚀 LECTURA DE PARÁMETROS GLOBALES (Notificaciones)
-  const paramsGlobal = useGlobalSearchParams();
-  const rawNotifId = paramsGlobal.id || paramsGlobal.storeId || paramsGlobal.supportId || paramsGlobal.referenceId || paramsGlobal.reference_id;
+  
+  // 🚀 FIX DE LA NOTIFICACIÓN: Atrapar cualquier variante del ID globalmente
+  const paramsGlobal = useLocalSearchParams();
+  const rawNotifId = paramsGlobal.id || paramsGlobal.supportId || paramsGlobal.referenceId;
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
 
   const mapRef = useRef<MapView>(null); 
@@ -223,6 +161,9 @@ export default function SupportScreen() {
 
   const Colors = DynamicColors;
 
+  const textlabel = t.genericlabel.labelmessagepay;
+  const [before, after] = textlabel.split("{amount}"); 
+
   // --- ESTADOS ---
   const [zipCode, setZipCode] = useState('');
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
@@ -238,10 +179,6 @@ export default function SupportScreen() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
 
-  // --- ESTADOS DE RENOVACIÓN ---
-  const [renewModalVisible, setRenewModalVisible] = useState(false);
-  const [storeToRenew, setStoreToRenew] = useState<any>(null);
-
   // --- ESTADOS SUGERIR APOYO ---
   const [isModalVisible, setModalVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -253,15 +190,16 @@ export default function SupportScreen() {
   const [formPhone, setFormPhone] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
+  
+  const [formPlan, setFormPlan] = useState('basic');
+  const [formCoupon, setFormCoupon] = useState('');
+  const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' });
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
-  
+
   // --- ESTADOS ADMIN ---
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
-
-  // 🚀 TARIFA DINÁMICA
-  const [currentTariff, setCurrentTariff] = useState<string>("50.00");
 
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
   const isZipValid = zipCode.length === 5;
@@ -275,6 +213,42 @@ export default function SupportScreen() {
   const ringAnim = useRef(new Animated.Value(0)).current;
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
+
+  const applyLocalFilters = (supportList: any[], categoryIdx: number, lat: number, lng: number) => {
+    let filtered = (categoryIdx === 0) ? [...supportList] : supportList.filter(l => Number(l.categoryId) === categoryIdx);
+    
+    // Filtro para ocultar expirados al público normal, pero mostrarlos al dueño
+    filtered = filtered.filter(item => {
+      const isOwner = item.userId === currentUserId;
+      const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) 
+        ? new Date(item.timepostEnd) < new Date() 
+        : false;
+      return isOwner || !isExpired; 
+    });
+
+    filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
+    return filtered;
+  };
+
+  useEffect(() => {
+    const fetchTariff = async () => {
+      try {
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Support`);
+        if (res.ok) {
+          const tariffsData = await res.json();
+          if (tariffsData && tariffsData.length > 0) {
+            setCompanyTariffs({
+              coupon: tariffsData[0].priceCoupon || '0.00',
+              basic: tariffsData[0].priceBasic || '50.00',
+              premium: tariffsData[0].pricePremium || '99.00',
+              unlimited: tariffsData[0].priceUnlimited || '149.00'
+            });
+          }
+        }
+      } catch (e) { console.warn("⚠️ No se pudo cargar la tarifa de Support"); }
+    };
+    fetchTariff();
+  }, []);
 
   useEffect(() => {
     Animated.loop(
@@ -300,24 +274,6 @@ export default function SupportScreen() {
     inputRange: [-1, 1],
     outputRange: ['-10deg', '10deg']
   });
-
-  // 🚀 CARGAR TARIFA
-  useEffect(() => {
-    const fetchTariff = async () => {
-      try {
-        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Support`);
-        if (res.ok) {
-          const tariffsData = await res.json();
-          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
-            setCurrentTariff(tariffsData[0].price);
-          }
-        }
-      } catch (e) {
-        console.warn("⚠️ No se pudo cargar la tarifa dinámica", e);
-      }
-    };
-    fetchTariff();
-  }, []);
 
   const getCurrentLocation = async (isManual = false) => {
     try {
@@ -360,42 +316,21 @@ export default function SupportScreen() {
     }
   }, [isAdminMode]);
 
-  const applyLocalFilters = (supportList: any[], categoryIdx: number, lat: number, lng: number) => {
-    let filtered = (categoryIdx === 0) ? [...supportList] : supportList.filter(l => Number(l.categoryId) === categoryIdx);
-    
-    filtered.sort((a, b) => {
-      const aIsOwner = a.userId === currentUserId;
-      const aIsExpired = a.timepostEnd ? new Date(a.timepostEnd) < new Date() : false;
-      const aNeedsRenewal = aIsOwner && aIsExpired;
-
-      const bIsOwner = b.userId === currentUserId;
-      const bIsExpired = b.timepostEnd ? new Date(b.timepostEnd) < new Date() : false;
-      const bNeedsRenewal = bIsOwner && bIsExpired;
-
-      if (aNeedsRenewal && !bNeedsRenewal) return -1;
-      if (!aNeedsRenewal && bNeedsRenewal) return 1;
-
-      return getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng);
-    });
-
-    return filtered;
-  };
-
   const fetchAllPendingSupports = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_SUPPORT_URL}?userId=${currentUserId}`); 
+      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`); 
       const data = await res.json();
       
       if (Array.isArray(data)) {
         const mappedData = data.map(item => ({
           id: item.id,
-          name: item.nameSupp || item.name || 'Sin nombre',
-          description: item.descriptionSupp || item.description || '',
-          address: item.addressSupp || item.address || '',
+          name: item.nameSupp || 'Sin nombre',
+          description: item.descriptionSupp || '',
+          address: item.addressSupp || '',
           categoryId: item.categoryId || 0,
           zip: item.zip,
-          image: item.imageSupp || item.image || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
+          image: item.imageSupp || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
           lat: Number(item.lat) || 34.0934,
           lng: Number(item.lng) || -117.5847,
           phone: item.phone || '',
@@ -404,6 +339,8 @@ export default function SupportScreen() {
           totalReviews: Number(item.totalReviews) || 0,
           status: item.approved ? 'approved' : 'pending',
           ownerName: item.ownerName,
+          premiumPlan: item.premiumPlan, 
+          couponCode: item.couponCode, 
           referenceCode: item.referenceCode,
           paymentMethod: item.paymentMethod,
           userId: item.userId || item.user_id,
@@ -421,18 +358,18 @@ export default function SupportScreen() {
   const fetchSupportData = async (searchZip: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_SUPPORT_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`);
+      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`);
       const data = await res.json();
       
       if (Array.isArray(data)) {
         const mappedData = data.map(item => ({
           id: item.id,
-          name: item.nameSupp || item.name || 'Sin nombre',
-          description: item.descriptionSupp || item.description || '',
-          address: item.addressSupp || item.address || '',
+          name: item.nameSupp || 'Sin nombre',
+          description: item.descriptionSupp || '',
+          address: item.addressSupp || '',
           categoryId: item.categoryId || 0,
           zip: item.zip,
-          image: item.imageSupp || item.image || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
+          image: item.imageSupp || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
           lat: Number(item.lat) || 34.0934,
           lng: Number(item.lng) || -117.5847,
           phone: item.phone || '',
@@ -441,8 +378,6 @@ export default function SupportScreen() {
           totalReviews: Number(item.totalReviews) || 0,
           status: item.approved ? 'approved' : 'pending',
           ownerName: item.ownerName,
-          referenceCode: item.referenceCode,
-          paymentMethod: item.paymentMethod,
           userId: item.userId || item.user_id,
           timepostEnd: item.timepostEnd || item.timepost_end
         }));
@@ -464,64 +399,9 @@ export default function SupportScreen() {
     }
   };
 
-  // 🚀 LÓGICA DE NOTIFICACIÓN
-  const lastProcessedNotifId = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (notificationId) {
-      const cleanNotifId = String(notificationId).trim();
-
-      if (cleanNotifId !== lastProcessedNotifId.current) {
-        lastProcessedNotifId.current = cleanNotifId;
-        
-        const localMatch = allStores.find(l => String(l.id) === cleanNotifId) || pendingStores.find(l => String(l.id) === cleanNotifId);
-
-        if (localMatch) {
-          setSelectedDetail(localMatch);
-        } else {
-          const fetchSpecificSupport = async () => {
-            try {
-              const res = await fetch(`${API_SUPPORT_URL}/${cleanNotifId}`);
-              if (res.ok) {
-                const data = await res.json();
-                
-                const mappedSupport = {
-                  ...data,
-                  name: data.nameSupp || data.name || 'Sin nombre',
-                  address: data.addressSupp || data.address || '',
-                  description: data.descriptionSupp || data.description || '',
-                  image: data.imageSupp || data.image || data.imageUrl || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
-                  lat: Number(data.lat) || 34.0934,
-                  lng: Number(data.lng) || -117.5847,
-                };
-
-                setSelectedDetail(mappedSupport); 
-
-                if (data.zip && String(data.zip).length === 5) {
-                  setZipCode(String(data.zip));
-                  handleSearch(undefined, String(data.zip));
-                }
-              }
-            } catch (e) {
-              console.error("❌ Error Fetch notificación de Support:", e);
-            }
-          };
-          fetchSpecificSupport();
-        }
-      }
-    }
-  }, [notificationId]);
-
-  const handleCloseDetailModal = () => {
-    setSelectedDetail(null);
-    lastProcessedNotifId.current = null;
-    router.setParams({ id: '', supportId: '', referenceId: '', reference_id: '', openEventId: '' });
-  };
-
   const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string) => {
     const targetZip = forcedZip || zipCode;
     if (targetZip.length !== 5) return;
-
     const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
     setIsFilteredByMap(false);
 
@@ -549,6 +429,57 @@ export default function SupportScreen() {
     setMapKey(k => k + 1);
   };
 
+  // 🚀 LÓGICA DE APERTURA DE NOTIFICACIÓN DIRECTA
+  const lastProcessedNotifId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!notificationId) {
+      lastProcessedNotifId.current = null;
+      return;
+    }
+
+    const cleanNotifId = String(notificationId).trim();
+    if (cleanNotifId && cleanNotifId !== lastProcessedNotifId.current) {
+      lastProcessedNotifId.current = cleanNotifId;
+      router.setParams({ id: '', supportId: '', referenceId: '' });
+
+      const syncSearchAndDetail = async (item: any) => {
+        setSelectedDetail(item);
+        if (item.zip && String(item.zip).length === 5) {
+          setZipCode(String(item.zip));
+          // 🔥 Aseguramos la búsqueda inmediata de resultados para ese ZIP
+          await handleSearch(0, String(item.zip));
+        }
+      };
+
+      const localMatch = allStores.find(s => String(s.id) === cleanNotifId) || pendingStores.find(s => String(s.id) === cleanNotifId);
+      
+      if (localMatch) {
+        syncSearchAndDetail(localMatch);
+      } else {
+        const fetchSpecificSupport = async () => {
+          try {
+            const res = await fetch(`${API_STORES_URL}/${cleanNotifId}`);
+            if (res.ok) {
+              const data = await res.json();
+              const mappedSupport = {
+                ...data,
+                name: data.nameSupp || data.name || 'Sin nombre',
+                description: data.descriptionSupp || data.description || '',
+                address: data.addressSupp || data.address || '',
+                image: data.imageSupp || data.image || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
+                lat: Number(data.lat) || 34.0934,
+                lng: Number(data.lng) || -117.5847,
+              };
+              syncSearchAndDetail(mappedSupport);
+            }
+          } catch (e) { console.error(e); }
+        };
+        fetchSpecificSupport();
+      }
+    }
+  }, [notificationId, allStores, pendingStores]);
+
   const handleZipChange = (text: string) => {
     setZipCode(text);
     if (text.length < 5) {
@@ -560,7 +491,7 @@ export default function SupportScreen() {
       setShowMarkers(false);
       setIsFilteredByMap(false);
     } else if (text.length === 5) {
-      handleSearch(selectedCategoryIdx);
+      handleSearch(selectedCategoryIdx, text);
     }
   };
 
@@ -583,9 +514,9 @@ export default function SupportScreen() {
   };
 
   const handleShare = async (store: any) => {
-    if (!store) return;
-    try { await Share.share({ message: `Te recomiendo este contacto de apoyo: ${store.name || store.nameSupp}\n${store.description || store.descriptionSupp}` }); } 
-    catch (error) { console.log(error); }
+      if (!store) return;
+      try { await Share.share({ message: t.genericlabel.labelcontacsupp + `${store.name}\n${store.description}` }); } 
+      catch (error) { console.log(error); }
   };
 
   const pickImage = async () => {
@@ -594,8 +525,8 @@ export default function SupportScreen() {
   };
 
   const handlePublishStore = async () => {
-    if (!isFormValid) {
-      const msg = "Completar nombre, ubicación, foto y código de pago son obligatorios.";
+    if (!formName.trim() || !formAddress.trim() || formZip.length < 5) {
+      const msg = t.genericlabel.labelfields;
       return isWeb ? window.alert(msg) : Alert.alert("Atención", msg);
     }
     setIsPublishing(true);
@@ -607,7 +538,7 @@ export default function SupportScreen() {
         if (!esSegura) {
           setIsPublishing(false);
           const title = "Error";
-          const desc = "Imagen inválida o inapropiada";
+          const desc = t.genericlabel.labelerrorimageinapro;
           if (isWeb) { window.alert(`${title}\n${desc}`); } 
           else { Alert.alert(title, desc); }
           return;
@@ -618,13 +549,7 @@ export default function SupportScreen() {
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-        if (Platform.OS === 'web') {
-          const responseBlob = await fetch(formImage as string);
-          const blob = await responseBlob.blob();
-          formData.append('imagen', blob as any, filename);
-        } else {
-          formData.append('imagen', { uri: formImage as string, name: filename, type } as any);
-        }
+        formData.append('imagen', { uri: formImage, name: filename, type } as any);
 
         const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/support', {
           method: 'POST',
@@ -633,7 +558,7 @@ export default function SupportScreen() {
         });
 
         const uploadData = await uploadResponse.json();
-        if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
+        if (!uploadResponse.ok) throw new Error(uploadData.error || t.genericlabel.labelerrorimage);
         finalImageName = uploadData.identificadorArchivo;
       }
 
@@ -656,20 +581,22 @@ export default function SupportScreen() {
         lat: lat, 
         lng: lng, 
         phone: fullPhone, 
-        userId: currentUserId,
+        userId: userMetadata?.id || userMetadata?.userId || null,
         approved: false,
+        premiumPlan: formPlan, 
+        couponCode: formCoupon ? formCoupon.trim() : '', 
         referenceCode: formRefCode,
-        paymentMethod: formPayMethod 
+        paymentMethod: formPayMethod
       };
 
-      const response = await fetch(API_SUPPORT_URL, {
+      const response = await fetch(API_STORES_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       
       const savedFromDB = await response.json();
-      if (!response.ok) throw new Error(savedFromDB.error || "Error guardando soporte");
+      if (!response.ok) throw new Error(savedFromDB.error || t.genericlabel.labelerrorsave);
 
       const newEntryLocal = {
         id: savedFromDB.id,
@@ -684,26 +611,25 @@ export default function SupportScreen() {
         totalReviews: 0,
         phone: savedFromDB.phone,
         status: 'pending',
-        referenceCode: formRefCode,
-        paymentMethod: formPayMethod,
         userId: currentUserId,
         timepostEnd: null
       };
 
-      setPendingStores([newEntryLocal, ...pendingStores]);
+      setPendingStores(prev => [newEntryLocal, ...prev]);
       setModalVisible(false);
-      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setFormImage(null); setFormCategoryIdx(1); setFormRefCode(''); setFormPayMethod('Zelle');
+      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setFormImage(null); setFormCategoryIdx(1); 
+      setFormPlan('basic'); setFormCoupon(''); setFormRefCode(''); setFormPayMethod('Zelle'); 
       
       if (!zipCode || zipCode.length < 5) {
         setZipCode(formZip);
-        handleSearch(undefined, formZip);
+        handleSearch(0, formZip);
       }
 
-      const success = "Solicitud enviada exitosamente, pendiente de aprobación.";
-      isWeb ? window.alert(success) : Alert.alert("Solicitud Enviada", success);
+      const success = t.supporttab.labelcheck;
+      isWeb ? window.alert(success) : Alert.alert(t.genericlabel.labelsendreq, success);
 
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Error al enviar la solicitud.");
+      Alert.alert("Error", err.message || t.genericlabel.labelerrorsend);
     } finally {
       setIsPublishing(false);
     }
@@ -711,12 +637,12 @@ export default function SupportScreen() {
 
   const approveStore = async (store: any, durationMonths: number) => {
     try {
-      const response = await fetch(`${API_SUPPORT_URL}/${store.id}`, {
+      const response = await fetch(`${API_STORES_URL}/${store.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approved: true, durationMonths })
       });
-      if (!response.ok) throw new Error("Error en servidor");
+      if (!response.ok) throw new Error(t.genericlabel.labelerrorserver);
 
       const updatedStoreFromServer = await response.json();
       const futureDate = new Date();
@@ -730,7 +656,7 @@ export default function SupportScreen() {
       };
       
       if (store.zip === zipCode) {
-        const newAllStores = [approvedStore, ...allStores.filter(s => s.id !== store.id)];
+        const newAllStores = [approvedStore, ...allStores];
         setAllStores(newAllStores);
         
         if (showMarkers || isZipValid) {
@@ -743,68 +669,50 @@ export default function SupportScreen() {
       }
 
       setPendingStores(pendingStores.filter(s => s.id !== store.id));
-      Alert.alert("Aprobado", `El contacto ha sido aprobado exitosamente por ${durationMonths} meses.`);
+      Alert.alert(t.genericlabel.labelaprov, t.genericlabel.labelmessajeaprov +` ${durationMonths} `+t.genericlabel.labelmonth);
     } catch (error) {
-      Alert.alert("Error", "No se pudo aprobar.");
+      Alert.alert("Error", t.genericlabel.labelaproval);
     }
   };
 
   const rejectStore = async (id: number) => {
     try {
-      const response = await fetch(`${API_SUPPORT_URL}/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error("Error en servidor");
+      const response = await fetch(`${API_STORES_URL}/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(t.genericlabel.labelerrorserver);
       setPendingStores(pendingStores.filter(e => e.id !== id));
-      Alert.alert("Rechazado", "Contacto eliminado.");
+      Alert.alert(t.genericlabel.labelreject, t.genericlabel.labeldeletecontac);
     } catch (error) {
-      Alert.alert("Error", "No se pudo rechazar.");
+      Alert.alert("Error", t.genericlabel.labelnoreject);
     }
   };
 
-  const SupportCard = ({ store, renderAdminControls }: { store: any, renderAdminControls?: any }) => {
+  const handleCloseDetailModal = () => {
+    setSelectedDetail(null);
+    lastProcessedNotifId.current = null;
+    router.setParams({ id: '', supportId: '', referenceId: '' });
+  };
+
+  const SupportCard = ({ store }: { store: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
     const isPending = store.status === 'pending';
-    const isOwner = store.userId === currentUserId;
-    
-    const isExpired = (store.timepostEnd && new Date(store.timepostEnd).getFullYear() > 1970) 
-        ? new Date(store.timepostEnd) < new Date() 
-        : false;
-    
-    const fadeCard = isExpired && !isPending;
 
     const safeRating = Number(store.rating) || 0;
     const displayRating = safeRating > 0 ? safeRating.toFixed(1) : "Nuevo";
 
-    // 🚀 LÓGICA DE CONTADOR ABREVIADO Y SEGURO
     const reviewCount = store.reviews?.length || store.totalReviews || 0;
     let formattedCount = reviewCount.toString();
     if (reviewCount >= 1000) {
       formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
     }
 
-    const cardBgColor = isPending 
-      ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.9)')
-      : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)');
-
     return (
-      <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : DynamicColors.border }}>
+      <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: isPending ? '#FFB74D' : DynamicColors.border }}>
         
-        {isPending && isOwner && (
+        {isPending && (
           <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
               <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
-              <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>En revisión. Será publicado pronto.</ThemedText>
-          </View>
-        )}
-
-        {isOwner && isExpired && !isPending && (
-          <View style={{ backgroundColor: 'rgba(255, 82, 82, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 82, 82, 0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <MaterialCommunityIcons name="alert-circle" size={20} color="#FF5252" />
-              <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>Tu publicación ha expirado.</ThemedText>
-            </View>
-            <TouchableOpacity onPress={() => { setStoreToRenew(store); setRenewModalVisible(true); }} style={{ backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 10 }}>
-              <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>Renovar</ThemedText>
-            </TouchableOpacity>
+              <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>{t.genericlabel.labelaprovaladmin}</ThemedText>
           </View>
         )}
 
@@ -820,18 +728,18 @@ export default function SupportScreen() {
           </View>
         </View>
         
-        <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140, opacity: fadeCard ? 0.6 : 1 }}>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140 }}>
           <Image source={{ uri: store.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
             <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>Ver detalle</ThemedText>
+            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{t.genericlabel.labelviewdetail}</ThemedText>
           </View>
         </TouchableOpacity>
         
-        <View style={{ padding: 15, opacity: fadeCard ? 0.6 : 1 }}>
+        <View style={{ padding: 15 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{store.name}</ThemedText>
-            {dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist} mi</ThemedText>}
+            {dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist + t.genericlabel.labelme} </ThemedText>}
           </View>
 
           {store.address && (
@@ -843,24 +751,21 @@ export default function SupportScreen() {
           <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6 }} numberOfLines={isPending ? undefined : 2}>{store.description}</ThemedText>
           
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
-            <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
+            <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} />
-               {/* 🚀 INYECTAMOS EL CONTADOR EN EL BOTÓN */}
                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
-                  Reseñas {reviewCount > 0 ? `(${formattedCount})` : ''}
+                  {t.genericbtn?.reviews || "Reseñas"} {reviewCount > 0 ? `(${formattedCount})` : ''}
                </ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
+            <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
               <MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>Ruta</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.genericbtn.route}</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${store.phone}`)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
+            <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${store.phone}`)} disabled={isPending} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}>
               <MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>Llamar</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.genericbtn.call}</ThemedText>
             </TouchableOpacity>
           </View>
-
-          {renderAdminControls && renderAdminControls()}
         </View>
       </View>
     );
@@ -868,9 +773,20 @@ export default function SupportScreen() {
 
   const PendingSupportItem = ({ store }: { store: any }) => {
     const [selectedMonths, setSelectedMonths] = useState(1);
-    
-    const adminControls = () => (
+
+    return (
       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
+        <SupportCard store={store} />
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
+            {store.premiumPlan && (
+                <View style={{ backgroundColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || DynamicColors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.selected || DynamicColors.border }}>
+                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: planStyles[store.premiumPlan as keyof typeof planStyles]?.selected || DynamicColors.subtext }}> {t.genericlabel.lableplan + store.premiumPlan.toUpperCase()}</ThemedText>
+                </View>
+            )}
+        </View>
+
+
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
            <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
            <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -879,35 +795,29 @@ export default function SupportScreen() {
         </View>
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-          {[1, 3, 6, 12].map(m => (
-            <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
-               <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
-            </TouchableOpacity>
-          ))}
+            {[1, 3, 6, 12].map(m => (
+                <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
+                    <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
+                </TouchableOpacity>
+            ))}
         </View>
-        
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText></TouchableOpacity>
-          <TouchableOpacity onPress={() => approveStore(store, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText></TouchableOpacity>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, zIndex: 10, paddingRight: 15, gap: 10 }}>
+          <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12 }}>
+              <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
+              <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => approveStore(store, selectedMonths)} style={{ flex: 1, alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12 }}>
+            <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
+            <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>{t.genericlabel.labelaprovedplan}</ThemedText>
+          </TouchableOpacity>
         </View>
       </View>
     );
-
-    return <SupportCard store={store} renderAdminControls={adminControls} />;
   };
 
   return (
     <View style={stylesUnified.container}>
-
-      {/* MODAL DE RENOVACIÓN */}
-      <RenewSupportModal 
-        visible={renewModalVisible} 
-        onClose={() => setRenewModalVisible(false)} 
-        onSuccess={() => { setRenewModalVisible(false); handleSearch(); }} 
-        storeToRenew={storeToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
-        t={t} isDark={isDark} Colors={DynamicColors} orangeGradient={orangeGradient} 
-        isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} 
-      />
 
       {/* MODAL DETALLE */}
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
@@ -937,20 +847,20 @@ export default function SupportScreen() {
                     </ThemedText>
                   </View>
                 </View>
-                <ThemedText style={{ fontSize: 24, fontWeight: '900', marginVertical: 10, color: DynamicColors.text }}>{selectedDetail?.name || selectedDetail?.nameSupp}</ThemedText>
-                {(selectedDetail?.address || selectedDetail?.addressSupp) && <ThemedText style={{ color: '#FF5F6D', fontWeight:'700', marginBottom:10 }}>{selectedDetail?.address || selectedDetail?.addressSupp}</ThemedText>}
+                <ThemedText style={{ fontSize: 24, fontWeight: '900', marginVertical: 10, color: DynamicColors.text }}>{selectedDetail?.name}</ThemedText>
+                {selectedDetail?.address && <ThemedText style={{ color: '#FF5F6D', fontWeight:'700', marginBottom:10 }}>{selectedDetail.address}</ThemedText>}
                 <View style={{height:1, backgroundColor:DynamicColors.border, marginVertical:20}} />
-                <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>{selectedDetail?.description || selectedDetail?.descriptionSupp}</ThemedText>
+                <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>{selectedDetail?.description}</ThemedText>
 
                 {isAdminMode && selectedDetail?.status === 'pending' && (
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
                         <TouchableOpacity onPress={() => { rejectStore(selectedDetail.id); handleCloseDetailModal(); }} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
                             <MaterialCommunityIcons name="close-circle" size={18} color="#FFF" />
-                            <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>Rechazar</ThemedText>
+                            <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>{t.genericbtn.rejectbtn}</ThemedText>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => { approveStore(selectedDetail, 1); handleCloseDetailModal(); }} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
                             <MaterialCommunityIcons name="check-circle" size={18} color="#FFF" />
-                            <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>Aprobar</ThemedText>
+                            <ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>{t.genericbtn.aprovedbtn}</ThemedText>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -969,8 +879,8 @@ export default function SupportScreen() {
               {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
                 <View style={{ flex: 1 }}>
-                    <ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name || selectedStore?.nameSupp}</ThemedText>
-                    <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>Experiencias y Opiniones</ThemedText>
+                    <ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name}</ThemedText>
+                    <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>{t.genericlabel.labelexperien}</ThemedText>
                 </View>
                 <TouchableOpacity onPress={() => { setSelectedStore(null); setShowReviewInput(false); }}>
                   <MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} />
@@ -981,7 +891,7 @@ export default function SupportScreen() {
                   <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
-                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>Compartir experiencia</ThemedText>
+                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.genericlabel.labelshareexper}</ThemedText>
                     </LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
@@ -1008,10 +918,10 @@ export default function SupportScreen() {
                            reference_id: selectedStore.id,
                            stars: ratingNum,
                            comment: commentStr,
-                           userId: currentUserId
+                           userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9"
                          };
 
-                         const res = await fetch(`${API_SUPPORT_URL}/reviews`, {
+                         const res = await fetch(`${API_STORES_URL}/reviews`, {
                            method: 'POST',
                            headers: { 'Content-Type': 'application/json' },
                            body: JSON.stringify(reviewPayload)
@@ -1041,9 +951,9 @@ export default function SupportScreen() {
                          setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
                          setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
 
-                         Alert.alert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+                         Alert.alert(t.genericlabel.labelreviewthanks, t.genericlabel.labelreviewexp);
                        } catch (e) {
-                         Alert.alert("Error", "No se pudo conectar al servidor.");
+                         Alert.alert("Error", t.genericlabel.labelerrorconection);
                        } finally {
                          setShowReviewInput(false);
                        }
@@ -1055,7 +965,7 @@ export default function SupportScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL SUGERIR APOYO */}
+      {/* MODAL SUGERIR APOYO (REGISTRO CON PLANES) */}
       <Modal visible={isModalVisible} animationType="slide" transparent statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
@@ -1064,15 +974,15 @@ export default function SupportScreen() {
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
-                <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>Unirse a la Red</ThemedText>
+                <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>{t.genericlabel.labeljoinred}</ThemedText>
                 <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
               </View>
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>FOTO</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{t.genericbtn.photo}</ThemedText></View>}
                 </TouchableOpacity>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none'}}>Categoría</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none'}}>{t.genericlabel.labelcatergory}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {CATEGORIES_LIST.map((cat, index) => {
                     if (index === 0) return null; 
@@ -1096,10 +1006,9 @@ export default function SupportScreen() {
                   })}
                 </ScrollView>
 
-                {/* 🚀 AÑADIDO: autoCapitalize="words" para capitalizar la primera letra */}
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                  placeholder="Nombre del Profesional / Mentor" 
+                  placeholder={t.genericlabel.labelnameprof}
                   placeholderTextColor={DynamicColors.subtext} 
                   value={formName} 
                   onChangeText={setFormName} 
@@ -1108,7 +1017,7 @@ export default function SupportScreen() {
                 
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                  placeholder="Ciudad o Dirección" 
+                  placeholder={t.genericlabel.labelcityaddres}
                   placeholderTextColor={DynamicColors.subtext} 
                   value={formAddress} 
                   onChangeText={setFormAddress} 
@@ -1117,7 +1026,7 @@ export default function SupportScreen() {
                 
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                  placeholder="Código Postal" 
+                  placeholder={t.genericlabel.labelzipcde} 
                   placeholderTextColor={DynamicColors.subtext} 
                   value={formZip} 
                   onChangeText={setFormZip} 
@@ -1125,18 +1034,53 @@ export default function SupportScreen() {
                   maxLength={5} 
                 />
                 
-                {/* 🚀 AÑADIDO: autoCapitalize="sentences" para capitalizar oraciones */}
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                  placeholder="Especialidad o cómo ayudas..." 
+                  placeholder={t.genericlabel.lablelespecia} 
                   placeholderTextColor={DynamicColors.subtext} 
                   value={formDesc} 
                   onChangeText={setFormDesc} 
                   multiline 
                   autoCapitalize="sentences" 
                 />
+
+                {/* 🚀 SELECCIÓN DE PLANES INTEGRADAS */}
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
+                <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    {[
+                        { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc },
+                        { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
+                        { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
+                        { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
+                    ].map(plan => {
+                        const pStyle = planStyles[plan.id as keyof typeof planStyles];
+                        const isSelected = formPlan === plan.id;
+                        
+                        return (
+                        <TouchableOpacity 
+                            key={plan.id}
+                            onPress={() => setFormPlan(plan.id)}
+                            style={{ 
+                               padding: 15, 
+                               borderRadius: 14, 
+                               borderWidth: 1, 
+                               borderColor: isSelected ? pStyle.selected : DynamicColors.border, 
+                               backgroundColor: isSelected ? pStyle.unselected(isDark) : DynamicColors.inputBg 
+                            }}
+                        >
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : DynamicColors.subtext} />
+                                    <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : DynamicColors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
+                                </View>
+                                <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText>
+                            </View>
+                            <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                        </TouchableOpacity>
+                    )})}
+                </View>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none' }}>Teléfono de Contacto</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none' }}>{t.genericlabel.labelphonecont}</ThemedText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
                   <TouchableOpacity 
                     activeOpacity={0.7}
@@ -1154,14 +1098,18 @@ export default function SupportScreen() {
                 </View>
 
                 <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
-                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
+                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>{t.genericlabel.labelcheckpay}</ThemedText>
                   
                   <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: DynamicColors.text }}>
-                    Para promocionar tu perfil de apoyo, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                    {before}
+                      <ThemedText style={{ fontWeight: '900', color: DynamicColors.accent }}>
+                      ${(companyTariffs as any)[formPlan]} USD
+                      </ThemedText>
+                    {after}     
                   </ThemedText>
-                  
+
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                    {['Zelle', 'Venmo'].map((method) => (
+                    {['Zelle'].map((method) => (
                       <TouchableOpacity 
                         key={method}
                         onPress={() => setFormPayMethod(method)} 
@@ -1172,10 +1120,9 @@ export default function SupportScreen() {
                     ))}
                   </View>
 
-                  {/* 🚀 ASEGURADO: uppercase forzado */}
                   <TextInput 
                     style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                    placeholder={`# CONFIRMACION DE ${formPayMethod}...`} 
+                    placeholder={t.genericlabel.labelconfirmpay + `${formPayMethod}...`} 
                     placeholderTextColor={DynamicColors.subtext}
                     value={formRefCode} 
                     onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
@@ -1186,7 +1133,7 @@ export default function SupportScreen() {
                 <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
-                    <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>Enviar Solicitud</ThemedText>
+                    <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.genericbtn.sendrequest}</ThemedText>
                   </LinearGradient>
                 </TouchableOpacity>
               </ScrollView>
@@ -1212,7 +1159,7 @@ export default function SupportScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
                   <TextInput 
                     style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                    placeholder="Código postal..." 
+                    placeholder={t.genericlabel.labelcodepostal} 
                     keyboardType="numeric" maxLength={5} value={zipCode} 
                     onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
                     placeholderTextColor={DynamicColors.subtext} 
@@ -1239,7 +1186,7 @@ export default function SupportScreen() {
                   
                   {isAdminMode && pendingStores.length > 0 && (
                     <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Verificar ({pendingStores.length})</ThemedText>
+                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.genericbtn.verify} ({pendingStores.length})</ThemedText>
                       {pendingStores.map(store => (
                          <PendingSupportItem key={store.id} store={store} />
                       ))}
@@ -1261,8 +1208,8 @@ export default function SupportScreen() {
                         </View>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>Línea de Crisis 988</ThemedText>
-                        <ThemedText style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>Atención en español 24/7</ThemedText>
+                        <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{t.supporttab.phone}</ThemedText>
+                        <ThemedText style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>{t.supporttab.labelphone}</ThemedText>
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
@@ -1305,11 +1252,11 @@ export default function SupportScreen() {
                   </View>
 
                   <View style={{ marginTop: 20 }}>
-                    {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? "resultados" : "resultado")}</ThemedText>}
+                    {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' + (t.genericbtn.results || "resultados")}</ThemedText>}
                     {isFilteredByMap && (
                       <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accenticon }}>
                         <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accenticon} />
-                        <ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>Ver todos</ThemedText>
+                        <ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>{t.genericbtn.viewall || "Ver todos"}</ThemedText>
                       </TouchableOpacity>
                     )}
                     {results.map((store) => <SupportCard key={store.id} store={store} />)}
@@ -1330,11 +1277,11 @@ export default function SupportScreen() {
                                </Animated.View>
                            </View>
                         </View>
-                        <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 14 }}>SOS 988</ThemedText>
+                        <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 14 }}>{t.supporttab.phone || "SOS 988"}</ThemedText>
                       </LinearGradient>
                     </TouchableOpacity>
 
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>Categorías</ThemedText>
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{t.genericlabel.labelcategorys}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {CATEGORIES_LIST.map((area, index) => {
                         const iconName = ICONS_ARRAY[index] || 'heart';
@@ -1363,7 +1310,7 @@ export default function SupportScreen() {
                       
                       {isAdminMode && pendingStores.length > 0 && (
                         <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Verificar ({pendingStores.length})</ThemedText>
+                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>{t.genericbtn.verify} ({pendingStores.length})</ThemedText>
                           {pendingStores.map(store => (
                              <PendingSupportItem key={store.id} store={store} />
                           ))}
@@ -1371,11 +1318,11 @@ export default function SupportScreen() {
                       )}
 
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} resultados</ThemedText>}
+                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length + ' ' + (t.genericbtn.results || "resultados")} </ThemedText>}
                         {isFilteredByMap && (
                           <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}>
                             <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} />
-                            <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  Ver todos`}</ThemedText>
+                            <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{t.genericbtn.viewall || "Ver todos"}</ThemedText>
                           </TouchableOpacity>
                         )}
                         {results.map((store) => <SupportCard key={store.id} store={store} />)}
