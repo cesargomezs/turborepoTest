@@ -1,7 +1,9 @@
 import { db } from "../../../../packages/db/src"; 
 import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
+import { imag } from "@tensorflow/tfjs";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -10,6 +12,7 @@ const NOMBRE_BUCKET = 'images';
 
 // 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
 const sanitizeText = (str: any) => {
@@ -26,7 +29,6 @@ const getCurrentLawyerPrice = async () => {
 
     const activeTariff = await db.select({ price: tariffs.priceBasic })
     .from(tariffs)
-    // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
     .where(
       and(
@@ -56,6 +58,8 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
     .from(lawyers)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+    // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
+    .leftJoin(users, eq(ratingTable.userId, users.id))
     .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
     .where(
       currentUserId 
@@ -87,10 +91,16 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        
+
         lawyersMap.get(lawyerId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
+           name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+           image: data?.signedUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -116,6 +126,8 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
           const rutaArchivo = lawyer.imageUrl.startsWith('lawyers/') 
               ? lawyer.imageUrl : `lawyers/${lawyer.imageUrl}`;
 
+          //console.log("🔑 Generando URL firmada para:", rutaArchivo);
+          
           const { data, error } = await supabase
               .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
 
@@ -123,8 +135,12 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
               return { ...lawyer, image: data.signedUrl, imageUrl: data.signedUrl }; 
           }
       }
+
+      
       return { ...lawyer, image: lawyer.imageUrl }; 
     }));
+
+    //console.log("✅ Abogados obtenidos:", finalResult);
 
     return finalResult;
   } catch (error: any) {
@@ -144,6 +160,9 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       .from(lawyers)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
+          // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
+      .leftJoin(users, eq(ratingTable.userId, users.id))
+      .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
       .where(eq(lawyers.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
@@ -151,22 +170,30 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     const lawyerFinal: any = {
       ...rows[0].lawyers, 
       reviews: [],
+      payments: rows[0].payments?.amount,
       totalRating: 0,
       totalReviews: 0           
     };
 
     for (const row of rows) {
+
+      const { data, error } = await supabase
+      .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
         lawyerFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+          image: data?.signedUrl,
+          displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
       }
-    }
 
+    }
+    //lawyerFinal.amount = lawyerFinal.;
     lawyerFinal.totalReviews = lawyerFinal.reviews.length;
     if (lawyerFinal.totalReviews > 0) {
       const sum = lawyerFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
@@ -192,6 +219,9 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     } else {
         lawyerFinal.image = lawyerFinal.imageUrl;
     }
+    //lawyerFinal.amount=lawyerFinal.payment.amount;
+
+    console.log("✅ Abogado obtenido por ID:", lawyerFinal);
 
     return lawyerFinal;
   } catch (error: any) {
@@ -202,6 +232,8 @@ export const getLawyerByIdWithReviews = async (id: string) => {
 // 📥 3. CREAR ABOGADO
 export const createLawyer = async (data: any) => {
   try {
+
+    //console.log(data);
     let cleanImage = sanitizeText(data.imageUrl) || '';
     if (cleanImage.startsWith('lawyers/')) {
       cleanImage = cleanImage.replace('lawyers/', '');
@@ -210,6 +242,7 @@ export const createLawyer = async (data: any) => {
     return await db.transaction(async (tx) => {
       
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
+      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
 
       const lawyerPayload: any = {
         nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
@@ -222,6 +255,7 @@ export const createLawyer = async (data: any) => {
         descriptionLawy: safeDesc,
         lat: data.lat ? Number(data.lat) : null,
         lng: data.lng ? Number(data.lng) : null,
+        premiumPlan: planSeleccionado, 
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         approved: false 
       };
@@ -230,14 +264,14 @@ export const createLawyer = async (data: any) => {
 
       if (data.referenceCode && data.paymentMethod) {
         const basePrice = await getCurrentLawyerPrice();
-
+        console.log(data.tariffPlan);
         await tx.insert(payments).values({
           entityType: 'lawyer',
           entityId: newLawyer.id,
           userId: lawyerPayload.userId,
           referenceCode: sanitizeText(data.referenceCode) || '', 
           paymentMethod: sanitizeText(data.paymentMethod) || '', 
-          amount: basePrice, 
+          amount: data.tariffPlan,
           durationDays: 30, 
           status: "pending"
         });
@@ -265,12 +299,21 @@ export const createLawyer = async (data: any) => {
 // 🔄 4. ACTUALIZAR ABOGADO
 export const updateLawyer = async (id: string, data: any) => {
   try {
+
+    // 1. Obtener los datos del abogado
+    const res = await fetch(`http://192.168.252.243:3000/lawyers/${id}`);
+    const response = await res.json();
+
+    // 2. Acceder al valor directamente (ya que es un objeto, no un arreglo)
+    // Usamos Number() para asegurar que sea un número y || 0 por seguridad
+    const amount = Number(response.payments);
+
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
     return await db.transaction(async (tx) => {
       
-      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description', 'descriptionLawy'];
+      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description','premiumPlan', 'descriptionLawy'];
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
@@ -308,9 +351,9 @@ export const updateLawyer = async (id: string, data: any) => {
         
         updatePayload.timepostEnd = expirationDate; 
 
-        const basePriceString = await getCurrentLawyerPrice();
-        const basePriceNum = Number(basePriceString) || 50; 
-        const totalAmount = (monthsToAdd * basePriceNum).toFixed(2); 
+
+        ///console.log(data.payments);
+        const totalAmount = (monthsToAdd * amount).toFixed(2); 
 
         const daysToAdd = monthsToAdd * 30; 
 
@@ -437,7 +480,7 @@ export const createRating = async (data: any) => {
     return {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
-      comment: savedComment
+      comment: savedComment,
     };
 
   } catch (error: any) {

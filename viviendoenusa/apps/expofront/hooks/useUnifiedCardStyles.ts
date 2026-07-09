@@ -3,8 +3,8 @@ import { useMockSelector } from '@/redux/slices';
 
 export const useUnifiedCardStyles = () => {
   const { width, height } = useWindowDimensions();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'light' ? false : true; // Aseguramos que cualquier valor distinto a 'light' se trate como 'dark'
+  const colorScheme = useColorScheme(); // Aseguramos que cualquier valor distinto a 'light' se trate como 'dark'
+  const isDark = colorScheme === 'dark';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
   // --- LÓGICA DE DIMENSIONES Y PLATAFORMA ---
@@ -28,7 +28,9 @@ export const useUnifiedCardStyles = () => {
     subtext: isDark ? '#A0A0A0' : '#1A1A1A',
     accent: '#FF5F6D',
     accentLight: 'rgba(255, 95, 109, 0.15)',
-    reactionBg: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)'
+    reactionBg: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+    iconInactive: isDark ? '#B0BEC5' : '#364045'    
+
   };
 
   const styles = StyleSheet.create({
@@ -112,7 +114,7 @@ export const useUnifiedCardStyles = () => {
     },
     commentBubble: { marginBottom: 6 },
     commentUser: { fontSize: 13, fontWeight: 'bold', color: glassColors.accent },
-    commentText: { fontWeight: 'normal', fontSize: 13, color: glassColors.text, lineHeight: 8, padding:0 },
+    commentText: { fontWeight: 'normal', fontSize: 13, color: glassColors.iconInactive, lineHeight: 8, padding:0 },
     noCommentsText: { fontSize: 13, color: glassColors.subtext, fontStyle: 'italic', textAlign: 'center', marginVertical: 8 },
     replyBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
     replyBtnText: { color: glassColors.accent, fontSize: 13, marginLeft: 5, fontWeight: 'bold' },

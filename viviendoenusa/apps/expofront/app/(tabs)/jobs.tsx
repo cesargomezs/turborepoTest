@@ -253,6 +253,7 @@ export default function JobsScreen() {
              id: r.id,
              stars: Number(r.rating || r.stars) || 0,
              text: r.review || r.comment || '',
+             image: r.image || '',
              userName: r.userName || r.name || 'Anónimo',
              displayTime: r.displayTime || ''
           })) : [];
@@ -1836,7 +1837,12 @@ export default function JobsScreen() {
                                         <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : DynamicColors.iconInactive} />
                                     ))}
                                 </View>
-                                <ThemedText style={{ fontSize: 12,fontWeight: 'bold' }}>{r.userName || 'Anónimo'}</ThemedText>
+
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 5 }}>
+                                  {r.image ? ( <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/> ) : ( <MaterialCommunityIcons name="account-circle" size={24} color={DynamicColors.subtext} /> )}
+                                  <ThemedText style={{ color: DynamicColors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.userName}</ThemedText>
+                                </View> 
+
                             </View>
                             <ThemedText style={{ color: DynamicColors.text, fontSize: 14, lineHeight: 20 }}>{r.text}</ThemedText>
                         </View>

@@ -1,143 +1,235 @@
 import { db } from "../../../../packages/db/src"; 
-// 🚀 1. Usamos ALIAS para la tabla 'rating' y agregamos la tabla 'reviews' (plural)
 import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql } from "drizzle-orm"; 
+import { eq, desc, sql, and } from "drizzle-orm"; 
+import { alias } from "drizzle-orm/pg-core"; 
 import { createClient } from '@supabase/supabase-js';
 
-// 🚀 Inicializamos Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🔍 1. CONSULTA GENERAL (Con doble JOIN para Ratings y Reviews)
-export const getEntrepreneurships = async (zip?: string) => {
-    try {
-      let query = db
-        .select()
-        .from(entrepreneurship)
-        .leftJoin(users, eq(entrepreneurship.userId, users.id))
-        // 🚀 PRIMER JOIN: Traemos las estrellas
-        .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id)) 
-        // 🚀 SEGUNDO JOIN: Traemos el texto de la reseña enlazado al rating
-        .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-        .$dynamic(); 
-  
-      // Filtro por Zip Code si se proporciona
-      if (zip && zip.trim().length === 5) {
-        const cleanZip = zip.trim();
-        query = query.where(sql`${entrepreneurship.zip}::text = ${cleanZip}`); 
-      }
-  
-      query = query.orderBy(desc(entrepreneurship.createdAt));
-  
-      const rows = await query;
-      if (!rows || rows.length === 0) return [];
-  
-      // 🚀 AGRUPAMOS LAS RESEÑAS POR EMPRENDIMIENTO
-      const itemsMap = new Map<string, any>();
-  
-      for (const row of rows) {
-        const itemId = row.entrepreneurship.id;
-  
-        if (!itemsMap.has(itemId)) {
-          const dbUser = row.users;
-          itemsMap.set(itemId, {
-            ...row.entrepreneurship,
-            ownerName: dbUser?.name || 'Usuario Anónimo',
-            reviews: [], // Array vacío inicial
-            rating: 0 // Promedio inicial
-          });
-        }
-  
-        // Si hay un rating válido, lo agregamos y buscamos su review correspondiente
-        if (row.rating && row.rating.id) {
-          // 🛡️ Buscamos el texto donde sea que esté en la tabla reviews
-          const commentText = row.reviews?.comment || '';
+// 🚀 Declaramos el alias de la tabla users para los que escriben reseñas
+const reviewers = alias(users, 'reviewers');
 
-          itemsMap.get(itemId).reviews.push({
-             ...row.rating,
-             stars: Number(row.rating.rating) || 0,
-             comment: commentText, 
-             displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          });
-        }
-      }
-  
-      const finalList = await Promise.all(Array.from(itemsMap.values()).map(async (item) => {
-          
-          // 🧮 Calcular promedio de estrellas
-          if (item.reviews.length > 0) {
-              const totalStars = item.reviews.reduce((sum: number, r: any) => sum + (Number(r.stars) || 0), 0);
-              item.rating = totalStars / item.reviews.length;
-          } else {
-              item.rating = 0; // Forzamos el 0 si no hay reseñas
-          }
-  
-          const fileName = item.imageEntrepren;
-          let publicUrl = fileName; 
-  
-          if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
-              const cleanName = fileName.replace('entrepreneurship/', '');
-              const rutaArchivo = `entrepreneurship/${cleanName}`;
-  
-              const { data, error } = await supabase.storage
-                  .from(NOMBRE_BUCKET)
-                  .createSignedUrl(rutaArchivo, 3600); 
-  
-              if (!error && data?.signedUrl) {
-                  publicUrl = data.signedUrl;
-              } else if (error) {
-                  console.warn(`⚠️ Error firmando imagen:`, error.message);
-              }
-          }
-  
-          return { 
-              ...item,
-              imageEntrepren: publicUrl
-          }; 
-      }));
-  
-      return finalList;
-    } catch (error) {
-      console.error("❌ Error en getEntrepreneurships:", error);
-      return [];
-    }
-  };
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
 
-// 🔍 2. CONSULTA INDIVIDUAL POR ID
-export const getEntrepreneurshipById = async (id: string) => {
+// 🔍 1. CONSULTA GENERAL
+export const getEntrepreneurships = async (zip?: string, userId?: string) => {
   try {
-    const rows = await db
+    let query = db
       .select()
       .from(entrepreneurship)
       .leftJoin(users, eq(entrepreneurship.userId, users.id))
-      .where(eq(entrepreneurship.id, id));
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id)) 
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
+      .$dynamic(); 
 
+    if (zip && zip.trim().length === 5) {
+      query = query.where(sql`${entrepreneurship.zip}::text = ${zip.trim()}`); 
+    }
+
+    query = query.orderBy(desc(entrepreneurship.createdAt));
+
+    const rows = await query;
+    if (!rows || rows.length === 0) return [];
+
+    const itemsMap = new Map<string, any>();
+
+    for (const row of rows) {
+      const itemId = row.entrepreneurship.id;
+
+      if (!itemsMap.has(itemId)) {
+        itemsMap.set(itemId, {
+          ...row.entrepreneurship,
+          reviews: [],
+          rating: 0,
+          totalReviews: 0,
+          likes: 0,
+          dislikes: 0,
+          userVote: null
+        });
+      }
+
+      if (row.rating && row.rating.id) {
+        const reviewerUser = row.reviewers;
+        
+        let signedImageUrl = null;
+        if (reviewerUser?.imageUrl) {
+          const { data } = await supabase
+            .storage.from(NOMBRE_BUCKET).createSignedUrl('users/' + reviewerUser.imageUrl, 3600);
+          if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        }
+        
+        const commentText = row.reviews?.comment || '';
+        const name = reviewerUser ? `${reviewerUser.name || ''} ${reviewerUser.lastName?.substring(0, 1) || ''}`.trim() : 'Anónimo';
+
+        itemsMap.get(itemId).reviews.push({
+           ...row.rating,
+           stars: Number(row.rating.rating) || 0,
+           comment: commentText, 
+           name: name,
+           image: signedImageUrl,
+           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    }
+
+    // 🚀 LECTURA DE VOTOS (countlikes) CON SOPORTE SEGURO
+    const likesRes = await db.execute(sql`
+      SELECT relationship_id, SUM(likes) as t_likes, SUM(dislikes) as t_dislikes 
+      FROM public.countlikes 
+      GROUP BY relationship_id
+    `) as any;
+    
+    // Validamos la estructura devuelta por Drizzle dependiendo del driver
+    const likesData = Array.isArray(likesRes) ? likesRes : (likesRes?.rows || []);
+
+    let userVotesData: any[] = [];
+    if (userId) {
+       const uVotesRes = await db.execute(sql`
+          SELECT relationship_id, likes, dislikes 
+          FROM public.countlikes 
+          WHERE user_id = ${userId}
+       `) as any;
+       userVotesData = Array.isArray(uVotesRes) ? uVotesRes : (uVotesRes?.rows || []);
+    }
+
+    const finalListPromises = Array.from(itemsMap.values()).map(async item => {
+        item.totalReviews = item.reviews.length;
+        item.rating = item.totalReviews > 0 
+          ? Math.round((item.reviews.reduce((sum: number, r: any) => sum + r.stars, 0) / item.totalReviews) * 10) / 10 
+          : 0;
+
+        // Integración de likes totales
+        const itemLikes = likesData.find((ld: any) => ld.relationship_id === item.id);
+        if (itemLikes) {
+            item.likes = Number(itemLikes.t_likes) || 0;
+            item.dislikes = Number(itemLikes.t_dislikes) || 0;
+        }
+
+        // Integración del voto del usuario actual para mantener el color activo
+        const uVote = userVotesData.find(uv => uv.relationship_id === item.id);
+        if (uVote) {
+           if (Number(uVote.likes) === 1) item.userVote = 'like';
+           else if (Number(uVote.dislikes) === 1) item.userVote = 'dislike';
+        }
+
+        const fileName = item.imageEntrepren;
+        let publicUrl = fileName; 
+
+        if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
+            const cleanName = fileName.replace('entrepreneurship/', '');
+            const rutaArchivo = `entrepreneurship/${cleanName}`;
+
+            const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
+
+            if (!error && data?.signedUrl) {
+                publicUrl = data.signedUrl;
+            }
+        }
+
+        return { ...item, imageEntrepren: publicUrl }; 
+    });
+
+    const finalList = await Promise.all(finalListPromises);
+    return finalList;
+  } catch (error) {
+    console.error("❌ Error en getEntrepreneurships:", error);
+    return [];
+  }
+};
+
+// 🔍 2. CONSULTA INDIVIDUAL POR ID 
+export const getEntrepreneurshipById = async (id: string, userId?: string) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) return null;
+
+    const rows = await db
+      .select()
+      .from(entrepreneurship)
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id))
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id)) 
+      .where(eq(entrepreneurship.id, cleanId));
+  
     if (!rows || rows.length === 0) return null;
-
+  
     const dbItem = rows[0].entrepreneurship;
-    const dbUser = rows[0].users;
-    const nombreUsuario = dbUser?.name || 'Usuario Anónimo';
 
-    let publicUrl = dbItem.imageEntrepren;
+    const itemFinal: any = {
+      ...dbItem, 
+      reviews: [],
+      totalRating: 0,
+      totalReviews: 0,
+      likes: 0,
+      dislikes: 0,
+      userVote: null
+    };
 
-    if (publicUrl && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
-        const cleanName = publicUrl.replace('entrepreneurship/', '');
-        const { data, error } = await supabase.storage
-            .from(NOMBRE_BUCKET).createSignedUrl(`entrepreneurship/${cleanName}`, 3600);
-            
-        if (!error && data?.signedUrl) {
-            publicUrl = data.signedUrl;
+    for (const row of rows) {
+      if (row.rating && row.rating.id) {
+        const reviewerUser = row.reviewers;
+        
+        let signedImageUrl = null;
+        if (reviewerUser?.imageUrl) {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/' + reviewerUser.imageUrl, 3600);
+            if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        }
+
+        const commentText = row.reviews?.comment || '';
+        const namePart = reviewerUser?.name || reviewerUser?.lastName || 'Anónimo';
+        const lastNamePart = reviewerUser?.lastName ? reviewerUser.lastName.substring(0, 1) : '';
+
+        itemFinal.reviews.push({
+          ...row.rating,
+          stars: Number(row.rating.rating) || 0,
+          comment: commentText,
+          name: `${namePart} ${lastNamePart}`.trim(),
+          image: signedImageUrl,
+          displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    }
+
+    itemFinal.totalReviews = itemFinal.reviews.length;
+    if (itemFinal.totalReviews > 0) {
+      const sum = itemFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+      itemFinal.rating = Math.round((sum / itemFinal.totalReviews) * 10) / 10;
+    }
+
+    if (dbItem.imageEntrepren && dbItem.imageEntrepren.trim() !== '' && !dbItem.imageEntrepren.startsWith('http')) {
+      const cleanName = dbItem.imageEntrepren.replace('entrepreneurship/', '');
+      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(`entrepreneurship/${cleanName}`, 3600);
+      if (data?.signedUrl) itemFinal.imageEntrepren = data.signedUrl;
+    }
+
+    // 🚀 LECTURA INDIVIDUAL DE LIKES
+    const likesRes = await db.execute(sql`SELECT SUM(likes) as t_likes, SUM(dislikes) as t_dislikes FROM public.countlikes WHERE relationship_id = ${cleanId}`) as any;
+    const likesArray = Array.isArray(likesRes) ? likesRes : (likesRes?.rows || []);
+    const likesRow = likesArray[0];
+    
+    itemFinal.likes = likesRow ? Number(likesRow.t_likes || 0) : 0;
+    itemFinal.dislikes = likesRow ? Number(likesRow.t_dislikes || 0) : 0;
+
+    if (userId) {
+        const uVoteRes = await db.execute(sql`SELECT likes, dislikes FROM public.countlikes WHERE relationship_id = ${cleanId} AND user_id = ${userId}`) as any;
+        const uVoteArray = Array.isArray(uVoteRes) ? uVoteRes : (uVoteRes?.rows || []);
+        const uVoteRow = uVoteArray[0];
+        
+        if (uVoteRow) {
+            if (Number(uVoteRow.likes) === 1) itemFinal.userVote = 'like';
+            else if (Number(uVoteRow.dislikes) === 1) itemFinal.userVote = 'dislike';
         }
     }
 
-    return {
-        ...dbItem,
-        imageEntrepren: publicUrl,
-        ownerName: nombreUsuario
-    };
+    return itemFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener el emprendimiento por ID: ${error.message}`);
   }
@@ -151,7 +243,6 @@ export const createEntrepreneurship = async (data: any) => {
         cleanImage = cleanImage.replace('entrepreneurship/', '');
     }
 
-    // 🚀 BLINDAJE DE UUID PARA EVITAR CRASHEO
     let validUserId = null;
     if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
         validUserId = data.userId;
@@ -172,10 +263,8 @@ export const createEntrepreneurship = async (data: any) => {
       contactMethod: data.contactMethod || 'whatsapp',
       zip: data.zip ? String(data.zip).trim() : null,
       estate: data.estate || 'active',
-      userId: validUserId // <-- Usar validUserId seguro para que no explote
+      userId: validUserId 
     };
-
-    console.log("📤 Payload para crear emprendimiento:", payload);
 
     const newItem = await db.insert(entrepreneurship).values(payload).returning();
     return newItem[0];
@@ -208,69 +297,182 @@ export const deleteEntrepreneurship = async (id: string) => {
   }
 };
 
-// 📥 6. CREAR RESEÑA (INSERCIÓN DOBLE)
+// 📥 6. CREAR RESEÑA 
 export const createEntrepreneurshipReview = async (data: any) => {
-    try {
-      let validUserId = null;
-      if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
-          validUserId = data.userId;
-      } else {
-          const fallbackUser = await db.select().from(users).limit(1);
-          if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
-      }
-  
-      // --- PASO A: GUARDAR LAS ESTRELLAS EN 'rating' ---
-      const ratingPayload: any = {
-        rating: String(data.stars || 5), 
-        userId: validUserId,
-      };
-      
-      if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'entrepreneurship';
-      else ratingPayload.type_entry = 'entrepreneurship';
-  
-      if ('referenceId' in ratingTable) ratingPayload.referenceId = data.reference_id;
-      else ratingPayload.reference_id = data.reference_id;
-  
-      const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
-      const generatedRatingId = newRating[0].id;
-  
-      // --- PASO B: GUARDAR EL TEXTO EN 'reviews' (Plural) ---
-      let savedComment = '';
-      
-      if (data.comment && data.comment.trim() !== '') {
-        const reviewPayload: any = {
-          userId: validUserId
-        };
-  
-        // 1. Asignamos el texto a la columna correcta
-        if ('review' in reviewsTable) reviewPayload.review = data.comment;
-        else if ('text' in reviewsTable) reviewPayload.text = data.comment;
-        else reviewPayload.comment = data.comment;
-  
-        // 2. 🚀 Usamos relationshipId para coincidir con el JOIN
-        if ('relationshipId' in reviewsTable) reviewPayload.relationshipId = generatedRatingId;
-        else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
-        else reviewPayload.rating_id = generatedRatingId;
-        
-        // 3. 🚀 Asignamos tu UUID fijo para Entrepreneurship directamente al payload
-        if ('typeDetailId' in reviewsTable) {
-            reviewPayload.typeDetailId = '035118eb-612e-41a2-ac95-b4f339b4e388';
-        } else {
-            reviewPayload.type_detail_id = '035118eb-612e-41a2-ac95-b4f339b4e388';
-        }
-  
-        const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
-        savedComment = newReview[0].comment || '';
-      }
-  
-      return {
-        id: generatedRatingId,
-        stars: Number(newRating[0].rating),
-        comment: savedComment
-      };
-  
-    } catch (error: any) { 
-      console.error("❌ Error CRÍTICO en createEntrepreneurshipReview (Doble Insert):", error);
-      throw new Error(`Error al crear la reseña: ${error.message}`);
+  try {
+    const validUserId = data.userId; 
+
+    // 🚀 VALIDACIÓN CORRECTA CON DRIZZLE PURA PARA EVITAR DUPLICADOS
+    const existingReview = await db
+      .select()
+      .from(ratingTable)
+      .where(
+        and(
+          eq(ratingTable.referenceId, data.reference_id),
+          eq(ratingTable.userId, validUserId)
+        )
+      )
+      .limit(1);
+
+    if (existingReview.length > 0) {
+      throw new Error("Ya has escrito una reseña para este negocio.");
     }
-  };
+
+    const ratingPayload: any = {
+      rating: String(data.stars || 5),
+      userId: validUserId,
+      referenceId: data.reference_id, 
+      typeEntry: 'entrepreneurship'
+    };
+
+    const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
+    const generatedRatingId = newRating[0].id;
+
+    let savedComment = '';
+    if (data.comment && data.comment.trim() !== '') {
+      const reviewPayload: any = {
+        userId: validUserId,
+        comment: data.comment,
+        relationshipId: generatedRatingId,
+        typeDetailId: '035118eb-612e-41a2-ac95-b4f339b4e388' 
+      };
+
+      const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
+      savedComment = newReview[0].comment || '';
+    }
+
+    return {
+      id: generatedRatingId,
+      stars: Number(newRating[0].rating),
+      comment: savedComment,
+    };
+
+  } catch (error: any) { 
+    console.error("❌ Error en createEntrepreneurshipReview:", error);
+    throw error; 
+  }
+};
+
+// 🚀 7. FUNCIÓN PARA VOTAR (ME GUSTA / NO ME GUSTA)
+export const voteEntrepreneurship = async (data: any) => {
+  try {
+    const { relationship_id, userId, action } = data;
+    if (!relationship_id || !userId || !action) throw new Error("Faltan datos obligatorios para votar.");
+
+    const isLike = action === 'like' ? 1 : 0;
+    const isDislike = action === 'dislike' ? 1 : 0;
+
+    const existingVoteRes = await db.execute(
+      sql`SELECT id, likes, dislikes FROM public.countlikes WHERE relationship_id = ${relationship_id} AND user_id = ${userId} LIMIT 1`
+    ) as any;
+    
+    const existingRows = Array.isArray(existingVoteRes) ? existingVoteRes : (existingVoteRes?.rows || []);
+
+    if (existingRows.length > 0) {
+      const voteId = existingRows[0].id;
+      const currentLikes = Number(existingRows[0].likes);
+      const currentDislikes = Number(existingRows[0].dislikes);
+
+      // Si presiona el mismo botón, anula el voto (Toggle)
+      if ((action === 'like' && currentLikes === 1) || (action === 'dislike' && currentDislikes === 1)) {
+        await db.execute(sql`UPDATE public.countlikes SET likes = 0, dislikes = 0 WHERE id = ${voteId}`);
+      } else {
+        // Cambia de opinión (ej: de dislike a like)
+        await db.execute(sql`UPDATE public.countlikes SET likes = ${isLike}, dislikes = ${isDislike} WHERE id = ${voteId}`);
+      }
+    } else {
+      // Es su primer voto
+      await db.execute(
+        sql`INSERT INTO public.countlikes (relationship_id, user_id, likes, dislikes, created_at) VALUES (${relationship_id}, ${userId}, ${isLike}, ${isDislike}, NOW())`
+      );
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("❌ Error en voteEntrepreneurship:", error);
+    throw new Error(`Error al procesar el voto: ${error.message}`);
+  }
+};
+
+// 🔍 8. CONSULTA POR LOTE (BATCH) PARA GUARDADOS
+export const getEntrepreneurshipsByIds = async (ids: string[], userId?: string) => {
+  try {
+    if (!ids || ids.length === 0) return [];
+
+    let query = db
+      .select()
+      .from(entrepreneurship)
+      .leftJoin(users, eq(entrepreneurship.userId, users.id))
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id)) 
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
+      .where(sql`${entrepreneurship.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`)
+      .orderBy(desc(entrepreneurship.createdAt));
+
+    const rows = await query;
+    if (!rows || rows.length === 0) return [];
+
+    const itemsMap = new Map<string, any>();
+
+    for (const row of rows) {
+      const itemId = row.entrepreneurship.id;
+      if (!itemsMap.has(itemId)) {
+        itemsMap.set(itemId, { ...row.entrepreneurship, reviews: [], rating: 0, totalReviews: 0, likes: 0, dislikes: 0, userVote: null });
+      }
+
+      if (row.rating && row.rating.id) {
+        const reviewerUser = row.reviewers;
+        let signedImageUrl = null;
+        if (reviewerUser?.imageUrl) {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/' + reviewerUser.imageUrl, 3600);
+          if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        }
+        const commentText = row.reviews?.comment || '';
+        const name = reviewerUser ? `${reviewerUser.name || ''} ${reviewerUser.lastName?.substring(0, 1) || ''}`.trim() : 'Anónimo';
+
+        itemsMap.get(itemId).reviews.push({
+           ...row.rating, stars: Number(row.rating.rating) || 0, comment: commentText, name: name, image: signedImageUrl,
+           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    }
+
+    const likesRes = await db.execute(sql`SELECT relationship_id, SUM(likes) as t_likes, SUM(dislikes) as t_dislikes FROM public.countlikes GROUP BY relationship_id`) as any;
+    const likesData = Array.isArray(likesRes) ? likesRes : (likesRes?.rows || []);
+
+    let userVotesData: any[] = [];
+    if (userId) {
+       const uVotesRes = await db.execute(sql`SELECT relationship_id, likes, dislikes FROM public.countlikes WHERE user_id = ${userId}`) as any;
+       userVotesData = Array.isArray(uVotesRes) ? uVotesRes : (uVotesRes?.rows || []);
+    }
+
+    const finalListPromises = Array.from(itemsMap.values()).map(async item => {
+        item.totalReviews = item.reviews.length;
+        item.rating = item.totalReviews > 0 ? Math.round((item.reviews.reduce((sum: number, r: any) => sum + r.stars, 0) / item.totalReviews) * 10) / 10 : 0;
+
+        const itemLikes = likesData.find((ld: any) => ld.relationship_id === item.id);
+        if (itemLikes) { item.likes = Number(itemLikes.t_likes) || 0; item.dislikes = Number(itemLikes.t_dislikes) || 0; }
+
+        const uVote = userVotesData.find(uv => uv.relationship_id === item.id);
+        if (uVote) {
+           if (Number(uVote.likes) === 1) item.userVote = 'like';
+           else if (Number(uVote.dislikes) === 1) item.userVote = 'dislike';
+        }
+
+        const fileName = item.imageEntrepren;
+        let publicUrl = fileName; 
+        if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
+            const cleanName = fileName.replace('entrepreneurship/', '');
+            const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(`entrepreneurship/${cleanName}`, 3600); 
+            if (!error && data?.signedUrl) publicUrl = data.signedUrl;
+        }
+
+        return { ...item, imageEntrepren: publicUrl }; 
+    });
+
+    return await Promise.all(finalListPromises);
+  } catch (error) {
+    console.error("❌ Error en getEntrepreneurshipsByIds:", error);
+    return [];
+  }
+};

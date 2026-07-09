@@ -109,47 +109,60 @@ export default function ServicesScreen() {
                 />
               </View>
 
-              {/* --- ZONA: RED DE APOYO (BOTÓN ROJO SOS DESTACADO) --- */}
-              <View style={{ paddingHorizontal: isLargeWeb ? 0 : 5, marginTop: 5, marginBottom: 15 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-                  
-                  <TouchableOpacity
-                    activeOpacity={0.9}
-                    onPress={() => router.push('/tabservices/support' as any)}
+              {/* --- ZONA: RED DE APOYO (BOTÓN ROJO DESTACADO) --- */}
+              <View style={{ 
+                paddingHorizontal: isLargeWeb ? 0 : 5, 
+                marginTop: 10, 
+                marginBottom: 5,
+                alignItems: 'center', // Centrado horizontal forzado para Web
+                justifyContent: 'center' 
+              }}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => router.push('/tabservices/support' as any)}
+                  style={{
+                    // Sombra más compatible con Web
+                    shadowColor: '#FF416C',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 5,
+                    elevation: 6,
+                    borderRadius: 25,
+                    // En Web, esto asegura que el botón no se estire a todo el ancho
+                    maxWidth: 350, 
+                  }}
+                >
+                  <LinearGradient
+                    colors={['#FF5F6D', '#FF416C']} 
+                    start={{ x: 0, y: 0 }} 
+                    end={{ x: 1, y: 0 }}
                     style={{
-                      shadowColor: '#FF416C',
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: 0.4,
-                      shadowRadius: 8,
-                      elevation: 6,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingHorizontal: 25,
+                      paddingVertical: 15,
+                      borderRadius: 25,
                     }}
                   >
-                    <LinearGradient
-                      colors={['#FF416C', '#FF4B2B']} 
-                      start={{ x: 0, y: 0 }} 
-                      end={{ x: 1, y: 1 }}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingHorizontal: 26,
-                        paddingVertical: 14,
-                        borderRadius: 24,
-                      }}
-                    >
-                      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                        <MaterialCommunityIcons name="heart-pulse" size={24} color="#FFFFFF" />
-                      </Animated.View>
-                      <ThemedText style={{ marginLeft: 10, fontWeight: '900', fontSize: 16, color: '#FFFFFF', letterSpacing: 0.5 }}>
-                        {t.supporttab?.support_btn_title }
-                      </ThemedText>
-                    </LinearGradient>
-                  </TouchableOpacity>
-
-                </View>
+                    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                      <MaterialCommunityIcons name="heart-pulse" size={32} color="#FFFFFF" />
+                    </Animated.View>
+                    <ThemedText style={{ 
+                      marginLeft: 10, 
+                      fontWeight: '800', 
+                      fontSize: 16, 
+                      color: '#FFFFFF',
+                      textAlign: 'center' 
+                    }}>
+                      {t.supporttab?.support_btn_title || "Red de Apoyo"}
+                    </ThemedText>
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={{ height: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
+                <View style={{ height: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 5 }}>
                     <ThemedText style={localStyles.middleText}>
                         {t.servicestab?.help_question}
                     </ThemedText>

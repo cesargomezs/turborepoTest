@@ -54,6 +54,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(payments, and(eq(payments.entityId, support.id), eq(payments.entityType, 'support')))
+    .leftJoin(users, eq(ratingTable.userId, users.id))
     .where(
       currentUserId 
         ? sql`${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${currentUserId}`
@@ -83,12 +84,18 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       }
 
       if (row.rating && row.rating.id) {
+
         const commentText = row.reviews?.comment || '';
+
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
         supportsMap.get(supportId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
+           name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+           image: data?.signedUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -142,6 +149,7 @@ export const getSupportById = async (id: string) => {
       .from(support)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
+      .leftJoin(users, eq(ratingTable.userId, users.id))
       .where(eq(support.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
@@ -156,11 +164,17 @@ export const getSupportById = async (id: string) => {
 
     for (const row of rows) {
       if (row.rating && row.rating.id) {
+
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+
         const commentText = row.reviews?.comment || '';
         supportFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
+          name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+          image: data?.signedUrl,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }

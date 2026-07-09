@@ -54,6 +54,8 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
     .from(stores)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+    // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
+    .leftJoin(users, eq(ratingTable.userId, users.id))
     .leftJoin(payments, and(eq(payments.entityId, stores.id), eq(payments.entityType, 'store')))
     .where(
       currentUserId 
@@ -85,10 +87,15 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+
         storesMap.get(storeId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
+           name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+           image: data?.signedUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -142,6 +149,8 @@ export const getStoreById = async (id: string) => {
       .from(stores)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
+      // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
+      .leftJoin(users, eq(ratingTable.userId, users.id))
       .where(eq(stores.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
@@ -154,12 +163,18 @@ export const getStoreById = async (id: string) => {
     };
 
     for (const row of rows) {
+
+      const { data, error } = await supabase
+      .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
         storeFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
+          name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+          image: data?.signedUrl,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -262,6 +277,15 @@ export const createStore = async (data: any) => {
 // 🔄 4. ACTUALIZAR NEGOCIO
 export const updateStore = async (id: string, data: any) => {
   try {
+
+    // 1. Obtener los datos del abogado
+    const res = await fetch(`http://192.168.252.243:3000/stores/${id}`);
+    const response = await res.json();
+
+    // 2. Acceder al valor directamente (ya que es un objeto, no un arreglo)
+    // Usamos Number() para asegurar que sea un número y || 0 por seguridad
+    const amount = Number(response.payments);
+
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
@@ -305,8 +329,11 @@ export const updateStore = async (id: string, data: any) => {
         updatePayload.timepostEnd = expirationDate; 
 
         const basePriceString = await getCurrentStorePrice();
-        const basePriceNum = Number(basePriceString) || 50; 
-        const totalAmount = (monthsToAdd * basePriceNum).toFixed(2); 
+        
+        
+        
+        //const basePriceNum = Number(basePriceString) || 50; 
+        const totalAmount = (monthsToAdd * amount).toFixed(2); 
 
         const daysToAdd = monthsToAdd * 30; 
 
@@ -363,8 +390,10 @@ export const createStoreReview = async (data: any) => {
 
     const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
 
+    let existingRating = null;
+
     if (validUserId && targetReferenceId) {
-        const existingRating = await db.select()
+       existingRating = await db.select()
           .from(ratingTable)
           .where(
             and(
@@ -433,7 +462,9 @@ export const createStoreReview = async (data: any) => {
     return {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
-      comment: savedComment
+      comment: savedComment,
+      //name: existingRating?.[0].users?.name + ' ' + existingRating?.[0].users?.lastName?.substring(0, 1),
+      //image: data?.signedUrl,
     };
 
   } catch (error: any) {

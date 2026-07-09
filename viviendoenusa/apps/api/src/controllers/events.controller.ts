@@ -38,6 +38,7 @@ const getCurrentEventPrice = async () => {
     .from(tariffs)
     // 🚀 FIX CRÍTICO: Forzamos el ::text para que Postgres no rechace el cruce UUID vs TEXT
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
+    .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
     .where(
       and(
         sql`${typeDetail.typeCode} ILIKE 'Event%'`, 
@@ -63,7 +64,7 @@ export const getEvents = async (zip?: string) => {
       .select()
       .from(events)
       .leftJoin(users, eq(events.userId, users.id)) 
-      .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'Event')))
+      .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .$dynamic(); 
 
     const cleanZipParam = zip ? sanitizeText(String(zip)) : '';
@@ -106,7 +107,7 @@ export const getEvents = async (zip?: string) => {
             ...dbEvent,
             imageEven: publicUrl, 
             ownerName: nombreUsuario,
-            referenceCode: dbPayment?.referenceCode || '',
+            referenceCode: dbPayment?.referenceCode,
             paymentMethod: dbPayment?.paymentMethod || '',
         }; 
     }));
@@ -154,7 +155,7 @@ export const getEventById = async (id: string) => {
         ...dbEvent,
         imageEven: publicUrl,
         ownerName: nombreUsuario,
-        referenceCode: dbPayment?.referenceCode || '',
+        referenceCode: dbPayment?.referenceCode,
         paymentMethod: dbPayment?.paymentMethod || '',
     };
   } catch (error: any) {
@@ -173,6 +174,10 @@ export const createEvent = async (data: any) => {
     }
 
     return await db.transaction(async (tx) => {
+
+      const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
+      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+
         const payload: any = {
           title: cleanData.title || 'Sin título',
           categoryIdx: cleanData.categoryIdx || 0,
@@ -187,6 +192,7 @@ export const createEvent = async (data: any) => {
           phone: cleanData.phone || '',
           contactMethod: cleanData.contactMethod || 'whatsapp',
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
+          premiumPlan: planSeleccionado,
           approved: false, 
         };
 
@@ -204,7 +210,7 @@ export const createEvent = async (data: any) => {
             const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
             // 💰 Obtenemos el precio desde la tabla tariffs para la categoría Events
-            const currentPrice = await getCurrentEventPrice();
+            //const currentPrice = await getCurrentEventPrice();
 
             await tx.insert(payments).values({
               entityType: 'event', 
@@ -212,7 +218,7 @@ export const createEvent = async (data: any) => {
               userId: payload.userId as string, 
               referenceCode: String(cleanData.referenceCode).trim(), 
               paymentMethod: String(cleanData.paymentMethod).trim(), 
-              amount: currentPrice, // 🚀 Guardado del precio consultado
+              amount: data.tariffPlan, // 🚀 Guardado del precio consultado
               durationDays: daysLeft, 
               timepost_end: eventDate,
               status: "pending"
@@ -270,7 +276,6 @@ export const updateEvent = async (id: string, data: any) => {
                 .set({ 
                     status: 'approved', 
                     approvedAt: new Date(), 
-                    amount: currentPrice, // 🚀 Por seguridad re-grabamos el monto oficial
                     timepost_end: expirationDate 
                 })
                 .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));

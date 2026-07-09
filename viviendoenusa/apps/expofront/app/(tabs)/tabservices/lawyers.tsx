@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
-  StyleSheet, useWindowDimensions,
+  StyleSheet, useWindowDimensions, Animated, Easing,
   TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert,
   Modal, KeyboardAvoidingView, ColorValue, Share
 } from 'react-native';
@@ -25,17 +25,11 @@ import MapComponent from '@/components/Map';
 
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
+import { Colors } from 'react-native/Libraries/NewAppScreen';
 
 const API_BASE_URL = 'http://192.168.252.243:3000/lawyers';
 const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
-
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
-
-const validateComment = (text: string): boolean => {
-  const lowerText = text.toLowerCase();
-  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
-};
-
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
 const AREA_ICONS: Record<string, { lib: any, name: string }> = {
@@ -51,6 +45,18 @@ const AREA_ICONS: Record<string, { lib: any, name: string }> = {
   'Default': { lib: MaterialCommunityIcons, name: 'scale-balance' }
 };
 
+const planStyles: any = {
+  coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  basic: { selected: '#FF5F6D', unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  premium: { selected: '#F5A623', unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  unlimited: { selected: '#10B981', unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' }
+};
+
+const validateComment = (text: string): boolean => {
+  const lowerText = text.toLowerCase();
+  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+};
+
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
   const R = 3958.8;
@@ -61,6 +67,16 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   return parseFloat((R * c).toFixed(1));
 };
 
+const openDirections = (item: any) => {
+  const label = encodeURIComponent(item.name || item.nameLawy || 'Ubicacion');
+  const url = Platform.select({
+    ios: `maps:0,0?q=${label}@${item.lat},${item.lng}`,
+    android: `geo:0,0?q=${item.lat},${item.lng}(${label})`,
+    web: `https://maps.google.com/?q=${item.lat},${item.lng}`
+  });
+  if (url) RNLinking.openURL(url);
+};
+
 const ActionBtn = ({ icon, text, color, bgColor, onPress, flex, width, disabled = false }: any) => (
   <TouchableOpacity disabled={disabled} onPress={onPress} style={[{ height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, opacity: disabled ? 0.6 : 1 }, flex ? { flex } : {}, width ? { width } : {}]}>
      <MaterialCommunityIcons name={icon} size={16} color={color} />
@@ -68,55 +84,9 @@ const ActionBtn = ({ icon, text, color, bgColor, onPress, flex, width, disabled 
   </TouchableOpacity>
 );
 
-const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
 
-  const handlePrePublish = () => {
-    if (!validateComment(comment)) {
-      const errorMsg = (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado.";
-      if (Platform.OS === 'web') { window.alert(errorMsg); } 
-      else { Alert.alert((t.communitytab as any)?.textInappropriateTittle || "Aviso", errorMsg); }
-      return;
-    }
-    onPublish(rating, comment);
-  };
 
-  return (
-    <View style={{ flex: 1, paddingVertical: 10 }}>
-      <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{(t.lawyerstab as any)?.backBtn }</ThemedText>
-      </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>{(t.lawyerstab as any)?.experience }</ThemedText>
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
-        {[1, 2, 3, 4, 5].map(s => (
-          <TouchableOpacity key={s} onPress={() => setRating(s)}>
-            <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput 
-          value={comment} 
-          onChangeText={setComment} 
-          placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder } 
-          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
-          multiline 
-          autoCapitalize="sentences"
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-        />
-      </View>
-      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-        <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
-          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.publishBtn}</ThemedText>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  );
-});
-
-const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets }: any) => {
+  const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets }: any) => {
   const [renewRefCode, setRenewRefCode] = useState('');
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
@@ -138,10 +108,10 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error();
-      Alert.alert((t.lawyerstab as any)?.successTitle , (t.lawyerstab as any)?.renewSuccessMsg );
+      Alert.alert((t.lawyerstab as any)?.successTitle || 'Éxito' , (t.lawyerstab as any)?.renewSuccessMsg || 'Renovación enviada');
       onSuccess();
     } catch (e) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle , (t.lawyerstab as any)?.renewErrorMsg);
+      Alert.alert((t.lawyerstab as any)?.errorTitle || 'Error' , (t.lawyerstab as any)?.renewErrorMsg || 'Error al renovar');
     } finally {
       setIsRenewing(false);
     }
@@ -156,12 +126,12 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
             {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>{(t.lawyerstab as any)?.renewTitle }</ThemedText>
+              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text }}>{(t.lawyerstab as any)?.renewTitle || 'Renovar'}</ThemedText>
               <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
 
             <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
-              Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariff} USD y enviando el comprobante aquí abajo.
+              Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariffs} USD y enviando el comprobante aquí abajo.
             </ThemedText>
             
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -181,7 +151,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
             <TouchableOpacity onPress={handleRenewSubmit} disabled={isRenewing}>
               <LinearGradient colors={orangeGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
                 {isRenewing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" style={{ marginRight: 8 }} />}
-                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t.lawyerstab as any)?.sendRenewBtn }</ThemedText>
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t.lawyerstab as any)?.sendRenewBtn || 'Enviar'}</ThemedText>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -191,7 +161,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   );
 });
 
-const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets }: any) => {
+const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, companyTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets }: any) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -203,11 +173,18 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
+  const [formPlan, setFormPlan] = useState('basic');
+  const [formCoupon, setFormCoupon] = useState('');
+
+  // 🚀 AQUI SE ARREGLARON LOS ERRORES TS(2304)
+  const isFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage && formRefCode.trim());
+  const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
   useEffect(() => {
     if(visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
       setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); setFormRefCode(''); setFormPayMethod('Zelle');
+      setFormPlan('basic'); setFormCoupon('');
     }
   }, [visible]);
 
@@ -221,7 +198,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
 
   const handlePublishLawyer = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5 || !formRefCode.trim()) {
-      return Alert.alert((t.lawyerstab as any)?.alertmessage);
+      return Alert.alert((t.lawyerstab as any)?.alertmessage || 'Completa todos los campos');
     }
     setIsPublishing(true);
     try {
@@ -230,7 +207,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
           setIsPublishing(false);
-          return Alert.alert((t.communitytab as any)?.imageInappropriateTittle , (t.communitytab as any)?.imageInappropriateDescription );
+          return Alert.alert((t.communitytab as any)?.imageInappropriateTittle || 'Error', (t.communitytab as any)?.imageInappropriateDescription || 'Imagen inapropiada');
         }
         
         const formData = new FormData();
@@ -266,7 +243,8 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         nameLawy: formName, description: formDesc, address: formAddress,
         area: PRACTICE_AREAS[formCategoryIdx] || PRACTICE_AREAS[1], zip: formZip, imageUrl: finalImageName,
         lat: lat, lng: lng, phone: fullPhone, userId: currentUserId,
-        approved: false, referenceCode: formRefCode, paymentMethod: formPayMethod, durationDays: 30
+        approved: false, referenceCode: formRefCode, paymentMethod: formPayMethod, durationDays: 30,
+        premiumPlan: formPlan, couponCode: formCoupon.trim(),tariffPlan:(companyTariffs as any)[formPlan]
       };
 
       const response = await fetch(API_BASE_URL, {
@@ -279,10 +257,11 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         id: savedFromDB.id, name: savedFromDB.nameLawy, description: savedFromDB.description,
         address: savedFromDB.address, area: savedFromDB.area, image: formImage, lat, lng,
         rating: 0, reviews: [], totalReviews: 0, phone: savedFromDB.phone, status: 'pending',
-        referenceCode: formRefCode, paymentMethod: formPayMethod, userId: currentUserId, timepostEnd: null
+        referenceCode: formRefCode, paymentMethod: formPayMethod, userId: currentUserId, timepostEnd: null,
+        premiumPlan: formPlan, couponCode: formCoupon
       };
       
-      Alert.alert((t.lawyerstab as any)?.sendnewsug );
+      Alert.alert((t.lawyerstab as any)?.sendnewsug || 'Enviado');
       onSuccess(newEntryLocal, formZip);
     } catch (err: any) {
       Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", err.message || (t.communitytab as any)?.errorServer || "Error");
@@ -301,15 +280,15 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
             {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
-              <ThemedText style={{fontSize: 20, fontWeight:'bold'}}>{(t.lawyerstab as any)?.suggest}</ThemedText>
-              <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+              <ThemedText style={{fontSize: 20, fontWeight:'bold' , color:Colors.text}}>{(t.lawyerstab as any)?.suggest || 'Unirse'}</ThemedText>
+              <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.subtext} /></TouchableOpacity>
             </View>
             <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}>
               <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border }}>
-                {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{(t.genericbtn as any)?.photo }</ThemedText></View>}
+                {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8,color: Colors.subtext }}>{(t.genericbtn as any)?.photo || 'FOTO'}</ThemedText></View>}
               </TouchableOpacity>
               
-              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none' }}>{(t.lawyerstab as any)?.label}</ThemedText>
+              <ThemedText style={{ fontSize: 12, fontWeight: '900',color:Colors.text, marginBottom: 8, textTransform:'none' }}>{(t.lawyerstab as any)?.label || 'Categoría'}</ThemedText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                 {PRACTICE_AREAS.map((cat: string, index: number) => {
                   if (index === 0) return null; 
@@ -335,7 +314,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
 
               <TextInput 
                 style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.placeHoldname } 
+                placeholder={(t.lawyerstab as any)?.placeHoldname || 'Nombre' } 
                 placeholderTextColor={Colors.subtext} 
                 value={formName} 
                 onChangeText={setFormName} 
@@ -343,7 +322,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
               />
               <TextInput 
                 style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text,  ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.placeHoldAddress } 
+                placeholder={(t.lawyerstab as any)?.placeHoldAddress || 'Dirección' } 
                 placeholderTextColor={Colors.subtext} 
                 value={formAddress} 
                 onChangeText={setFormAddress} 
@@ -351,7 +330,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
               />
               <TextInput 
                 style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.messagezip } 
+                placeholder={(t.lawyerstab as any)?.messagezip || 'ZIP'} 
                 placeholderTextColor={Colors.subtext} 
                 value={formZip} 
                 onChangeText={setFormZip} 
@@ -359,7 +338,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
               />
               <TextInput 
                 style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.description } 
+                placeholder={(t.lawyerstab as any)?.description || 'Descripción'} 
                 placeholderTextColor={Colors.subtext} 
                 value={formDesc} 
                 onChangeText={setFormDesc} 
@@ -367,31 +346,67 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 autoCapitalize="sentences"
               />
               
-              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none'  }}>{(t.lawyerstab as any)?.phoneContacto || 'Teléfono'}</ThemedText>
+              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
+              <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                  {[
+                      { id: 'coupon', name: t.categoryplan?.coupon || 'Cupón', price: companyTariffs?.coupon || '0.00', desc: t.categoryplan?.coupondesc || 'Cupón o periodo de prueba.' },
+                      { id: 'basic', name: t.categoryplan?.basic || 'Básico', price: companyTariffs?.basic || '50.00', desc: t.categoryplan?.basicdesc || 'Ideal para profesionales.' },
+                      { id: 'premium', name: t.categoryplan?.premium || 'Premium', price: companyTariffs?.premium || '99.00', desc: t.categoryplan?.premiumdesc || 'Mayor visibilidad.' },
+                      { id: 'unlimited', name: t.categoryplan?.unlimited || 'Ilimitado', price: companyTariffs?.unlimited || '149.00', desc: t.categoryplan?.unlimiteddesc || 'Prioridad máxima.' }
+                  ].map(plan => {
+                      const pStyle = planStyles[plan.id as keyof typeof planStyles];
+                      const isSelected = formPlan === plan.id;
+                      
+                      return (
+                      <TouchableOpacity 
+                          key={plan.id}
+                          onPress={() => setFormPlan(plan.id)}
+                          style={{ 
+                              padding: 15, 
+                              borderRadius: 14, 
+                              borderWidth: 1, 
+                              borderColor: isSelected ? pStyle.selected : Colors.border, 
+                              backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg 
+                          }}
+                      >
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                  <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} />
+                                  <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : Colors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
+                              </View>
+                              <ThemedText style={{ fontWeight: '900', fontSize: 16, color: Colors.text }}>${plan.price}</ThemedText>
+                          </View>
+                          <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : Colors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                      </TouchableOpacity>
+                  )})}
+              </View>
+
+              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none' }}>{(t.lawyerstab as any)?.phoneContacto || 'Teléfono'}</ThemedText>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, overflow: 'hidden' }}>
                 <TouchableOpacity 
                   activeOpacity={0.7}
-                  onPress={() => setCountryIdx(prev => (prev === 0 ? 1 : 0))}
+                  onPress={() => setCountryIdx(prev => (prev + 1) % COUNTRIES.length)}
                   style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}
                 >
-                  <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText>
-                  <ThemedText style={{ fontWeight: '800', color: Colors.text, marginRight: 4 }}>{COUNTRIES[countryIdx].code}</ThemedText>
+                  <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx]?.flag || ''}</ThemedText>
+                  <ThemedText style={{ fontWeight: '800', color: Colors.text, marginRight: 4 }}>{COUNTRIES[countryIdx]?.code || ''}</ThemedText>
                   <MaterialCommunityIcons name="chevron-down" size={16} color={Colors.subtext} />
                 </TouchableOpacity>
                 <TextInput value={formPhone} onChangeText={setFormPhone}
                   placeholder="(909) 000-0000" keyboardType="phone-pad"
-                  style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                  placeholderTextColor={Colors.subtext}
+                  style={{ flex: 1, color: Colors.subtext, padding: 15, fontSize: 14, fontWeight: '800', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
 
               <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                 <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>{(t.lawyerstab as any)?.paymentVerification || "Verificación de Pago"}</ThemedText>
                 
-                <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18 }}>
-                  Para publicar tu perfil, realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>
+                  Para publicar tu perfil, realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
                 </ThemedText>
                 
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                  {['Zelle', 'Venmo'].map((method) => (
+                  {['Zelle'].map((method) => (
                     <TouchableOpacity key={method} onPress={() => setFormPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? Colors.accent : Colors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
                       <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
                     </TouchableOpacity>
@@ -399,18 +414,18 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 </View>
 
                 <TextInput 
-                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                   placeholder={`# CONFIRMACION DE ${formPayMethod}...`} placeholderTextColor={Colors.subtext}
                   value={formRefCode} onChangeText={(text) => setFormRefCode(text.toUpperCase())} autoCapitalize="characters"
                 />
-              </View>
 
-              <TouchableOpacity onPress={handlePublishLawyer} disabled={isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
-                <LinearGradient colors={orangeGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
-                  <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t.lawyerstab as any)?.sendbutton || 'Enviar'}</ThemedText>
-                </LinearGradient>
-              </TouchableOpacity>
+                <TouchableOpacity onPress={handlePublishLawyer} disabled={!isFormValid || isPublishing}>
+                  <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
+                    <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{(t.lawyerstab as any)?.sendbutton || 'Enviar'}</ThemedText>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -423,18 +438,13 @@ export default function LawyersScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
   const params = useLocalSearchParams();
-  
-  const rawNotifId = params.id || params.lawyerId || params.referenceId || params.reference_id || params.openEventId;
-  const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
-
+  const notificationId = params.id || params.lawyerId || params.referenceId || params.reference_id || params.openEventId;
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null); 
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
-  
   const { t } = useTranslation();
   const stylesUnified = useUnifiedCardStyles();
   const styles = getContentCardStyles(isDark);
@@ -449,12 +459,13 @@ export default function LawyersScreen() {
 
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
-    subtext: isDark ? '#B0BEC5' : '#546E7A',
+    subtext: isDark ? '#B0BEC5' : '#364045',
     accent: '#FF5F6D',
     accenticon: isDark ? '#4FC3F7' : '#0080B5',
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-    iconInactive: isDark ? '#3a3939' : '#666666',    
+    iconInactive: isDark ? '#B0BEC5' : '#364045',  
+
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
 
@@ -487,8 +498,8 @@ export default function LawyersScreen() {
   const [pendingLawyers, setPendingLawyers] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
   
-  // 🚀 TARIFA DINÁMICA POR DEFECTO 50.00
   const [currentTariff, setCurrentTariff] = useState<string>("50.00");
+  const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' });
 
   const isZipValid = zipCode.length === 5;
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
@@ -497,120 +508,11 @@ export default function LawyersScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // 🚀 FETCH CORRECTO CON QUERY PARAMS: typeCode=Lawyers
-  useEffect(() => {
-    const fetchTariff = async () => {
-      try {
-        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Lawyers`);
-        if (res.ok) {
-          const tariffsData = await res.json();
-          // El backend ya lo filtró, debería ser el primer elemento si existe
-          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
-            setCurrentTariff(tariffsData[0].price);
-          }
-        }
-      } catch (e) {
-        console.warn("⚠️ No se pudo cargar la tarifa dinámica en el front, usando $50.00 por defecto");
-      }
-    };
-    fetchTariff();
-  }, []);
-
-  useEffect(() => {
-    if (!isFilteredByMap) {
-      const lat = userLocation ? userLocation.latitude : 34.0934;
-      const lng = userLocation ? userLocation.longitude : -117.5847;
-      const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng);
-      setResults(filtered);
-    }
-  }, [allLawyers, selectedArea, userLocation, isFilteredByMap]);
-
   const lastProcessedNotifId = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (notificationId) {
-      const cleanNotifId = String(notificationId).trim();
-
-      if (cleanNotifId !== lastProcessedNotifId.current) {
-        lastProcessedNotifId.current = cleanNotifId;
-        console.log("🔥 ID de Abogado recibido desde notificación:", cleanNotifId);
-        
-        const localMatch = allLawyers.find(l => String(l.id) === cleanNotifId) || pendingLawyers.find(l => String(l.id) === cleanNotifId);
-
-        if (localMatch) {
-          console.log("✅ Abogado encontrado en memoria local. Abriendo perfil...");
-          setSelectedDetail(localMatch);
-        } else {
-          const fetchSpecificLawyer = async () => {
-            try {
-              const res = await fetch(`${API_BASE_URL}/${cleanNotifId}`);
-              if (res.ok) {
-                const data = await res.json();
-                console.log("✅ Abogado encontrado en la BD. Abriendo perfil...");
-                setSelectedDetail(data); 
-
-                if (data.zip && String(data.zip).length === 5) {
-                  setZipCode(String(data.zip));
-                  handleSearch(undefined, String(data.zip));
-                }
-              } else {
-                console.log(`⚠️ El abogado no se encontró (Error ${res.status})`);
-              }
-            } catch (e) {
-              console.error("❌ Error Fetch notificación de Abogado:", e);
-            }
-          };
-          fetchSpecificLawyer();
-        }
-      }
-    }
-  }, [notificationId]);
-
-  const handleCloseDetailModal = () => {
-    setSelectedDetail(null);
-    router.setParams({ id: '', lawyerId: '', referenceId: '', reference_id: '', openEventId: '' });
-  };
-
-  const handleZoom = (type: 'in' | 'out') => {
-    if (isWeb || !mapRef.current) return;
-    mapRef.current.getCamera().then((camera: any) => {
-      if (isIOS) camera.altitude *= type === 'in' ? 0.5 : 2;
-      else camera.zoom += type === 'in' ? 1 : -1;
-      mapRef.current?.animateCamera(camera, { duration: 400 });
-    });
-  };
-
-  const getCurrentLocation = async (isManual = false) => {
-    try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const coords = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
-      setUserLocation(coords);
-      setMapKey(prev => prev + 1); 
-      if (!isWeb && mapRef.current) mapRef.current.animateToRegion(coords, isManual ? 1000 : 1);
-    } catch (e) { console.log(e); }
-  };
-
   const hasFetchedLocation = useRef(false);
-  useEffect(() => {
-    if (!hasFetchedLocation.current) {
-      getCurrentLocation();
-      hasFetchedLocation.current = true;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isAdminMode) {
-      fetchAllPendingLawyers();
-    } else {
-      if (zipCode.length !== 5) {
-        setPendingLawyers([]);
-      } else {
-        fetchLawyersData(zipCode);
-      }
-    }
-  }, [isAdminMode]);
+  const ringAnim = useRef(new Animated.Value(0)).current;
+  const pulseRingAnim = useRef(new Animated.Value(1)).current;
+  const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
   const applyLocalFilters = (lawyersList: any[], areaName: string, lat: number, lng: number) => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
@@ -633,41 +535,48 @@ export default function LawyersScreen() {
     return filtered;
   };
 
-  const fetchAllPendingLawyers = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`); 
-      const data = await res.json();
-      
-      if (Array.isArray(data)) {
-        const mappedData = data.map(item => ({
-          id: item.id,
-          name: item.nameLawy || 'Sin nombre',
-          description: item.description || item.descriptionLawy || '',
-          address: item.address || item.addressLawy || '',
-          area: item.area || 'General',
-          zip: item.zip,
-          image: item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
-          lat: Number(item.lat) || 34.0934,
-          lng: Number(item.lng) || -117.5847,
-          phone: item.phone || '',
-          rating: Number(item.totalRating) || Number(item.rating) || 0,
-          reviews: Array.isArray(item.reviews) ? item.reviews : [],
-          totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
-          status: item.approved ? 'approved' : 'pending',
-          referenceCode: item.referenceCode,
-          paymentMethod: item.paymentMethod,
-          userId: item.userId || item.user_id,
-          timepostEnd: item.timepostEnd || item.timepost_end
-        }));
-        setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
+  const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState('');
+    const handlePrePublish = () => {
+      if (!validateComment(comment)) {
+        const errorMsg = (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado.";
+        Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Aviso", errorMsg);
+        return;
       }
-    } catch (e) {
-      console.error("Error obteniendo pendientes globales:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
+      onPublish(rating, comment);
+    };
+    return (
+      <View style={{ flex: 1, paddingVertical: 10 }}>
+        <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+          <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{(t.lawyerstab as any)?.backBtn || 'Volver' }</ThemedText>
+        </TouchableOpacity>
+        <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 , color:Colors.text}}>{(t.lawyerstab as any)?.experience || 'Tu Experiencia'}</ThemedText>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
+          {[1, 2, 3, 4, 5].map(s => (
+            <TouchableOpacity key={s} onPress={() => setRating(s)}>
+              <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+          <TextInput 
+            value={comment} onChangeText={setComment} 
+            placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder || 'Escribe tu opinión...'} 
+            placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
+            multiline autoCapitalize="sentences"
+            style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+          />
+        </View>
+        <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+          <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
+            <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.publishBtn || 'Publicar'}</ThemedText>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
+  });
 
   const fetchLawyersData = async (searchZip: string) => {
     try {
@@ -694,9 +603,12 @@ export default function LawyersScreen() {
           referenceCode: item.referenceCode,
           paymentMethod: item.paymentMethod,
           userId: item.userId || item.user_id,
-          timepostEnd: item.timepostEnd || item.timepost_end
+          timepostEnd: item.timepostEnd || item.timepost_end,
+          premiumPlan: item.premiumPlan, 
+          couponCode: item.couponCode
+          //,tarrifPlan: item.
         }));
-
+        //console.log("Mapped Data front:", mappedData);
         const approved = mappedData.filter(s => s.status === 'approved');
         setAllLawyers(approved);
         setLocalData(approved);
@@ -738,8 +650,74 @@ export default function LawyersScreen() {
     
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
-    await fetchLawyersData(targetZip);
+    const lawyers = await fetchLawyersData(targetZip);
+    setResults(applyLocalFilters(lawyers, forcedArea || selectedArea, lat, lng));
     setMapKey(k => k + 1);
+  };
+
+  const fetchAllPendingLawyers = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`); 
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        const mappedData = data.map(item => ({
+          id: item.id,
+          name: item.nameLawy || 'Sin nombre',
+          description: item.description || item.descriptionLawy || '',
+          address: item.address || item.addressLawy || '',
+          area: item.area || 'General',
+          zip: item.zip,
+          image: item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
+          lat: Number(item.lat) || 34.0934,
+          lng: Number(item.lng) || -117.5847,
+          phone: item.phone || '',
+          rating: Number(item.totalRating) || Number(item.rating) || 0,
+          reviews: Array.isArray(item.reviews) ? item.reviews : [],
+          totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
+          status: item.approved ? 'approved' : 'pending',
+          referenceCode: item.referenceCode,
+          paymentMethod: item.paymentMethod,
+          userId: item.userId || item.user_id,
+          timepostEnd: item.timepostEnd || item.timepost_end,
+          premiumPlan: item.premiumPlan, 
+          couponCode: item.couponCode 
+        }));
+        setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
+      }
+    } catch (e) {
+      console.error("Error obteniendo pendientes:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrentLocation = async (isManual = false) => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const coords = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+      setUserLocation(coords);
+      setMapKey(prev => prev + 1); 
+      if (!isWeb && mapRef.current) mapRef.current.animateToRegion(coords, isManual ? 1000 : 1);
+    } catch (e) { console.log(e); }
+  };
+
+  const handleZoom = (type: 'in' | 'out') => {
+    if (isWeb || !mapRef.current) return;
+    mapRef.current.getCamera().then((camera: any) => {
+      if (isIOS) camera.altitude *= type === 'in' ? 0.5 : 2;
+      else camera.zoom += type === 'in' ? 1 : -1;
+      mapRef.current?.animateCamera(camera, { duration: 400 });
+    });
+  };
+
+  const handleCloseDetailModal = () => {
+    setSelectedDetail(null);
+    lastProcessedNotifId.current = null;
+    router.setParams({ id: '', lawyerId: '', referenceId: '', reference_id: '', openEventId: '' });
   };
 
   const handleZipChange = (text: string) => {
@@ -748,11 +726,11 @@ export default function LawyersScreen() {
       setResults([]);
       setAllLawyers([]);
       setLocalData([]);
-      if (!isAdminMode) {
-        setPendingLawyers([]);
-      }
+      if (!isAdminMode) setPendingLawyers([]);
       setShowMarkers(false);
       setIsFilteredByMap(false);
+    } else if (text.length === 5) {
+      handleSearch(selectedArea, text);
     }
   };
 
@@ -770,16 +748,6 @@ export default function LawyersScreen() {
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800);
   };
 
-  const openDirections = (lawyer: any) => {
-    const label = encodeURIComponent(lawyer.name);
-    const url = Platform.select({
-      ios: `maps:0,0?q=${label}@${lawyer.lat},${lawyer.lng}`,
-      android: `geo:0,0?q=${lawyer.lat},${lawyer.lng}(${label})`,
-      web: `http://googleusercontent.com/maps.google.com/?q=${lawyer.lat},${lawyer.lng}`
-    });
-    if (url) RNLinking.openURL(url);
-  };
-
   const handleShare = async (lawyer: any) => {
     if (!lawyer) return;
     try {
@@ -789,6 +757,8 @@ export default function LawyersScreen() {
 
   const approveLawyerField = async (lawyer: any, durationMonths: number) => {
     try {
+
+      
       const response = await fetch(`${API_BASE_URL}/${lawyer.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -797,7 +767,6 @@ export default function LawyersScreen() {
       if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError || "Error en servidor");
       
       const updatedLawyerFromServer = await response.json();
-
       const futureDate = new Date();
       futureDate.setMonth(futureDate.getMonth() + durationMonths);
 
@@ -815,7 +784,7 @@ export default function LawyersScreen() {
       }
       
       setPendingLawyers(pendingLawyers.filter(s => s.id !== lawyer.id));
-      Alert.alert((t.lawyerstab as any)?.approvedTitle || "Aprobado", ((t.lawyerstab as any)?.approvedMsgPrefix ) + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix ));
+      Alert.alert((t.lawyerstab as any)?.approvedTitle || "Aprobado", ((t.lawyerstab as any)?.approvedMsgPrefix || "Aprobado por ") + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix || " meses" ));
     } catch (error) {
       Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.approveError);
     }
@@ -832,10 +801,134 @@ export default function LawyersScreen() {
     }
   };
 
+  // --- USE EFFECTS LÓGICOS ---
+  useEffect(() => {
+    if (!hasFetchedLocation.current) {
+      getCurrentLocation();
+      hasFetchedLocation.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchTariff = async () => {
+      try {
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Lawyers`);
+        if (res.ok) {
+          const tariffsData = await res.json();
+          if (tariffsData && tariffsData.length > 0) {
+            setCompanyTariffs({
+              coupon: tariffsData[0].coupon || '0.00',
+              basic: tariffsData[0].basic || '50.00',
+              premium: tariffsData[0].premium || '99.00',
+              unlimited: tariffsData[0].unlimited || '149.00'
+            });
+            if (tariffsData[0].price) setCurrentTariff(tariffsData[0].price);
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo cargar la tarifa dinámica en el front");
+      }
+    };
+    fetchTariff();
+  }, []);
+
+  useEffect(() => {
+    if (!isFilteredByMap && allLawyers.length > 0) {
+      const lat = userLocation ? userLocation.latitude : 34.0934;
+      const lng = userLocation ? userLocation.longitude : -117.5847;
+      const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng);
+      setResults(filtered);
+    }
+  }, [allLawyers, selectedArea, userLocation, isFilteredByMap]);
+
+  useEffect(() => {
+    if (isAdminMode) {
+      fetchAllPendingLawyers();
+    } else {
+      if (zipCode.length !== 5) {
+        setPendingLawyers([]);
+      } else {
+        fetchLawyersData(zipCode);
+      }
+    }
+  }, [isAdminMode]);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringAnim, { toValue: 1, duration: 50, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: -1, duration: 100, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: 1, duration: 100, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: -1, duration: 100, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(ringAnim, { toValue: 0, duration: 50, easing: Easing.linear, useNativeDriver: true }),
+        Animated.delay(1000) 
+      ])
+    ).start();
+
+    Animated.loop(
+        Animated.parallel([
+            Animated.timing(pulseRingAnim, { toValue: 1.5, duration: 1500, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            Animated.timing(pulseOpacityAnim, { toValue: 0, duration: 1500, easing: Easing.out(Easing.ease), useNativeDriver: true })
+        ])
+    ).start();
+  }, [ringAnim, pulseRingAnim, pulseOpacityAnim]);
+
+  // 🚀 LÓGICA DE APERTURA POR NOTIFICACIÓN
+  useEffect(() => {
+    if (notificationId) {
+      const cleanNotifId = String(notificationId).trim();
+
+      if (cleanNotifId && cleanNotifId !== lastProcessedNotifId.current) {
+        lastProcessedNotifId.current = cleanNotifId;
+        router.setParams({ id: '', lawyerId: '', referenceId: '', reference_id: '', openEventId: '' });
+
+        const syncSearchAndDetail = async (item: any) => {
+          setSelectedDetail(item);
+          if (item.zip && String(item.zip).length === 5) {
+            setZipCode(String(item.zip));
+            await handleSearch(undefined, String(item.zip));
+          }
+        };
+
+        const localMatch = allLawyers.find(l => String(l.id) === cleanNotifId) || pendingLawyers.find(l => String(l.id) === cleanNotifId);
+
+        if (localMatch) {
+          syncSearchAndDetail(localMatch);
+        } else {
+          const fetchSpecificLawyer = async () => {
+            try {
+              const res = await fetch(`${API_BASE_URL}/${cleanNotifId}`);
+              if (res.ok) {
+                const data = await res.json();
+                
+                const mappedSupport = {
+                    ...data,
+                    name: data.nameLawy || data.name || 'Sin nombre',
+                    description: data.descriptionLawy || data.description || '',
+                    address: data.addressLawy || data.address || '',
+                    image: data.image || data.imageUrl || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
+                    lat: Number(data.lat) || 34.0934,
+                    lng: Number(data.lng) || -117.5847,
+                    status: data.approved ? 'approved' : 'pending',
+                    timepostEnd: data.timepostEnd || data.timepost_end
+                };
+
+                syncSearchAndDetail(mappedSupport);
+              }
+            } catch (e) {
+              console.error("❌ Error Fetch notificación de Abogado:", e);
+            }
+          };
+          fetchSpecificLawyer();
+        }
+      }
+    }
+  }, [notificationId, allLawyers, pendingLawyers]);
+
+  // --- COMPONENTES INTERNOS ---
   const LawyerCard = ({ lawyer, isReviewMode = false, renderAdminControls }: { lawyer: any, isReviewMode?: boolean, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     const isPending = lawyer.status === 'pending';
-
     const isOwner = lawyer.userId === currentUserId;
     
     const isExpired = (lawyer.timepostEnd && new Date(lawyer.timepostEnd).getFullYear() > 1970) 
@@ -843,7 +936,6 @@ export default function LawyersScreen() {
         : false;
     
     const fadeCard = isExpired && !isPending;
-
     const safeRating = Number(lawyer.rating) || 0;
     const displayRating = safeRating > 0 ? safeRating.toFixed(1) : ((t.lawyerstab as any)?.newLabel || "Nuevo");
 
@@ -916,7 +1008,7 @@ export default function LawyersScreen() {
             {dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist} mi</ThemedText>}
           </View>
           
-          <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6 }} numberOfLines={isPending ? undefined : 2}>{lawyer.description}</ThemedText>
+          <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6, color:Colors.text }} numberOfLines={isPending ? undefined : 2}>{lawyer.description}</ThemedText>
           
           <View style={{ gap: 8, marginTop: 15, opacity: isPending ? 0.5 : 1 }}>
             <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -948,7 +1040,17 @@ export default function LawyersScreen() {
     
     const adminControls = () => (
       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15 }}>
-        
+
+        {/* 🚀 VISUALIZACIÓN DEL PLAN PARA EL ADMIN */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
+            {lawyer.premiumPlan && (
+                <View style={{ backgroundColor: planStyles[lawyer.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || Colors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: planStyles[lawyer.premiumPlan as keyof typeof planStyles]?.selected || Colors.border }}>
+                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: planStyles[lawyer.premiumPlan as keyof typeof planStyles]?.selected || Colors.subtext }}> {(t.genericlabel?.lableplan || 'PLAN ') + lawyer.premiumPlan.toUpperCase()}</ThemedText>
+                </View>
+            )}
+            
+        </View>
+
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
            <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
            <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -996,8 +1098,9 @@ export default function LawyersScreen() {
             setZipCode(formZip);
             handleSearch(undefined, formZip);
           }
+          ///currentevaluetari={ }
         }} 
-        currentUserId={currentUserId} currentTariff={currentTariff} t={t} isDark={isDark} Colors={Colors} 
+        currentUserId={currentUserId} currentTariff={currentTariff}  companyTariffs={companyTariffs} t={t} isDark={isDark} Colors={Colors} 
         orangeGradient={orangeGradient} isLargeWeb={isLargeWeb} isAndroid={isAndroid} 
         isIOS={isIOS} PRACTICE_AREAS={PRACTICE_AREAS} 
         insets={insets}
@@ -1104,7 +1207,7 @@ export default function LawyersScreen() {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
                 <View style={{ flex: 1 }}>
                     <ThemedText style={{ fontSize: 22, fontWeight: '900', color: Colors.text }}>{selectedReviews?.name}</ThemedText>
-                    <ThemedText style={{ fontWeight: '800' }}>{(t.lawyerstab as any)?.commutnityopini }</ThemedText>
+                    <ThemedText style={{ fontWeight: '800', color: Colors.text }}>{(t.lawyerstab as any)?.commutnityopini }</ThemedText>
                 </View>
                 <TouchableOpacity onPress={() => { setSelectedReviews(null); setShowReviewInput(false); }}>
                   <MaterialCommunityIcons name="close" size={28} color={Colors.text} />
@@ -1137,7 +1240,12 @@ export default function LawyersScreen() {
                            {[1, 2, 3, 4, 5].map((s) => (
                              <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
                            ))}
+                           
                          </View>
+                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                          <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
+                          <ThemedText style={{ color: Colors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
+                         </View> 
                          <ThemedText style={{ color: Colors.text, fontSize: 14 }}>{r.comment}</ThemedText>
                        </View>
                     ))}
@@ -1171,6 +1279,7 @@ export default function LawyersScreen() {
                             id: fromDB.id || Date.now().toString(), 
                             stars: Number(ratingNum), 
                             comment: commentStr,
+                            name: fromDB.name ,
                             userId: currentUserId 
                           };
 
@@ -1181,6 +1290,7 @@ export default function LawyersScreen() {
                           const updatedLawyerObj = {
                             ...selectedReviews,
                             reviews: updatedReviews,
+                            name: selectedReviews.name,
                             rating: newAverage,
                             totalReviews: updatedReviews.length
                           };
@@ -1405,7 +1515,6 @@ export default function LawyersScreen() {
 
       {/* FAB para Sugerir Abogado */}
       <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
-      
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="scale-balance" size={32} color="#FFF" />
         </LinearGradient>

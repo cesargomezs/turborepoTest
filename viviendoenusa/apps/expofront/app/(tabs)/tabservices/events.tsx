@@ -3,7 +3,7 @@ import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, ActivityIndicator, Share, Linking,
-  Modal as RNModal, KeyboardAvoidingView, ColorValue
+  Modal as RNModal, KeyboardAvoidingView, ColorValue, Text
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -31,22 +31,38 @@ try {
 
 const isTextInappropriate = (text: string): boolean => {
   if (!text) return false;
-  const lowerText = text.toLowerCase();
-  return BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+  return BANNED_WORDS.some(word => text.toLowerCase().includes(word.toLowerCase()));
 };
 
-// IDs neutrales e iconos internos
 const INTERNAL_CATEGORIES = ['Todos', 'Social', 'Salud', 'Educación', 'Deportes'];
 const ICONS_ARRAY = ['calendar-range', 'account-group', 'heart-pulse', 'school', 'basketball'];
+const COUNTRIES = [ { code: '+1', flag: '🇺🇸', name: 'USA' }, { code: '+1', flag: '🇺🇸', name: 'USA' } ];
 
-const COUNTRIES = [
-  { code: '+1', flag: '🇺🇸', name: 'USA' },
-  { code: '+1', flag: '🇺🇸', name: 'USA' }
-];
-
-// 📡 URL BASE PARA LOS EVENTOS CONECTADA AL BACKEND
 const API_EVENTS_URL = 'http://192.168.252.243:3000/events';
 const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
+
+const planStyles: any = {
+  coupon: { 
+    selected: '#EA8D2D', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  },
+  basic: { 
+    selected: '#FF5F6D', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  },
+  premium: { 
+    selected: '#F5A623', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  },
+  unlimited: { 
+    selected: '#10B981', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  }
+};
 
 export default function EventsScreen() {
   const { t } = useTranslation();
@@ -57,7 +73,6 @@ export default function EventsScreen() {
   const isDark = colorScheme === 'dark';
   const stylesUnified = useUnifiedCardStyles();
 
-  // 🚀 EXTRACCIÓN DEL PARÁMETRO DE NOTIFICACIÓN
   const params = useLocalSearchParams();
   const rawNotifId = params.openEventId || params.id || params.referenceId;
   const eventIdFromNotif = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
@@ -75,12 +90,13 @@ export default function EventsScreen() {
 
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
-    subtext: isDark ? '#B0BEC5' : '#607D8B',
+    subtext: isDark ? '#B0BEC5' : '#364045',
+    
     border: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
     inputBg: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
     accent: '#FF5F6D',
     accenticon: isDark ? '#4FC3F7' : '#0080B5',
-    iconInactive: isDark ? '#E0E0E0' : '#666666',
+    iconInactive: isDark ? '#B0BEC5' : '#364045',  
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
     cardBg: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
   };
@@ -90,7 +106,7 @@ export default function EventsScreen() {
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
   const rawCategories = t.eventstab?.categoriesList;
-  const CATEGORIES_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_CATEGORIES.length
+  const CATEGORIES_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_CATEGORIES.length 
       ? rawCategories 
       : INTERNAL_CATEGORIES;
 
@@ -119,6 +135,8 @@ export default function EventsScreen() {
   
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
+  const [formPlan, setFormPlan] = useState('basic');
+  const [formCoupon, setFormCoupon] = useState('');
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -127,52 +145,32 @@ export default function EventsScreen() {
   const [pendingEvents, setPendingEvents] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // 🚀 TARIFA INICIAL DE RESPALDO
-  const [currentTariff, setCurrentTariff] = useState<string>("120.00");
+  const [currentTariff, setCurrentTariff] = useState<string>("50.00");
+  const [companyTariffs, setCompanyTariffs] = useState({
+    coupon: '0.00', 
+    basic: '50.00', 
+    premium: '99.00', 
+    unlimited: '149.00' 
+  });
 
   const lastProcessedNotifId = useRef<string | null>(null);
 
   const isFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage && formRefCode.trim());
 
-  // 🚀 FETCH INFALIBLE TOTALMENTE CORREGIDO
-  /*useEffect(() => {
-    const fetchTariff = async () => {
-      try {
-        // Quitamos el query param para que nos devuelva todo el arreglo y filtrar nosotros
-        const res = await fetch(API_TARIFFS_URL);
-        if (res.ok) {
-          const result = await res.json();
-          const tariffsData = Array.isArray(result) ? result : (result.data || []);
-          
-          const eventTariff = tariffsData.find((t: any) => {
-            const code = String(t.typeCode || t.type_code || '').toLowerCase();
-            const refId = String(t.referenceId || t.reference_id || '');
-            
-            // ✅ FIX: 'event' TODO EN MINÚSCULAS porque le hicimos toLowerCase() arriba
-            return code.includes('event') || refId === '6c4f4076-0ccf-4f26-97c8-abe139796066';
-          });
-
-          if (eventTariff && eventTariff.price) {
-            setCurrentTariff(String(eventTariff.price));
-            console.log("💰 Tarifa correcta cargada:", eventTariff.price);
-          }
-        }
-      } catch (e) {
-        console.warn("⚠️ No se pudo cargar la tarifa dinámica", e);
-      }
-    };
-    fetchTariff();
-  }, []);*/
   useEffect(() => {
     const fetchTariff = async () => {
       try {
         const res = await fetch(`${API_TARIFFS_URL}?typeCode=Event`);
         if (res.ok) {
           const tariffsData = await res.json();
-          //console.log("Tarifas obtenidas:", tariffsData);
-          // El backend ya lo filtró, debería ser el primer elemento si existe
-          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
-            setCurrentTariff(tariffsData[0].price);
+          if (tariffsData && tariffsData.length > 0) {
+            setCompanyTariffs({
+              coupon: tariffsData[0].coupon || '0.00',
+              basic: tariffsData[0].basic || '50.00',
+              premium: tariffsData[0].premium || '99.00',
+              unlimited: tariffsData[0].unlimited || '149.00'
+            });
+            if (tariffsData[0].basic) setCurrentTariff(tariffsData[0].basic);
           }
         }
       } catch (e) {
@@ -188,12 +186,10 @@ export default function EventsScreen() {
       
       if (cleanEventId !== lastProcessedNotifId.current) {
         lastProcessedNotifId.current = cleanEventId;
-        console.log("🔥 Evento detectado desde notificación:", cleanEventId);
         
         const localMatch = events.find(e => String(e.id) === cleanEventId);
         
         if (localMatch) {
-          console.log("✅ Evento encontrado en memoria local. Abriendo modal...");
           setSelectedEventDetails(localMatch);
         } else {
           const fetchSpecificEvent = async () => {
@@ -219,7 +215,6 @@ export default function EventsScreen() {
                   location: data.locationEven || '',
                 };
 
-                console.log("✅ Evento traído del backend con éxito. Abriendo modal...");
                 setSelectedEventDetails(eventMapped); 
 
                 if (data.zip && String(data.zip).length === 5) {
@@ -227,8 +222,6 @@ export default function EventsScreen() {
                   fetchEvents(String(data.zip), isAdminMode);
                 }
 
-              } else {
-                console.log(`⚠️ El evento específico no se encontró en la base de datos (Error ${res.status})`);
               }
             } catch (e) {
               console.error("❌ Error haciendo fetch al ID del evento:", e);
@@ -238,7 +231,7 @@ export default function EventsScreen() {
         }
       }
     }
-  }, [eventIdFromNotif]); 
+  }, [eventIdFromNotif, events]); 
 
   const handleCloseDetailModal = () => {
     setSelectedEventDetails(null);
@@ -274,7 +267,9 @@ export default function EventsScreen() {
             image: item.imageEven || '',
             location: item.locationEven || '',
             referenceCode: item.referenceCode,
-            paymentMethod: item.paymentMethod
+            paymentMethod: item.paymentMethod,
+            premiumPlan: item.premiumPlan,
+            couponCode: item.couponCode
           };
         });
 
@@ -418,7 +413,10 @@ export default function EventsScreen() {
         approved: false, 
         userId: userMetadata?.id || userMetadata?.userId || null,
         referenceCode: formRefCode,
-        paymentMethod: formPayMethod
+        paymentMethod: formPayMethod,
+        premiumPlan: formPlan,
+        couponCode: formCoupon.trim(),
+        tariffPlan: (companyTariffs as any)[formPlan]
       };
 
       const response = await fetch(API_EVENTS_URL, {
@@ -439,8 +437,10 @@ export default function EventsScreen() {
         timeEnd: savedFromDB.timeEnd,
         description: savedFromDB.descriptionEven,
         location: savedFromDB.locationEven,
-        referenceCode: formRefCode,
-        paymentMethod: formPayMethod
+        referenceCode: savedFromDB.referenceCode || formRefCode,
+        paymentMethod: savedFromDB.paymentMethod || formPayMethod,
+        premiumPlan: formPlan,
+        couponCode: formCoupon
       };
 
       setPendingEvents(prev => [newEventLocal, ...prev]);
@@ -461,12 +461,12 @@ export default function EventsScreen() {
     }
   };
 
-  const approveEvent = async (event: any) => {
+  const approveEvent = async (event: any, durationMonths: number) => {
     try {
       const response = await fetch(`${API_EVENTS_URL}/${event.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved: true })
+        body: JSON.stringify({ approved: true, durationMonths })
       });
       if (!response.ok) throw new Error("Error en servidor");
       
@@ -497,7 +497,7 @@ export default function EventsScreen() {
     setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormZip('');
     setFormPhone(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
     setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
-    setFormRefCode(''); setFormPayMethod('Zelle'); 
+    setFormRefCode(''); setFormPayMethod('Zelle'); setFormPlan('basic'); setFormCoupon('');
   };
 
   const filteredEvents = useMemo(() => 
@@ -508,6 +508,66 @@ export default function EventsScreen() {
              title.toLowerCase().includes(searchQuery.toLowerCase());
     }), 
   [events, selectedCategoryIdx, searchQuery]);
+
+  const PendingEventItem = ({ ev }: { ev: any }) => {
+    const [selectedMonths, setSelectedMonths] = useState(1);
+    
+    const adminControls = () => (
+       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15 }}>
+         
+         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
+             {ev.premiumPlan && (
+                 <View style={{ backgroundColor: planStyles[ev.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || Colors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: planStyles[ev.premiumPlan as keyof typeof planStyles]?.selected || Colors.border }}>
+                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: planStyles[ev.premiumPlan as keyof typeof planStyles]?.selected || Colors.subtext }}>
+                         PLAN {ev.premiumPlan.toUpperCase()}
+                     </ThemedText>
+                 </View>
+             )}
+         </View>
+
+         {/*ev.couponCode ? (
+             <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}>
+                <MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" />
+                <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
+                   Cupón: <ThemedText style={{color: '#4CAF50', fontWeight: '900'}}>{ev.couponCode}</ThemedText>
+                </ThemedText>
+             </View>
+         ) : null*/}
+
+         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
+            <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
+            <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
+               Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{ev.referenceCode || 'N/A'}</ThemedText> ({ev.paymentMethod || 'Pago'})
+            </ThemedText>
+         </View>
+         
+         <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+           <TouchableOpacity onPress={() => rejectEvent(ev.id)} style={{ flex: 1, backgroundColor: '#FF5252', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+             <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize: 16}}>Rechazar</Text>
+           </TouchableOpacity>
+           <TouchableOpacity onPress={() => approveEvent(ev, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+             <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize: 16}}>Aprobar</Text>
+           </TouchableOpacity>
+         </View>
+       </View>
+    );
+
+    return (
+        <EventCard 
+            item={ev} 
+            isLargeWeb={isLargeWeb} 
+            isDark={isDark} 
+            Colors={Colors} 
+            orangeGradient={orangeGradient} 
+            onOpen={(it: any) => setSelectedEventDetails(it)} 
+            ActionBtn={ActionBtn} 
+            t={t} 
+            categoryLabels={CATEGORIES_LABELS} 
+            internalCategories={INTERNAL_CATEGORIES} 
+            renderAdminControls={adminControls} 
+        />
+    );
+  };
 
   return (
     <View style={stylesUnified.container}>
@@ -602,7 +662,7 @@ export default function EventsScreen() {
                   {/* BUSCADOR DE TEXTO */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, paddingHorizontal: 16, height: 48 }}>
                     <MaterialCommunityIcons name="magnify" size={22} color={Colors.iconInactive} style={{ marginRight: 10 }} />
-                    <TextInput style={{ flex: 1, color: Colors.text, fontSize: 15, height: '100%', fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.eventstab?.inputEvents || 'Buscar evento...'} placeholderTextColor={Colors.iconInactive} value={searchQuery} onChangeText={setSearchQuery} />
+                    <TextInput style={{ flex: 1, color: Colors.text, fontSize: 15, height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.eventstab?.inputEvents || 'Buscar evento...'} placeholderTextColor={Colors.iconInactive} value={searchQuery} onChangeText={setSearchQuery} />
                     {searchQuery.length > 0 && (
                       <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}><MaterialCommunityIcons name="close-circle" size={20} color={Colors.iconInactive} /></TouchableOpacity>
                     )}
@@ -637,46 +697,13 @@ export default function EventsScreen() {
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* SECCIÓN ADMIN */}
+                    {/* SECCIÓN ADMIN MODIFICADA SIN EL FONDO AMARILLO */}
                     {isAdminMode && pendingEvents.length > 0 && (
-                      <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                        <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>REVISIÓN ({pendingEvents.length})</ThemedText>
-                        {pendingEvents.map(ev => (
-                          <View key={ev.id} style={{ marginBottom: 15 }}>
-                             <EventCard 
-                               item={ev} 
-                               isLargeWeb={false} 
-                               isDark={isDark} 
-                               Colors={Colors} 
-                               orangeGradient={orangeGradient} 
-                               onOpen={(it: any) => setSelectedEventDetails(it)} 
-                               ActionBtn={ActionBtn}
-                               t={t} 
-                               categoryLabels={CATEGORIES_LABELS}
-                               internalCategories={INTERNAL_CATEGORIES} 
-                             />
-
-                             <View style={{ marginTop: -15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15, zIndex: 10, paddingHorizontal: 15 }}>
-                                <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
-                                   <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
-                                   <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
-                                      Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{ev.referenceCode || 'N/A'}</ThemedText> ({ev.paymentMethod || 'Pago'})
-                                   </ThemedText>
-                                </View>
-
-                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
-                                  <TouchableOpacity onPress={() => rejectEvent(ev.id)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 }}>
-                                    <MaterialCommunityIcons name="close-circle" size={16} color="#FFF" />
-                                    <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Rechazar</ThemedText>
-                                  </TouchableOpacity>
-                                  <TouchableOpacity onPress={() => approveEvent(ev)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 }}>
-                                    <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" />
-                                    <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Aprobar</ThemedText>
-                                  </TouchableOpacity>
-                                </View>
-                             </View>
-                          </View>
-                        ))}
+                      <View style={{ marginBottom: 20 }}>
+                        <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>
+                          Revisión ({pendingEvents.length})
+                        </ThemedText>
+                        {pendingEvents.map(ev => <PendingEventItem key={ev.id} ev={ev} />)}
                       </View>
                     )}
 
@@ -725,7 +752,11 @@ export default function EventsScreen() {
       </ScrollView>
 
       {/* FAB - NUEVO EVENTO */}
-      <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}><LinearGradient colors={orangeGradient} style={{ flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-plus" size={28} color="#fff" /></LinearGradient></TouchableOpacity>
+      <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+        <LinearGradient colors={orangeGradient} style={{ flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="calendar-plus" size={28} color="#fff" />
+        </LinearGradient>
+      </TouchableOpacity>
 
       {/* MODAL CREAR EVENTO CON PAGO */}
       <RNModal visible={isModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setModalVisible(false)}>
@@ -746,10 +777,10 @@ export default function EventsScreen() {
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border, backgroundColor: Colors.inputBg }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight:'800', fontSize:11, marginTop:8}}>{t.eventstab?.photoEvent || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{alignItems:'center'}}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight:'800', fontSize:11, marginTop:8, color: Colors.subtext}}>{t.eventstab?.photoEvent || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.typeEvent || 'TIPO'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 , color:Colors.text}}>{t.eventstab?.typeEvent || 'TIPO'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20, paddingBottom: 6 }}>
                   {CATEGORIES_LABELS.map((catLabel: string, index: number) => {
                     if (index === 0) return null; 
@@ -763,7 +794,7 @@ export default function EventsScreen() {
                             <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'none' }}>{catLabel}</ThemedText>
                           </LinearGradient>
                         ) : (
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                             <MaterialCommunityIcons name={iconName as any} size={14} color={Colors.iconInactive} style={{ marginRight: 6 }} />
                             <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600',textTransform:'none' }}>{catLabel}</ThemedText>
                           </View>
@@ -773,7 +804,7 @@ export default function EventsScreen() {
                   })}
                 </ScrollView>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.dateEvent || 'FECHA'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 , color:Colors.text}}>{t.eventstab?.dateEvent || 'FECHA'}</ThemedText>
                 {isWeb ? (
                   <View style={{ position: 'relative', display: 'flex', alignItems: 'center', marginBottom: 15 }}>
                     <MaterialCommunityIcons name="calendar-month" size={20} color={Colors.accent} style={{ position: 'absolute', left: 15, zIndex: 1 }} />
@@ -795,7 +826,7 @@ export default function EventsScreen() {
                   </View>
                 )}
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{t.eventstab?.timeEvent || 'HORA'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, color:Colors.text }}>{t.eventstab?.timeEvent || 'HORA'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   {isWeb ? (
                     <>
@@ -839,13 +870,41 @@ export default function EventsScreen() {
                   </View>
                 )}
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'none' }}>{t.eventstab?.informationevent || 'Información'}</ThemedText>
-                <TextInput value={formTitle} onChangeText={setFormTitle} autoCapitalize="words" placeholder={t.eventstab?.nameEvent || 'Nombre'}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formLocation} onChangeText={setFormLocation} autoCapitalize="words" placeholder={t.eventstab?.addressEvent || 'Dirección'} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formDescription} onChangeText={setFormDescription} autoCapitalize="sentences" placeholder={t.eventstab?.detailsEvent || 'Detalles'} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontSize: 15, fontWeight: '600', color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'none' , color:Colors.text }}>{t.eventstab?.informationevent || 'Información'}</ThemedText>
+                <TextInput value={formTitle} onChangeText={setFormTitle} autoCapitalize="words" placeholder={t.eventstab?.nameEvent || 'Nombre'} placeholderTextColor={Colors.iconInactive}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formLocation} onChangeText={setFormLocation} autoCapitalize="words" placeholder={t.eventstab?.addressEvent || 'Dirección'} placeholderTextColor={Colors.iconInactive} style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} placeholderTextColor={Colors.iconInactive} style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formDescription} onChangeText={setFormDescription} autoCapitalize="sentences" placeholder={t.eventstab?.detailsEvent || 'Detalles'} placeholderTextColor={Colors.iconInactive} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'none'}}>{t.eventstab?.typeContact || 'Contacto'}</ThemedText>
+                {/* 🚀 SELECCIONAR PLAN */}
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
+                <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    {[
+                        { id: 'coupon', name: 'Cupón', price: companyTariffs?.coupon || '0.00', desc: 'Cupón o periodo de prueba.' },
+                        { id: 'basic', name: 'Básico', price: companyTariffs?.basic || '50.00', desc: 'Ideal para eventos locales.' },
+                        { id: 'premium', name: 'Premium', price: companyTariffs?.premium || '99.00', desc: 'Mayor visibilidad.' },
+                        { id: 'unlimited', name: 'Ilimitado', price: companyTariffs?.unlimited || '149.00', desc: 'Prioridad máxima.' }
+                    ].map(plan => {
+                        const pStyle = planStyles[plan.id as keyof typeof planStyles];
+                        const isSelected = formPlan === plan.id;
+                        return (
+                        <TouchableOpacity 
+                            key={plan.id} onPress={() => setFormPlan(plan.id)}
+                            style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : Colors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg }}
+                        >
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} />
+                                    <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : Colors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
+                                </View>
+                                <ThemedText style={{ fontWeight: '900', fontSize: 16, color: Colors.text }}>${plan.price}</ThemedText>
+                            </View>
+                            <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : Colors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                        </TouchableOpacity>
+                    )})}
+                </View>
+
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 ,textTransform:'none', color:Colors.text}}>{t.eventstab?.typeContact || 'Contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : Colors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : Colors.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : Colors.subtext} style={{ marginRight: 8 }} />
@@ -858,33 +917,26 @@ export default function EventsScreen() {
                 </View>
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 20, overflow: 'hidden' }}>
-                  <TouchableOpacity 
-                    activeOpacity={0.7}
-                    onPress={() => setCountryIdx(prev => (prev === 0 ? 1 : 0))}
-                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}
-                  >
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => setCountryIdx(prev => (prev === 0 ? 1 : 0))} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}>
                     <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText>
                     <ThemedText style={{ fontWeight: '800', color: Colors.text, marginRight: 4 }}>{COUNTRIES[countryIdx].code}</ThemedText>
                     <MaterialCommunityIcons name="chevron-down" size={16} color={Colors.subtext} />
                   </TouchableOpacity>
-                  <TextInput value={formPhone} onChangeText={setFormPhone}
-                    placeholder="(909) 000-0000"
-                    keyboardType="phone-pad"
-                    style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                  <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.iconInactive} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
+                {/* 🚀 VERIFICACIÓN DE PAGO */}
                 <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                   <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>Verificación de Pago</ThemedText>
                   
-                  {/* 🚀 TEXTO DINÁMICO CON LA TARIFA */}
                   <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>
-                    Para promocionar tu evento, realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                    Para promocionar tu evento, realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
                   </ThemedText>
                   
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                    {['Zelle', 'Venmo'].map((method) => (
+                    {['Zelle'].map((method) => (
                       <TouchableOpacity 
-                        key={method}
+                        key={method} 
                         onPress={() => setFormPayMethod(method)} 
                         style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? Colors.accent : Colors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
                       >
@@ -893,23 +945,12 @@ export default function EventsScreen() {
                     ))}
                   </View>
 
-                  {/* 🚀 FIX: Forzar input a mayúsculas */}
-                  <TextInput 
-                    style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                    placeholder={`# CONFIRMACION DE ${formPayMethod}...`} 
-                    placeholderTextColor={Colors.subtext}
-                    value={formRefCode} 
-                    onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
-                    autoCapitalize="characters"
-                  />
+                  <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={`# CONFIRMACION DE ${formPayMethod}...`} placeholderTextColor={Colors.subtext} value={formRefCode} onChangeText={(text) => setFormRefCode(text.toUpperCase())} autoCapitalize="characters" />
                 </View>
 
                 <TouchableOpacity onPress={handlePublishEvent} disabled={!isFormValid || isPublishing} style={{ alignSelf: 'center', marginTop: 10 }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <>
-                      <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />
-                      <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.eventstab?.createEvent || 'Crear'}</ThemedText>
-                    </>}
+                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.eventstab?.createEvent || 'Crear'}</ThemedText></>}
                   </LinearGradient>
                 </TouchableOpacity>
 
@@ -973,7 +1014,15 @@ export default function EventsScreen() {
                     bgColor={selectedEventDetails.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
                   />
                 )}
-                <ActionBtn minWidth={130} disabled={!selectedEventDetails?.approved} onPress={() => handleShare(selectedEventDetails)} icon="share-variant" text={t.genericbtn?.sharingbtn || 'Compartir'} color={isDark ? '#4FC3F7' : '#1976D2'} bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} />
+                <ActionBtn 
+                  minWidth={130} 
+                  disabled={!selectedEventDetails?.approved} 
+                  onPress={() => handleShare(selectedEventDetails)} 
+                  icon="share-variant" 
+                  text={t.genericbtn?.sharingbtn || 'Compartir'} 
+                  color={isDark ? '#4FC3F7' : '#1976D2'} 
+                  bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
+                />
               </View>
 
             </ScrollView>
@@ -991,30 +1040,43 @@ export default function EventsScreen() {
   );
 }
 
-const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories }: any) => {
+const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls }: any) => {
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
-  
   const isPending = !item.approved;
+  
+  // 🚀 El fondo del componente EventCard (blanco absoluto o gris oscuro)
+  const cardBgColor = isPending 
+      ? (isDark ? '#1E1E1E' : '#FFFFFF') 
+      : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)');
 
   return (
     <TouchableOpacity 
         activeOpacity={0.9} 
         onPress={() => onOpen(item)} 
-        style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
+        style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
     >
+      {/* 🚀 BARRA DE PENDIENTE PEGADA AL BORDE SUPERIOR */}
       {isPending && (
-        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, margin: 10, marginBottom: 0, flexDirection: 'row', alignItems: 'center' }}>
-            <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#FFB74D" />
-            <ThemedText style={{ color: '#FFB74D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 }}>Pendiente de aprobación (Admin)</ThemedText>
+        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
+          <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>
+            En revisión. Será publicado pronto.
+          </ThemedText>
         </View>
       )}
 
-      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center' }}>
-        <LinearGradient colors={orangeGradient} style={{ width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="calendar-check" size={14} color="#FFF" /></LinearGradient>
-        <ThemedText style={{ marginLeft: 10, fontSize: 13, fontWeight: '800', flex: 1, color: Colors.text }}>{item.date}</ThemedText>
-        <View style={{ backgroundColor: 'rgba(255,95,109,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
-          <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
+      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+          <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>
+            {catLabel.toUpperCase()}
+          </ThemedText>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
+          <MaterialCommunityIcons name="calendar-month" size={14} color="#FFB300" />
+          <ThemedText style={{ marginLeft: 4, fontSize: 13, fontWeight: '900', color: Colors.text }}>
+            {item.date}
+          </ThemedText>
         </View>
       </View>
       
@@ -1035,18 +1097,24 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
          </View>
       </View>
       
-      <View style={{ padding: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.01)' }}>
-        <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Colors.text }} numberOfLines={1}>{item.title}</ThemedText>
+      <View style={{ padding: 16 }}>
+        <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }} numberOfLines={1}>{item.title}</ThemedText>
         <ThemedText style={{ color: Colors.subtext, fontSize: 13, marginTop: 4, marginBottom: 8 }} numberOfLines={isPending ? undefined : 2}>{item.description}</ThemedText>
-        <View style={{ marginTop: 4 }}>
-          <View style={{flexDirection:'row', alignItems:'center', marginBottom:4}}><MaterialCommunityIcons name="clock-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.text }}>{item.time} - {item.timeEnd}</ThemedText></View>
-          <View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} /><ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText></View>
+        <View style={{ marginTop: 4, gap: 4 }}>
+          <View style={{flexDirection:'row', alignItems:'center'}}>
+            <MaterialCommunityIcons name="clock-outline" size={14} color={Colors.accent} />
+            <ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.text }}>{item.time} - {item.timeEnd}</ThemedText>
+          </View>
+          <View style={{flexDirection:'row', alignItems:'center'}}>
+            <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} />
+            <ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText>
+          </View>
         </View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
           {item.phone && (
             <ActionBtn 
-              minWidth={100}
+              flex={1}
               disabled={isPending}
               onPress={(e: any) => {
                 e.stopPropagation?.();
@@ -1060,7 +1128,7 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
             />
           )}
           <ActionBtn 
-            minWidth={100} 
+            flex={1} 
             disabled={isPending}
             onPress={(e: any) => { e.stopPropagation?.(); Share.share({ message: item.title }) }} 
             icon="share-variant" 
@@ -1069,6 +1137,8 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
             bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
            />
         </View>
+
+        {renderAdminControls && renderAdminControls()}
       </View>
     </TouchableOpacity>
   );

@@ -75,11 +75,19 @@ export const getCommunityPosts = async (zip?: string) => {
       }
 
       if (row.reviews && row.reviews.id) {
-        const usr = row.users as any;
-        const nombreUsuario = usr?.name || usr?.firstName || usr?.first_name || usr?.full_name || 'Usuario Anónimo';
         
+        const usr = row.users as any;
+        const urlimagen = usr?.imageUrl ;
+        const nombreUsuario = usr?.name + ' ' + usr?.lastName.substring(0, 1) || 'Usuario Anónimo';
+
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        
+        //console.log(data?.signedUrl);
+
         postsMap.get(postId).commentsList.push({
           ...row.reviews,
+          image: data?.signedUrl,
           userName: nombreUsuario
         });
       }
@@ -120,7 +128,7 @@ export const getCommunityPosts = async (zip?: string) => {
         }
         return post; 
     }));
-    
+    console.log(postsConImagenesSeguras);
    return postsConImagenesSeguras;
 
   } catch (error) {
@@ -143,16 +151,16 @@ export const getCommunityPostById = async (id: string) => {
       .where(eq(community.id, cleanId));
 
     if (!rows || rows.length === 0) return null;
-
     const commentsArray = rows
       .filter(row => row.reviews !== null && row.reviews !== undefined && row.reviews.id)
       .map(row => {
         const usr = row.users as any;
         return {
           ...row.reviews,
-          userName: usr?.name || usr?.firstName || usr?.first_name || 'Usuario Anónimo'
+          userName: usr?.name + ' ' + usr?.lastName.substring(0, 1) || 'Usuario Anónimo'
         };
       });
+      
 
     const dbPostBase = rows[0].community as any;
     const textoNormalizadoBase = dbPostBase.text || dbPostBase.textContent || dbPostBase.text_content || '';
@@ -188,7 +196,7 @@ export const getCommunityPostById = async (id: string) => {
             postFinal.imageUrl = data.signedUrl;
         }
     }
-
+    //console.log(postFinal);
     return postFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener la publicación por ID: ${error.message}`);

@@ -2,10 +2,12 @@ import { db } from "../../../../packages/db/src";
 import { jobs, users, rating as ratingTable, reviews as reviewsTable, notifications, tariffs, typeDetail, companies } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
+import { imag } from "@tensorflow/tfjs";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const NOMBRE_BUCKET = 'images'; 
 
 const ANON_UUID = "bb50c6a4-d284-4cdd-8263-cf6b4a74de25";
 const TEMP_USER_ID = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
@@ -63,13 +65,17 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
       if (row.rating && row.rating.id) {
         const commentText = row.reviews ? (row.reviews as any).review || (row.reviews as any).text || (row.reviews as any).comment || '' : '';
         const reviewUserId = row.reviews ? (row.reviews as any).userId : null;
-        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name || 'Anónimo');
+        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name  + ' ' + row.users?.lastName?.substring(0,1) || 'Anónimo');
+
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
         jobsMap.get(jobId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
            userName: reviewerName, 
+           image: data?.signedUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -131,13 +137,17 @@ export const getJobById = async (id: string) => {
       if (row.rating && row.rating.id) {
         const commentText = row.reviews ? (row.reviews as any).review || (row.reviews as any).text || (row.reviews as any).comment || '' : '';
         const reviewUserId = row.reviews ? (row.reviews as any).userId : null;
-        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name || 'Anónimo');
+        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name + ' ' + row.users?.lastName || 'Anónimo');
+
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
         jobFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
           userName: reviewerName,
+          image: data?.signedUrl,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }

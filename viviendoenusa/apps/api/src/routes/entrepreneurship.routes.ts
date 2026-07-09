@@ -5,7 +5,9 @@ import {
   createEntrepreneurship, 
   updateEntrepreneurship, 
   deleteEntrepreneurship,
-  createEntrepreneurshipReview // 🚀 1. Importamos la nueva función para reseñas
+  createEntrepreneurshipReview, // 🚀 1. Importamos la función para reseñas
+  voteEntrepreneurship,          // 🚀 2. Importamos la nueva función para los votos
+  getEntrepreneurshipsByIds
 } from '../controllers/entrepreneurship.controller'; // Nota: Usa '../' si este archivo está dentro de la carpeta 'routes'
 
 const router = Router();
@@ -14,7 +16,9 @@ const router = Router();
 router.get('/', async (req, res) => {
   try {
     const zipCode = req.query.zip as string; 
-    const itemsList = await getEntrepreneurships(zipCode);
+    // Ahora pasamos también el userId si viene en la query (útil para saber si el usuario ya votó)
+    const userId = req.query.userId as string; 
+    const itemsList = await getEntrepreneurships(zipCode, userId);
     res.json(itemsList);
   } catch (error: any) {
     console.error("❌ Error en GET /entrepreneurship:", error.message);
@@ -35,11 +39,25 @@ router.post('/reviews', async (req, res) => {
   }
 });
 
+// 👍 🚀 POST: Registrar Voto (Me gusta / No me gusta)
+// (También arriba de /:id para evitar conflictos)
+router.post('/vote', async (req, res) => {
+  try {
+    console.log("👍 Recibiendo voto:", req.body);
+    const result = await voteEntrepreneurship(req.body);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /entrepreneurship/vote:", error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // 🔍 GET: Obtener por ID
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const item = await getEntrepreneurshipById(id);
+    const userId = req.query.userId as string; // Recibimos el userId opcional
+    const item = await getEntrepreneurshipById(id, userId);
     if (!item) {
       return res.status(404).json({ error: 'Emprendimiento no encontrado' });
     }
@@ -93,6 +111,18 @@ router.delete('/:id', async (req, res) => {
   } catch (error: any) {
     console.error(`❌ Error en DELETE /entrepreneurship/${req.params.id}:`, error.message);
     res.status(400).json({ error: error.message });
+  }
+});
+
+// Agrega esta nueva ruta:
+router.post('/batch', async (req, res) => {
+  try {
+    const { ids, userId } = req.body;
+    const items = await getEntrepreneurshipsByIds(ids, userId);
+    res.json(items);
+  } catch (error: any) {
+    console.error("❌ Error en POST /entrepreneurship/batch:", error.message);
+    res.status(500).json({ error: 'Error al cargar guardados' });
   }
 });
 

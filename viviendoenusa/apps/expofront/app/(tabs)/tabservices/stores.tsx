@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, ActivityIndicator, Image, Linking, Alert,
-  Modal, KeyboardAvoidingView, Share, ColorValue
+  Modal, KeyboardAvoidingView, Share, ColorValue, Text
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -23,7 +23,11 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
+import { Colors } from '@/constants/Colors';
 
+// 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
+const API_STORES_URL = 'http://192.168.252.243:3000/stores';
+const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -34,9 +38,28 @@ const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
 
-// 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
-const API_STORES_URL = 'http://192.168.252.243:3000/stores';
-const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs';
+const planStyles: any = {
+  coupon: { 
+    selected: '#EA8D2D', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  },
+  basic: { 
+    selected: '#FF5F6D', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  },
+  premium: { 
+    selected: '#F5A623', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  },
+  unlimited: { 
+    selected: '#10B981', 
+    unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', 
+    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
+  }
+};
 
 const validateComment = (text: string): boolean => {
   const lowerText = text.toLowerCase();
@@ -61,55 +84,6 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return parseFloat((R * c).toFixed(1));
-};
-
-// --- COMPONENTE: FORMULARIO DE RESEÑA ---
-const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
-
-  const handlePrePublish = () => {
-    if (!validateComment(comment)) {
-      const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
-      if (Platform.OS === 'web') { window.alert(errorMsg); } 
-      else { Alert.alert("Error", errorMsg); }
-      return;
-    }
-    onPublish(rating, comment);
-  };
-
-  return (
-    <View style={{ flex: 1, paddingVertical: 10 }}>
-      <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.lawyerstab?.backBtn || 'Volver'}</ThemedText>
-      </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>{t.lawyerstab?.experience || 'Tu Experiencia'}</ThemedText>
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
-        {[1, 2, 3, 4, 5].map(s => (
-          <TouchableOpacity key={s} onPress={() => setRating(s)}>
-            <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput 
-          value={comment} 
-          onChangeText={setComment} 
-          placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} 
-          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
-          multiline 
-          autoCapitalize="sentences"
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-        />
-      </View>
-      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-        <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
-          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.lawyerstab?.publishBtn || 'Publicar'}</ThemedText>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  );
 };
 
 // 🚀 COMPONENTE: MODAL DE RENOVACIÓN DE TIENDA
@@ -189,24 +163,23 @@ const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, curre
 });
 
 export default function StoresScreen() {
+  const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  const params = useLocalSearchParams();
-  const rawNotifId = params.id || params.storeId || params.referenceId || params.reference_id || params.openEventId;
-  const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
-
-  const mapRef = useRef<MapView>(null); 
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  
-  const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
-  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
-  
-  const { t } = useTranslation();
   const stylesUnified = useUnifiedCardStyles();
 
+  const params = useLocalSearchParams();
+  const rawNotifId = params.openEventId || params.id || params.referenceId;
+  const eventIdFromNotif = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
+
+  const mapRef = useRef<MapView>(null); 
+  const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
+  const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
+  
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
   const isLargeWeb = isWeb && width > 1000;
@@ -217,12 +190,12 @@ export default function StoresScreen() {
 
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
-    subtext: isDark ? '#B0BEC5' : '#546E7A',
+    subtext: isDark ? '#B0BEC5' : '#364045',
     accent: '#FF5F6D',
     accenticon: isDark ? '#4FC3F7' : '#0080B5',
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-    iconInactive: isDark ? '#E0E0E0' : '#666666',
+    iconInactive: isDark ? '#B0BEC5' : '#364045', 
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
 
@@ -264,6 +237,14 @@ export default function StoresScreen() {
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
 
+  const [formPlan, setFormPlan] = useState('basic');
+  const [companyTariffs, setCompanyTariffs] = useState({
+    coupon: '0.00', 
+    basic: '50.00', 
+    premium: '99.00', 
+    unlimited: '149.56' 
+  });
+
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
@@ -289,8 +270,13 @@ export default function StoresScreen() {
         const res = await fetch(`${API_TARIFFS_URL}?typeCode=Store`);
         if (res.ok) {
           const tariffsData = await res.json();
-          if (tariffsData && tariffsData.length > 0 && tariffsData[0].price) {
-            setCurrentTariff(tariffsData[0].price);
+          if (tariffsData && tariffsData.length > 0 ) {
+            setCompanyTariffs({
+              coupon: tariffsData[0].coupon,
+              basic: tariffsData[0].basic ,
+              premium: tariffsData[0].premium ,
+              unlimited: tariffsData[0].unlimited 
+            });
           }
         }
       } catch (e) {
@@ -325,6 +311,8 @@ export default function StoresScreen() {
           ownerName: item.ownerName,
           referenceCode: item.referenceCode,
           paymentMethod: item.paymentMethod,
+          premiumPlan: item.premiumPlan,
+          couponCode: item.couponCode,
           userId: item.userId || item.user_id,
           timepostEnd: item.timepostEnd || item.timepost_end
         }));
@@ -346,12 +334,12 @@ export default function StoresScreen() {
     }
   };
 
-  // 🚀 LÓGICA DE NOTIFICACIÓN CORREGIDA (Mapeo asegurado)
+  // 🚀 LÓGICA DE NOTIFICACIÓN CORREGIDA
   const lastProcessedNotifId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (notificationId) {
-      const cleanNotifId = String(notificationId).trim();
+    if (eventIdFromNotif) {
+      const cleanNotifId = String(eventIdFromNotif).trim();
 
       if (cleanNotifId !== lastProcessedNotifId.current) {
         lastProcessedNotifId.current = cleanNotifId;
@@ -367,7 +355,6 @@ export default function StoresScreen() {
               if (res.ok) {
                 const data = await res.json();
                 
-                // 🚀 FIX CRÍTICO: Aseguramos el mapeo de variables para el Modal
                 const mappedStore = {
                   ...data,
                   name: data.nameStores || data.name || 'Sin nombre',
@@ -393,7 +380,7 @@ export default function StoresScreen() {
         }
       }
     }
-  }, [notificationId]);
+  }, [eventIdFromNotif]);
 
   const handleCloseDetailModal = () => {
     setSelectedDetail(null);
@@ -478,6 +465,8 @@ export default function StoresScreen() {
           ownerName: item.ownerName,
           referenceCode: item.referenceCode, 
           paymentMethod: item.paymentMethod,
+          premiumPlan: item.premiumPlan,
+          couponCode: item.couponCode,
           userId: item.userId || item.user_id,
           timepostEnd: item.timepostEnd || item.timepost_end
         }));
@@ -638,7 +627,10 @@ export default function StoresScreen() {
         userId: currentUserId,
         approved: false,
         referenceCode: formRefCode,
-        paymentMethod: formPayMethod 
+        paymentMethod: formPayMethod,
+        premiumPlan: formPlan,
+        
+        tariffPlan: (companyTariffs as any)[formPlan]
       };
 
       const response = await fetch(API_STORES_URL, {
@@ -665,6 +657,7 @@ export default function StoresScreen() {
         status: 'pending',
         referenceCode: formRefCode,
         paymentMethod: formPayMethod,
+        premiumPlan: formPlan,
         userId: currentUserId,
         timepostEnd: null
       };
@@ -760,8 +753,9 @@ export default function StoresScreen() {
       formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
     }
 
+    // 🚀 Fondo blanco solido cuando esta pendiente o oscuro si es Dark Mode
     const cardBgColor = isPending 
-      ? (isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.9)')
+      ? (isDark ? '#1E1E1E' : '#FFFFFF')
       : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)');
 
     return (
@@ -820,7 +814,7 @@ export default function StoresScreen() {
                  <MaterialCommunityIcons name="map-marker-outline" size={12}/> {store.address || store.addressStores}
              </ThemedText>
           )}
-          <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6 }} numberOfLines={isPending ? undefined : 2}>{store.description || store.descriptionStores}</ThemedText>
+          <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6, color:DynamicColors.text }} numberOfLines={isPending ? undefined : 2}>{store.description || store.descriptionStores}</ThemedText>
           
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
             <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
@@ -845,11 +839,83 @@ export default function StoresScreen() {
     );
   };
 
+  // --- COMPONENTE: FORMULARIO DE RESEÑA ---
+const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+
+  const handlePrePublish = () => {
+    if (!validateComment(comment)) {
+      const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
+      if (Platform.OS === 'web') { window.alert(errorMsg); } 
+      else { Alert.alert("Error", errorMsg); }
+      return;
+    }
+    onPublish(rating, comment);
+  };
+
+  return (
+    <View style={{ flex: 1, paddingVertical: 10 }}>
+      <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.lawyerstab?.backBtn || 'Volver'}</ThemedText>
+      </TouchableOpacity>
+      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color:DynamicColors.text }}>{t.lawyerstab?.experience || 'Tu Experiencia'}</ThemedText>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
+        {[1, 2, 3, 4, 5].map(s => (
+          <TouchableOpacity key={s} onPress={() => setRating(s)}>
+            <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+        <TextInput 
+          value={comment} 
+          onChangeText={setComment} 
+          placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} 
+          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
+          multiline 
+          autoCapitalize="sentences"
+          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+        />
+      </View>
+      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+        <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
+          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.lawyerstab?.publishBtn || 'Publicar'}</ThemedText>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
   const PendingStoreItem = ({ store }: { store: any }) => {
     const [selectedMonths, setSelectedMonths] = useState(1);
     
     const adminControls = () => (
       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
+        
+        {/* Etiqueta del PLAN */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
+            {store.premiumPlan && (
+                <View style={{ backgroundColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || DynamicColors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.selected || DynamicColors.border }}>
+                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: planStyles[store.premiumPlan as keyof typeof planStyles]?.selected || DynamicColors.subtext }}>
+                        PLAN {store.premiumPlan.toUpperCase()}
+                    </ThemedText>
+                </View>
+            )}
+        </View>
+
+        {/* Etiqueta del Cupón */}
+        {store.couponCode ? (
+            <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}>
+               <MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" />
+               <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
+                  Cupón: <ThemedText style={{color: '#4CAF50', fontWeight: '900'}}>{store.couponCode}</ThemedText>
+               </ThemedText>
+            </View>
+        ) : null}
+
+        {/* Etiqueta de la Referencia de Pago */}
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
            <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
            <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -857,18 +923,25 @@ export default function StoresScreen() {
            </ThemedText>
         </View>
 
+        {/* Selector de Meses */}
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
           {[1, 3, 6, 12].map(m => (
             <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
-               <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
+               <Text style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</Text>
             </TouchableOpacity>
           ))}
         </View>
         
+        {/* 🚀 BOTONES DE APROBAR/RECHAZAR EN BLANCO */}
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText></TouchableOpacity>
-          <TouchableOpacity onPress={() => approveStore(store, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText></TouchableOpacity>
+          <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+            <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Rechazar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => approveStore(store, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+            <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Aprobar</Text>
+          </TouchableOpacity>
         </View>
+
       </View>
     );
 
@@ -990,6 +1063,10 @@ export default function StoresScreen() {
                              <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
                            ))}
                          </View>
+                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                            <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
+                            <ThemedText style={{ color: DynamicColors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
+                         </View> 
                          <ThemedText style={{ color: DynamicColors.text, fontSize: 14 }}>{r.comment}</ThemedText>
                        </View>
                     ))}
@@ -1001,50 +1078,50 @@ export default function StoresScreen() {
                     t={t} 
                     onCancel={() => setShowReviewInput(false)} 
                     onPublish={async (ratingNum: number, commentStr: string) => { 
-                       try {
-                         const reviewPayload = {
-                           reference_id: selectedStore.id,
-                           stars: ratingNum,
-                           comment: commentStr,
-                           userId: currentUserId
-                         };
+                        try {
+                          const reviewPayload = {
+                            reference_id: selectedStore.id,
+                            stars: ratingNum,
+                            comment: commentStr,
+                            userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9"
+                          };
 
-                         const res = await fetch(`${API_STORES_URL}/reviews`, {
-                           method: 'POST',
-                           headers: { 'Content-Type': 'application/json' },
-                           body: JSON.stringify(reviewPayload)
-                         });
+                          const res = await fetch(`${API_STORES_URL}/reviews`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(reviewPayload)
+                          });
 
-                         if (!res.ok) throw new Error();
-                         const fromDB = await res.json();
+                          if (!res.ok) throw new Error();
+                          const fromDB = await res.json();
 
-                         const newReviewFormatted = { 
-                           id: fromDB.id || Date.now().toString(), 
-                           stars: Number(ratingNum), 
-                           comment: commentStr 
-                         };
+                          const newReviewFormatted = { 
+                            id: fromDB.id || Date.now().toString(), 
+                            stars: Number(ratingNum), 
+                            comment: commentStr 
+                          };
 
-                         const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
-                         const totalStars = updatedReviews.reduce((sum, r) => sum + r.stars, 0);
-                         const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
+                          const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
+                          const totalStars = updatedReviews.reduce((sum, r) => sum + r.stars, 0);
+                          const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
 
-                         const updatedStoreObj = {
-                           ...selectedStore,
-                           reviews: updatedReviews,
-                           rating: newAverage,
-                           totalReviews: updatedReviews.length
-                         };
+                          const updatedStoreObj = {
+                            ...selectedStore,
+                            reviews: updatedReviews,
+                            rating: newAverage,
+                            totalReviews: updatedReviews.length
+                          };
 
-                         setSelectedStore(updatedStoreObj);
-                         setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
-                         setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
+                          setSelectedStore(updatedStoreObj);
+                          setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
+                          setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
 
-                         Alert.alert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
-                       } catch (e) {
-                         Alert.alert("Error", "No se pudo conectar al servidor.");
-                       } finally {
-                         setShowReviewInput(false);
-                       }
+                          Alert.alert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+                        } catch (e) {
+                          Alert.alert("Error", "No se pudo conectar al servidor.");
+                        } finally {
+                          setShowReviewInput(false);
+                        }
                     }} 
                 />
               )}
@@ -1067,10 +1144,10 @@ export default function StoresScreen() {
               </View>
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8,color:DynamicColors.subtext }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none'}}>{t.storestab?.category || 'Categoría'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none',color:DynamicColors.text}}>{t.storestab?.category || 'Categoría'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {CATEGORIES_LIST.map((cat, index) => {
                     if (index === 0) return null; 
@@ -1132,7 +1209,35 @@ export default function StoresScreen() {
                   autoCapitalize="sentences" 
                 />
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none'  }}>{t.storestab?.phoneContacto || 'Teléfono'}</ThemedText>
+                {/* 🚀 SELECCIONAR PLAN */}
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
+                <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    {[
+                        { id: 'coupon', name: 'Cupón', price: companyTariffs?.coupon || '0.00', desc: 'Cupón o periodo de prueba.' },
+                        { id: 'basic', name: 'Básico', price: companyTariffs?.basic || '50.00', desc: 'Ideal para eventos locales.' },
+                        { id: 'premium', name: 'Premium', price: companyTariffs?.premium || '99.00', desc: 'Mayor visibilidad.' },
+                        { id: 'unlimited', name: 'Ilimitado', price: companyTariffs?.unlimited || '149.00', desc: 'Prioridad máxima.' }
+                    ].map(plan => {
+                        const pStyle = planStyles[plan.id as keyof typeof planStyles];
+                        const isSelected = formPlan === plan.id;
+                        return (
+                        <TouchableOpacity 
+                            key={plan.id} onPress={() => setFormPlan(plan.id)}
+                            style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : DynamicColors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : DynamicColors.inputBg }}
+                        >
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : DynamicColors.subtext} />
+                                    <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : DynamicColors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
+                                </View>
+                                <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText>
+                            </View>
+                            <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                        </TouchableOpacity>
+                    )})}
+                </View>
+
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none',color:DynamicColors.text  }}>{t.storestab?.phoneContacto || 'Teléfono'}</ThemedText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
                   <TouchableOpacity 
                     activeOpacity={0.7}
@@ -1154,11 +1259,11 @@ export default function StoresScreen() {
                   <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
                   
                   <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: DynamicColors.text }}>
-                    Para promocionar tu negocio, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${currentTariff} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
+                    Para promocionar tu negocio, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
                   </ThemedText>
                   
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                    {['Zelle', 'Venmo'].map((method) => (
+                    {['Zelle'].map((method) => (
                       <TouchableOpacity 
                         key={method}
                         onPress={() => setFormPayMethod(method)} 
@@ -1223,7 +1328,7 @@ export default function StoresScreen() {
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <TouchableOpacity onLongPress={() => { setIsAdminMode(!isAdminMode); }}>
+                  <TouchableOpacity onPress={() => { setIsAdminMode(!isAdminMode); }}>
                     <MaterialCommunityIcons name="store-plus-outline" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>
@@ -1231,16 +1336,15 @@ export default function StoresScreen() {
 
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
-                  
-                  {isAdminMode && pendingStores.length > 0 && (
-                    <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                      <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
+                  {/* 🚀 PENDIENTES MOVIDOS AL FINAL (DESPUÉS DE RESULTADOS) */}
+                    {isAdminMode && pendingStores.length > 0 && (
+                    <View style={{ marginTop: 20 }}>
+                      <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
                       {pendingStores.map(store => (
                         <PendingStoreItem key={store.id} store={store} />
                       ))}
                     </View>
-                  )}
-
+                  )} 
                   <View style={{ marginBottom: 15 }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
                       {CATEGORIES_LIST.map((area, index) => {
@@ -1305,6 +1409,7 @@ export default function StoresScreen() {
                       ) : null
                     )}
                   </View>
+
                 </ScrollView>
               ) : (
                 <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -1337,16 +1442,16 @@ export default function StoresScreen() {
                   <View style={{ flex: 1, flexDirection: 'row', marginLeft: 25 }}>
                     <View style={{ flex: 1 }}>
                       
-                      {isAdminMode && pendingStores.length > 0 && (
-                        <View style={{ backgroundColor: 'rgba(255,255,0,0.1)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                          <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 10 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
-                          {pendingStores.map(store => (
-                            <PendingStoreItem key={store.id} store={store} />
-                          ))}
-                        </View>
-                      )}
-
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+                        {/* 🚀 PENDIENTES ABAJO EN WEB TAMBIÉN */}
+                        {isAdminMode && pendingStores.length > 0 && (
+                          <View style={{ marginTop: 20 }}>
+                            <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
+                            {pendingStores.map(store => (
+                              <PendingStoreItem key={store.id} store={store} />
+                            ))}
+                          </View>
+                        )}
                         {results.length > 0 ? (
                           <>
                             <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.genericbtn?.resultdomore || 'resultados'}</ThemedText>
@@ -1386,7 +1491,7 @@ export default function StoresScreen() {
                       )}
                     </View>
                   </View>
-                  </View>
+                </View>
               )}
             </View>
           </View>

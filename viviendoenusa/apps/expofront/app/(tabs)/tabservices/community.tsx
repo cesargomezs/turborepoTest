@@ -22,6 +22,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
+import { Colors } from 'react-native/Libraries/NewAppScreen';
 
 // --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
@@ -107,7 +108,7 @@ export default function CommunityScreen() {
     accenticon: isDark ? '#607D8B' : '#1A1A1A',
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-    iconInactive: isDark ? '#E0E0E0' : '#666666',
+    iconInactive: isDark ? '#B0BEC5' : '#364045',  
     categoryUnselected: isDark ? 'rgba(255,255,255,0.15)' : 'transparent',
   };
 
@@ -199,7 +200,8 @@ export default function CommunityScreen() {
               text: c.comment || c.review || c.text || '',
               createdAt: c.createdAt || new Date().toISOString(),
               displayTime: c.createdAt ? getRelativeTime(c.createdAt) : 'Hace un momento',
-              userName: c.userName || 'Usuario Anónimo'
+              userName: c.userName || 'Usuario Anónimo',
+              image: c.image || null
             }));
           }
         });
@@ -707,13 +709,28 @@ export default function CommunityScreen() {
                             <View style={[styles.commentSection, { marginTop: 6, paddingTop: 4 }]}>
                               {(comments[post.id] || []).length > 0 ? (
                                 (comments[post.id] || []).map(c => (
-                                  <View key={c.id} style={[styles.commentBubble, { marginBottom: 2, paddingVertical: 2, minHeight: 0 }]}>
-                                    <ThemedText style={[styles.commentUser, { lineHeight: 18 }]}>
-                                      {c.userName}: <ThemedText style={[styles.commentText, { lineHeight: 18 }]}>{c.text}</ThemedText>
-                                    </ThemedText>
-                                  </View>
+                            <View key={c.id} style={[styles.commentBubble, { flexDirection: 'row', alignItems: 'center', padding: 4, gap: 8 }]}>
+                              {/* Avatar pequeño y alineado al inicio */}
+                              <Image 
+                                source={{ uri: c.image }} 
+                                style={{ width: 28, height: 28, borderRadius: 14 }} 
+                                resizeMode="cover"
+                              />
+                              
+                              {/* Texto compuesto en una sola línea */}
+                              <ThemedText style={{ flex: 1, lineHeight: 18 }}>
+                                <ThemedText style={[styles.commentUser, { fontWeight: 'bold' , fontStyle:'italic' }]}>
+                                  {c.userName}{': '}
+                                </ThemedText>
+                                <ThemedText style={[styles.commentText, {fontStyle:'italic'}]}>
+                                  {c.text}
+                                </ThemedText>
+                              </ThemedText>
+                            </View>
                                 ))
-                              ) : <ThemedText style={[styles.noCommentsText, { marginBottom: 4 }]}>{t.communitytab.firtscomment}</ThemedText>}
+                              ) : 
+
+                              <ThemedText style={[styles.noCommentsText, { marginBottom: 4 }]}>{t.communitytab.firtscomment}</ThemedText>}
                               
                               <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={[styles.replyBtn, { marginTop: 4 }]}>
                                 <MaterialCommunityIcons name="pencil-outline" size={14} color={DynamicColors.accent} />
@@ -776,7 +793,7 @@ export default function CommunityScreen() {
               </View>
 
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
-                <ThemedText style={[styles.label, {fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.labeltypepost}</ThemedText>
+                <ThemedText style={[{fontSize: 12, fontWeight: '900', marginBottom: 8, color:DynamicColors.text}]}>{t.communitytab.labeltypepost}</ThemedText>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                   {t.communitytab.typepostAdd.map((tag: string) => {
                     const isActive = selectedTag === tag;
@@ -798,7 +815,7 @@ export default function CommunityScreen() {
                   })}
                 </View>
 
-                <ThemedText style={[styles.label, { fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.category}</ThemedText>
+                <ThemedText style={[{ color:DynamicColors.text,fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.category}</ThemedText>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}>
                   {subCategories.map(sub => {
                     const isActive = selectedSubCategory === sub.id;
@@ -822,7 +839,7 @@ export default function CommunityScreen() {
 
                 <TextInput 
                   value={postText} onChangeText={setPostText} 
-                  placeholder={t.communitytab.messageNewPost} placeholderTextColor={isDark ? "#888" : "#999"} 
+                  placeholder={t.communitytab.messageNewPost} placeholderTextColor={DynamicColors.iconInactive} 
                   multiline style={{ color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, fontSize: 15, fontWeight: '600', borderColor: DynamicColors.border, borderWidth: 1, height: 120, textAlignVertical: 'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                 />
 

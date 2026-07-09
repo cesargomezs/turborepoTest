@@ -10,7 +10,7 @@ import { useColorScheme } from '../../hooks/useColorScheme';
 import { ThemedText } from '../ThemedText';
 
 // --- IMPORTACIONES DE ENRUTAMIENTO Y REDUX ---
-import { useRouter ,useLocalSearchParams } from 'expo-router'; 
+import { useRouter, useLocalSearchParams, usePathname } from 'expo-router'; // 🚀 Agregado usePathname
 import { useMockDispatch, useMockSelector } from '../../redux/slices'; 
 import { setLanguage } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation'; 
@@ -23,7 +23,11 @@ export default function Header({ title }: { title?: string }) {
   const insets = useSafeAreaInsets();
   const isDark = theme === 'dark';
   
+  // 🚀 Constante para saber si estamos en Web
+  const isWeb = Platform.OS === 'web';
+  
   const router = useRouter(); 
+  const pathname = usePathname(); // 🚀 Capturamos la ruta actual
   const dispatch = useMockDispatch();
   
   const { t } = useTranslation();
@@ -39,6 +43,14 @@ export default function Header({ title }: { title?: string }) {
     { code: 'es', label: 'Español' },
     { code: 'en', label: 'English' },
   ];
+
+  // 🚀 OCULTAR RUTA Y VARIABLES EN LA BARRA DEL NAVEGADOR WEB
+  useEffect(() => {
+    if (isWeb && typeof window !== 'undefined') {
+      // Reescribe la URL en la barra de direcciones a la raíz "/" sin recargar la página
+      window.history.replaceState(null, '', '/');
+    }
+  }, [pathname]); // Se ejecuta silenciosamente cada vez que cambia de tab
 
   // 🚀 OBTENER NOTIFICACIONES DESDE EL BACKEND
   const fetchNotifications = async () => {
@@ -91,7 +103,7 @@ export default function Header({ title }: { title?: string }) {
     }
 
     setTimeout(() => {
-      // 🚀 DICCIONARIO DE RUTAS (Más limpio y seguro que usar muchos if/else)
+      // 🚀 DICCIONARIO DE RUTAS
       const routes: Record<string, { path: string, param: string }> = {
         'job': { path: '/jobs', param: 'openJobId' },
         'store': { path: '/tabservices/stores', param: 'id' },
@@ -104,7 +116,6 @@ export default function Header({ title }: { title?: string }) {
       const target = routes[notif.type];
       
       if (target) {
-        // 🚀 FIX: Aseguramos tomar el ID ya sea camelCase o snake_case desde el Backend
         const targetId = notif.referenceId || notif.reference_id || notif.id;
 
         router.navigate({ 
@@ -123,7 +134,7 @@ export default function Header({ title }: { title?: string }) {
         style={{ paddingTop: insets.top }}
         className="border-b border-white/10"
       >
-        <View style={styles.headerRow}>
+        <View style={[styles.headerRow, isWeb && { paddingBottom: 15 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={[styles.avatarContainer, { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
               <Image
@@ -140,41 +151,44 @@ export default function Header({ title }: { title?: string }) {
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity 
-            onPress={() => {
-                fetchNotifications();
-                setNotifModalVisible(true);
-            }}
-            activeOpacity={0.7}
-            style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}
-          >
-            <MaterialCommunityIcons
-              size={22}
-              color={Colors[theme].text}
-              name={hasUnread ? "bell-ring" : "bell-outline"}
-            />
-            {hasUnread && <View style={styles.unreadBadge} />}
-          </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => {
+                  fetchNotifications();
+                  setNotifModalVisible(true);
+              }}
+              activeOpacity={0.7}
+              style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}
+            >
+              <MaterialCommunityIcons
+                size={22}
+                color={Colors[theme].text}
+                name={hasUnread ? "bell-ring" : "bell-outline"}
+              />
+              {hasUnread && <View style={styles.unreadBadge} />}
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            onPress={() => setLangModalVisible(true)}
-            activeOpacity={0.7}
-            style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
-          >
-            <MaterialCommunityIcons
-              size={22}
-              color={Colors[theme].text}
-              name="translate"
-            />
-          </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setLangModalVisible(true)}
+              activeOpacity={0.7}
+              style={[styles.langButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+            >
+              <MaterialCommunityIcons
+                size={22}
+                color={Colors[theme].text}
+                name="translate"
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.titleContainer}>
-          <ThemedText className="text-center text-2xl" style={{ color: Colors[theme].tabIconDefault , fontWeight: 'bold' }}>
-            {title}
-          </ThemedText>
-        </View>
+        {/* 🚀 Solo renderiza el título nativo en dispositivos móviles */}
+        {!isWeb && (
+          <View style={styles.titleContainer}>
+            <ThemedText className="text-center text-2xl" style={{ color: Colors[theme].tabIconDefault , fontWeight: 'bold' }}>
+              {title}
+            </ThemedText>
+          </View>
+        )}
       </BlurView>
 
       <Modal animationType="fade" transparent={true} visible={langModalVisible} onRequestClose={() => setLangModalVisible(false)}>
@@ -381,15 +395,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
-    marginTop: 5,
-    paddingBottom: 15,
-    position: 'relative'
+    marginTop: Platform.OS === 'web' ? 20 : 0, 
+    justifyContent: 'space-between'
   },
   notifItem: {
     flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
-    borderRadius: 20,
-    marginBottom: 12,
+    borderRadius: 16,
+    marginBottom: 10,
   },
   notifIconWrapper: {
     width: 44,

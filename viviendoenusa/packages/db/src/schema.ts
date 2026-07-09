@@ -22,6 +22,7 @@ import {
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").unique(),
     name: text("name"),
+    lastName: text("last_name"),
     birth: date("birth").notNull().defaultNow(), // Corregido a date según tu SQL original
     phone: text("phone"),
     createdAt: timestamp("created_at").defaultNow(),
@@ -30,6 +31,7 @@ import {
     password: text("password"),
     zip: text("zip"),
     estate: text("estate"),
+    imageUrl: text("image_url"),
     // SOLUCIÓN AL TS7022: Se añade : AnyPgColumn para romper el bucle infinito de tipos
     roleId: uuid("role_id").references((): AnyPgColumn => typeDetail.id, { onDelete: "cascade" }),
   });

@@ -73,7 +73,7 @@ export default function DonationsScreen() {
   // ESTILOS DINÁMICOS
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
-    subtext: isDark ? '#B0BEC5' : '#607D8B',
+    subtext: isDark ? '#B0BEC5' : '#364045',
     locationtext: isDark ? '#F57F71' : '#731709',
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)',
     cardBg: isDark ? 'rgba(30, 30, 30, 0.75)' : 'rgba(255, 255, 255, 0.82)', 
@@ -81,7 +81,7 @@ export default function DonationsScreen() {
     inputBgRed: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
     accent: '#FF5F6D',
     accenticon: isDark ? '#4FC3F7' : '#0080B5',
-    iconInactive: isDark ? '#E0E0E0' : '#666666',
+    iconInactive: isDark ? '#B0BEC5' : '#364045',
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
     success: '#4CAF50'
   };
@@ -341,8 +341,8 @@ export default function DonationsScreen() {
                               </LinearGradient>
                             ) : (
                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
-                                <MaterialCommunityIcons name={iconName as any} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} />
-                                <ThemedText style={{ color: DynamicColors.text, fontWeight: '600', fontSize: 14 }}>{catLabel}</ThemedText>
+                                <MaterialCommunityIcons name={iconName as any} size={18} color={DynamicColors.iconInactive} style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 14 }}>{catLabel}</ThemedText>
                               </View>
                             )}
                           </TouchableOpacity>
@@ -460,10 +460,10 @@ export default function DonationsScreen() {
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 70 }}>
                 <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 }); if(!r.canceled) setFormImage(r.assets[0].uri); }} 
                   style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus"  size={32} color={DynamicColors.text} /><ThemedText style={{ fontSize: 11, fontWeight: '800', marginTop: 5 }}>{(t.donationstab as any)?.choisephoto || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus"  size={32} color={DynamicColors.text} /><ThemedText style={{ fontSize: 11, fontWeight: '800', marginTop: 5, color:DynamicColors.subtext }}>{(t.donationstab as any)?.choisephoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{(t.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, color:DynamicColors.text  }}>{(t.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
                   {CATEGORY_LABELS.map((catLabel: string, index: number) => {
                     if (index === 0) return null; 
@@ -489,7 +489,7 @@ export default function DonationsScreen() {
                   })}
                 </ScrollView>
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 }}>{(t.donationstab as any)?.typeContact || 'Contacto'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 , color:DynamicColors.text }}>{(t.donationstab as any)?.typeContact || 'Contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : DynamicColors.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.subtext} style={{ marginRight: 8 }} />
@@ -513,6 +513,7 @@ export default function DonationsScreen() {
                   </TouchableOpacity>
                   <TextInput value={formPhone} onChangeText={setFormPhone}
                     placeholder="(909) 000-0000"
+                    placeholderTextColor={DynamicColors.subtext}
                     keyboardType="phone-pad"
                     style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
