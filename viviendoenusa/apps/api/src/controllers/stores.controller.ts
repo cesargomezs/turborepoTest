@@ -2,7 +2,32 @@ import { db } from "../../../../packages/db/src";
 import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
+import NodeGeocoder from 'node-geocoder';
 
+// =====================================================================
+// 🌍 CONFIGURACIÓN DE GEOCODER
+// =====================================================================
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
+  }
+  
+  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
+  return { lat: 34.0934, lng: -117.5847 };
+};
+
+// =====================================================================
+// ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
+// =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -11,16 +36,15 @@ const NOMBRE_BUCKET = 'images';
 // 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
 const getCurrentStorePrice = async () => {
   try {
-    // Obtener el año actual dinámicamente (ej: "2024")
     const currentYear = new Date().getFullYear().toString();
 
     const activeTariff = await db.select({ price: tariffs.priceBasic })
@@ -44,26 +68,64 @@ const getCurrentStorePrice = async () => {
   return "50.00";
 };
 
-// 🔍 1. CONSULTA GENERAL
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL CON FILTRO DE RADIO Y VISIBILIDAD
+// =====================================================================
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
 
+    // Obtenemos lat y lng del ZIP
+    const { lat, lng } = await getCoordsFromZip(zip || ''); 
+    const radiusMiles = 4; // Rango de búsqueda: 4 millas
+
+     // 🚀 Fórmula de Distancia Haversine (Segura)
+     const distanceFormula = sql`(
+      3959 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${lat}::numeric)) * cos(radians(${stores.lat}::numeric)) * cos(radians(${stores.lng}::numeric) - radians(${lng}::numeric)) + 
+          sin(radians(${lat}::numeric)) * sin(radians(${stores.lat}::numeric))
+        ))
+      )
+    )`;
+
+    // 🚀 Definimos explícitamente el select incluyendo la distancia
     let query = db
-    .select()
+    .select({
+      stores: stores,
+      users: users,
+      rating: ratingTable,
+      reviews: reviewsTable,
+      payments: payments,
+      distance: distanceFormula.as('distance')
+    })
     .from(stores)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
     .leftJoin(users, eq(ratingTable.userId, users.id))
     .leftJoin(payments, and(eq(payments.entityId, stores.id), eq(payments.entityType, 'store')))
-    .where(
-      currentUserId 
-        ? sql`${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${currentUserId}`
-        : sql`${stores.approved} = false OR ${stores.timepostEnd} > NOW()`
-    )
-    .orderBy(desc(stores.createdAt))
     .$dynamic();
+
+    // 🚀 Lógica de Visibilidad 
+    const visibilityCondition = currentUserId
+      ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${currentUserId})`
+      : sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW())`;
+
+    // 🚀 Aplicamos los filtros sin sobreescribir (usando AND)
+    if (zip && zip.length === 5) {
+      query = query.where(
+        and(
+          sql`${distanceFormula} <= ${radiusMiles}`,
+          visibilityCondition 
+        )
+      );
+      // Ordenamos para mostrar los más cercanos primero
+      query = query.orderBy(distanceFormula);
+    } else {
+      // Si no buscaron ZIP, solo aplicamos la visibilidad
+      query = query.where(visibilityCondition);
+      query = query.orderBy(desc(stores.createdAt));
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -87,7 +149,7 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
-        const { data, error } = await supabase
+        const { data } = await supabase
         .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
         storesMap.get(storeId).reviews.push({
@@ -121,10 +183,10 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
           const rutaArchivo = store.imageStores.startsWith('stores/') 
               ? store.imageStores : `stores/${store.imageStores}`;
 
-          const { data, error } = await supabase
+          const { data } = await supabase
               .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
 
-          if (!error && data) {
+          if (data) {
               return { ...store, image: data.signedUrl, imageStores: data.signedUrl }; 
           }
       }
@@ -138,7 +200,9 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
   }
 };
 
+// =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID
+// =====================================================================
 export const getStoreById = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -149,7 +213,6 @@ export const getStoreById = async (id: string) => {
       .from(stores)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
       .leftJoin(users, eq(ratingTable.userId, users.id))
       .where(eq(stores.id, cleanId));
   
@@ -163,8 +226,7 @@ export const getStoreById = async (id: string) => {
     };
 
     for (const row of rows) {
-
-      const { data, error } = await supabase
+      const { data } = await supabase
       .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
       if (row.rating && row.rating.id) {
@@ -212,13 +274,18 @@ export const getStoreById = async (id: string) => {
   }
 };
 
+// =====================================================================
 // 📥 3. CREAR NEGOCIO
+// =====================================================================
 export const createStore = async (data: any) => {
   try {
     let cleanImage = sanitizeText(data.imageStores) || '';
     if (cleanImage.startsWith('stores/')) {
       cleanImage = cleanImage.replace('stores/', '');
     }
+
+    // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP 
+    const { lat, lng } = await getCoordsFromZip(data.zip || '');
 
     return await db.transaction(async (tx) => {
       
@@ -232,8 +299,8 @@ export const createStore = async (data: any) => {
         phone: sanitizeText(data.phone) || '',
         imageStores: cleanImage,
         descriptionStores: safeDesc,
-        lat: data.lat ? Number(data.lat) : null,
-        lng: data.lng ? Number(data.lng) : null,
+        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD
+        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         approved: false 
       };
@@ -265,26 +332,21 @@ export const createStore = async (data: any) => {
     });
   } catch (error: any) { 
     console.error("❌ Error en createStore:", error);
-    
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
        throw new Error("Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único.");
     }
-
     throw new Error(`Error al crear el negocio: ${error.message}`);
   }
 };
 
+// =====================================================================
 // 🔄 4. ACTUALIZAR NEGOCIO
+// =====================================================================
 export const updateStore = async (id: string, data: any) => {
   try {
-
-    // 1. Obtener los datos del abogado
-    const res = await fetch(`http://192.168.252.243:3000/stores/${id}`);
+    const res = await fetch(`http://192.168.1.201:3000/stores/${id}`);
     const response = await res.json();
-
-    // 2. Acceder al valor directamente (ya que es un objeto, no un arreglo)
-    // Usamos Number() para asegurar que sea un número y || 0 por seguridad
-    const amount = Number(response.payments);
+    const amount = Number(response.payments) || 0;
 
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
@@ -328,13 +390,7 @@ export const updateStore = async (id: string, data: any) => {
         
         updatePayload.timepostEnd = expirationDate; 
 
-        const basePriceString = await getCurrentStorePrice();
-        
-        
-        
-        //const basePriceNum = Number(basePriceString) || 50; 
         const totalAmount = (monthsToAdd * amount).toFixed(2); 
-
         const daysToAdd = monthsToAdd * 30; 
 
         await tx.update(payments)
@@ -380,7 +436,9 @@ export const updateStore = async (id: string, data: any) => {
   }
 };
 
+// =====================================================================
 // 🚀 5. INGRESO DE RATING Y RESEÑA
+// =====================================================================
 export const createStoreReview = async (data: any) => {
   try {
     let validUserId = sanitizeText(data.userId) || null;
@@ -463,8 +521,6 @@ export const createStoreReview = async (data: any) => {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
-      //name: existingRating?.[0].users?.name + ' ' + existingRating?.[0].users?.lastName?.substring(0, 1),
-      //image: data?.signedUrl,
     };
 
   } catch (error: any) {
@@ -473,7 +529,9 @@ export const createStoreReview = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 🗑️ 6. ELIMINAR NEGOCIO 
+// =====================================================================
 export const deleteStore = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -486,7 +544,9 @@ export const deleteStore = async (id: string) => {
   }
 };
 
+// =====================================================================
 // 🔄 7. RENOVAR NEGOCIO
+// =====================================================================
 export const renewStore = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);

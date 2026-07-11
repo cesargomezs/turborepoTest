@@ -22,8 +22,8 @@ const ICONS_ARRAY = ['apps', 'heart-pulse', 'brain', 'hand-heart', 'dots-horizon
 const CATEGORIES_LIST = ['Todos', 'Psicólogos Pro-Bono', 'Mentores Locales', 'Grupos de Apoyo', 'Otros'];
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
-const API_STORES_URL = 'http://192.168.252.243:3000/support';
-const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs';
+const API_STORES_URL = 'http://192.168.1.201:3000/support';
+const API_TARIFFS_URL = 'http://192.168.1.201:3000/tariffs';
 
 const planStyles: any = {
   coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
@@ -307,7 +307,7 @@ export default function SupportScreen() {
         if (!(await validarImagenEnServidor(formImage))) { setIsPublishing(false); if (isWeb) { window.alert(`Error\n${t.genericlabel.labelerrorimageinapro}`); } else { Alert.alert("Error", t.genericlabel.labelerrorimageinapro); } return; }
         const formData = new FormData(); const filename = formImage.split('/').pop() || 'imagen.jpg'; const type = `image/${filename.split('.').pop() || 'jpeg'}`;
         formData.append('imagen', { uri: formImage, name: filename, type } as any);
-        const uploadRes = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/support', { method: 'POST', body: formData, headers: { 'Accept': 'application/json' } });
+        const uploadRes = await fetch('http://192.168.1.201:3000/api/subir-imagen-optimizada/support', { method: 'POST', body: formData, headers: { 'Accept': 'application/json' } });
         const uploadData = await uploadRes.json();
         if (!uploadRes.ok) throw new Error(uploadData.error || t.genericlabel.labelerrorimage);
         finalImageName = uploadData.identificadorArchivo;

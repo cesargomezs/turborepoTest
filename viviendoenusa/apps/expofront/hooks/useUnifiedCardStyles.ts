@@ -1,10 +1,24 @@
 import { StyleSheet, Platform, useColorScheme, useWindowDimensions } from 'react-native';
 import { useMockSelector } from '@/redux/slices';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const useUnifiedCardStyles = () => {
   const { width, height } = useWindowDimensions();
   const colorScheme = useColorScheme(); // Aseguramos que cualquier valor distinto a 'light' se trate como 'dark'
-  const isDark = colorScheme === 'dark';
+  //const isDark = colorScheme === 'light';
+  const [isDark, setIsDark] = useState(false);
+
+  
+  useEffect(() => {
+    const checkTheme = async () => {
+      const savedTheme = await AsyncStorage.getItem('@app_theme');
+      setIsDark(savedTheme === 'dark');
+    };
+    checkTheme();
+  }, []);
+
+
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
   // --- LÓGICA DE DIMENSIONES Y PLATAFORMA ---
@@ -70,7 +84,7 @@ export const useUnifiedCardStyles = () => {
     },
     // --- SERVICIOS ---
     welcomeText: { fontSize: 30, fontWeight: '900', letterSpacing: -1, color: glassColors.text },
-    middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8, color: glassColors.text },
+    middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8},
     gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 5 },
     webGridCentering: { justifyContent: 'center', gap: 20 },
     mobileCard: { width: '47%', height: 110, marginBottom: 16 },

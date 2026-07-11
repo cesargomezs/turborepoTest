@@ -1,14 +1,16 @@
 import { BlurView } from 'expo-blur';
 import { StyleSheet, Platform, View } from 'react-native';
 import React from 'react';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function BlurTabBarBackground() {
-  const theme = useColorScheme() ?? 'light';
-  const isDark = theme === 'dark';
-  const insets = useSafeAreaInsets();
+// 🚀 IMPORTAMOS EL CONTEXTO GLOBAL QUE CREAMOS (Uso tu alias @)
+import { useAppTheme } from '@/app/src/context/ThemeContext';
 
+export default function BlurTabBarBackground() {
+  // 🚀 LEEMOS EL TEMA EN TIEMPO REAL DIRECTO DEL CONTEXTO
+  const { isDark } = useAppTheme();
+
+  const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === 'web';
   const isIOS = Platform.OS === 'ios';
 
@@ -42,9 +44,7 @@ export default function BlurTabBarBackground() {
           style={[
             StyleSheet.absoluteFill,
             isIOS && {
-              // Esta es la corrección para iOS:
-              // Expandimos el fondo hacia abajo usando el inset, 
-              // pero mantenemos el origen en el lugar correcto.
+              // Corrección para iOS: Expandimos el fondo hacia abajo usando el inset
               bottom: -insets.bottom, 
               height: DEFAULT_TAB_BAR_HEIGHT + insets.bottom,
             }
@@ -59,7 +59,6 @@ const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
-    // Importante para que no bloquee los toques en los iconos
     pointerEvents: 'none', 
   },
 });

@@ -2,6 +2,28 @@ import { db } from "../../../../packages/db/src";
 import { community, reviews, countlikes, users } from "../../../../packages/db/src/schema"; 
 import { eq, desc, and, sql, inArray } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
+import NodeGeocoder from 'node-geocoder';
+
+// =====================================================================
+// 🌍 CONFIGURACIÓN DE GEOCODER
+// =====================================================================
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
+  }
+  
+  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 // 🚀 1. Inicializamos Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -30,28 +52,53 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
-// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado)
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado a 4 Millas)
+// =====================================================================
 export const getCommunityPosts = async (zip?: string) => {
   try {
     const cleanZip = zip ? sanitizeText(String(zip)) : null;
 
-    // 🛡️ BARRERA DE RENDIMIENTO: Si no hay ZIP válido, no tocamos la base de datos
-    if (!cleanZip || cleanZip.length !== 5) {
+    // 🛡️ Si enviaron un ZIP pero es inválido, devolvemos vacío
+    if (zip && (!cleanZip || cleanZip.length !== 5)) {
       return []; 
     }
     
+    // 🚀 Obtenemos lat y lng del ZIP
+    const { lat, lng } = await getCoordsFromZip(cleanZip || ''); 
+    const radiusMiles = 4; // Rango de búsqueda: 4 millas
+
+    // 🚀 Fórmula de Distancia Haversine (Segura para Drizzle ORM)
+    const distanceFormula = sql`(
+      3959 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${lat}::numeric)) * cos(radians(${community.lat}::numeric)) * cos(radians(${community.lng}::numeric) - radians(${lng}::numeric)) + 
+          sin(radians(${lat}::numeric)) * sin(radians(${community.lat}::numeric))
+        ))
+      )
+    )`;
+
     let query = db
-      .select()
+      .select({
+        community: community,
+        reviews: reviews,
+        users: users,
+        distance: distanceFormula.as('distance') // Agregamos la distancia al resultado
+      })
       .from(community)
       .leftJoin(reviews, eq(reviews.relationshipId, community.id)) 
       .leftJoin(users, eq(reviews.userId, users.id)) 
       .$dynamic(); 
 
-    // 🚀 FILTRO INTELIGENTE DE ZIP CODE
-    query = query.where(sql`${community.zip}::text = ${cleanZip}`); 
-
-    // El ordenamiento se aplica siempre después del filtrado
-    query = query.orderBy(desc(community.id));
+    // 🚀 APLICAMOS EL FILTRO CONDICIONALMENTE
+    if (cleanZip) {
+      query = query.where(sql`${distanceFormula} <= ${radiusMiles}`);
+      // Ordenamos para mostrar los más cercanos primero
+      query = query.orderBy(distanceFormula);
+    } else {
+      // Si no hay código postal, simplemente traemos todas de la más nueva a la más vieja
+      query = query.orderBy(desc(community.id));
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -77,13 +124,10 @@ export const getCommunityPosts = async (zip?: string) => {
       if (row.reviews && row.reviews.id) {
         
         const usr = row.users as any;
-        const urlimagen = usr?.imageUrl ;
-        const nombreUsuario = usr?.name + ' ' + usr?.lastName.substring(0, 1) || 'Usuario Anónimo';
+        const nombreUsuario = usr?.name + ' ' + usr?.lastName?.substring(0, 1) || 'Usuario Anónimo';
 
         const { data, error } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
-        
-        //console.log(data?.signedUrl);
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+usr?.imageUrl, 3600);
 
         postsMap.get(postId).commentsList.push({
           ...row.reviews,
@@ -128,7 +172,7 @@ export const getCommunityPosts = async (zip?: string) => {
         }
         return post; 
     }));
-    console.log(postsConImagenesSeguras);
+    
    return postsConImagenesSeguras;
 
   } catch (error) {
@@ -137,7 +181,9 @@ export const getCommunityPosts = async (zip?: string) => {
   }
 };
 
+// =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL
+// =====================================================================
 export const getCommunityPostById = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -157,7 +203,7 @@ export const getCommunityPostById = async (id: string) => {
         const usr = row.users as any;
         return {
           ...row.reviews,
-          userName: usr?.name + ' ' + usr?.lastName.substring(0, 1) || 'Usuario Anónimo'
+          userName: usr?.name + ' ' + usr?.lastName?.substring(0, 1) || 'Usuario Anónimo'
         };
       });
       
@@ -196,18 +242,27 @@ export const getCommunityPostById = async (id: string) => {
             postFinal.imageUrl = data.signedUrl;
         }
     }
-    //console.log(postFinal);
+    
     return postFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener la publicación por ID: ${error.message}`);
   }
 };
 
-// 📥 3. CREAR POST
+// =====================================================================
+// 📥 3. CREAR POST (CON GEOLOCALIZACIÓN AUTOMÁTICA)
+// =====================================================================
 export const createCommunityPost = async (data: any) => {
   try {
     // 🛡️ Sanitizamos absolutamente todo el cuerpo de la petición
     const cleanPayload = sanitizePayload(data);
+
+    // 🚀 Obtenemos las coordenadas a partir del ZIP y las guardamos
+    const { lat, lng } = await getCoordsFromZip(cleanPayload.zip || '');
+    
+    // Aseguramos que la latitud y longitud se incluyan en el payload
+    cleanPayload.lat = cleanPayload.lat ? Number(cleanPayload.lat) : lat;
+    cleanPayload.lng = cleanPayload.lng ? Number(cleanPayload.lng) : lng;
 
     if (cleanPayload.imageUrl && cleanPayload.imageUrl.startsWith('community/')) {
       cleanPayload.imageUrl = cleanPayload.imageUrl.replace('community/', '');
@@ -219,7 +274,9 @@ export const createCommunityPost = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 📥 4. CREAR COMENTARIO
+// =====================================================================
 export const createCommunityReview = async (data: any) => {
   try {
     // 🛡️ Sanitizamos todo el cuerpo del comentario para evitar inyecciones en el hilo
@@ -232,7 +289,9 @@ export const createCommunityReview = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 🔄 5. PROCESAR VOTO
+// =====================================================================
 export const handlePostVote = async (postId: string, userId: string, voteType: 'like' | 'dislike') => {
   try {
     const cleanPostId = sanitizeText(postId);
@@ -304,7 +363,9 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
   }
 };
 
+// =====================================================================
 // 🔄 6. ACTUALIZAR POST
+// =====================================================================
 export const updateCommunityPost = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
@@ -320,7 +381,9 @@ export const updateCommunityPost = async (id: string, data: any) => {
   }
 };
 
+// =====================================================================
 // 🗑️ 7. ELIMINAR POST
+// =====================================================================
 export const deleteCommunityPost = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);

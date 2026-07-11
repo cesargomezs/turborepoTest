@@ -2,6 +2,29 @@ import { db } from "../../../../packages/db/src";
 import { events, users, notifications, payments, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
+import NodeGeocoder from 'node-geocoder';
+
+
+// Configuración global del Geocoder (Provider gratuito)
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+// Función para convertir ZIP a coordenadas (Lat, Lng)
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
+  }
+  
+  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
+  return { lat: 34.0934, lng: -117.5847 };
+};
+
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -57,28 +80,60 @@ const getCurrentEventPrice = async () => {
   return "50.00";
 };
 
-// 🔍 1. CONSULTA GENERAL CON PAGOS
+// 🔍 1. CONSULTA GENERAL CON PAGOS Y DISTANCIA
 export const getEvents = async (zip?: string) => {
   try {
+    // Sanitizamos el código postal
+    const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
+
+    // Obtenemos lat y lng del ZIP
+    const { lat, lng } = await getCoordsFromZip(cleanZipParam || ''); 
+    const radiusMiles = 4; // Definimos el radio
+ 
+    // 🚀 1. Fórmula de Distancia Haversine (Segura para Drizzle ORM)
+    const distanceFormula = sql`(
+      3959 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${lat}::numeric)) * cos(radians(${events.lat}::numeric)) * cos(radians(${events.lng}::numeric) - radians(${lng}::numeric)) + 
+          sin(radians(${lat}::numeric)) * sin(radians(${events.lat}::numeric))
+        ))
+      )
+    )`;
+
+    // 2. Construimos la consulta base
     let query = db
-      .select()
+      .select({
+        events: events,
+        users: users,
+        payments: payments,
+        distance: distanceFormula.as('distance')
+      })
       .from(events)
       .leftJoin(users, eq(events.userId, users.id)) 
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .$dynamic(); 
 
-    const cleanZipParam = zip ? sanitizeText(String(zip)) : '';
-
+    // 3. Aplicamos filtros de manera acumulativa
     if (cleanZipParam && cleanZipParam.length === 5) {
-      query = query.where(sql`${events.zip}::text = ${cleanZipParam}`); 
+      query = query.where(
+        and(
+          sql`${distanceFormula} <= ${radiusMiles}`,
+          eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021')
+        )
+      );
+      // Ordenamos por distancia (más cerca primero)
+      query = query.orderBy(distanceFormula);
+    } else {
+      // Si no hay zip, solo filtramos por estado
+      query = query.where(eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'));
+      query = query.orderBy(desc(events.timepostEnd));
     }
-
-    query = query.orderBy(desc(events.timepostEnd));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
-    const finalEvents = await Promise.all(rows.map(async (row: any) => {
+    // Mapeo final (se mantiene igual)
+    return await Promise.all(rows.map(async (row: any) => {
         const dbEvent = row.events;
         const dbUser = row.users;
         const dbPayment = row.payments;
@@ -89,18 +144,8 @@ export const getEvents = async (zip?: string) => {
         let publicUrl = fileName; 
 
         if (fileName && typeof fileName === 'string' && fileName.trim() !== '' && !fileName.startsWith('http')) {
-            const cleanName = fileName.replace('events/', '');
-            const rutaArchivo = `events/${cleanName}`;
-
-            const { data, error } = await supabase.storage
-                .from(NOMBRE_BUCKET)
-                .createSignedUrl(rutaArchivo, 3600); 
-
-            if (!error && data?.signedUrl) {
-                publicUrl = data.signedUrl;
-            } else if (error) {
-                console.warn(`⚠️ Error firmando imagen de evento ${dbEvent.id}:`, error.message);
-            }
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(`events/${fileName.replace('events/', '')}`, 3600); 
+            if (data?.signedUrl) publicUrl = data.signedUrl;
         }
 
         return { 
@@ -111,8 +156,6 @@ export const getEvents = async (zip?: string) => {
             paymentMethod: dbPayment?.paymentMethod || '',
         }; 
     }));
-
-    return finalEvents;
   } catch (error) {
     console.error("❌ Error en getEvents:", error);
     return [];
@@ -167,6 +210,8 @@ export const getEventById = async (id: string) => {
 export const createEvent = async (data: any) => {
   try {
     const cleanData = sanitizePayload(data);
+    // 🚀 Obtenemos las coordenadas a partir del ZIP y las guardamos
+    const { lat, lng } = await getCoordsFromZip(cleanData.zip || '');
 
     let cleanImage = cleanData.imageEven || '';
     if (typeof cleanImage === 'string' && cleanImage.startsWith('events/')) {
@@ -187,6 +232,8 @@ export const createEvent = async (data: any) => {
           descriptionEven: cleanData.descriptionEven || '',
           imageEven: cleanImage,
           locationEven: cleanData.locationEven || '',
+          lat: lat, // 🚀 Coordenada de latitud guardada
+          lng: lng, // 🚀 Coordenada de longitud guardada
           zip: cleanData.zip ? String(cleanData.zip).trim() : '',
           estate: 'CA',
           phone: cleanData.phone || '',

@@ -4,6 +4,27 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
 import { imag } from "@tensorflow/tfjs";
+import NodeGeocoder from 'node-geocoder';
+
+// Configuración global del Geocoder (Provider gratuito)
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+// Función para convertir ZIP a coordenadas (Lat, Lng)
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
+  }
+  
+  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -12,7 +33,7 @@ const NOMBRE_BUCKET = 'images';
 
 // 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
-const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
+const API_TARIFFS_URL = 'http://192.168.1.201:3000/tariffs'; 
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
 const sanitizeText = (str: any) => {
@@ -51,7 +72,21 @@ const getCurrentLawyerPrice = async () => {
 // 🔍 1. CONSULTA GENERAL
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
-    const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+
+    // Obtenemos lat y lng del ZIP
+    const { lat, lng } = await getCoordsFromZip(cleanZipParam || ''); 
+    const radiusMiles = 4; // Definimos el radio
+
+    // 🚀 1. Fórmula de Distancia Haversine (Segura para Drizzle ORM)
+    const distanceFormula = sql`(
+      3959 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${lat}::numeric)) * cos(radians(${lawyers.lat}::numeric)) * cos(radians(${lawyers.lng}::numeric) - radians(${lng}::numeric)) + 
+          sin(radians(${lat}::numeric)) * sin(radians(${lawyers.lat}::numeric))
+        ))
+      )
+    )`;
 
     let query = db
     .select()
@@ -68,6 +103,22 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
     )
     .orderBy(desc(lawyers.createdAt))
     .$dynamic();
+
+    // 3. Aplicamos filtros de manera acumulativa
+    if (cleanZipParam && cleanZipParam.length === 5) {
+      query = query.where(
+        and(
+          sql`${distanceFormula} <= ${radiusMiles}`
+          //,eq(lawyers.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021')
+        )
+      );
+      // Ordenamos por distancia (más cerca primero)
+      query = query.orderBy(distanceFormula);
+    } else {
+      // Si no hay zip, solo filtramos por estado
+      //query = query.where(eq(lawyers.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'));
+      query = query.orderBy(desc(lawyers.timepostEnd));
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -240,6 +291,8 @@ export const createLawyer = async (data: any) => {
     }
 
     return await db.transaction(async (tx) => {
+
+      const { lat, lng } = await getCoordsFromZip(data.zip || '');
       
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
@@ -301,7 +354,7 @@ export const updateLawyer = async (id: string, data: any) => {
   try {
 
     // 1. Obtener los datos del abogado
-    const res = await fetch(`http://192.168.252.243:3000/lawyers/${id}`);
+    const res = await fetch(`http://192.168.1.201:3000/lawyers/${id}`);
     const response = await res.json();
 
     // 2. Acceder al valor directamente (ya que es un objeto, no un arreglo)

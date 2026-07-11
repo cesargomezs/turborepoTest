@@ -1,22 +1,68 @@
-import { ImageBackground, Platform, StyleSheet, View, Dimensions, ViewStyle } from 'react-native';
-
+import { ImageBackground, Platform, StyleSheet, View } from 'react-native';
 import { useEffect } from 'react';
 import { Provider as AppStateProvider } from 'react-redux';
-import { ThemeProvider } from '@react-navigation/native';
-import { DarkTheme, DefaultTheme } from '../constants/Theme';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import store from './store';
-import { useColorScheme } from '../hooks/useColorScheme';
-
 import '../global.css';
+
+// 🚀 1. IMPORTAMOS EL THEME PROVIDER DE NAVEGACIÓN (Original)
+import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme } from '../constants/Theme';
+
+// 🚀 2. IMPORTAMOS NUESTRO THEME PROVIDER CON UN "ALIAS" PARA QUE NO CHOQUEN
+import { ThemeProvider as CustomAppThemeProvider, useAppTheme } from './src/context/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
 
+// 🚀 3. CREAMOS UN SUB-COMPONENTE PARA LEER EL ESTADO GLOBAL
+function AppLayoutNavigator() {
+  // Aquí leemos si el usuario seleccionó dark o light en el modal
+  const { isDark } = useAppTheme();
+
+  const backgroundWebStyle = Platform.select({
+    web: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      zIndex: -1,
+    } as any,
+    default: {
+      flex: 1,
+    }
+  });
+
+  // 👇 MANTUVIMOS TU DISEÑO EXACTAMENTE IGUAL AL QUE TE FUNCIONA
+  return (
+    <NavigationThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <ImageBackground
+          source={require('../assets/images/background.jpg')}
+          resizeMode="cover"
+          style={[styles.background, backgroundWebStyle]}
+        >
+          <Stack
+            screenOptions={{
+              contentStyle: { backgroundColor: 'transparent' }, 
+              headerShown: false,
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+        </ImageBackground>
+      </View>
+    </NavigationThemeProvider>
+  );
+}
+
+// 🚀 4. EL ROOT LAYOUT AHORA ENVUELVE TODO ORDENADAMENTE
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
@@ -31,50 +77,12 @@ export default function RootLayout() {
     return null;
   }
 
-  const backgroundWebStyle = Platform.select({
-    web: {
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100vw',
-      height: '100vh',
-      zIndex: -1, // Se asegura de estar detrás de todo
-    } as any,
-    default: {
-      flex: 1,
-    }
-  });
-
-  // Definimos el estilo de la web como un objeto plano para evitar el error de tipos
-  const webBackgroundStyle = Platform.OS === 'web' ? {
-    height: '100vh' as any,
-    width: '100vw' as any,
-    position: 'fixed' as any,
-  } : {};
-
- return (
+  return (
     <AppStateProvider store={store}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        {/* Contenedor Maestro para asegurar el llenado de pantalla en Web */}
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <ImageBackground
-            source={require('../assets/images/background.jpg')}
-            resizeMode="cover"
-            style={[styles.background, backgroundWebStyle]}
-          >
-            <Stack
-              screenOptions={{
-                contentStyle: { backgroundColor: 'transparent' }, 
-                headerShown: false,
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="+not-found" />
-            </Stack>
-            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'}  />
-          </ImageBackground>
-        </View>
-      </ThemeProvider>
+      {/* Nuestro tema envuelve al de navegación */}
+      <CustomAppThemeProvider> 
+        <AppLayoutNavigator />
+      </CustomAppThemeProvider>
     </AppStateProvider>
   );
 }
@@ -82,7 +90,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   background: {
     flex: 1,
-    // Estilos base para iOS/Android
     ...Platform.select({
       ios: {
         backgroundColor: '#000',

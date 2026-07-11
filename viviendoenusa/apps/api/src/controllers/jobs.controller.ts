@@ -3,6 +3,28 @@ import { jobs, users, rating as ratingTable, reviews as reviewsTable, notificati
 import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 import { imag } from "@tensorflow/tfjs";
+import NodeGeocoder from 'node-geocoder';
+
+
+// Configuración global del Geocoder (Provider gratuito)
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+// Función que sí utiliza 'geocoder'
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    // 🚀 AQUÍ SE USA 'geocoder', por eso ya no dará error de TS(6133)
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error("Error al geocodificar:", err);
+  }
+  // Coordenadas por defecto si el zip no se encuentra
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -179,6 +201,9 @@ export const createJob = async (data: any) => {
 
       if (!companyId) throw new Error("Debes seleccionar una empresa registrada para publicar un empleo.");
 
+      // 🚀 Llamamos a la función que SÍ usa el geocoder
+      //const { lat, lng } = await getCoordsFromZip(data.zip);
+
       const jobPayload: any = {
         nameJobs: sanitizeText(data.nameJobs || data.title) || 'Sin título',
         title: sanitizeText(data.title || data.nameJobs) || 'Sin título',
@@ -195,6 +220,8 @@ export const createJob = async (data: any) => {
         salaryMin: sanitizeText(data.salaryMin),
         salaryMax: sanitizeText(data.salaryMax),
         descriptionJob: safeDesc,
+        //lat: lat,
+        //lng: lng,
         isOpen: data.isOpen !== undefined ? data.isOpen : true,
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         userNameId: sanitizeText(data.userNameId || data.userName) || 'Anónimo',

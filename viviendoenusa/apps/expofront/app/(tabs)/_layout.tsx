@@ -1,12 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, Tabs, useSegments } from 'expo-router'; 
-import { Platform, useColorScheme, StyleSheet, ViewStyle } from 'react-native';
+import { Platform, StyleSheet, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '../../components/HapticTab';
 import Header from '../../components/ui/Header';
 import TabBarBackground from '../../components/ui/TabBarBackground';
-import { Colors } from '../../constants/Colors';
 import { Media } from '../../constants/Media';
 import { useTranslation } from '../../hooks/useTranslation'; 
 import {
@@ -15,19 +14,25 @@ import {
   useMockSelector,
 } from '../../redux/slices';
 
+// 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
+import { useAppTheme } from '@/app/src/context/ThemeContext'; 
+
 export default function TabLayout() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets(); 
-  const colorScheme = useColorScheme() ?? 'light';
-  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
+  
+  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const dispatch = useMockDispatch();
-  const isDark = colorScheme === 'dark';
 
+  // 🚀 LEEMOS EL TEMA DESDE EL CONTEXTO
+  const { isDark } = useAppTheme();
+  
   const segments = useSegments();
-  const isServiceSubScreen = segments.includes('lawyers') || segments.includes('community') || segments.includes('donations') || segments.includes('events') || segments.includes('stores') || segments.includes('entrepreneurs');
+  const isServiceSubScreen = segments.includes('lawyers') || segments.includes('community') || segments.includes('donations') || segments.includes('events') || segments.includes('stores') || segments.includes('entrepreneurs') || segments.includes('support');
 
-  const activeColor = Colors[colorScheme].tint;
-  const inactiveColor = Colors[colorScheme].tabIconNotSelected;
+  // 🚀 COLORES DE ALTO CONTRASTE PARA QUE SE VEAN PERFECTO
+  const activeColor = isDark ? '#4FC3F7' : '#007AFF'; // Azul brillante en oscuro
+  const inactiveColor = isDark ? '#CFD8DC' : '#3c3c3c'; // Gris muy claro (casi blanco) en oscuro
 
   const getTabBarStyle = (): ViewStyle => {
     if (Platform.OS === 'web') {
@@ -44,15 +49,10 @@ export default function TabLayout() {
       } as ViewStyle; 
     } 
     
-    // --- LÓGICA MÓVIL (Android e iOS con corrección de Insets) ---
     const isAndroid = Platform.OS === 'android';
     const isIOS = Platform.OS === 'ios';
     
-    // Altura base del TabBar
     const BASE_HEIGHT = 48;
-    
-    // Calculamos el offset inferior basado en el área segura (Notch/Botones)
-    // En iOS modernos suele ser 34, en Android depende de la configuración del sistema.
     const bottomOffset = insets.bottom > 0 ? insets.bottom : (isAndroid ? 12 : 10);
 
     return StyleSheet.flatten([
@@ -63,16 +63,9 @@ export default function TabLayout() {
         right: 0,
         elevation: 0,
         borderTopWidth: 0,
-        backgroundColor: 'transparent', // Para que el BlurTabBarBackground haga su trabajo
-        
-        // Ajustamos la altura total para incluir el espacio de seguridad
+        backgroundColor: 'transparent', 
         height: BASE_HEIGHT + bottomOffset, 
-        
-        // Aplicamos el padding inferior para empujar los iconos hacia arriba
-        // En iOS dividimos por 1.5 para que no suban demasiado, pero dejen de estar pegados
         paddingBottom: isIOS ? insets.bottom / 1.5 : bottomOffset,
-        
-        // Ajuste de padding superior para centrar los iconos en el nuevo espacio
         paddingTop: 12,
       },
       Media.styles.view,
@@ -91,7 +84,6 @@ export default function TabLayout() {
         tabBarBackground: TabBarBackground,
         animation: 'fade', 
         tabBarStyle: getTabBarStyle(),
-        // Forzamos que los labels también tengan un pequeño margen inferior en iOS
         tabBarLabelStyle: {
           marginBottom: Platform.OS === 'ios' ? 4 : 0,
           fontSize: 11,
@@ -154,6 +146,7 @@ export default function TabLayout() {
         }}
       />
 
+      {/* Pantallas ocultas */}
       <Tabs.Screen name="tabservices/lawyers" options={{ title: t.servicestab.service1, href: null }} />
       <Tabs.Screen name="tabservices/community" options={{ title: t.servicestab.service2, href: null }} />
       <Tabs.Screen name="tabservices/donations" options={{ title: t.servicestab.service3, href: null }} />
@@ -162,7 +155,6 @@ export default function TabLayout() {
       <Tabs.Screen name="tabservices/entrepreneurs" options={{ title: t.servicestab.service6, href: null }} />
       <Tabs.Screen name="tabservices/support" options={{ title: t.servicestab.service7, href: null }} />
       <Tabs.Screen name="tabservices/post/id" options={{ href: null }} />
-
     </Tabs>
   );
 }

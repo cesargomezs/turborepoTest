@@ -16,16 +16,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
 
 import { ThemedText } from '../../components/ThemedText';
-import { useColorScheme } from '../../hooks/useColorScheme';
 import ThemedTextInput from '../../components/ThemedTextInput';
 import { Colors } from '../../constants/Colors';
 import { toggleAuth, useMockDispatch, useMockSelector } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation';
 
+// 🚀 RUTA CORREGIDA (Con dos ../../ para salir de app y tabs)
+import { useAppTheme } from '../src/context/ThemeContext';
+
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  
+  // 🚀 LEEMOS EL TEMA DESDE EL CONTEXTO (INSTANTÁNEO EN TODA LA APP)
+  const { isDark } = useAppTheme();
+  const colorScheme = isDark ? 'dark' : 'light';
   
   const [isRegistering, setIsRegistering] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -37,7 +41,7 @@ export default function HomeScreen() {
     birthDate: new Date() 
   });
 
-  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
+  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const dispatch = useMockDispatch();
   const { t } = useTranslation();
 
@@ -174,7 +178,6 @@ export default function HomeScreen() {
                             
                             <ThemedText style={styles.labelDate}>{t.hometab.dateBirthday}</ThemedText>
                             
-                            {/* DISEÑO ORIGINAL RESTAURADO */}
                             <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, position: 'relative' }]}>
                               <ThemedText style={{ color: DynamicColors.text, fontWeight: '700' }}>
                                 {form.birthDate.toLocaleDateString()}
@@ -226,7 +229,7 @@ export default function HomeScreen() {
 
                       <View style={styles.actionsContainer}>
                         <TouchableOpacity activeOpacity={0.8} onPress={() => { Keyboard.dismiss(); dispatch(toggleAuth()); }} style={styles.styledLoginButton}>
-                          <LinearGradient colors={orangeGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtnStyled}>
+                          <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtnStyled}>
                             <View style={styles.buttonInnerContainer}>
                               <MaterialCommunityIcons name={isRegistering ? "account-plus" : "login-variant"} size={20} color="white" />
                               <ThemedText style={styles.btnTextStyled}>{isRegistering ? t.hometab.registerhome : t.hometab.acces}</ThemedText>

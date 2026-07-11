@@ -27,8 +27,8 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 
-const API_BASE_URL = 'http://192.168.252.243:3000/lawyers';
-const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
+const API_BASE_URL = 'http://192.168.1.201:3000/lawyers';
+const API_TARIFFS_URL = 'http://192.168.1.201:3000/tariffs'; 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
@@ -223,7 +223,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/lawyers', {
+        const uploadResponse = await fetch('http://192.168.1.201:3000/api/subir-imagen-optimizada/lawyers', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
         

@@ -24,6 +24,7 @@
     "jimp": "^1.6.0",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
+    "node-geocoder": "^4.4.1",
     "nsfwjs": "^4.2.1",
     "sharp": "^0.34.5"
   },
@@ -33,6 +34,7 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^25.1.0",
     "@types/node-cron": "^3.0.11",
+    "@types/node-geocoder": "^4.2.6",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },

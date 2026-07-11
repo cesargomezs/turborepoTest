@@ -3,6 +3,28 @@ import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable
 import { eq, desc, sql, and } from "drizzle-orm"; 
 import { alias } from "drizzle-orm/pg-core"; 
 import { createClient } from '@supabase/supabase-js';
+import NodeGeocoder from 'node-geocoder'; // Importación
+import { add } from "@tensorflow/tfjs";
+
+// Configuración global del Geocoder (Provider gratuito)
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+// Función que sí utiliza 'geocoder'
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    // 🚀 AQUÍ SE USA 'geocoder', por eso ya no dará error de TS(6133)
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error("Error al geocodificar:", err);
+  }
+  // Coordenadas por defecto si el zip no se encuentra
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -18,11 +40,26 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🔍 1. CONSULTA GENERAL
+// 🔍 1. CONSULTA GENERAL CON BÚSQUEDA POR RADIO DE MILLAS
 export const getEntrepreneurships = async (zip?: string, userId?: string) => {
   try {
+    // Obtenemos lat y lng del ZIP
+    const { lat, lng } = await getCoordsFromZip(zip || ''); 
+    const radiusMiles = 4; // Tu rango de 8 millas
+
+    // 🚀 1. EXTRAEMOS LA FÓRMULA A UNA CONSTANTE
+    const distanceFormula = sql`(3959 * acos(cos(radians(${lat})) * cos(radians(entrepreneurship.lat)) * cos(radians(entrepreneurship.lng) - radians(${lng})) + sin(radians(${lat})) * sin(radians(entrepreneurship.lat))))`;
+
     let query = db
-      .select()
+      .select({
+        entrepreneurship: entrepreneurship,
+        users: users,
+        rating: ratingTable,
+        reviews: reviewsTable,
+        reviewers: reviewers,
+        // Usamos la constante en el select
+        distance: distanceFormula.as('distance') 
+      })
       .from(entrepreneurship)
       .leftJoin(users, eq(entrepreneurship.userId, users.id))
       .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id)) 
@@ -30,17 +67,21 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .$dynamic(); 
 
-    if (zip && zip.trim().length === 5) {
-      query = query.where(sql`${entrepreneurship.zip}::text = ${zip.trim()}`); 
+    // 🚀 2. APLICAMOS EL FILTRO (Usando la fórmula completa, NO el alias)
+    if (zip) {
+      query = query.where(sql`${distanceFormula} <= ${radiusMiles}`);
+      // Opcional y muy recomendado: Ordenar del más cercano al más lejano
+      query = query.orderBy(distanceFormula);
+    } else {
+      query = query.orderBy(desc(entrepreneurship.createdAt));
     }
-
-    query = query.orderBy(desc(entrepreneurship.createdAt));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
     const itemsMap = new Map<string, any>();
 
+    // ... (El resto de tu ciclo FOR y la lógica de Votos y Promesas se mantiene EXACTAMENTE IGUAL)
     for (const row of rows) {
       const itemId = row.entrepreneurship.id;
 
@@ -138,6 +179,7 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
     });
 
     const finalList = await Promise.all(finalListPromises);
+    console.log(finalList);
     return finalList;
   } catch (error) {
     console.error("❌ Error en getEntrepreneurships:", error);
@@ -228,7 +270,7 @@ export const getEntrepreneurshipById = async (id: string, userId?: string) => {
             else if (Number(uVoteRow.dislikes) === 1) itemFinal.userVote = 'dislike';
         }
     }
-
+    console.log("✅ Emprendimiento final:", itemFinal);
     return itemFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener el emprendimiento por ID: ${error.message}`);
@@ -251,6 +293,9 @@ export const createEntrepreneurship = async (data: any) => {
         if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
     }
 
+    // 🚀 Llamamos a la función que SÍ usa el geocoder
+    const { lat, lng } = await getCoordsFromZip(data.zip);
+
     const payload: any = {
       nameEntrepren: data.nameEntrepren || 'Sin nombre',
       categoryId: String(data.categoryId || '0'), 
@@ -261,7 +306,10 @@ export const createEntrepreneurship = async (data: any) => {
       imageEntrepren: cleanImage,
       saved: data.saved !== undefined ? data.saved : false,
       contactMethod: data.contactMethod || 'whatsapp',
+      addressentr: data.addressEntrepren || '',
       zip: data.zip ? String(data.zip).trim() : null,
+      lat: lat,
+      lng: lng,
       estate: data.estate || 'active',
       userId: validUserId 
     };

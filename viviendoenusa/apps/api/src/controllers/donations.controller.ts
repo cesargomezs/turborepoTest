@@ -1,25 +1,47 @@
 import { db } from "../../../../packages/db/src"; 
 import { donations, users } from "../../../../packages/db/src/schema"; 
-// 🚀 1. Agregamos 'and' a las importaciones de Drizzle
 import { eq, desc, sql, and } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
+import NodeGeocoder from 'node-geocoder';
 
-// Inicialización de Supabase
+// =====================================================================
+// 🌍 CONFIGURACIÓN DE GEOCODER
+// =====================================================================
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+// Función para convertir ZIP a coordenadas (Lat, Lng)
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
+  }
+  
+  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
+  return { lat: 34.0934, lng: -117.5847 };
+};
+
+// =====================================================================
+// ☁️ CONFIGURACIÓN DE SUPABASE
+// =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-// El bucket correcto
 const NOMBRE_BUCKET = 'images'; 
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+// =====================================================================
+// 🛡️ FUNCIONES DE SEGURIDAD (SANITIZACIÓN)
+// =====================================================================
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🛡️ BARRERA DE SANITIZACIÓN PARA OBJETOS: Limpia todos los textos de un payload
 const sanitizePayload = (data: any) => {
   if (!data || typeof data !== 'object') return data;
   const sanitizedData: any = {};
@@ -33,38 +55,65 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
-// 🔍 1. CONSULTA GENERAL
+// =====================================================================
+// 🔍 1. OBTENER DONACIONES (CON FILTRO DE DISTANCIA)
+// =====================================================================
 export const getDonations = async (zip?: string) => {
   try {
-    // 🛡️ Sanitizamos el código postal antes de procesarlo
+    // Sanitizamos el código postal
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
 
-    if (!cleanZipParam || cleanZipParam.length !== 5) return []; 
+    // Si enviaron un ZIP pero es inválido (no tiene 5 caracteres), devolvemos vacío
+    if (zip && (!cleanZipParam || cleanZipParam.length !== 5)) return []; 
 
-    const cleanZip = cleanZipParam;
+    // Obtenemos lat y lng del ZIP
+    const { lat, lng } = await getCoordsFromZip(cleanZipParam || ''); 
+    const radiusMiles = 4; // Rango de búsqueda: 10 millas
+
+    // 🚀 Fórmula de Distancia Haversine (Segura para Drizzle ORM)
+    const distanceFormula = sql`(
+      3959 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${lat}::numeric)) * cos(radians(${donations.lat}::numeric)) * cos(radians(${donations.lng}::numeric) - radians(${lng}::numeric)) + 
+          sin(radians(${lat}::numeric)) * sin(radians(${donations.lat}::numeric))
+        ))
+      )
+    )`;
 
     let query = db
-            .select()
-            .from(donations)
-            .leftJoin(users, eq(donations.userId, users.id))
-            .$dynamic();
+      .select({
+        donations: donations,
+        users: users,
+        distance: distanceFormula.as('distance') // Agregamos la distancia calculada al resultado
+      })
+      .from(donations)
+      .leftJoin(users, eq(donations.userId, users.id))
+      .$dynamic();
 
-    // 🚀 2. FORMA CORRECTA DE COMBINAR CONDICIONES EN DRIZZLE
-    query = query.where(
-      and(
-        sql`${donations.zip}::text = ${cleanZip}`,
-        eq(donations.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021')
-      )
-    ); 
-
-    query = query.orderBy(desc(donations.id));
+    // 🚀 Aplicar el filtro condicionalmente
+    if (cleanZipParam) {
+      query = query.where(
+        and(
+          // 1. Que esté dentro del radio de 10 millas
+          sql`${distanceFormula} <= ${radiusMiles}`,
+          // 2. Que la donación esté ACTIVA
+          eq(donations.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021')
+        )
+      );
+      // Ordenamos para mostrar los más cercanos primero
+      query = query.orderBy(distanceFormula);
+    } else {
+      // Si no hay código postal, simplemente traemos todas las activas, de la más nueva a la más vieja
+      query = query.where(eq(donations.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'));
+      query = query.orderBy(desc(donations.id));
+    }
 
     const rows = await query;
     
     if (!rows || rows.length === 0) return [];
 
+    // Mapeo final de resultados y firmas de imágenes en Supabase
     const finalDonations = await Promise.all(rows.map(async (row: any) => {
-        
         const dbDonation = row.donations;
         const dbUser = row.users;
 
@@ -102,17 +151,24 @@ export const getDonations = async (zip?: string) => {
   }
 };
 
-// 📥 2. CREAR DONACIÓN
+// =====================================================================
+// 📥 2. CREAR DONACIÓN (INCLUYENDO COORDENADAS)
+// =====================================================================
 export const createDonation = async (data: any) => {
   try {
-    // 🛡️ Limpiamos toda la data entrante para evitar XSS en el título y descripción
+    // Limpiamos toda la data entrante para evitar XSS
     const cleanData = sanitizePayload(data);
+
+    // 🚀 Obtenemos las coordenadas a partir del ZIP y las guardamos
+    const { lat, lng } = await getCoordsFromZip(cleanData.zip || '');
 
     const dbPayload: any = {
       title: cleanData.title || 'Sin título', 
       categoryIdx: Number(cleanData.categoryIdx || 1),
       phone: cleanData.phone || '',
       zip: String(cleanData.zip || '').trim(),
+      lat: lat, // 🚀 Coordenada de latitud guardada
+      lng: lng, // 🚀 Coordenada de longitud guardada
       contactMethod: cleanData.contactMethod || 'whatsapp',
       statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
       estate: 'active', 
@@ -132,10 +188,12 @@ export const createDonation = async (data: any) => {
   }
 };
 
-// 🔄 3. ACTUALIZAR ESTADO 
+// =====================================================================
+// 🔄 3. ACTUALIZAR ESTADO DE LA DONACIÓN
+// =====================================================================
 export const updateDonationStatus = async (id: string, status: string) => {
   try {
-    // 🛡️ Sanitizamos el ID y el nuevo estado
+    // Sanitizamos el ID y el nuevo estado
     const cleanId = sanitizeText(id);
     const cleanStatus = sanitizeText(status) || 'active';
 

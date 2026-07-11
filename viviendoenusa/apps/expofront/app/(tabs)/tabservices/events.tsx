@@ -38,8 +38,8 @@ const INTERNAL_CATEGORIES = ['Todos', 'Social', 'Salud', 'Educación', 'Deportes
 const ICONS_ARRAY = ['calendar-range', 'account-group', 'heart-pulse', 'school', 'basketball'];
 const COUNTRIES = [ { code: '+1', flag: '🇺🇸', name: 'USA' }, { code: '+1', flag: '🇺🇸', name: 'USA' } ];
 
-const API_EVENTS_URL = 'http://192.168.252.243:3000/events';
-const API_TARIFFS_URL = 'http://192.168.252.243:3000/tariffs'; 
+const API_EVENTS_URL = 'http://192.168.1.201:3000/events';
+const API_TARIFFS_URL = 'http://192.168.1.201:3000/tariffs'; 
 
 const planStyles: any = {
   coupon: { 
@@ -385,7 +385,7 @@ export default function EventsScreen() {
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/events', {
+        const uploadResponse = await fetch('http://192.168.1.201:3000/api/subir-imagen-optimizada/events', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },

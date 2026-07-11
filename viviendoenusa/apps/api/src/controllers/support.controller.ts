@@ -2,6 +2,28 @@ import { db } from "../../../../packages/db/src";
 import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, ConsoleLogWriter } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
+import NodeGeocoder from 'node-geocoder';
+
+// =====================================================================
+// 🌍 CONFIGURACIÓN DE GEOCODER
+// =====================================================================
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap'
+});
+
+const getCoordsFromZip = async (zip: string) => {
+  try {
+    const res = await geocoder.geocode(`${zip}, USA`);
+    if (res && res.length > 0) {
+      return { lat: res[0].latitude, lng: res[0].longitude };
+    }
+  } catch (err) {
+    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
+  }
+  
+  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -43,25 +65,64 @@ const getCurrentSupportPrice = async () => {
   return "50.00";
 };
 
-// 🔍 1. CONSULTA GENERAL
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL (AQUÍ SE AGREGÓ EL FILTRO DE DISTANCIA)
+// =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
 
+    // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP PARA LA BÚSQUEDA
+    const { lat, lng } = await getCoordsFromZip(zip || ''); 
+    const radiusMiles = 4; // Rango de búsqueda: 10 millas
+
+    // 🚀 Fórmula de Distancia Haversine (Segura para Drizzle y Postgres)
+    const distanceFormula = sql`(
+      3959 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${lat}::numeric)) * cos(radians(${support.lat}::numeric)) * cos(radians(${support.lng}::numeric) - radians(${lng}::numeric)) + 
+          sin(radians(${lat}::numeric)) * sin(radians(${support.lat}::numeric))
+        ))
+      )
+    )`;
+
+    // 🚀 Definimos explícitamente el select incluyendo la distancia
     let query = db
-    .select()
+    .select({
+      support: support,
+      rating: ratingTable,
+      reviews: reviewsTable,
+      payments: payments,
+      users: users,
+      distance: distanceFormula.as('distance')
+    })
     .from(support)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(payments, and(eq(payments.entityId, support.id), eq(payments.entityType, 'support')))
     .leftJoin(users, eq(ratingTable.userId, users.id))
-    .where(
-      currentUserId 
-        ? sql`${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${currentUserId}`
-        : sql`${support.approved} = false OR ${support.timepostEnd} > NOW()`
-    )
-    .orderBy(desc(support.createdAt))
     .$dynamic();
+
+    // 🚀 Lógica de Visibilidad Original
+    const visibilityCondition = currentUserId
+      ? sql`(${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${currentUserId})`
+      : sql`(${support.approved} = false OR ${support.timepostEnd} > NOW())`;
+
+    // 🚀 Aplicamos los filtros condicionalmente
+    if (zip && zip.length === 5) {
+      query = query.where(
+        and(
+          sql`${distanceFormula} <= ${radiusMiles}`,
+          visibilityCondition 
+        )
+      );
+      // Ordenamos para mostrar los más cercanos primero
+      query = query.orderBy(distanceFormula);
+    } else {
+      // Si no buscaron ZIP, solo aplicamos la visibilidad
+      query = query.where(visibilityCondition);
+      query = query.orderBy(desc(support.createdAt));
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -76,7 +137,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           ...row.support,
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
-          premiumPlan: row.support.premiumPlan || 'basic', // 🚀 Asegurar envío
+          premiumPlan: row.support.premiumPlan || 'basic', 
           reviews: [], 
           totalRating: 0,
           totalReviews: 0
@@ -138,7 +199,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
   }
 };
 
+// =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID
+// =====================================================================
 export const getSupportById = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -156,7 +219,7 @@ export const getSupportById = async (id: string) => {
   
     const supportFinal: any = {
       ...rows[0].support, 
-      premiumPlan: rows[0].support.premiumPlan || 'basic', // 🚀 Asegurar envío
+      premiumPlan: rows[0].support.premiumPlan || 'basic', 
       reviews: [],
       totalRating: 0,
       totalReviews: 0           
@@ -212,7 +275,9 @@ export const getSupportById = async (id: string) => {
   }
 };
 
-// 📥 3. CREAR CONTACTO DE APOYO (AJUSTE EN EL PAYLOAD)
+// =====================================================================
+// 📥 3. CREAR CONTACTO DE APOYO (SIN MODIFICAR GEOLOCALIZACIÓN COMO SE PIDIÓ)
+// =====================================================================
 export const createSupport = async (data: any) => {
   try {
     let cleanImage = sanitizeText(data.imageSupp) || '';
@@ -223,7 +288,7 @@ export const createSupport = async (data: any) => {
     return await db.transaction(async (tx) => {
       
       const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
-      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; // 🚀 Asegura el plan default
+      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
 
       const supportPayload: any = {
         nameSupp: sanitizeText(data.nameSupp || data.name) || 'Sin nombre',
@@ -233,18 +298,18 @@ export const createSupport = async (data: any) => {
         phone: sanitizeText(data.phone) || '',
         imageSupp: cleanImage,
         descriptionSupp: safeDesc,
-        lat: data.lat ? Number(data.lat) : null,
-        lng: data.lng ? Number(data.lng) : null,
+        lat: data.lat ? Number(data.lat) : null, // 🚀 Se mantiene tal cual estaba
+        lng: data.lng ? Number(data.lng) : null, // 🚀 Se mantiene tal cual estaba
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         premiumPlan: planSeleccionado, 
-        couponCode: sanitizeText(data.couponCode) || '', // 🚀 Recibir cupón
+        couponCode: sanitizeText(data.couponCode) || '', 
         approved: false 
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
 
       if (data.referenceCode && data.paymentMethod) {
-        const basePrice = await getCurrentSupportPrice(); // En un futuro puedes mandar el precio real de DB
+        const basePrice = await getCurrentSupportPrice(); 
 
         await tx.insert(payments).values({
           entityType: 'support',
@@ -277,7 +342,9 @@ export const createSupport = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 🔄 4. ACTUALIZAR CONTACTO DE APOYO
+// =====================================================================
 export const updateSupport = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
@@ -285,7 +352,7 @@ export const updateSupport = async (id: string, data: any) => {
 
     return await db.transaction(async (tx) => {
       
-      const allowedFields = ['nameSupp', 'categoryId', 'addressSupp', 'zip', 'phone', 'lat', 'lng', 'imageSupp', 'descriptionSupp', 'premiumPlan', 'couponCode']; // 🚀 Campos Permitidos
+      const allowedFields = ['nameSupp', 'categoryId', 'addressSupp', 'zip', 'phone', 'lat', 'lng', 'imageSupp', 'descriptionSupp', 'premiumPlan', 'couponCode']; 
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
@@ -371,7 +438,9 @@ export const updateSupport = async (id: string, data: any) => {
   }
 };
 
+// =====================================================================
 // 🚀 5. INGRESO DE RATING Y RESEÑA
+// =====================================================================
 export const createSupportReview = async (data: any) => {
   try {
     let validUserId = sanitizeText(data.userId) || null;
@@ -460,7 +529,9 @@ export const createSupportReview = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 🗑️ 6. ELIMINAR CONTACTO DE APOYO
+// =====================================================================
 export const deleteSupport = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -473,7 +544,9 @@ export const deleteSupport = async (id: string) => {
   }
 };
 
+// =====================================================================
 // 🔄 7. RENOVAR CONTACTO DE APOYO
+// =====================================================================
 export const renewSupport = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);

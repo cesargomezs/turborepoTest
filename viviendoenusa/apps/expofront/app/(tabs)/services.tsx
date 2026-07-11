@@ -9,10 +9,12 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from '@/components/ThemedText';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
+
+// 🚀 IMPORTAMOS EL CONTEXTO GLOBAL EN LUGAR DE ASYNCSTORAGE
+import { useAppTheme } from '@/app/src/context/ThemeContext'; 
 
 interface ButtonConfig {
   id: number;
@@ -25,7 +27,6 @@ interface ButtonConfig {
 const BUTTONS_DATA: ButtonConfig[] = [
   { id: 1, icon: 'scale-balance', path: '/tabservices/lawyers', colors: ['#4facfe', '#00f2fe'], description: 'Asesoría legal y abogados certificados.' },
   { id: 2, icon: 'account-group-outline', path: '/tabservices/community', colors: ['#FF5F6D', '#FFC371'], description: 'Conecta y participa con tu comunidad.' },
-  // NUEVO COLOR CIAN PARA DONACIONES: Transmite confianza y ayuda desinteresada
   { id: 3, icon: 'hand-heart', path: '/tabservices/donations', colors: ['#00c6fb', '#005bea'], description: 'Apoya causas y organizaciones locales.' },
   { id: 4, icon: 'calendar-star', path: '/tabservices/events', colors: ['#f6d365', '#fda085'], description: 'Descubre eventos y actividades próximas.' },
   { id: 5, icon: 'store-plus-outline', path: '/tabservices/stores', colors: ['#667eea', '#764ba2'], description: 'Explora negocios y servicios cercanos.' },
@@ -35,9 +36,11 @@ const BUTTONS_DATA: ButtonConfig[] = [
 export default function ServicesScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
-  const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
+  
+  // 🚀 LEEMOS EL TEMA DESDE EL CONTEXTO (INSTANTÁNEO EN TODA LA APP)
+  const { isDark } = useAppTheme();
+
+  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
   const localStyles = useUnifiedCardStyles();
@@ -72,7 +75,6 @@ export default function ServicesScreen() {
       <ScrollView 
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start' }} 
         keyboardShouldPersistTaps="handled"
-        // BLOQUEO DE SCROLL EXTERIOR: Solo habilitado en Web
         scrollEnabled={isWeb}
       >
         <View style={[localStyles.centerContainer, { marginTop: verticalOffset }]}>
@@ -112,23 +114,21 @@ export default function ServicesScreen() {
               {/* --- ZONA: RED DE APOYO (BOTÓN ROJO DESTACADO) --- */}
               <View style={{ 
                 paddingHorizontal: isLargeWeb ? 0 : 5, 
-                marginTop: 10, 
+                marginTop: 0, 
                 marginBottom: 5,
-                alignItems: 'center', // Centrado horizontal forzado para Web
+                alignItems: 'center', 
                 justifyContent: 'center' 
               }}>
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={() => router.push('/tabservices/support' as any)}
                   style={{
-                    // Sombra más compatible con Web
                     shadowColor: '#FF416C',
                     shadowOffset: { width: 0, height: 4 },
                     shadowOpacity: 0.3,
                     shadowRadius: 5,
                     elevation: 6,
                     borderRadius: 25,
-                    // En Web, esto asegura que el botón no se estire a todo el ancho
                     maxWidth: 350, 
                   }}
                 >

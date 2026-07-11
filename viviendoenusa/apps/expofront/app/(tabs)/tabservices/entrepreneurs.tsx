@@ -20,12 +20,11 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
-import { Colors } from 'react-native/Libraries/NewAppScreen';
 
 // =====================================================================
 // 📡 1. CONFIGURACIONES GLOBALES, URLS Y CONSTANTES
 // =====================================================================
-const API_ENTREPRENEURSHIP_URL = 'http://192.168.252.243:3000/entrepreneurship';
+const API_ENTREPRENEURSHIP_URL = 'http://192.168.1.201:3000/entrepreneurship';
 
 let BANNED_WORDS: string[] = [];
 try {
@@ -65,6 +64,7 @@ type Review = {
 type Emprendimiento = {
   id: string;
   name: string;
+  address: string; // 🚀 AÑADIDO: Campo de dirección
   categoryId: number; 
   description: string;
   rating: number;
@@ -178,7 +178,7 @@ export default function EntrepreneurshipScreen() {
   const DC = {
     text:               isDark ? '#FFFFFF'                  : '#1A1A1A',
     textmes:            isDark ? '#FFFFFF'                  : '#1A1A1A',
-    subtext:            isDark ? '#B0BEC5'                  : '#364045',
+    subtext:            isDark ? '#B0BEC5'                  : '#546E7A',
     accent:             isDark ? '#FF5F6D'                  : '#FF5F6D',
     border:             isDark ? 'rgba(255,255,255,0.22)'   : 'rgba(0,0,0,0.1)',
     inputBg:            isDark ? 'rgba(255,255,255,0.05)'   : 'rgba(0,0,0,0.03)',
@@ -200,7 +200,7 @@ export default function EntrepreneurshipScreen() {
   const [results, setResults] = useState<Emprendimiento[]>([]);
   const [pendingItems, setPendingItems] = useState<Emprendimiento[]>([]);
   
-  // 🚀 ESTADOS PARA EL FILTRO GLOBAL Y GUARDADOS (CACHÉ LOCAL)
+  // ESTADOS PARA EL FILTRO GLOBAL Y GUARDADOS (CACHÉ LOCAL)
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [savedItems, setSavedItems] = useState<string[]>([]); 
 
@@ -213,6 +213,7 @@ export default function EntrepreneurshipScreen() {
 
   // Formulario
   const [formName, setFormName] = useState('');
+  const [formAddress, setFormAddress] = useState(''); // 🚀 AÑADIDO: Estado para la dirección
   const [formDesc, setFormDesc] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formContactMethod, setFormContactMethod] = useState<'whatsapp' | 'phone'>('whatsapp');
@@ -226,7 +227,7 @@ export default function EntrepreneurshipScreen() {
   const isZipValid = zipCode.length === 5;
   const triggerAlert = (title: string, msg: string) => Platform.OS === 'web' ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
 
-  // 🚀 EFECTO PARA CARGAR LOS GUARDADOS AL INICIAR
+  // EFECTO PARA CARGAR LOS GUARDADOS AL INICIAR
   useEffect(() => {
     const loadSavedItems = async () => {
       try {
@@ -250,6 +251,7 @@ export default function EntrepreneurshipScreen() {
         const mappedData: Emprendimiento[] = data.map((item: any) => ({
           ...item,
           name: item.nameEntrepren || 'Sin nombre',
+          address: item.addressentr || item.address || '', // 🚀 AÑADIDO: Mapeo de dirección
           categoryId: Number(item.categoryId) || 0,
           description: item.descriptionEntrepren || '',
           rating: Number(item.rating) || 5.0,
@@ -273,7 +275,7 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // 🚀 NUEVA FUNCIÓN PARA TRAER LOS GUARDADOS SIN IMPORTAR EL ZIP CODE
+  // NUEVA FUNCIÓN PARA TRAER LOS GUARDADOS SIN IMPORTAR EL ZIP CODE
   const fetchSavedItems = async () => {
     if (savedItems.length === 0) {
       setResults([]);
@@ -293,6 +295,7 @@ export default function EntrepreneurshipScreen() {
         const mappedData: Emprendimiento[] = data.map((item: any) => ({
           ...item,
           name: item.nameEntrepren || 'Sin nombre',
+          address: item.addressentr || item.address || '', // 🚀 AÑADIDO: Mapeo de dirección
           categoryId: Number(item.categoryId) || 0,
           description: item.descriptionEntrepren || '',
           rating: Number(item.rating) || 5.0,
@@ -315,7 +318,7 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // 🚀 INTERRUPTOR CENTRAL ENTRE BÚSQUEDA NORMAL Y GUARDADOS
+  // INTERRUPTOR CENTRAL ENTRE BÚSQUEDA NORMAL Y GUARDADOS
   useEffect(() => {
     if (showSavedOnly) {
       fetchSavedItems();
@@ -338,6 +341,7 @@ export default function EntrepreneurshipScreen() {
         const mappedData: Emprendimiento[] = data.map((item: any) => ({
           ...item,
           name: item.nameEntrepren || 'Sin nombre',
+          address: item.addressentr || item.address || '', // 🚀 AÑADIDO
           categoryId: Number(item.categoryId) || 0,
           description: item.descriptionEntrepren || '',
           reviews: Array.isArray(item.reviews) ? item.reviews : [],
@@ -365,11 +369,10 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // 🚀 APLICAR FILTROS EN TIEMPO REAL (INCLUYE EVALUACIÓN DE GUARDADOS DE ASYNCSTORAGE)
+  // APLICAR FILTROS EN TIEMPO REAL
   const applyFilters = (dataList: Emprendimiento[], catIdx: number, textQuery: string) => {
     let list = catIdx === 0 ? dataList : dataList.filter(l => l.categoryId === catIdx);
     
-    // Si la vista es de guardados, elimina dinámicamente si el usuario quita el guardado
     if (showSavedOnly) {
       list = list.filter(l => savedItems.includes(l.id));
     }
@@ -415,7 +418,6 @@ export default function EntrepreneurshipScreen() {
     } catch (error) { console.error("Error enviando voto al servidor:", error); }
   };
 
-  // 🚀 LÓGICA DE GUARDAR OPTIMIZADA CON ASYNCSTORAGE
   const handleSave = async (id: string) => {
     try {
       let newSavedList = [...savedItems];
@@ -440,7 +442,7 @@ export default function EntrepreneurshipScreen() {
     const currentItem = detailItem?.id === targetId ? detailItem : (reviewTarget?.id === targetId ? reviewTarget : results.find(r => r.id === targetId));
 
     if (currentItem?.reviews?.some((r: any) => String(r.userId) === String(currentUserId))) {
-      triggerAlert("Aviso", "Ya has escrito una reseña para este emprendimiento.");
+      triggerAlert("Aviso", "Ya has escrito una reseña para este negocio.");
       setShowReviewInput(false);
       return;
     }
@@ -492,8 +494,9 @@ export default function EntrepreneurshipScreen() {
   };
 
   const handlePublish = async () => {
-    if (!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5) {
-      triggerAlert('Campos incompletos', 'Completa nombre, descripción, teléfono, código postal e imagen.'); return;
+    // 🚀 AÑADIDO: Validación de que formAddress no esté vacío
+    if (!formName.trim() || !formAddress.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5) {
+      triggerAlert('Campos incompletos', 'Completa nombre, dirección, descripción, teléfono, código postal e imagen.'); return;
     }
     setIsSubmitting(true);
     
@@ -516,7 +519,7 @@ export default function EntrepreneurshipScreen() {
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.252.243:3000/api/subir-imagen-optimizada/entrepreneurship', {
+        const uploadResponse = await fetch('http://192.168.1.201:3000/api/subir-imagen-optimizada/entrepreneurship', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
 
@@ -525,10 +528,17 @@ export default function EntrepreneurshipScreen() {
       }
 
       const payload = {
-        nameEntrepren: formName.trim(), categoryId: String(formCategoryIdx), 
-        descriptionEntrepren: formDesc.trim(), phone: `${COUNTRIES[countryIdx].code}${formPhone.trim()}`,
-        verified: false, promo: formPromo.trim() || null, imageEntrepren: finalImageName,
-        saved: false, contactMethod: formContactMethod, zip: formZip.trim(),
+        nameEntrepren: formName.trim(), 
+        categoryId: String(formCategoryIdx), 
+        descriptionEntrepren: formDesc.trim(), 
+        addressEntrepren: formAddress.trim(), // 🚀 AÑADIDO: Se envía la dirección al Backend
+        phone: `${COUNTRIES[countryIdx].code}${formPhone.trim()}`,
+        verified: false, 
+        promo: formPromo.trim() || null, 
+        imageEntrepren: finalImageName,
+        saved: false, 
+        contactMethod: formContactMethod, 
+        zip: formZip.trim(),
         userId: userMetadata?.id || null
       };
 
@@ -540,13 +550,28 @@ export default function EntrepreneurshipScreen() {
       if (!response.ok) throw new Error(savedFromDB.error || "Error al guardar");
 
       setPendingItems(prev => [{
-        id: savedFromDB.id, name: savedFromDB.nameEntrepren, categoryId: Number(savedFromDB.categoryId) || 0, 
-        description: savedFromDB.descriptionEntrepren, rating: 5.0, phone: savedFromDB.phone, verified: false, 
-        promo: savedFromDB.promo, image: formImage, likes: 0, dislikes: 0, userVote: null, saved: false, reviews: [],
-        contactMethod: savedFromDB.contactMethod, zip: savedFromDB.zip, status: 'pending'
+        id: savedFromDB.id, 
+        name: savedFromDB.nameEntrepren, 
+        address: savedFromDB.addressEntrepren || formAddress.trim(), // 🚀 AÑADIDO
+        categoryId: Number(savedFromDB.categoryId) || 0, 
+        description: savedFromDB.descriptionEntrepren, 
+        rating: 5.0, 
+        phone: savedFromDB.phone, 
+        verified: false, 
+        promo: savedFromDB.promo, 
+        image: formImage, 
+        likes: 0, 
+        dislikes: 0, 
+        userVote: null, 
+        saved: false, 
+        reviews: [],
+        contactMethod: savedFromDB.contactMethod, 
+        zip: savedFromDB.zip, 
+        status: 'pending'
       } as Emprendimiento, ...prev]);
       
-      setFormName(''); setFormDesc(''); setFormPhone(''); setFormZip(''); setFormPromo(''); setFormImage(null); 
+      // Limpiar formulario
+      setFormName(''); setFormAddress(''); setFormDesc(''); setFormPhone(''); setFormZip(''); setFormPromo(''); setFormImage(null); 
       setFormCategoryIdx(1); setCountryIdx(0); setFormContactMethod('whatsapp');
       setIsSubmitting(false); setFormVisible(false);
       
@@ -639,7 +664,12 @@ export default function EntrepreneurshipScreen() {
                 <ThemedText style={{ fontWeight: '900', fontSize: 15, color: DC.text, flexShrink: 1 }}>{item.name}</ThemedText>
                 {item.verified && <MaterialCommunityIcons name="check-decagram" size={15} color="#4FC3F7" />}
               </View>
-              <ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '600' }}>{item.zip}</ThemedText>
+              
+              <View style={{flexDirection:'row', alignItems:'center'}}>
+                <MaterialCommunityIcons name="map-marker-outline" size={14} color={DC.accent} />
+                <ThemedText style={{ fontSize: 12, marginLeft: 3, fontWeight: '500', color: DC.subtext }} numberOfLines={1}>{item.zip +' '+ item.address}</ThemedText>
+              </View>
+              
             </View>
           </View>
 
@@ -652,15 +682,17 @@ export default function EntrepreneurshipScreen() {
             </View>
           )}
 
-          {/* 🚀 FILA COMPACTA DE ACCIONES (Formato K aplicado) */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: 4, paddingHorizontal: 4 }}>
-            <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'like'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
-              <MaterialCommunityIcons name={item.userVote === 'like' ? 'thumb-up' : 'thumb-up-outline'} size={22} color= '#1976D2'/>
+            <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'like'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, backgroundColor: item.userVote === 'like' ? (isDark ? 'rgba(25, 118, 210, 0.35)' : 'rgba(25, 118, 210, 0.25)') : (isDark ? 'rgba(25, 118, 210, 0.15)' : 'rgba(25, 118, 210, 0.1)'), paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}>
+              {/* 🚀 MANO SIEMPRE LLENA Y AZUL */}
+              <MaterialCommunityIcons name="thumb-up" size={18} color="#1976D2" />
               <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: '#1976D2' }}>{formatCount(item.likes)}</ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'dislike'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
-              <MaterialCommunityIcons name={item.userVote === 'dislike' ? 'thumb-down' : 'thumb-down-outline'} size={22} color= '#FA8072' />
+            {/* BOTÓN DE NO ME GUSTA */}
+            <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'dislike'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: item.userVote === 'dislike' ? (isDark ? 'rgba(250, 128, 114, 0.35)' : 'rgba(250, 128, 114, 0.25)') : (isDark ? 'rgba(250, 128, 114, 0.15)' : 'rgba(250, 128, 114, 0.1)'), paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}>
+              {/* 🚀 MANO SIEMPRE LLENA Y ROJA */}
+              <MaterialCommunityIcons name="thumb-down" size={18} color="#FA8072" />
               <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: '#FA8072' }}>{formatCount(item.dislikes)}</ThemedText>
             </TouchableOpacity>
 
@@ -882,13 +914,19 @@ export default function EntrepreneurshipScreen() {
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}><ThemedText style={{ fontWeight: '900', fontSize: 20, color: DC.text }}>{detailItem.name}</ThemedText>{detailItem.verified && <MaterialCommunityIcons name="check-decagram" size={20} color="#4FC3F7" />}</View>
                     <ThemedText style={{ color: DC.subtext, fontSize: 13, fontWeight: '600', marginTop: 2 }}>{CATEGORIES[detailItem.categoryId]}</ThemedText>
+                    
+                    {/* 🚀 AÑADIDO: Renderizado de la Dirección en el Modal */}
+                    {detailItem.address ? (
+                      <ThemedText style={{ color: '#FF5F6D', fontSize: 14, fontWeight: '700', marginTop: 4 }}>
+                        <MaterialCommunityIcons name="map-marker-outline" size={13} />
+                         {detailItem.zip +' '+detailItem.address}
+                      </ThemedText>
+                    ) : null}
                   </View>
                 </View>
                 {detailItem.promo && ( <View style={[S.promoBadge, { marginBottom: 16 }]}><MaterialCommunityIcons name="tag-outline" size={14} color="#FFF" style={{ marginRight: 6 }} /><ThemedText style={{ color: '#FFF', fontSize: 13, fontWeight: '800' }}>{detailItem.promo}</ThemedText></View> )}
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><MaterialCommunityIcons name="text-box-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} /><ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.aboutBussines || 'Sobre el negocio'}</ThemedText></View>
-                  
-                  {/* 🚀 DESCRIPCIÓN COMPLETA EN EL MODAL DE DETALLES */}
                   <ThemedText style={{ color: DC.subtext, fontSize: 14, lineHeight: 22 }}>{detailItem.description}</ThemedText>
                 </View>
                 <View style={[S.contactRow, { marginBottom: 16, flexWrap: 'wrap' }]}>
@@ -898,17 +936,18 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                {/* 🚀 FILA COMPACTA DE ACCIONES TAMBIÉN EN EL MODAL DE DETALLE (Formato 1k) */}
                 <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg, marginBottom: 20 }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TouchableOpacity onPress={() => handleVote(detailItem.id, 'like')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
-                        <MaterialCommunityIcons name={detailItem.userVote === 'like' ? 'thumb-up' : 'thumb-up-outline'} size={24} color='#1976D2'/>
-                        <ThemedText style={{ marginLeft: 6, fontSize: 14, fontWeight: '800', color: '#1976D2'}}>{formatCount(detailItem.likes)}</ThemedText>
+                      <TouchableOpacity onPress={() => handleVote(detailItem.id, 'like')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, backgroundColor: detailItem.userVote === 'like' ? (isDark ? 'rgba(25, 118, 210, 0.35)' : 'rgba(25, 118, 210, 0.25)') : (isDark ? 'rgba(25, 118, 210, 0.15)' : 'rgba(25, 118, 210, 0.1)'), paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}>
+                        {/* 🚀 MANO SIEMPRE LLENA Y AZUL */}
+                        <MaterialCommunityIcons name="thumb-up" size={20} color="#1976D2" />
+                        <ThemedText style={{ marginLeft: 6, fontSize: 14, fontWeight: '800', color: '#1976D2' }}>{formatCount(detailItem.likes)}</ThemedText>
                       </TouchableOpacity>
 
-                      <TouchableOpacity onPress={() => handleVote(detailItem.id, 'dislike')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
-                        <MaterialCommunityIcons name={detailItem.userVote === 'dislike' ? 'thumb-down' : 'thumb-down-outline'} size={24} color= '#FA8072' />
+                      <TouchableOpacity onPress={() => handleVote(detailItem.id, 'dislike')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: detailItem.userVote === 'dislike' ? (isDark ? 'rgba(250, 128, 114, 0.35)' : 'rgba(250, 128, 114, 0.25)') : (isDark ? 'rgba(250, 128, 114, 0.15)' : 'rgba(250, 128, 114, 0.1)'), paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}>
+                        {/* 🚀 MANO SIEMPRE LLENA Y ROJA */}
+                        <MaterialCommunityIcons name="thumb-down" size={20} color="#FA8072" />
                         <ThemedText style={{ marginLeft: 6, fontSize: 14, fontWeight: '800', color: '#FA8072' }}>{formatCount(detailItem.dislikes)}</ThemedText>
                       </TouchableOpacity>
                     </View>
@@ -1055,9 +1094,13 @@ export default function EntrepreneurshipScreen() {
                   })}
                 </ScrollView>
 
-                <TextInput value={formName} onChangeText={setFormName} placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'} placeholderTextColor={DC.subtext} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
-                <TextInput value={formZip} onChangeText={setFormZip} placeholder="Código Postal (Zip)" keyboardType="numeric" maxLength={5} placeholderTextColor={DC.subtext} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
-                <TextInput value={formDesc} onChangeText={setFormDesc} placeholder={t.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'} placeholderTextColor={DC.subtext} multiline numberOfLines={3} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formName} onChangeText={setFormName} placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                
+                {/* 🚀 AÑADIDO: Input de Dirección en el formulario */}
+                <TextInput value={formAddress} onChangeText={setFormAddress} placeholder={'Dirección del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+
+                <TextInput value={formZip} onChangeText={setFormZip} placeholder="Código Postal (Zip)" keyboardType="numeric" maxLength={5} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formDesc} onChangeText={setFormDesc} placeholder={t.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} multiline numberOfLines={3} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.contactMethod || 'Método de contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -1083,8 +1126,8 @@ export default function EntrepreneurshipScreen() {
                 <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.promotion || 'Promoción'}</ThemedText>
                 <TextInput value={formPromo} onChangeText={setFormPromo} placeholder={t.entrepreneurshiptab?.exampleoffet || 'Ej: 10% de descuento'} placeholderTextColor={isDark ? '#B0BEC5' : '#364045'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
-                <TouchableOpacity onPress={handlePublish} disabled={!formName.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5 || isSubmitting}>
-                  <LinearGradient colors={(formName.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? OG as any : DG as any} style={[S.publishBtn, { opacity: (formName.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? 1 : 0.55 }]}>
+                <TouchableOpacity onPress={handlePublish} disabled={!formName.trim() || !formAddress.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5 || isSubmitting}>
+                  <LinearGradient colors={(formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? OG as any : DG as any} style={[S.publishBtn, { opacity: (formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? 1 : 0.55 }]}>
                     {isSubmitting ? <ActivityIndicator color="#fff" /> : <><MaterialCommunityIcons name="store-plus-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.entrepreneurshiptab?.publishEntrepre || 'Publicar'}</ThemedText></>}
                   </LinearGradient>
                 </TouchableOpacity>
