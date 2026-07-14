@@ -34,6 +34,7 @@ import notificationsRoutes from './routes/notifications.routes';
 import paymentsRoutes from './routes/payments.routes';
 import tarrifsRoutes from './routes/tariffs.routes';
 import companiesRoutes from './routes/companies.routes';
+import authRoutes from '../auth/register/auth.routes';
 import './cron/cron.jobs';
 
 const app = express();
@@ -46,6 +47,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
+//const authRoutes = require('./auth/register/auth.routes').default;
+
 
 let model: any = null;
 
@@ -78,6 +81,7 @@ app.use('/notifications', notificationsRoutes);
 app.use('/payments', paymentsRoutes);
 app.use('/tariffs', tarrifsRoutes);
 app.use('/companies', companiesRoutes);
+app.use('/auth', authRoutes);
 
 // --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (DINÁMICO Y SEGURO) ---
 app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {
