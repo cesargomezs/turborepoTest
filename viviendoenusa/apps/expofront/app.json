@@ -1,9 +1,9 @@
 {
   "expo": {
     "name": "Viviendo en USA",
-    "slug": "viviendo-en-usa-expofront",
+    "slug": "viviendoenusa",
     "version": "1.0.0",
-    "scheme": "expofront-scheme",
+    "scheme": "viviendoenusa",
     "orientation": "portrait",
     "icon": "./assets/images/backgroundusajpg.jpg",
     "userInterfaceStyle": "light",

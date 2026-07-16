@@ -26,8 +26,8 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 import { Colors } from '@/constants/Colors';
 
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
-const API_STORES_URL = 'http://192.168.1.201:3000/stores';
-const API_TARIFFS_URL = 'http://192.168.1.201:3000/tariffs'; 
+const API_STORES_URL = 'http://192.168.1.107:3000/stores';
+const API_TARIFFS_URL = 'http://192.168.1.107:3000/tariffs'; 
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -594,7 +594,7 @@ export default function StoresScreen() {
           formData.append('imagen', { uri: formImage as string, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.201:3000/api/subir-imagen-optimizada/stores', {
+        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/stores', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },
@@ -1213,10 +1213,10 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                 <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
                 <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                     {[
-                        { id: 'coupon', name: 'Cupón', price: companyTariffs?.coupon || '0.00', desc: 'Cupón o periodo de prueba.' },
-                        { id: 'basic', name: 'Básico', price: companyTariffs?.basic || '50.00', desc: 'Ideal para eventos locales.' },
-                        { id: 'premium', name: 'Premium', price: companyTariffs?.premium || '99.00', desc: 'Mayor visibilidad.' },
-                        { id: 'unlimited', name: 'Ilimitado', price: companyTariffs?.unlimited || '149.00', desc: 'Prioridad máxima.' }
+                        { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc },
+                        { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
+                        { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
+                        { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
                     ].map(plan => {
                         const pStyle = planStyles[plan.id as keyof typeof planStyles];
                         const isSelected = formPlan === plan.id;

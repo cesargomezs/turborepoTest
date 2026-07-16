@@ -27,9 +27,9 @@ const validateComment = (text: string): boolean => {
   return !BANNED_WORDS.some((word: string) => lowerText.includes(word.toLowerCase()));
 };
 
-const API_JOBS_URL = 'http://192.168.1.201:3000/jobs';
-const API_COMPANIES_URL = 'http://192.168.1.201:3000/companies';
-const API_TARIFFS_URL = 'http://192.168.1.201:3000/tariffs';
+const API_JOBS_URL = 'http://192.168.1.107:3000/jobs';
+const API_COMPANIES_URL = 'http://192.168.1.107:3000/companies';
+const API_TARIFFS_URL = 'http://192.168.1.107:3000/tariffs';
 
 const usCitiesData: Record<string, string[]> = {
   "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
@@ -39,7 +39,6 @@ const usCitiesData: Record<string, string[]> = {
 const STATES = Object.keys(usCitiesData);
 
 const COUNTRY_CODES = [{ code: '+1', flag: '🇺🇸' }];
-  //, { code: '+52', flag: '🇲🇽' }, { code: '+57', flag: '🇨🇴' }];
 
 const CATEGORY_MAP: Record<string, string[]> = {
   'Bodega': ['Bodega', 'Warehouse'],
@@ -68,6 +67,7 @@ export default function JobsScreen() {
   
   const currentUser = userMetadata?.name || userMetadata?.firstName || 'Cesar Gomez';
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
+  const isSuperAdmin = userMetadata?.role === 'SAdmin' || userMetadata?.email === 'cesargomez853@gmail.com'; 
 
   const jobstabData = (t.jobstab as any) || {};
   
@@ -107,31 +107,28 @@ export default function JobsScreen() {
     cardBg:  isDark ? 'rgba(255,255,255,0.05)'   : 'rgba(255,255,255,0.45)',
     iconInactive: isDark ? '#E0E0E0' : '#666666',
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-
   };
-
-  //comp.premiumPlan
 
   const planStyles: any = {
     coupon: {
-      selected: '#EA8D2D', // Coral vibrante (Mantenido, es un excelente color)
+      selected: '#EA8D2D', 
       unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)',
       text: (isDark: boolean) => isDark ? '#FFF' : '#333',
     },
     basic: {
-      selected: '#FF5F6D', // Coral vibrante (Mantenido, es un excelente color)
+      selected: '#FF5F6D', 
       unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)',
       text: (isDark: boolean) => isDark ? '#FFF' : '#333',
     },
     premium: {
-      selected: '#F5A623', // Oro/Ámbar más brillante y "premium" (Mejora sobre el #CFA82E opaco)
-      unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', // Ahora usa los RGB correctos del color seleccionado
+      selected: '#F5A623', 
+      unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', 
       text: (isDark: boolean) => isDark ? '#FFF' : '#333',
     },
     unlimited: {
-      selected: '#10B981', // Verde esmeralda moderno y profesional
-      unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', // Unificado al patrón de opacidad
-      text: (isDark: boolean) => isDark ? '#FFF' : '#333', // Ajustado para garantizar legibilidad en ambos temas
+      selected: '#10B981', 
+      unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', 
+      text: (isDark: boolean) => isDark ? '#FFF' : '#333', 
     }
   };
 
@@ -185,6 +182,8 @@ export default function JobsScreen() {
   const [selectedCompany, setSelectedCompany] = useState<any>(null); 
   const [selectedJobDetail, setSelectedJobDetail] = useState<any>(null); 
   const [selectedCompanyProfile, setSelectedCompanyProfile] = useState<any>(null);
+  
+  const [tempCompanyProfile, setTempCompanyProfile] = useState<any>(null);
 
   const [reviewForm, setReviewForm] = useState({ visible: false, text: '', rating: 0, isAnonymous: false });
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
@@ -355,6 +354,13 @@ export default function JobsScreen() {
     setSelectedJobDetail(null);
     lastProcessedNotifId.current = null;
     router.setParams({ id: '', openJobId: '', jobId: '' });
+
+    if (tempCompanyProfile) {
+        setTimeout(() => {
+            setSelectedCompanyProfile(tempCompanyProfile);
+            setTempCompanyProfile(null);
+        }, 350);
+    }
   };
 
   const toggleSaveJob = async (id: string) => {
@@ -443,8 +449,8 @@ export default function JobsScreen() {
       if (newCompanyForm.logoUri) {
         const esSegura = await validarImagenEnServidor(newCompanyForm.logoUri);
         if (!esSegura) {
-          setIsCreatingCompany(false);
-          return Alert.alert("Error", "Imagen inapropiada");
+            setIsCreatingCompany(false);
+            return Alert.alert("Error", "Imagen inapropiada");
         }
         
         const formData = new FormData();
@@ -460,7 +466,7 @@ export default function JobsScreen() {
           formData.append('imagen', { uri: newCompanyForm.logoUri, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.201:3000/api/subir-imagen-optimizada/companies', {
+        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/companies', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
         
@@ -673,14 +679,11 @@ export default function JobsScreen() {
       } catch (e: any) { triggerAlert("Aviso", e.message); }
   };
 
-  // 🚀 LÓGICA DE AGRUPACIÓN DE VACANTES EN EL FEED (CORREGIDA PARA TYPESCRIPT)
   const filteredJobs = useMemo(() => {
     const filtered = jobs.filter(job => {
-      
       if (job.companyId && !job.isCompanyVerified && job.userId !== currentUserId) {
           return false; 
       }
-
       let matchCategory = false;
       if (activeFilter === 'Todos' || activeFilter === 'All') { matchCategory = true; } 
       else {
@@ -835,7 +838,7 @@ export default function JobsScreen() {
                               </LinearGradient>
                             ) : (
                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
-                                <MaterialCommunityIcons name={cat.icon as any} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} />
+                                <MaterialCommunityIcons name={cat.icon as any} size={18} color={DynamicColors.text} style={{color: DynamicColors.text, marginRight: 10 }} />
                                 <ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', fontSize: 14 }}>{cat.id}</ThemedText>
                               </View>
                             )}
@@ -850,7 +853,6 @@ export default function JobsScreen() {
                   
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* 🚀 PANEL ADMIN ADENTRO DEL SCROLL */}
                     {isAdminMode && pendingCompanies.length > 0 && (
                         <View style={{ backgroundColor: 'rgba(255,255,0,0.06)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
                         <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 12 }}>Empresas por Verificar ({pendingCompanies.length})</ThemedText>
@@ -900,8 +902,8 @@ export default function JobsScreen() {
                                     </LinearGradient>
                                     ) : (
                                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                                        <MaterialCommunityIcons name={cat.icon as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                                        <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: 'bold', fontSize: 12 }}>{cat.id}</ThemedText>
+                                        <MaterialCommunityIcons name={cat.icon as any} size={14} color={DynamicColors.text} style={{color: DynamicColors.text, marginRight: 5 }} />
+                                        <ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', fontSize: 12 }}>{cat.id}</ThemedText>
                                     </View>
                                     )}
                                 </TouchableOpacity>
@@ -958,7 +960,6 @@ export default function JobsScreen() {
                               <View style={{ padding: 15, paddingTop: 0 }}>
                                 <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
                                 
-                                {/* 🚀 INFO CORPORATIVA (TEXTO NORMAL) */}
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 15 }}>
                                     <MaterialCommunityIcons name="domain" size={16} color={DynamicColors.subtext} />
                                     <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: 'bold', marginLeft: 4 }}>{job.company}</ThemedText>
@@ -971,7 +972,6 @@ export default function JobsScreen() {
 
                             <View style={{ padding: 15, paddingTop: 0 }}>
                               
-                              {/* 🚀 BANNER DE AGRUPACIÓN (FLEX SEGURO Y CLICKEABLE) */}
                               {job.groupedCount > 1 && (
                                   <TouchableOpacity onPress={() => handleOpenCompanyProfile(job.companyId)} style={{ marginBottom: 15, borderRadius: 14, overflow: 'hidden' }}>
                                       <LinearGradient colors={isDark ? ['rgba(255,95,109,0.2)', 'rgba(255,195,113,0.1)'] : ['rgba(255,95,109,0.1)', 'rgba(255,195,113,0.05)']} start={{x:0, y:0}} end={{x:1, y:0}} style={{ paddingVertical: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255, 95, 109, 0.4)', borderRadius: 14 }}>
@@ -988,7 +988,6 @@ export default function JobsScreen() {
                                   </TouchableOpacity>
                               )}
 
-                              {/* 🚀 BOTONES DE CONTACTO */}
                               <View style={{ flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
                                   <TouchableOpacity onPress={() => setSelectedCompany(job)} style={{ flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)' }}>
                                     <MaterialCommunityIcons name="comment-text-outline" size={18} color={DynamicColors.text} />
@@ -1003,11 +1002,11 @@ export default function JobsScreen() {
                                   </TouchableOpacity>
                               </View>
 
-                              {/* 🚀 BOTÓN 'CERRAR VACANTE' */}
-                              {isOwner && (
-                                  <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ width: '100%', marginTop: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.5)' : 'rgba(76, 175, 80, 0.5)', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.05)' : 'rgba(76, 175, 80, 0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                                      <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={18} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 8}} />
-                                      <ThemedText style={{ color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: '900', fontSize: 13, textTransform: 'uppercase' }}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
+                              {/* 🚀 BOTÓN DE CERRAR VACANTE (Visible para dueño o Admin, PERO oculto si está agrupado) */}
+                              {(isOwner || isSuperAdmin) && job.groupedCount <= 1 && (
+                                  <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ width: '100%', marginTop: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.5)' : 'rgba(76, 175, 80, 0.5)', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.05)' : 'rgba(76, 175, 80, 0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                                      <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={18} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 6}} />
+                                      <ThemedText numberOfLines={1} style={{ color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: '900', fontSize: 13, textAlign: 'center', flexShrink: 1 }}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
                                   </TouchableOpacity>
                               )}
                             </View>
@@ -1030,7 +1029,7 @@ export default function JobsScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* --- MODAL DEL PERFIL CORPORATIVO (NUEVO) --- */}
+      {/* --- MODAL DEL PERFIL CORPORATIVO --- */}
       <RNModal visible={!!selectedCompanyProfile} transparent animationType="slide" statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', alignItems: 'center' }}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setSelectedCompanyProfile(null)} />
@@ -1085,27 +1084,43 @@ export default function JobsScreen() {
                           const isJobOwner = job.userId === currentUserId;
                           return (
                           <View key={job.id} style={{ backgroundColor: DynamicColors.inputBg, padding: 18, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: DynamicColors.border, opacity: !job.isOpen ? 0.6 : 1 }}>
-                              <TouchableOpacity disabled={!job.isOpen} onPress={() => { setSelectedCompanyProfile(null); setTimeout(() => setSelectedJobDetail(job), 300); }}>
-                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                                      <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-                                          <ThemedText style={{ color: DynamicColors.accent, fontSize: 10, fontWeight: '900' }}>{job.category.toUpperCase()}</ThemedText>
-                                      </View>
-                                      <ThemedText style={{ fontSize: 12, color: '#4CAF50', fontWeight: 'bold' }}>${job.salaryMin}/hr</ThemedText>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                  <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                                      <ThemedText style={{ color: DynamicColors.accent, fontSize: 10, fontWeight: '900' }}>{job.category.toUpperCase()}</ThemedText>
                                   </View>
-                                  <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>{job.title}</ThemedText>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                                      <MaterialCommunityIcons name="map-marker-outline" size={14} color={DynamicColors.subtext} />
-                                      <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, marginLeft: 4 }}>{job.city}, {job.state}</ThemedText>
-                                  </View>
-                              </TouchableOpacity>
+                                  <ThemedText style={{ fontSize: 12, color: '#4CAF50', fontWeight: 'bold' }}>${job.salaryMin}/hr</ThemedText>
+                              </View>
                               
-                              {/* 🚀 BOTÓN DE CERRAR VACANTE DENTRO DEL PERFIL CORPORATIVO */}
-                              {isJobOwner && (
-                                  <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ borderTopWidth: 1, borderColor: DynamicColors.border, paddingTop: 12, marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-                                      <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={16} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 6}} />
-                                      <ThemedText style={{color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase'}}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
+                              <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>{job.title}</ThemedText>
+                              
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                  <MaterialCommunityIcons name="map-marker-outline" size={14} color={job.isOpen ? '#FF5252' : '#4CAF50'} />
+                                  <ThemedText style={{ fontSize: 12, color: DynamicColors.text, marginLeft: 4 }}>{job.city}, {job.state}</ThemedText>
+                              </View>
+
+                              {/* 🚀 BOTONES MEJORADOS EN LA LISTA DE LA EMPRESA */}
+                              <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, borderTopWidth: 1, borderColor: DynamicColors.border, paddingTop: 15 }}>
+                                  
+                                  <TouchableOpacity 
+                                      disabled={!job.isOpen} 
+                                      onPress={() => { 
+                                          setTempCompanyProfile(selectedCompanyProfile); 
+                                          setSelectedCompanyProfile(null); 
+                                          setTimeout(() => setSelectedJobDetail(job), 350); 
+                                      }} 
+                                      style={{ flex: 1, height: 40, borderRadius: 12, backgroundColor: DynamicColors.categoryUnselected, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 4 }}>
+                                      <MaterialCommunityIcons name="eye-outline" size={16} color={DynamicColors.text} style={{marginRight: 4}} />
+                                      <ThemedText numberOfLines={1} style={{fontSize: 12, fontWeight: 'bold', color: DynamicColors.text, textAlign: 'center', flexShrink: 1}}>Ver Info</ThemedText>
                                   </TouchableOpacity>
-                              )}
+
+                                  {/* 🚀 BOTÓN 'CERRAR VACANTE' (Visible solo para dueño o Admin) */}
+                                  {(isJobOwner || isSuperAdmin) && (
+                                      <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ flex: 1, height: 40, borderRadius: 12, backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.1)' : 'rgba(76, 175, 80, 0.1)', borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.3)' : 'rgba(76, 175, 80, 0.3)', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 4 }}>
+                                          <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={16} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 4}} />
+                                          <ThemedText numberOfLines={1} style={{color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: 'bold', fontSize: 12, textAlign: 'center', flexShrink: 1}}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
+                                      </TouchableOpacity>
+                                  )}
+                              </View>
                           </View>
                       )})
                   )}
@@ -1402,10 +1417,10 @@ export default function JobsScreen() {
                          <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 10 }}>{t.jobstab.labelplan}</ThemedText>
                          <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                              {[
-                                 { id: 'coupon', name: 'Cupón', price: companyTariffs.coupon, desc: 'Cupón o periodod de prueba.' },
-                                 { id: 'basic', name: 'Básico', price: companyTariffs.basic, desc: 'Ideal para independientes y PyMEs.' },
-                                 { id: 'premium', name: 'Premium', price: companyTariffs.premium, desc: 'Mayor visibilidad y hasta 5 publicaciones activas.' },
-                                 { id: 'unlimited', name: 'Ilimitado', price: companyTariffs.unlimited, desc: 'Acceso VIP, recluta todo el año sin límites.' }
+                                 { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc },
+                                 { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
+                                 { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
+                                 { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
                              ].map(plan => {
                                  const pStyle = planStyles[plan.id as keyof typeof planStyles];
                                  const isSelected = newCompanyForm.premiumPlan === plan.id;
@@ -1429,7 +1444,7 @@ export default function JobsScreen() {
                                          </View>
                                          <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText>
                                      </View>
-                                     <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                                     <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.text, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
                                  </TouchableOpacity>
                              )})}
                          </View>
@@ -1497,8 +1512,8 @@ export default function JobsScreen() {
                               </LinearGradient>
                           ) : (
                               <View style={{ flex: 1, flexDirection:'row', alignItems:'center', paddingHorizontal: 14, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}>
-                                  <MaterialCommunityIcons name={cat.icon as any} size={16} style={{marginRight:6}} />
-                                  <ThemedText style={{ fontSize: 13, fontWeight: 'bold' }}>{cat.id}</ThemedText>
+                                  <MaterialCommunityIcons name={cat.icon as any} size={16} style={{marginRight:6,color: DynamicColors.text }} />
+                                  <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: DynamicColors.text }}>{cat.id}</ThemedText>
                               </View>
                           )}
                         </TouchableOpacity>
@@ -1614,8 +1629,8 @@ export default function JobsScreen() {
                                         </LinearGradient>
                                     ) : (
                                         <View style={{ flex: 1, flexDirection:'row', alignItems:'center', paddingHorizontal: 14, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}>
-                                            <MaterialCommunityIcons name="circle-outline" size={14} style={{marginRight:6}} />
-                                            <ThemedText style={{ fontSize: 12, fontWeight: 'bold' }}>{shift}</ThemedText>
+                                            <MaterialCommunityIcons name="circle-outline" size={14} style={{color: DynamicColors.text,marginRight:6}} />
+                                            <ThemedText style={{ color: DynamicColors.text, fontSize: 12, fontWeight: 'bold' }}>{shift}</ThemedText>
                                         </View>
                                     )}
                                 </TouchableOpacity>

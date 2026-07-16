@@ -24,7 +24,7 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 // =====================================================================
 // 📡 1. CONFIGURACIONES GLOBALES, URLS Y CONSTANTES
 // =====================================================================
-const API_ENTREPRENEURSHIP_URL = 'http://192.168.1.201:3000/entrepreneurship';
+const API_ENTREPRENEURSHIP_URL = 'http://192.168.1.107:3000/entrepreneurship';
 
 let BANNED_WORDS: string[] = [];
 try {
@@ -519,7 +519,7 @@ export default function EntrepreneurshipScreen() {
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.201:3000/api/subir-imagen-optimizada/entrepreneurship', {
+        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/entrepreneurship', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
 

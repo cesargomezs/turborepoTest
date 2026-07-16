@@ -1,8 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useState, useEffect } from 'react'; 
+import { useState, useEffect, useRef } from 'react'; 
 import { 
-  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, TextInput, Alert, useWindowDimensions, Keyboard
+  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, TextInput, Alert, useWindowDimensions, Keyboard, Animated, PanResponder, Dimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
@@ -19,14 +19,64 @@ import { setLanguage } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation'; 
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
 
-const API_BASE_URL = 'http://192.168.1.201:3000';
+const API_BASE_URL = 'http://192.168.1.107:3000';
 const API_NOTIFICATIONS_URL = `${API_BASE_URL}/notifications`;
 const API_USERS_URL = `${API_BASE_URL}/auth/profile`; 
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
 const API_UPLOAD_URL = `${API_BASE_URL}/api/subir-imagen-optimizada/users`; 
 
-// 🚀 ID TEMPORAL MIENTRAS SE IMPLEMENTA EL LOGIN REAL
-const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+const TEMP_USER_ID = 'a391c27f-ffdc-4cb3-ba8c-7bc544880022';
+
+// ==========================================
+// 🚀 COMPONENTE: ITEM DESLIZABLE (SWIPE TO DELETE)
+// ==========================================
+const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, onSwipeRight: () => void }) => {
+  const pan = useRef(new Animated.Value(0)).current;
+  
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (gestureState.dx > 0) { 
+          pan.setValue(gestureState.dx);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx > 100) {
+          Animated.timing(pan, {
+            toValue: Dimensions.get('window').width,
+            duration: 250,
+            useNativeDriver: true,
+          }).start(() => onSwipeRight());
+        } else {
+          Animated.spring(pan, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      }
+    })
+  ).current;
+
+  const bgOpacity = pan.interpolate({
+    inputRange: [0, 30],
+    outputRange: [0, 1],
+    extrapolate: 'clamp'
+  });
+
+  return (
+    <View style={{ position: 'relative', marginBottom: 10, borderRadius: 16 }}>
+      <Animated.View style={{ position: 'absolute', width: '100%', height: '100%', backgroundColor: '#FF5F6D', borderRadius: 16, justifyContent: 'center', paddingLeft: 20, opacity: bgOpacity }}>
+        <MaterialCommunityIcons name="trash-can-outline" size={28} color="#FFF" />
+      </Animated.View>
+      <Animated.View style={{ transform: [{ translateX: pan }] }} {...panResponder.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+};
 
 export default function Header({ title }: { title?: string }) {
   const { width } = useWindowDimensions();
@@ -43,6 +93,7 @@ export default function Header({ title }: { title?: string }) {
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // 🚀 NUEVO: Estado de la contraseña
 
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
@@ -53,10 +104,8 @@ export default function Header({ title }: { title?: string }) {
 
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
-
-
   const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [activeProfileRole, setActiveProfileRole] = useState('Admin'); 
+  const [activeProfileRole, setActiveProfileRole] = useState('User'); 
 
   const [profileData, setProfileData] = useState({
     email: '',
@@ -66,12 +115,12 @@ export default function Header({ title }: { title?: string }) {
     zip: '',
     birth: '',
     typeDetail: '',
-    password: '', // 🚀 NUEVO: Campo Password
+    password: '', 
     image_url: null as string | null,
     new_image_uri: null as string | null,
   });
 
-  const isSuperAdmin = userMetadata?.role === 'SAdmin' || profileData.typeDetail === 'SAdmin';
+  const isSuperAdmin = userMetadata?.role === 'SAdmin' || profileData.typeDetail === 'SAdmin' || profileData.email === 'cesargomez853@gmail.com';
 
   const [notifications, setNotifications] = useState<any[]>([]);
   
@@ -80,13 +129,13 @@ export default function Header({ title }: { title?: string }) {
     { code: 'en', label: 'English' },
   ];
 
-  // 🚀 Cargar datos del usuario actual
   const fetchUserData = async () => {
     try {
       const res = await fetch(`${API_USERS_URL}/${TEMP_USER_ID}`);
       if (res.ok) {
         const userData = await res.json();
         if (userData && !userData.error) {
+          setActiveProfileRole(userData.typeDetail || 'User');
           setProfileData(prev => ({
             ...prev,
             email: userData.email || '',
@@ -95,9 +144,9 @@ export default function Header({ title }: { title?: string }) {
             phone: userData.phone || '',
             zip: userData.zip || '',
             birth: userData.birth ? new Date(userData.birth).toISOString().split('T')[0] : '',
-            typeDetail: userData.typeDetail || '',
+            typeDetail: userData.typeDetail || '', 
             image_url: userData.imageUrl || userData.image_url || null,
-            password: '', // No cargamos el password por seguridad
+            password: '', 
             new_image_uri: null,
           }));
         }
@@ -105,19 +154,99 @@ export default function Header({ title }: { title?: string }) {
     } catch (error) { console.error("Error al obtener datos:", error); }
   };
 
-
-
   useEffect(() => {
     if (!isCreatingUser) fetchUserData();
-  }, [isCreatingUser]);
+  }, [isCreatingUser, settingsModalVisible]);
 
-  // Manejar el cambio de modo
+  useEffect(() => {
+    if (isWeb && typeof window !== 'undefined') {
+      window.history.replaceState(null, '', '/');
+    }
+  }, [pathname]);
+
+  const fetchNotifications = async () => {
+    try {
+      // 🚀 Usamos una construcción explícita para evitar errores de concatenación
+      const url = `${API_BASE_URL}/notifications?userId=${TEMP_USER_ID}`;
+      console.log("Intentando conectar a:", url); // Esto te confirmará la URL real
+      
+      const res = await fetch(url);
+      
+      if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`);
+      
+      const data = await res.json();
+      if (Array.isArray(data)) setNotifications(data);
+    } catch (error) { 
+      console.error("Error al cargar notificaciones:", error); 
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(() => fetchNotifications(), 60000); 
+    return () => clearInterval(interval);
+  }, []);
+
+  const hasUnread = notifications.some(n => !n.read);
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'job': return { name: 'briefcase', color: '#4CAF50' }; 
+      case 'store': return { name: 'store', color: '#FFB300' }; 
+      case 'alert': return { name: 'alert-circle', color: '#FF5F6D' }; 
+      case 'event': return { name: 'calendar', color: '#9C27B0' }; 
+      case 'lawyer': return { name: 'scale-balance', color: '#FF5F6D' }; 
+      case 'support': return { name: 'heart-pulse', color: '#FF5F6D' }; 
+      default: return { name: 'bell', color: Colors[localTheme].text };
+    }
+  };
+
+  const handleNotificationPress = async (notif: any) => {
+    setNotifModalVisible(false);
+    setNotifications(prev => prev.filter(n => n.id !== notif.id));
+    try { await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, { method: 'DELETE' }); } catch (error) {}
+
+    setTimeout(() => {
+      const routes: Record<string, { path: string, param: string }> = {
+        'job': { path: '/jobs', param: 'openJobId' },
+        'store': { path: '/tabservices/stores', param: 'id' },
+        'community': { path: '/tabservices/community', param: 'openEventId' },
+        'event': { path: '/tabservices/events', param: 'openEventId' },
+        'lawyer': { path: '/tabservices/lawyers', param: 'id' },
+        'support': { path: '/tabservices/support', param: 'id' },
+      };
+      const target = routes[notif.type];
+      if (target) {
+        const targetId = notif.referenceId || notif.reference_id || notif.id;
+        router.navigate({ pathname: target.path as any, params: { [target.param]: targetId } }); 
+      }
+    }, 300); 
+  };
+
+  const handleDeleteNotificationOnly = async (notifId: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== notifId));
+    try { await fetch(`${API_NOTIFICATIONS_URL}/${notifId}`, { method: 'DELETE' }); } catch (error) {}
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
+
   const toggleCreateMode = (create: boolean) => {
     setIsCreatingUser(create);
+    setShowPassword(false);
     if (create) {
-      setProfileData({ email: '', name: '', last_name: '', phone: '', zip: '', birth: '', password: '', typeDetail:'', image_url: null, new_image_uri: null });
+      setProfileData({ email: '', name: '', last_name: '', phone: '', zip: '', birth: '', password: '', typeDetail: 'User', image_url: null, new_image_uri: null });
       setActiveProfileRole('User');
+    } else {
+      fetchUserData(); 
     }
+  };
+
+  const closeSettingsModal = () => {
+    setSettingsModalVisible(false);
+    setIsCreatingUser(false);
+    setShowPassword(false);
   };
 
   const pickProfileImage = async () => {
@@ -125,20 +254,18 @@ export default function Header({ title }: { title?: string }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images, 
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1, // Calidad máxima, el backend la optimizará
+      quality: 1, 
     });
     if (!result.canceled) {
       setProfileData({ ...profileData, new_image_uri: result.assets[0].uri });
     }
   };
 
-  // 🚀 LÓGICA DE GUARDADO CORREGIDA (Usa tus servicios correctamente)
   const handleSaveProfile = async () => {
     setIsSavingProfile(true);
     try {
       let finalImageName = profileData.image_url;
 
-      // 1. PASO: Si hay foto nueva, la subimos a tu endpoint optimizado
       if (profileData.new_image_uri) {
         const imageFormData = new FormData();
         const filename = profileData.new_image_uri.split('/').pop() || 'upload.jpg';
@@ -157,13 +284,9 @@ export default function Header({ title }: { title?: string }) {
         if (!uploadRes.ok) throw new Error("Error al subir la imagen al servidor");
         const uploadData = await uploadRes.json();
         
-        // Obtenemos el nombre final (ej: users/img-123.webp)
-        
-        //finalImageName = uploadData.identificadorArchivo; 
         finalImageName = uploadData.identificadorArchivo.split('/').pop();
       }
 
-      // 2. PASO: Enviamos los datos como JSON al AuthController
       const payload = {
         data: {
           email: profileData.email,
@@ -173,9 +296,9 @@ export default function Header({ title }: { title?: string }) {
           zip: profileData.zip,
           birth: profileData.birth,
           typeDetail: activeProfileRole,
-          ...(profileData.password ? { password: profileData.password } : {}) // Solo si escribió algo
+          ...(profileData.password ? { password: profileData.password } : {})
         },
-        newImageUri: profileData.new_image_uri ? finalImageName : null  // Enviamos el STRING de Supabase
+        newImageUri: profileData.new_image_uri ? finalImageName : null 
       };
 
       const endpoint = isCreatingUser ? API_REGISTER_URL : `${API_USERS_URL}/${TEMP_USER_ID}`;
@@ -193,8 +316,7 @@ export default function Header({ title }: { title?: string }) {
       }
       
       Alert.alert("Éxito", isCreatingUser ? "Usuario creado correctamente" : "Perfil actualizado correctamente");
-      setSettingsModalVisible(false);
-      if (isCreatingUser) toggleCreateMode(false); // Volver al modo perfil
+      closeSettingsModal();
       
     } catch (error: any) {
       console.error("Error:", error);
@@ -223,24 +345,36 @@ export default function Header({ title }: { title?: string }) {
               )}
             </View>
           </View>
+          
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
+              <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
+              {hasUnread && <View style={styles.unreadBadge} />}
+            </TouchableOpacity>
+
             <TouchableOpacity onPress={() => setSettingsModalVisible(true)} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
               <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name="cog" />
             </TouchableOpacity>
           </View>
         </View>
+
+        {!isWeb && (
+          <View style={styles.titleContainer}>
+            <ThemedText className="text-center text-2xl" style={{ color: Colors[localTheme].tabIconDefault , fontWeight: 'bold' }}>{title}</ThemedText>
+          </View>
+        )}
       </BlurView>
 
-      <Modal visible={settingsModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setSettingsModalVisible(false)}>
+      <Modal visible={settingsModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeSettingsModal}>
         <View style={styles.notifModalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSavingProfile && setSettingsModalVisible(false)} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSavingProfile && closeSettingsModal()} />
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
             <View style={[styles.notifModalContent, { backgroundColor: Platform.OS === 'android' ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', paddingBottom: Math.max(insets.bottom, 25), width: isWeb && width > 768 ? 500 : '100%', maxHeight: '92%' }]}>
               {Platform.OS !== 'android' && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               <View style={{ width: 40, height: 4, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', alignSelf: 'center', marginVertical: 10, borderRadius: 2 }} />
 
               <View style={styles.notifHeader}>
-                <TouchableOpacity onPress={() => setSettingsModalVisible(false)} style={{ position: 'absolute', left: 0, zIndex: 10, padding: 5 }}>
+                <TouchableOpacity onPress={closeSettingsModal} style={{ position: 'absolute', left: 0, zIndex: 10, padding: 5 }}>
                   <MaterialCommunityIcons name="close" size={28} color={Colors[localTheme].text} />
                 </TouchableOpacity>
                 <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>{isCreatingUser ? 'Crear Usuario' : 'Configuración'}</ThemedText>
@@ -248,7 +382,6 @@ export default function Header({ title }: { title?: string }) {
 
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWeb ? 150 : 30 }}>
                 
-                {/* Selector de Modo (Solo SuperAdmin) */}
                 {isSuperAdmin && (
                   <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 12, padding: 4, marginBottom: 20 }}>
                     <TouchableOpacity onPress={() => toggleCreateMode(false)} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: !isCreatingUser ? (isDark ? '#333' : '#FFF') : 'transparent', alignItems: 'center' }}>
@@ -271,7 +404,44 @@ export default function Header({ title }: { title?: string }) {
                   </TouchableOpacity>
                 </View>
 
-                {/* Rol de Usuario */}
+                {/* 🎨 APARIENCIA E IDIOMA */}
+                <View style={{ marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+                  
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="theme-light-dark" size={22} color={Colors[localTheme].text} style={{ marginRight: 10 }} />
+                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Apariencia</ThemedText>
+                    </View>
+                    <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: 4 }}>
+                      <TouchableOpacity onPress={() => toggleTheme('light')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: !isDark ? '#FFF' : 'transparent', shadowColor: !isDark ? '#000' : 'transparent', shadowOpacity: !isDark ? 0.1 : 0, shadowRadius: 4 }}>
+                        <MaterialCommunityIcons name="weather-sunny" size={18} color={!isDark ? '#FFB300' : '#888'} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => toggleTheme('dark')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: isDark ? '#333' : 'transparent', shadowColor: isDark ? '#000' : 'transparent', shadowOpacity: isDark ? 0.3 : 0, shadowRadius: 4 }}>
+                        <MaterialCommunityIcons name="weather-night" size={18} color={isDark ? '#4FC3F7' : '#888'} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={{ height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', marginBottom: 15 }} />
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="translate" size={22} color={Colors[localTheme].text} style={{ marginRight: 10 }} />
+                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Idioma</ThemedText>
+                    </View>
+                    <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: 4 }}>
+                      {languages.map((lang) => {
+                        const isSelected = selectedLanguage === lang.code;
+                        return (
+                          <TouchableOpacity key={lang.code} onPress={() => dispatch(setLanguage(lang.code))} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: isSelected ? (isDark ? '#333' : '#FFF') : 'transparent', shadowColor: isSelected ? '#000' : 'transparent', shadowOpacity: isSelected ? (isDark ? 0.3 : 0.1) : 0, shadowRadius: 4 }}>
+                            <ThemedText style={{ fontSize: 13, fontWeight: isSelected ? 'bold' : '600', color: isSelected ? Colors[localTheme].tint : '#888' }}>{lang.label}</ThemedText>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+
                 {isSuperAdmin && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -305,16 +475,42 @@ export default function Header({ title }: { title?: string }) {
                   </View>
                 </View>
 
-                {/* 🚀 CAMPO DE PASSWORD: Se muestra al crear, o si SAdmin quiere actualizarlo */}
                 <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{isCreatingUser ? "Contraseña" : "Nueva Contraseña (Opcional)"}</ThemedText>
-                <TextInput 
-                  value={profileData.password} 
-                  onChangeText={(val) => setProfileData({...profileData, password: val})} 
-                  secureTextEntry={true}
-                  placeholder="********"
-                  placeholderTextColor={isDark ? '#666' : '#999'}
-                  style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} 
-                />
+                
+{/* 🚀 SOLO VISIBLE SI ESTAMOS EN MODO CREACIÓN */}
+{isCreatingUser && (
+  <>
+    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>
+      Contraseña Inicial
+    </ThemedText>
+    <View style={{ width: '100%', position: 'relative', marginBottom: 15 }}>
+      <TextInput 
+        value={profileData.password} 
+        onChangeText={(val) => setProfileData({...profileData, password: val})} 
+        secureTextEntry={!showPassword}
+        placeholder="********"
+        placeholderTextColor={isDark ? '#666' : '#999'}
+        style={[styles.profileInput, { 
+          color: Colors[localTheme].text, 
+          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
+          borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', 
+          marginBottom: 0, 
+          paddingRight: 45 
+        }]} 
+      />
+      <TouchableOpacity 
+        style={{ position: 'absolute', right: 15, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} 
+        onPress={() => setShowPassword(!showPassword)}
+      >
+        <MaterialCommunityIcons 
+          name={showPassword ? "eye-outline" : "eye-off-outline"} 
+          size={22} 
+          color={isDark ? '#888' : '#AAA'} 
+        />
+      </TouchableOpacity>
+    </View>
+  </>
+)}
 
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>
@@ -372,6 +568,58 @@ export default function Header({ title }: { title?: string }) {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      <Modal animationType="slide" transparent={true} visible={notifModalVisible} onRequestClose={() => setNotifModalVisible(false)}>
+        <View style={styles.notifModalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNotifModalVisible(false)} />
+          
+          <View style={{ width: '100%', flex: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <View style={[styles.notifModalContent, { backgroundColor: Platform.OS === 'android' ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', paddingBottom: Math.max(insets.bottom, 25), width: isWeb && width > 768 ? 500 : '100%', maxHeight: '92%' }]}>
+              {Platform.OS !== 'android' && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+              <View style={{ width: 40, height: 4, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', alignSelf: 'center', marginVertical: 10, borderRadius: 2 }} />
+
+              <View style={styles.notifHeader}>
+                <TouchableOpacity onPress={() => setNotifModalVisible(false)} style={{ position: 'absolute', left: 0, zIndex: 10, padding: 5 }}>
+                  <MaterialCommunityIcons name="close" size={28} color={Colors[localTheme].text} />
+                </TouchableOpacity>
+                
+                <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>Notificaciones</ThemedText>
+                
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                {notifications.length > 0 ? (
+                  notifications.map((notif) => {
+                    const iconConfig = getNotificationIcon(notif.type);
+                    return (
+                      <SwipeableNotificationItem key={notif.id} onSwipeRight={() => handleDeleteNotificationOnly(notif.id)}>
+                        <TouchableOpacity 
+                          activeOpacity={0.7} 
+                          onPress={() => handleNotificationPress(notif)} 
+                          style={[styles.notifItem, { marginBottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', borderWidth: 1 }, !notif.read && { backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : 'rgba(79, 195, 247, 0.1)' }]}
+                        >
+                          <View style={[styles.notifIconWrapper, { backgroundColor: `${iconConfig.color}20` }]}><MaterialCommunityIcons name={iconConfig.name as any} size={22} color={iconConfig.color} /></View>
+                          <View style={{ flex: 1, paddingLeft: 12 }}>
+                            <ThemedText style={{ fontSize: 15, fontWeight: !notif.read ? 'bold' : '600', color: Colors[localTheme].text }}>{notif.title}</ThemedText>
+                            <ThemedText style={{ fontSize: 13, color: isDark ? '#B0BEC5' : '#546E7A', marginTop: 4, lineHeight: 18 }}>{notif.description}</ThemedText>
+                            <ThemedText style={{ fontSize: 11,  marginTop: 8, fontWeight: 'bold', color: Colors[localTheme].text }}>{notif.time}</ThemedText>
+                          </View>
+                          {!notif.read && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4FC3F7', alignSelf: 'center', marginLeft: 8 }} />}
+                        </TouchableOpacity>
+                      </SwipeableNotificationItem>
+                    );
+                  })
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40, opacity: 0.5 }}>
+                    <MaterialCommunityIcons name="bell-sleep-outline" size={48} color={Colors[localTheme].text} />
+                    <ThemedText style={{ marginTop: 15, fontWeight: 'bold', color: Colors[localTheme].text }}>No tienes notificaciones nuevas</ThemedText>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -384,7 +632,9 @@ const styles = StyleSheet.create({
   titleContainer: { width: '100%', alignItems: 'center', paddingBottom: 10 },
   notifModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   notifModalContent: { width: '100%', borderTopLeftRadius: 40, borderTopRightRadius: 40, paddingHorizontal: 20, borderWidth: 1, borderBottomWidth: 0, overflow: 'hidden', ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 20 }}) },
-  notifHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginTop: Platform.OS === 'web' ? 20 : 0, justifyContent: 'space-between' },
+  notifHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginTop: Platform.OS === 'web' ? 20 : 0, justifyContent: 'center', position: 'relative' },
+  notifItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 10 },
+  notifIconWrapper: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   inputLabel: { fontSize: 13, fontWeight: 'bold', marginBottom: 6, marginLeft: 4 },
   profileInput: { padding: 14, borderRadius: 14, borderWidth: 1, fontSize: 15, marginBottom: 15, width: '100%' },
   iosPickerContainer: { backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 15, marginTop: 5, overflow: 'hidden', marginBottom: 15 },

@@ -34,6 +34,9 @@ import {
     imageUrl: text("image_url"),
     // SOLUCIÓN AL TS7022: Se añade : AnyPgColumn para romper el bucle infinito de tipos
     roleId: uuid("role_id").references((): AnyPgColumn => typeDetail.id, { onDelete: "cascade" }),
+    // 🛡️ NUEVOS CAMPOS SUGERIDOS
+    isVerified: boolean("is_verified").default(false), // true si el usuario está certificado
+    verifiedAt: timestamp("verified_at"),
   });
   
   // 1. TABLA: TYPE DETAIL
@@ -286,16 +289,6 @@ export const payments = pgTable("payments", {
 });
   
   // 14. 💰 TABLA MAESTRA DE TARIFAS POR REFERENCIA (Y FUTURO STRIPE)
-/*export const tariffs = pgTable('tariffs', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  referenceId: text("reference_id"),  // Ej: 'lawyer', 'event', 'entrepreneur'
-  planType: text('plan_type').notNull(),     // Ej: 'monthly', 'annual', 'one_time'
-  price: numeric('price', { precision: 10, scale: 2 }).notNull(), // Ej: 50.00, 100.00
-  description: text('description'),          // Ej: 'Suscripción Anual para Eventos'
-  isActive: boolean('is_active').default(true), // Para apagar planes viejos sin borrarlos
-  userId: uuid("user_id").references(() => users.id),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});*/
 export const tariffs = pgTable("tariffs", {
   id: uuid("id").primaryKey().defaultRandom(),
   referenceId: text("reference_id"),
@@ -334,6 +327,16 @@ export const tariffs = pgTable("tariffs", {
   // Auditoría
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+ // 16. TABLA: user_terms_acceptance (Terminos y condiciones aceptados por el usuario)
+
+// schema.ts
+export const userTermsAcceptance = pgTable('user_terms_acceptance', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: "cascade" }).notNull(),
+  acceptedAt: timestamp('accepted_at').defaultNow(),
+  ipAddress: text("ip_address"), 
 });
 
   // ==========================================
