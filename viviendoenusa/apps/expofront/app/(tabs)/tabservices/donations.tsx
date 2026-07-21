@@ -17,6 +17,7 @@ import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 // --- 1. LÓGICA DE VALIDACIÓN GLOBAL ---
 let BANNED_WORDS: string[] = [];
@@ -53,9 +54,13 @@ export default function DonationsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+/*
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  
+  */
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
+
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
   //const currentUserName = userMetadata?.name || "Cesar"; 
   const currentUserName = 'Cesar';

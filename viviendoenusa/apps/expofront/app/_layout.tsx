@@ -1,25 +1,25 @@
 import { ImageBackground, Platform, StyleSheet, View } from 'react-native';
+import { AuthProvider } from '../context/AuthContext'; // ⬅️ IMPORTADO
+import { Slot, Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { Provider as AppStateProvider } from 'react-redux';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import store from './store';
 import '../global.css';
 
-// 🚀 1. IMPORTAMOS EL THEME PROVIDER DE NAVEGACIÓN (Original)
+// 🚀 1. IMPORTAMOS EL THEME PROVIDER DE NAVEGACIÓN
 import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { DarkTheme, DefaultTheme } from '../constants/Theme';
 
-// 🚀 2. IMPORTAMOS NUESTRO THEME PROVIDER CON UN "ALIAS" PARA QUE NO CHOQUEN
+// 🚀 2. IMPORTAMOS NUESTRO THEME PROVIDER
 import { ThemeProvider as CustomAppThemeProvider, useAppTheme } from './src/context/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
 
-// 🚀 3. CREAMOS UN SUB-COMPONENTE PARA LEER EL ESTADO GLOBAL
+// 🚀 3. SUB-COMPONENTE PARA LEER EL ESTADO GLOBAL
 function AppLayoutNavigator() {
-  // Aquí leemos si el usuario seleccionó dark o light en el modal
   const { isDark } = useAppTheme();
 
   const backgroundWebStyle = Platform.select({
@@ -36,7 +36,6 @@ function AppLayoutNavigator() {
     }
   });
 
-  // 👇 MANTUVIMOS TU DISEÑO EXACTAMENTE IGUAL AL QUE TE FUNCIONA
   return (
     <NavigationThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -61,7 +60,7 @@ function AppLayoutNavigator() {
   );
 }
 
-// 🚀 4. EL ROOT LAYOUT AHORA ENVUELVE TODO ORDENADAMENTE
+// 🚀 4. EL ROOT LAYOUT ENVUELVE TODO ORDENADAMENTE
 export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -78,12 +77,15 @@ export default function RootLayout() {
   }
 
   return (
-    <AppStateProvider store={store}>
-      {/* Nuestro tema envuelve al de navegación */}
-      <CustomAppThemeProvider> 
-        <AppLayoutNavigator />
-      </CustomAppThemeProvider>
-    </AppStateProvider>
+    // 🛡️ AuthProvider va primero para dar acceso al estado de sesión a toda la app
+    <AuthProvider>
+      <AppStateProvider store={store}>
+        {/* Nuestro tema envuelve al de navegación */}
+        <CustomAppThemeProvider> 
+          <AppLayoutNavigator />
+        </CustomAppThemeProvider>
+      </AppStateProvider>
+    </AuthProvider>
   );
 }
 
@@ -91,12 +93,8 @@ const styles = StyleSheet.create({
   background: {
     flex: 1,
     ...Platform.select({
-      ios: {
-        backgroundColor: '#000',
-      },
-      android: {
-        backgroundColor: '#000',
-      }
+      ios: { backgroundColor: '#000' },
+      android: { backgroundColor: '#000' }
     })
   }
 });

@@ -21,6 +21,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useMockSelector } from '@/redux/slices';
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 let BANNED_WORDS: string[] = [];
 try {
@@ -69,8 +70,12 @@ export default function EventsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  
+  /*const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';*/
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
+  
   const stylesUnified = useUnifiedCardStyles();
 
   const params = useLocalSearchParams();

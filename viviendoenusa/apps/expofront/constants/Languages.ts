@@ -13,7 +13,7 @@ export const translations = {
     profile: "Perfil",
     vision: "Visión",
     mision: "Misión",
-    welcome: "Hola, Cesar",
+    welcome: "Hola, ",
     select_lang: "Seleccionar Idioma",
     
     tabs: {
@@ -440,7 +440,7 @@ export const translations = {
     profile: "Profile",
     vision: "Vision",
     mision: "Mission",
-    welcome: "Hello, Cesar",
+    welcome: "Hello, ",
     select_lang: "Select Language",
     tabs: {
       home: "Home",
@@ -565,7 +565,7 @@ export const translations = {
       service_support: "Support Net",
       service7: "Support Net",
       icon7: "heart-pulse",
-      welcome_user: "Welcome, Cesar!"
+      welcome_user: "Welcome, "
     },
     lawyerstab: {
       label: "Specialties",

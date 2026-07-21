@@ -4,6 +4,10 @@ import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library'; 
+import nodemailer from 'nodemailer';
+import jwt from 'jsonwebtoken';
+import { Request, Response } from 'express'; // ⬅️ Importación necesaria para evitar errores
+import { AuthRequest } from '../middleware/authMiddleware'; // Importamos la interfaz extendida
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -17,7 +21,6 @@ const googleClient = new OAuth2Client();
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null) => {
   try {
-    console.log("Intentando registrar usuario con email:", data);
     const existingUsers = await db.select().from(users).where(eq(users.email, data.email));
     
     if (existingUsers.length > 0) {
@@ -25,21 +28,36 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-
     let hashedPassword = await bcrypt.hash(data.password, salt);
-/*
-    if(data.isVerified == true ){
-      hashedPassword=null;
+
+    let cityObj = undefined;
+    let stateObj = undefined;
+
+    if (data.zip && data.zip.length === 5) {
+      try {
+        const zipResponse = await fetch(`https://api.zippopotam.us/us/${data.zip}`);
+        if (zipResponse.ok) {
+          const zipInfo = await zipResponse.json();
+          const location = zipInfo.places[0];
+          cityObj = location['place name']; 
+          stateObj = location['state abbreviation']; 
+        } else {
+          console.warn(`Zip code no encontrado en la API al registrar: ${data.zip}`);
+        }
+      } catch (err) {
+        console.error("Error al consultar el servicio de Zip Codes en registro:", err);
+      }
     }
-*/
+
     const [newUser] = await db.insert(users).values({
       name: data.firstName,   
       lastName: data.lastName,     
       email: data.email,
       phone: data.phone || undefined,           
-      zip: data.zip || undefined,               
+      zip: data.zip || undefined,
+      estate: stateObj,                
       birth: data.birth || undefined,           
-      password: data.isVerified ?(null as string | null) : hashedPassword, 
+      password: data.isVerified ? (null as string | null) : hashedPassword, 
       imageUrl: imageUrl || undefined, 
       typeDetail: data.typeDetail || 'User',
       isVerified: data.isVerified      
@@ -149,43 +167,61 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 };
 
 // --------------------------------------------------------
-// 4. 🌐 AUTENTICACIÓN GOOGLE (LÓGICA CORREGIDA)
+// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Google + Email)
 // --------------------------------------------------------
-export const authenticateWithGoogle = async (idToken: string, termsAccepted: boolean) => {
+export const authenticateUser = async (credentials: { 
+  idToken?: string; 
+  email?: string; 
+  password?: string; 
+  isGoogle: boolean; 
+}) => {
   try {
-    console.log("Verificando token de Google...");
+    let email = credentials.email;
+    let firstName = "";
+    let lastName = "";
 
-    // 🚀 SOLUCIÓN: Validamos el token sin forzar el 'audience' inicialmente para evitar bloqueos
-    // La librería google-auth-library permite verificar sin pasar el audience si extraemos el payload primero.
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-    });
+    console.log("🔑 Intentando autenticar usuario. Google:", credentials.isGoogle, "Email:", email);
 
-    const payload = ticket.getPayload();
-    if (!payload || !payload.email) throw new Error("Token de Google inválido o no contiene email");
+    if (credentials.isGoogle && credentials.idToken) {
+      const ticket = await googleClient.verifyIdToken({ idToken: credentials.idToken });
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) throw new Error("Token de Google inválido");
+      email = payload.email;
+      firstName = payload.given_name || "";
+      lastName = payload.family_name || "";
+    }
 
-    const { email, given_name, family_name, picture } = payload;
-    console.log(`Token validado con éxito para: ${email}`);
+    if (!email) throw new Error("Email requerido");
 
     const rows = await db.select().from(users).where(eq(users.email, email));
     let user = rows[0];
 
-    // 🚀 TU LÓGICA: Si no existe, no lo guardamos aún. Le decimos al front que abra el modal.
     if (!user) {
-      console.log("Usuario nuevo detectado. Solicitando perfil...");
-      return {
-        message: "Usuario no registrado, requiere completar perfil",
-        requiresProfileCompletion: true,
-        user: { email, firstName: given_name, lastName: family_name, id: "temp" }
-      };
+      if (credentials.isGoogle) {
+        return {
+          message: "Usuario no registrado, requiere completar perfil",
+          requiresProfileCompletion: true,
+          user: { email, firstName, lastName, id: "temp" }
+        };
+      }
+      throw new Error("Usuario no encontrado. Regístrate primero.");
     }
 
-    // 🚀 TU LÓGICA: Si ya existe, se loguea directo al index.
-    console.log("Usuario existente detectado. Procediendo con el login...");
+    if (!credentials.isGoogle) {
+      if (!user.password) throw new Error("Esta cuenta requiere acceso con Google.");
+      const isMatch = await bcrypt.compare(credentials.password || '', user.password);
+      if (!isMatch) throw new Error("Contraseña incorrecta.");
+    }
+
+    // 🚀 AQUÍ ESTÁ LA SOLUCIÓN: Generar el token
+    const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
+    // Firmamos el token con el ID del usuario
+    const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
+
     return {
       message: "Autenticación exitosa",
-      token: "simulated_jwt_token", 
-      requiresProfileCompletion: false, // Va directo
+      requiresProfileCompletion: false,
+      token, // ⬅️ AHORA SÍ ENVIAMOS LA LLAVE AL FRONTEND
       user: {
         id: user.id,
         email: user.email,
@@ -194,7 +230,131 @@ export const authenticateWithGoogle = async (idToken: string, termsAccepted: boo
       }
     };
   } catch (error: any) {
-    console.error("❌ Error CRÍTICO en authenticateWithGoogle:", error.message);
-    throw new Error(`Error en autenticación con Google: ${error.message}`);
+    console.error("❌ Error en autenticación:", error.message);
+    throw new Error(error.message);
+  }
+};
+
+// --------------------------------------------------------
+// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
+// --------------------------------------------------------
+const transporter = nodemailer.createTransport({
+  host: 'smtp-mail.outlook.com', 
+  port: 587,
+  secure: false, 
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+export const sendPasswordResetEmail = async (email: string) => {
+  try {
+    console.log("Solicitud de recuperación para:", email);
+
+    // 1. Validar que el usuario exista
+    const rows = await db.select().from(users).where(eq(users.email, email));
+    const user = rows[0];
+
+    if (!user) {
+      throw new Error("No existe una cuenta registrada con este correo electrónico.");
+    }
+
+    if (!user.password) {
+      throw new Error("Esta cuenta usa autenticación de Google. Inicia sesión directamente con Google.");
+    }
+
+    // 2. 🚨 TRUCO DE SEGURIDAD: Combinar el secreto del .env con el password actual
+    const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
+    const secret = baseSecret + user.password;
+
+    // 3. Generar un token seguro firmado con ESA combinación (válido por 1 hora)
+    const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
+
+    // 4. Crear el enlace apuntando a tu IP local (o tu dominio web en producción)
+    const resetLink = `http://192.168.1.107:8081/ResetPassword?token=${resetToken}`;
+
+    const mailOptions = {
+      from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
+      to: user.email as string, 
+      subject: 'Recuperación de Contraseña - Viviendo en USA',
+      html: `
+        <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+          <h2>Recuperación de Contraseña</h2>
+          <p>Hola ${user.name},</p>
+          <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.</p>
+          <p>Haz clic en el botón de abajo para crear una nueva (este enlace expirará en 1 hora o al usarse):</p>
+          <br>
+          <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold;">
+            Restablecer Contraseña
+          </a>
+          <br><br>
+          <p>Si no solicitaste este cambio, simplemente ignora este correo.</p>
+        </div>
+      `
+    };
+
+    // 5. Enviar el correo
+    await transporter.sendMail(mailOptions);
+
+    return { message: "Correo enviado con éxito. Revisa tu bandeja de entrada." };
+  } catch (error: any) {
+    console.error("❌ Error enviando correo:", error.message);
+    throw new Error(error.message);
+  }
+};
+
+// --------------------------------------------------------
+// 6. 🔐 ACTUALIZAR CONTRASEÑA EN LA BASE DE DATOS
+// --------------------------------------------------------
+export const updatePassword = async (req: Request, res: Response) => {
+  const { token, password } = req.body;
+  
+  try {
+    // 1. Decodificar sin verificar para saber a quién le pertenece
+    const decodedPayload: any = jwt.decode(token);
+    if (!decodedPayload || !decodedPayload.id) {
+      throw new Error("Token con formato incorrecto.");
+    }
+
+    // 2. Buscar al usuario y obtener su contraseña actual
+    const rows = await db.select().from(users).where(eq(users.id, decodedPayload.id));
+    const user = rows[0];
+    if (!user) throw new Error("Usuario no encontrado.");
+
+    // 3. Reconstruir la misma llave combinada que usamos para crearlo
+    const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
+    const secret = baseSecret + user.password;
+
+    // 4. Verificar. Si la contraseña cambió, la combinación 'secret' falla y el token es rechazado
+    const decoded: any = jwt.verify(token, secret);
+    
+    // 5. Encriptar y guardar la contraseña nueva
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, decoded.id));
+
+    res.status(200).json({ message: "Contraseña actualizada correctamente." });
+  } catch (error: any) {
+    console.error("❌ Error al actualizar contraseña:", error.message);
+    res.status(400).json({ error: "El enlace es inválido, ha expirado o ya fue utilizado." });
+  }
+};
+
+export const getMiPerfil = async (req: AuthRequest, res: Response) => {
+  try {
+    // El middleware 'verifyToken' inyectó el 'user' en 'req'
+    const userId = req.user.id; 
+
+    const userProfile = await db.select().from(users).where(eq(users.id, userId));
+
+    if (userProfile.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    return res.status(200).json(userProfile[0]);
+  } catch (error) {
+    return res.status(500).json({ error: 'Error al obtener el perfil.' });
   }
 };

@@ -16,6 +16,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 const ICONS_ARRAY = ['apps', 'heart-pulse', 'brain', 'hand-heart', 'dots-horizontal'];
@@ -76,8 +77,13 @@ export default function SupportScreen() {
   const rawNotifId = paramsGlobal.id || paramsGlobal.supportId || paramsGlobal.referenceId;
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
   const mapRef = useRef<MapView>(null); 
+  /*
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
+  */
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
+
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const { t } = useTranslation();

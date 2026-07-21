@@ -2,18 +2,20 @@ import { StyleSheet, Platform, useColorScheme, useWindowDimensions } from 'react
 import { useMockSelector } from '@/redux/slices';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 export const useUnifiedCardStyles = () => {
   const { width, height } = useWindowDimensions();
-  const colorScheme = useColorScheme(); // Aseguramos que cualquier valor distinto a 'light' se trate como 'dark'
-  //const isDark = colorScheme === 'light';
-  const [isDark, setIsDark] = useState(false);
+
+
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
 
   
   useEffect(() => {
     const checkTheme = async () => {
       const savedTheme = await AsyncStorage.getItem('@app_theme');
-      setIsDark(savedTheme === 'dark');
+      //setIsDark(savedTheme === 'dark');
     };
     checkTheme();
   }, []);
@@ -84,7 +86,7 @@ export const useUnifiedCardStyles = () => {
     },
     // --- SERVICIOS ---
     welcomeText: { fontSize: 30, fontWeight: '900', letterSpacing: -1, color: glassColors.text },
-    middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8},
+    middleText: { fontSize: 16, fontWeight: '600', opacity: 0.8, color: isDark ? '#FFFFFF' : '#1A1A1A'},
     gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 5 },
     webGridCentering: { justifyContent: 'center', gap: 20 },
     mobileCard: { width: '47%', height: 110, marginBottom: 16 },
@@ -168,8 +170,7 @@ export const useUnifiedCardStyles = () => {
     // --- WEB SIDEBAR ---
     webSidebar: { width: 240, borderRightWidth: 1, borderColor: glassColors.border, paddingRight: 20 },
     sideMenuTitle: { 
-      fontSize: 12, fontWeight: '800', marginBottom: 20, letterSpacing: 1.2, 
-      textTransform: 'uppercase', color: glassColors.text
+      fontSize: 15, fontWeight: '800', marginBottom: 20, letterSpacing: 1.2, color: glassColors.text
     },
     webCapsuleBtn: { 
       paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, marginBottom: 10, 

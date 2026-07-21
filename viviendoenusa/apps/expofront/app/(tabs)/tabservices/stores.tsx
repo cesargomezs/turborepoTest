@@ -24,6 +24,7 @@ import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from '@/constants/Colors';
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
 const API_STORES_URL = 'http://192.168.1.107:3000/stores';
@@ -168,8 +169,11 @@ export default function StoresScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  /*const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';*/
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
+
   const stylesUnified = useUnifiedCardStyles();
 
   const params = useLocalSearchParams();

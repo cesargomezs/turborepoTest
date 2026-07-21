@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
-
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
 
 import { Colors } from '../../constants/Colors';
@@ -14,18 +13,16 @@ import { ThemedText } from '../ThemedText';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useRouter, usePathname } from 'expo-router'; 
-import { setUserMetadata, useMockDispatch, useMockSelector } from '../../redux/slices'; 
-import { setLanguage } from '../../redux/slices';
+import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage } from '../../redux/slices'; 
 import { useTranslation } from '../../hooks/useTranslation'; 
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
+import { useAuth } from '../../context/AuthContext';
 
 const API_BASE_URL = 'http://192.168.1.107:3000';
 const API_NOTIFICATIONS_URL = `${API_BASE_URL}/notifications`;
 const API_USERS_URL = `${API_BASE_URL}/auth/profile`; 
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
 const API_UPLOAD_URL = `${API_BASE_URL}/api/subir-imagen-optimizada/users`; 
-
-const TEMP_USER_ID = 'a391c27f-ffdc-4cb3-ba8c-7bc544880022';
 
 // ==========================================
 // 🚀 COMPONENTE: ITEM DESLIZABLE (SWIPE TO DELETE)
@@ -79,6 +76,11 @@ const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, 
 };
 
 export default function Header({ title }: { title?: string }) {
+  // 🔐 ESTADO GLOBAL DE AUTENTICACIÓN
+  const { user, token } = useAuth();
+
+  const REAL_USER_ID = user?.id;
+
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   
@@ -93,7 +95,7 @@ export default function Header({ title }: { title?: string }) {
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // 🚀 NUEVO: Estado de la contraseña
+  const [showPassword, setShowPassword] = useState(false); 
 
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
@@ -103,7 +105,6 @@ export default function Header({ title }: { title?: string }) {
   const isIOS = Platform.OS === 'ios';
 
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [activeProfileRole, setActiveProfileRole] = useState('User'); 
 
@@ -121,7 +122,6 @@ export default function Header({ title }: { title?: string }) {
   });
 
   const isSuperAdmin = userMetadata?.role === 'SAdmin' || profileData.typeDetail === 'SAdmin' || profileData.email === 'cesargomez853@gmail.com';
-
   const [notifications, setNotifications] = useState<any[]>([]);
   
   const languages = [
@@ -130,33 +130,45 @@ export default function Header({ title }: { title?: string }) {
   ];
 
   const fetchUserData = async () => {
+    if (!REAL_USER_ID || !token) return;
+
     try {
-      const res = await fetch(`${API_USERS_URL}/${TEMP_USER_ID}`);
-      if (res.ok) {
-        const userData = await res.json();
-        if (userData && !userData.error) {
-          setActiveProfileRole(userData.typeDetail || 'User');
-          setProfileData(prev => ({
-            ...prev,
-            email: userData.email || '',
-            name: userData.name || '',
-            last_name: userData.lastName || userData.last_name || '',
-            phone: userData.phone || '',
-            zip: userData.zip || '',
-            birth: userData.birth ? new Date(userData.birth).toISOString().split('T')[0] : '',
-            typeDetail: userData.typeDetail || '', 
-            image_url: userData.imageUrl || userData.image_url || null,
-            password: '', 
-            new_image_uri: null,
-          }));
+      const res = await fetch(`${API_USERS_URL}/${REAL_USER_ID}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`, 
+          'Content-Type': 'application/json'
         }
+      });
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Error ${res.status}: ${errText}`);
+      }
+      
+      const userData = await res.json();
+      if (userData && !userData.error) {
+        setActiveProfileRole(userData.typeDetail || 'User');
+        setProfileData(prev => ({
+          ...prev,
+          email: userData.email || '',
+          name: userData.name || '',
+          last_name: userData.lastName || userData.last_name || '',
+          phone: userData.phone || '',
+          zip: userData.zip || '',
+          birth: userData.birth ? new Date(userData.birth).toISOString().split('T')[0] : '',
+          typeDetail: userData.typeDetail || '', 
+          image_url: userData.imageUrl || userData.image_url || null,
+          password: '', 
+          new_image_uri: null,
+        }));
       }
     } catch (error) { console.error("Error al obtener datos:", error); }
   };
 
   useEffect(() => {
     if (!isCreatingUser) fetchUserData();
-  }, [isCreatingUser, settingsModalVisible]);
+  }, [isCreatingUser, settingsModalVisible, REAL_USER_ID, token]);
 
   useEffect(() => {
     if (isWeb && typeof window !== 'undefined') {
@@ -165,19 +177,35 @@ export default function Header({ title }: { title?: string }) {
   }, [pathname]);
 
   const fetchNotifications = async () => {
+    if (!REAL_USER_ID || !token) return;
+
     try {
-      // 🚀 Usamos una construcción explícita para evitar errores de concatenación
-      const url = `${API_BASE_URL}/notifications?userId=${TEMP_USER_ID}`;
-      console.log("Intentando conectar a:", url); // Esto te confirmará la URL real
+      const url = `${API_BASE_URL}/notifications?userId=${REAL_USER_ID}`;
       
-      const res = await fetch(url);
-      
-      if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`);
-      
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`, 
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res) {
+        throw new Error("No hubo respuesta del servidor");
+      }
+
+      if (!res.ok) {
+        const status = res.status || 500;
+        const errorText = await res.text().catch(() => "Error desconocido");
+        throw new Error(`Error ${status}: ${errorText}`);
+      }
+
       const data = await res.json();
-      if (Array.isArray(data)) setNotifications(data);
-    } catch (error) { 
-      console.error("Error al cargar notificaciones:", error); 
+      if (Array.isArray(data)) {
+        setNotifications(data);
+      }
+    } catch (error: any) { 
+      console.error("Error al cargar notificaciones:", error?.message || "Error desconocido"); 
     }
   };
 
@@ -185,7 +213,7 @@ export default function Header({ title }: { title?: string }) {
     fetchNotifications();
     const interval = setInterval(() => fetchNotifications(), 60000); 
     return () => clearInterval(interval);
-  }, []);
+  }, [REAL_USER_ID, token]);
 
   const hasUnread = notifications.some(n => !n.read);
 
@@ -204,7 +232,12 @@ export default function Header({ title }: { title?: string }) {
   const handleNotificationPress = async (notif: any) => {
     setNotifModalVisible(false);
     setNotifications(prev => prev.filter(n => n.id !== notif.id));
-    try { await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, { method: 'DELETE' }); } catch (error) {}
+    try { 
+      await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      }); 
+    } catch (error) {}
 
     setTimeout(() => {
       const routes: Record<string, { path: string, param: string }> = {
@@ -225,7 +258,12 @@ export default function Header({ title }: { title?: string }) {
 
   const handleDeleteNotificationOnly = async (notifId: string) => {
     setNotifications(prev => prev.filter(n => n.id !== notifId));
-    try { await fetch(`${API_NOTIFICATIONS_URL}/${notifId}`, { method: 'DELETE' }); } catch (error) {}
+    try { 
+      await fetch(`${API_NOTIFICATIONS_URL}/${notifId}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      }); 
+    } catch (error) {}
   };
 
   const clearAllNotifications = () => {
@@ -279,6 +317,7 @@ export default function Header({ title }: { title?: string }) {
         const uploadRes = await fetch(API_UPLOAD_URL, {
           method: 'POST',
           body: imageFormData,
+          headers: { 'Authorization': `Bearer ${token}` } 
         });
 
         if (!uploadRes.ok) throw new Error("Error al subir la imagen al servidor");
@@ -301,12 +340,15 @@ export default function Header({ title }: { title?: string }) {
         newImageUri: profileData.new_image_uri ? finalImageName : null 
       };
 
-      const endpoint = isCreatingUser ? API_REGISTER_URL : `${API_USERS_URL}/${TEMP_USER_ID}`;
+      const endpoint = isCreatingUser ? API_REGISTER_URL : `${API_USERS_URL}/${REAL_USER_ID}`;
       const method = isCreatingUser ? 'POST' : 'PUT';
 
       const res = await fetch(endpoint, {
         method: method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify(payload)
       });
 
@@ -339,7 +381,9 @@ export default function Header({ title }: { title?: string }) {
               <Image source={currentDisplayImage} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
             </TouchableOpacity>
             <View style={{ marginLeft: 12 }}>
-              <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>{t.welcome}</ThemedText>
+              <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>
+                {t.welcome + profileData.name + ' ' + (profileData.last_name ? profileData.last_name.substring(0, 1) : '')}
+              </ThemedText>
               {isSuperAdmin && (
                  <ThemedText style={{ fontSize: 11, color: '#FF5F6D', fontWeight: 'bold' }}>SAdmin Panel</ThemedText>
               )}
@@ -358,11 +402,10 @@ export default function Header({ title }: { title?: string }) {
           </View>
         </View>
 
-        {!isWeb && (
-          <View style={styles.titleContainer}>
-            <ThemedText className="text-center text-2xl" style={{ color: Colors[localTheme].tabIconDefault , fontWeight: 'bold' }}>{title}</ThemedText>
-          </View>
-        )}
+        {/* 🚀 TÍTULO HABILITADO PARA TODAS LAS PLATAFORMAS (INCLUYENDO WEB) */}
+        <View style={styles.titleContainer}>
+          <ThemedText className="text-center text-2xl" style={{ color: isDark ? '#4FC3F7' : '#007AFF', fontWeight: 'bold' }}>{title}</ThemedText>
+        </View>
       </BlurView>
 
       <Modal visible={settingsModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeSettingsModal}>
@@ -477,40 +520,39 @@ export default function Header({ title }: { title?: string }) {
 
                 <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{isCreatingUser ? "Contraseña" : "Nueva Contraseña (Opcional)"}</ThemedText>
                 
-{/* 🚀 SOLO VISIBLE SI ESTAMOS EN MODO CREACIÓN */}
-{isCreatingUser && (
-  <>
-    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>
-      Contraseña Inicial
-    </ThemedText>
-    <View style={{ width: '100%', position: 'relative', marginBottom: 15 }}>
-      <TextInput 
-        value={profileData.password} 
-        onChangeText={(val) => setProfileData({...profileData, password: val})} 
-        secureTextEntry={!showPassword}
-        placeholder="********"
-        placeholderTextColor={isDark ? '#666' : '#999'}
-        style={[styles.profileInput, { 
-          color: Colors[localTheme].text, 
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
-          borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', 
-          marginBottom: 0, 
-          paddingRight: 45 
-        }]} 
-      />
-      <TouchableOpacity 
-        style={{ position: 'absolute', right: 15, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} 
-        onPress={() => setShowPassword(!showPassword)}
-      >
-        <MaterialCommunityIcons 
-          name={showPassword ? "eye-outline" : "eye-off-outline"} 
-          size={22} 
-          color={isDark ? '#888' : '#AAA'} 
-        />
-      </TouchableOpacity>
-    </View>
-  </>
-)}
+                {isCreatingUser && (
+                  <>
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>
+                      Contraseña Inicial
+                    </ThemedText>
+                    <View style={{ width: '100%', position: 'relative', marginBottom: 15 }}>
+                      <TextInput 
+                        value={profileData.password} 
+                        onChangeText={(val) => setProfileData({...profileData, password: val})} 
+                        secureTextEntry={!showPassword}
+                        placeholder="********"
+                        placeholderTextColor={isDark ? '#666' : '#999'}
+                        style={[styles.profileInput, { 
+                          color: Colors[localTheme].text, 
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
+                          borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', 
+                          marginBottom: 0, 
+                          paddingRight: 45 
+                        }]} 
+                      />
+                      <TouchableOpacity 
+                        style={{ position: 'absolute', right: 15, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} 
+                        onPress={() => setShowPassword(!showPassword)}
+                      >
+                        <MaterialCommunityIcons 
+                          name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                          size={22} 
+                          color={isDark ? '#888' : '#AAA'} 
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
 
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>

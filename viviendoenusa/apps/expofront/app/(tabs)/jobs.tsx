@@ -20,6 +20,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
 import badWordsData from '@/utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 const BANNED_WORDS = Array.isArray((badWordsData as any)?.badWordsList) ? (badWordsData as any).badWordsList : []; 
 const validateComment = (text: string): boolean => {
@@ -59,8 +60,11 @@ export default function JobsScreen() {
   const rawNotifId = paramsGlobal.openJobId || paramsGlobal.id || paramsGlobal.jobId;
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
 
+  /*
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark'; 
+  const isDark = colorScheme === 'dark'; */
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
   
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);

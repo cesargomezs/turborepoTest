@@ -20,6 +20,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 // =====================================================================
 // 📡 1. CONFIGURACIONES GLOBALES, URLS Y CONSTANTES
@@ -155,8 +156,12 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 export default function EntrepreneurshipScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  
+  /*const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';*/
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
+
   const { t } = useTranslation();
   const stylesUnified = useUnifiedCardStyles();
   const router = useRouter();

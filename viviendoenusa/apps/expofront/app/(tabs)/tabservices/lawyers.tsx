@@ -26,6 +26,7 @@ import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from 'react-native/Libraries/NewAppScreen';
+import { useAppTheme } from 'app/src/context/ThemeContext';
 
 const API_BASE_URL = 'http://192.168.1.107:3000/lawyers';
 const API_TARIFFS_URL = 'http://192.168.1.107:3000/tariffs'; 
@@ -441,8 +442,11 @@ export default function LawyersScreen() {
   const notificationId = params.id || params.lawyerId || params.referenceId || params.reference_id || params.openEventId;
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null); 
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  //const colorScheme = useColorScheme() ?? 'light';
+  //const isDark = colorScheme === 'dark';
+  const { isDark, toggleTheme } = useAppTheme();
+  const localTheme = isDark ? 'dark' : 'light';
+  
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
