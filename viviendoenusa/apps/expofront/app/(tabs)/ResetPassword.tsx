@@ -27,7 +27,7 @@ export default function ResetPassword() {
     try {
       // Intenta despertar la aplicación en iOS/Android
       //await Linking.openURL('viviendoenusa://');
-      await Linking.openURL('exp://192.168.1.107:8081');
+      await Linking.openURL('exp://192.168.252.243:8081');
     } catch (error) {
       // Si falla (ej. escritorio), navega al inicio
       router.replace('/');
@@ -46,7 +46,7 @@ export default function ResetPassword() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://192.168.1.107:3000/auth/update-password', {
+      const response = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/auth/update-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),

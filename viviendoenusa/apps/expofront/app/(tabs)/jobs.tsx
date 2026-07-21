@@ -28,9 +28,9 @@ const validateComment = (text: string): boolean => {
   return !BANNED_WORDS.some((word: string) => lowerText.includes(word.toLowerCase()));
 };
 
-const API_JOBS_URL = 'http://192.168.1.107:3000/jobs';
-const API_COMPANIES_URL = 'http://192.168.1.107:3000/companies';
-const API_TARIFFS_URL = 'http://192.168.1.107:3000/tariffs';
+const API_JOBS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/jobs';
+const API_COMPANIES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/companies';
+const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
 
 const usCitiesData: Record<string, string[]> = {
   "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
@@ -470,7 +470,7 @@ export default function JobsScreen() {
           formData.append('imagen', { uri: newCompanyForm.logoUri, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/companies', {
+        const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/companies', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
         

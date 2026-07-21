@@ -166,6 +166,7 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
   }
 };
 
+
 // --------------------------------------------------------
 // 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Google + Email)
 // --------------------------------------------------------
@@ -179,8 +180,6 @@ export const authenticateUser = async (credentials: {
     let email = credentials.email;
     let firstName = "";
     let lastName = "";
-
-    console.log("🔑 Intentando autenticar usuario. Google:", credentials.isGoogle, "Email:", email);
 
     if (credentials.isGoogle && credentials.idToken) {
       const ticket = await googleClient.verifyIdToken({ idToken: credentials.idToken });
@@ -196,6 +195,9 @@ export const authenticateUser = async (credentials: {
     const rows = await db.select().from(users).where(eq(users.email, email));
     let user = rows[0];
 
+    // 🛡️ SEGURIDAD: Mensaje genérico para no revelar si el correo existe o no
+    const genericAuthError = "Credenciales incorrectas.";
+
     if (!user) {
       if (credentials.isGoogle) {
         return {
@@ -204,24 +206,53 @@ export const authenticateUser = async (credentials: {
           user: { email, firstName, lastName, id: "temp" }
         };
       }
-      throw new Error("Usuario no encontrado. Regístrate primero.");
+      throw new Error(genericAuthError);
+    }
+
+    // 🚀 CORRECCIÓN TS: Usamos (user.failedLoginAttempts ?? 0) para asegurar un número
+    const currentAttempts = user.failedLoginAttempts ?? 0;
+
+    // 🛡️ SEGURIDAD: Verificar si la cuenta está bloqueada ANTES de comparar contraseñas
+    if (user.isLocked || currentAttempts >= 5) {
+      throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos. Por favor, utiliza la opción '¿Olvidaste tu contraseña?' para restablecerla.");
     }
 
     if (!credentials.isGoogle) {
-      if (!user.password) throw new Error("Esta cuenta requiere acceso con Google.");
+      if (!user.password) throw new Error(genericAuthError);
+      
       const isMatch = await bcrypt.compare(credentials.password || '', user.password);
-      if (!isMatch) throw new Error("Contraseña incorrecta.");
+      
+      if (!isMatch) {
+        // 🛡️ SEGURIDAD: Incrementar contador de intentos fallidos
+        const attempts = currentAttempts + 1;
+        const isLocked = attempts >= 5; // Bloquear al quinto intento
+        
+        await db.update(users)
+          .set({ failedLoginAttempts: attempts, isLocked: isLocked })
+          .where(eq(users.id, user.id));
+
+        if (isLocked) {
+          throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos. Por favor, utiliza la opción '¿Olvidaste tu contraseña?' para restablecerla.");
+        }
+        
+        throw new Error(genericAuthError);
+      }
     }
 
-    // 🚀 AQUÍ ESTÁ LA SOLUCIÓN: Generar el token
+    // 🛡️ SEGURIDAD: Si el login es exitoso, reiniciamos los intentos fallidos a 0
+    if (currentAttempts > 0 || user.isLocked) {
+      await db.update(users)
+        .set({ failedLoginAttempts: 0, isLocked: false })
+        .where(eq(users.id, user.id));
+    }
+
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
-    // Firmamos el token con el ID del usuario
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
     return {
       message: "Autenticación exitosa",
       requiresProfileCompletion: false,
-      token, // ⬅️ AHORA SÍ ENVIAMOS LA LLAVE AL FRONTEND
+      token, 
       user: {
         id: user.id,
         email: user.email,
@@ -234,6 +265,7 @@ export const authenticateUser = async (credentials: {
     throw new Error(error.message);
   }
 };
+
 
 // --------------------------------------------------------
 // 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
@@ -272,7 +304,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
 
     // 4. Crear el enlace apuntando a tu IP local (o tu dominio web en producción)
-    const resetLink = `http://192.168.1.107:8081/ResetPassword?token=${resetToken}`;
+    const resetLink = `http://192.168.252.243:8081/ResetPassword?token=${resetToken}`;
 
     const mailOptions = {
       from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
@@ -311,28 +343,29 @@ export const updatePassword = async (req: Request, res: Response) => {
   const { token, password } = req.body;
   
   try {
-    // 1. Decodificar sin verificar para saber a quién le pertenece
     const decodedPayload: any = jwt.decode(token);
     if (!decodedPayload || !decodedPayload.id) {
       throw new Error("Token con formato incorrecto.");
     }
 
-    // 2. Buscar al usuario y obtener su contraseña actual
     const rows = await db.select().from(users).where(eq(users.id, decodedPayload.id));
     const user = rows[0];
     if (!user) throw new Error("Usuario no encontrado.");
 
-    // 3. Reconstruir la misma llave combinada que usamos para crearlo
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
 
-    // 4. Verificar. Si la contraseña cambió, la combinación 'secret' falla y el token es rechazado
     const decoded: any = jwt.verify(token, secret);
     
-    // 5. Encriptar y guardar la contraseña nueva
     const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // 🛡️ SEGURIDAD: Al restablecer la contraseña, desbloqueamos la cuenta y reseteamos los intentos
     await db.update(users)
-      .set({ password: hashedPassword })
+      .set({ 
+        password: hashedPassword,
+        failedLoginAttempts: 0,
+        isLocked: false
+      })
       .where(eq(users.id, decoded.id));
 
     res.status(200).json({ message: "Contraseña actualizada correctamente." });
@@ -341,6 +374,10 @@ export const updatePassword = async (req: Request, res: Response) => {
     res.status(400).json({ error: "El enlace es inválido, ha expirado o ya fue utilizado." });
   }
 };
+
+//// --------------------------------------------------------
+// 7. 🔍 OBTENER PERFIL DEL USUARIO AUTENTICADO
+//// --------------------------------------------------------
 
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {

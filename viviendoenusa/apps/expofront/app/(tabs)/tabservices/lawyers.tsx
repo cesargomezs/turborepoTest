@@ -28,8 +28,8 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 
-const API_BASE_URL = 'http://192.168.1.107:3000/lawyers';
-const API_TARIFFS_URL = 'http://192.168.1.107:3000/tariffs'; 
+const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/lawyers';
+const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
@@ -224,7 +224,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/lawyers', {
+        const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/lawyers', {
           method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
         });
         

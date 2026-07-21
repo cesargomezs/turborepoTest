@@ -105,7 +105,7 @@ export default function HomeScreen() {
       );
       const claims = JSON.parse(jsonPayload);
 
-      const API_URL = 'http://192.168.1.107:3000'; 
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND; 
       
       const res = await fetch(`${API_URL}/auth/login`, { 
         method: 'POST',
@@ -172,7 +172,7 @@ export default function HomeScreen() {
         authProvider: 'google'
       };
       
-      const API_URL = 'http://192.168.1.107:3000'; 
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND; 
       const endpoint = `${API_URL}/auth/register`;
 
       const response = await fetch(endpoint, {
@@ -237,7 +237,7 @@ export default function HomeScreen() {
     }
 
     try {
-      const API_URL = 'http://192.168.1.107:3000';
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
       const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
 
       const payload = isRegistering 
@@ -263,7 +263,6 @@ export default function HomeScreen() {
 
       const dataRes = await response.json();
       
-
       if (!response.ok) {
         throw new Error(dataRes.error || "Error al autenticar");
       }
@@ -271,10 +270,36 @@ export default function HomeScreen() {
 
       dispatch(toggleAuth());
 
-
     } catch (error: any) {
       console.log("Aviso de acceso:", error.message);
       const msg = error.message || "Ocurrió un error al intentar acceder.";
+      
+      // 🛡️ SEGURIDAD: Interceptamos el mensaje de cuenta bloqueada
+      if (msg.includes("bloqueada por múltiples intentos")) {
+        if (isWeb) {
+          const resetConfirm = window.confirm(`${msg}\n\n¿Deseas recuperar tu contraseña ahora?`);
+          if (resetConfirm) {
+            setResetEmail(form.email); // Pre-llenamos el correo
+            setShowResetModal(true);
+          }
+        } else {
+          Alert.alert(
+            "Cuenta Bloqueada", 
+            msg,
+            [
+              { text: "Cancelar", style: "cancel" },
+              { 
+                text: "Recuperar", 
+                onPress: () => {
+                  setResetEmail(form.email);
+                  setShowResetModal(true);
+                } 
+              }
+            ]
+          );
+        }
+        return; // Detenemos la ejecución para que no lance la alerta genérica abajo
+      }
       
       if (isWeb) {
         window.alert(`Error: ${msg}`);
@@ -282,7 +307,7 @@ export default function HomeScreen() {
         Alert.alert("Error", msg);
       }
     }
-  };
+  };  
 
   const handlePasswordReset = async () => {
     if (!resetEmail || !resetEmail.includes('@')) {
@@ -291,7 +316,7 @@ export default function HomeScreen() {
     }
 
     try {
-      const API_URL = 'http://192.168.1.107:3000';
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
       const response = await fetch(`${API_URL}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

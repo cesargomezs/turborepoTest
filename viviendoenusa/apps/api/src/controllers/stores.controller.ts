@@ -344,7 +344,7 @@ export const createStore = async (data: any) => {
 // =====================================================================
 export const updateStore = async (id: string, data: any) => {
   try {
-    const res = await fetch(`http://192.168.1.107:3000/stores/${id}`);
+    const res = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/stores/${id}`);
     const response = await res.json();
     const amount = Number(response.payments) || 0;
 

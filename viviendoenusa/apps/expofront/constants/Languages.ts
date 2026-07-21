@@ -1,3 +1,4 @@
+import { languageReducer } from "@/redux/slices";
 import { Filter } from "bad-words";
 import { time } from "console";
 import { create } from "domain";
@@ -22,6 +23,24 @@ export const translations = {
       jobs: "Trabajos",
       logout: "Cerrar Sesión"
     },
+
+    headertab: {
+      appearance: "Apariencia",
+      languaje: "Idioma",
+      rol:"Rol Asignado",
+      rolUser: "Usuario",
+      labelpersonal: "Información Personal",
+      email: "Correo electrónico",
+      name: "Nombre",
+      lastName: "Apellido",
+      labelPassword: "Contraseña Inicial",
+      phone: "Teléfono",
+      zipCode: "Código Postal",
+      birth: "Fecha de Nacimiento",
+      notification: "Notificaciones",
+      labelnotification: "No tienes notificaciones nuevas"
+    },
+
     genericbtn: {
       likebtn: "Me gusta",
       dislikebtn: "No me gusta",
@@ -447,6 +466,22 @@ export const translations = {
       services: "Services",
       jobs: "jobs",
       logout: "Close Session"
+    },
+    headertab: {
+      appearance: "Appearance",
+      languaje: "Language",
+      rol:"Assigned Role",
+      rolUser: "User",
+      labelpersonal: "Personal Information",
+      email: "Email",
+      name: "Name",
+      lastName: "Last Name",
+      labelPassword: "Initial Password",
+      phone: "Phone",
+      zipCode: "ZIP Code",
+      birth: "Birthdate",
+      notification: "Notifications",
+      labelnotification: "You have no new notifications"
     },
     genericbtn: {
       likebtn: "I like it",

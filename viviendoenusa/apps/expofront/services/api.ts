@@ -1,7 +1,7 @@
 // services/api.ts
 import { useAuth } from '../context/AuthContext'; // Importas tu hook de seguridad
 
-const API_URL = 'http://192.168.1.107:3000';
+const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
 
 export const secureFetch = async (endpoint: string, options: any = {}) => {
   // 1. Obtenemos el token desde nuestro contexto global

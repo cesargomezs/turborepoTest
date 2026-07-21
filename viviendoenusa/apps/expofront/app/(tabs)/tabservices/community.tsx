@@ -74,7 +74,7 @@ const getRelativeTime = (dateString: string | Date) => {
 };
 
 // 📡 URL BASE PARA LA COMUNIDAD
-const API_COMMUNITY_URL = 'http://192.168.1.107:3000/community'; 
+const API_COMMUNITY_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/community'; 
 
 export default function CommunityScreen() {
   const { t } = useTranslation();
@@ -265,7 +265,7 @@ export default function CommunityScreen() {
           } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/community', {
+        const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/community', {
           method: 'POST',
           body: formData,
           headers: { 

@@ -33,7 +33,7 @@ const NOMBRE_BUCKET = 'images';
 
 // 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
-const API_TARIFFS_URL = 'http://192.168.1.107:3000/tariffs'; 
+const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
 const sanitizeText = (str: any) => {
@@ -354,7 +354,7 @@ export const updateLawyer = async (id: string, data: any) => {
   try {
 
     // 1. Obtener los datos del abogado
-    const res = await fetch(`http://192.168.1.107:3000/lawyers/${id}`);
+    const res = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/lawyers/${id}`);
     const response = await res.json();
 
     // 2. Acceder al valor directamente (ya que es un objeto, no un arreglo)

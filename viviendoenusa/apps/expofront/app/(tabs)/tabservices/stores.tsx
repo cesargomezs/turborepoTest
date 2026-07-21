@@ -27,8 +27,8 @@ import { Colors } from '@/constants/Colors';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
-const API_STORES_URL = 'http://192.168.1.107:3000/stores';
-const API_TARIFFS_URL = 'http://192.168.1.107:3000/tariffs'; 
+const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
+const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -598,7 +598,7 @@ export default function StoresScreen() {
           formData.append('imagen', { uri: formImage as string, name: filename, type } as any);
         }
 
-        const uploadResponse = await fetch('http://192.168.1.107:3000/api/subir-imagen-optimizada/stores', {
+        const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/stores', {
           method: 'POST',
           body: formData,
           headers: { 'Accept': 'application/json' },

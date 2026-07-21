@@ -18,7 +18,9 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
 import { useAuth } from '../../context/AuthContext';
 
-const API_BASE_URL = 'http://192.168.1.107:3000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND || process.env.EXPO_PUBLIC_URL_BACKEND;
+console.log("🌐 API_BASE_URL:", API_BASE_URL);
+console.log(process.env.EXPO_PUBLIC_URL_BACKEND);
 const API_NOTIFICATIONS_URL = `${API_BASE_URL}/notifications`;
 const API_USERS_URL = `${API_BASE_URL}/auth/profile`; 
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
@@ -402,9 +404,11 @@ export default function Header({ title }: { title?: string }) {
           </View>
         </View>
 
-        {/* 🚀 TÍTULO HABILITADO PARA TODAS LAS PLATAFORMAS (INCLUYENDO WEB) */}
+        {/* 🚀 TÍTULO HABILITADO PARA TODAS LAS PLATAFORMAS (INCLUYENDO WEB)
+        #0a7ea4 -----#007AFF
+        */}
         <View style={styles.titleContainer}>
-          <ThemedText className="text-center text-2xl" style={{ color: isDark ? '#4FC3F7' : '#007AFF', fontWeight: 'bold' }}>{title}</ThemedText>
+          <ThemedText className="text-center text-2xl" style={{ color: isDark ? '#4FC3F7' : '#007AFF' , fontWeight: 'bold' }}>{title}</ThemedText>
         </View>
       </BlurView>
 
@@ -453,7 +457,7 @@ export default function Header({ title }: { title?: string }) {
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="theme-light-dark" size={22} color={Colors[localTheme].text} style={{ marginRight: 10 }} />
-                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Apariencia</ThemedText>
+                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>{t.headertab.appearance}</ThemedText>
                     </View>
                     <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: 4 }}>
                       <TouchableOpacity onPress={() => toggleTheme('light')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: !isDark ? '#FFF' : 'transparent', shadowColor: !isDark ? '#000' : 'transparent', shadowOpacity: !isDark ? 0.1 : 0, shadowRadius: 4 }}>
@@ -470,7 +474,7 @@ export default function Header({ title }: { title?: string }) {
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="translate" size={22} color={Colors[localTheme].text} style={{ marginRight: 10 }} />
-                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Idioma</ThemedText>
+                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>{t.headertab.languaje}</ThemedText>
                     </View>
                     <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: 4 }}>
                       {languages.map((lang) => {
@@ -489,31 +493,31 @@ export default function Header({ title }: { title?: string }) {
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="shield-account" size={22} color="#FF5F6D" style={{ marginRight: 10 }} />
-                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Rol Asignado</ThemedText>
+                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>{t.headertab.rol}</ThemedText>
                     </View>
                     <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: 4 }}>
                       <TouchableOpacity onPress={() => setActiveProfileRole('Admin')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: activeProfileRole === 'Admin' ? (isDark ? '#333' : '#FFF') : 'transparent' }}>
                         <ThemedText style={{ fontSize: 13, fontWeight: activeProfileRole === 'Admin' ? 'bold' : '600', color: activeProfileRole === 'Admin' ? '#FF5F6D' : '#888' }}>Admin</ThemedText>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => setActiveProfileRole('User')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: activeProfileRole === 'User' ? (isDark ? '#333' : '#FFF') : 'transparent' }}>
-                        <ThemedText style={{ fontSize: 13, fontWeight: activeProfileRole === 'User' ? 'bold' : '600', color: activeProfileRole === 'User' ? Colors[localTheme].tint : '#888' }}>Usuario</ThemedText>
+                        <ThemedText style={{ fontSize: 13, fontWeight: activeProfileRole === 'User' ? 'bold' : '600', color: activeProfileRole === 'User' ? Colors[localTheme].tint : '#888' }}>{t.headertab.rolUser}</ThemedText>
                       </TouchableOpacity>
                     </View>
                   </View>
                 )}
 
-                <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text, marginBottom: 10, fontSize: 16 }]}>Información Personal</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text, marginBottom: 10, fontSize: 16 }]}>{t.headertab.labelpersonal}</ThemedText>
                 
-                <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Correo Electrónico</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.email}</ThemedText>
                 <TextInput value={profileData.email} onChangeText={(val) => setProfileData({...profileData, email: val})} editable={isCreatingUser} keyboardType="email-address" autoCapitalize="none" style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
 
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Nombre</ThemedText>
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.name}</ThemedText>
                     <TextInput value={profileData.name} onChangeText={(val) => setProfileData({...profileData, name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Apellido</ThemedText>
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.lastName}</ThemedText>
                     <TextInput value={profileData.last_name} onChangeText={(val) => setProfileData({...profileData, last_name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
                   </View>
                 </View>
@@ -523,7 +527,7 @@ export default function Header({ title }: { title?: string }) {
                 {isCreatingUser && (
                   <>
                     <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>
-                      Contraseña Inicial
+                    {t.headertab.labelPassword}
                     </ThemedText>
                     <View style={{ width: '100%', position: 'relative', marginBottom: 15 }}>
                       <TextInput 
@@ -556,17 +560,17 @@ export default function Header({ title }: { title?: string }) {
 
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Teléfono</ThemedText>
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.phone}</ThemedText>
                     <TextInput value={profileData.phone} keyboardType="phone-pad" onChangeText={(val) => setProfileData({...profileData, phone: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Zip Code</ThemedText>
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.zipCode}</ThemedText>
                     <TextInput value={profileData.zip} keyboardType="numeric" maxLength={5} onChangeText={(val) => setProfileData({...profileData, zip: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
                   </View>
                 </View>
 
                 <View style={{ width: '100%', marginBottom: 15 }}>
-                  <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Nacimiento</ThemedText>
+                  <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.birth}</ThemedText>
                   <View style={{ position: 'relative' }}>
                     <View style={[styles.profileInput, { marginBottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
                       <ThemedText style={{ color: profileData.birth ? Colors[localTheme].text : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)') }}>{profileData.birth || 'yyyy-mm-dd'}</ThemedText>
@@ -625,7 +629,7 @@ export default function Header({ title }: { title?: string }) {
                   <MaterialCommunityIcons name="close" size={28} color={Colors[localTheme].text} />
                 </TouchableOpacity>
                 
-                <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>Notificaciones</ThemedText>
+                <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>{t.headertab.notification}</ThemedText>
                 
               </View>
 
@@ -654,7 +658,7 @@ export default function Header({ title }: { title?: string }) {
                 ) : (
                   <View style={{ alignItems: 'center', paddingVertical: 40, opacity: 0.5 }}>
                     <MaterialCommunityIcons name="bell-sleep-outline" size={48} color={Colors[localTheme].text} />
-                    <ThemedText style={{ marginTop: 15, fontWeight: 'bold', color: Colors[localTheme].text }}>No tienes notificaciones nuevas</ThemedText>
+                    <ThemedText style={{ marginTop: 15, fontWeight: 'bold', color: Colors[localTheme].text }}>{t.headertab.labelnotification}</ThemedText>
                   </View>
                 )}
               </ScrollView>

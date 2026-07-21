@@ -37,6 +37,8 @@ import {
     // 🛡️ NUEVOS CAMPOS SUGERIDOS
     isVerified: boolean("is_verified").default(false), // true si el usuario está certificado
     verifiedAt: timestamp("verified_at"),
+    failedLoginAttempts: integer('failed_login_attempts').default(0),
+    isLocked: boolean('is_locked').default(false),
   });
   
   // 1. TABLA: TYPE DETAIL
