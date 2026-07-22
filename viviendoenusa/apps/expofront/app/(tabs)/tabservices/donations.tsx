@@ -18,6 +18,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper'; // 🚀 IMPORTAMOS EL HELPER DE COMPARTIR
 
 // --- 1. LÓGICA DE VALIDACIÓN GLOBAL ---
 let BANNED_WORDS: string[] = [];
@@ -54,15 +55,11 @@ export default function DonationsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-/*
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
-  */
+
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
-  //const currentUserName = userMetadata?.name || "Cesar"; 
   const currentUserName = 'Cesar';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const stylesUnified = useUnifiedCardStyles();
@@ -144,6 +141,18 @@ export default function DonationsScreen() {
   const handleCategorySelect = (index: number) => {
     setSelectedCategoryIdx(index);
     setSearchQuery('');
+  };
+
+  // 🚀 NUEVA FUNCIÓN PARA COMPARTIR DONACIONES
+  const handleShare = async (item: any) => {
+    await handleUniversalShare({
+      title: t.donationstab.label+item.title,
+      description: item.descriptionDon || item.description,
+      phone: item.phone,
+      address: item.locationDon || item.location,
+      zip: item.zip,
+      image: item.image,
+    });
   };
 
   // 🚀 ACTUALIZAR ESTADO DE LA DONACIÓN
@@ -424,6 +433,8 @@ export default function DonationsScreen() {
                             onToggleStatus={handleToggleStatus}
                             t={t}
                             categoryLabels={CATEGORY_LABELS}
+                            isWeb={isWeb} // 🚀 Pasamos isWeb
+                            handleShare={handleShare} // 🚀 Pasamos la función de compartir
                           />
                         )) : (
                           <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
@@ -553,12 +564,10 @@ export default function DonationsScreen() {
 }
 
 // --- 3. COMPONENTE DE TARJETA DE DONACIÓN ---
-const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels }: any) => {
+const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels, isWeb, handleShare }: any) => {
   
   // 🚀 BLINDAJE: Si la BD no manda nombre, usamos 'Usuario' por defecto
   const safeOwnerName = item.ownerName || item.userId || 'Usuario';
-  console.log("Renderizando tarjeta para:", safeOwnerName, "con título:", item.title);
-  console.log("Datos completos del item:", currentUserName);
   const isOwner = safeOwnerName === currentUserName;
   const isDelivered = item.statusId === '6a226ffa-9edf-4886-931f-64299f8a6f7f';
   const isWhatsapp = item.contactMethod === 'whatsapp';
@@ -638,10 +647,13 @@ const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orang
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity onPress={() => Share.share({ message: item.title })} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
-            <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-            <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.genericbtn as any)?.sharingbtn || 'Compartir'}</ThemedText>
-          </TouchableOpacity>
+          {/* 🚀 BOTÓN DE COMPARTIR ACTUALIZADO Y OCULTO EN WEB */}
+          {!isWeb && (
+            <TouchableOpacity onPress={() => handleShare(item)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
+              <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.genericbtn as any)?.sharingbtn || 'Compartir'}</ThemedText>
+            </TouchableOpacity>
+          )}
 
           {isOwner && (
             <TouchableOpacity onPress={() => onToggleStatus(item.id)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDelivered ? 'rgba(76, 175, 80, 0.1)' : (isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0') }}>

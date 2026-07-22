@@ -1,3 +1,6 @@
+import Head from 'expo-router/head';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import React, { useState, useEffect } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
@@ -21,6 +24,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper';
 
 // =====================================================================
 // 📡 1. CONFIGURACIONES GLOBALES, URLS Y CONSTANTES
@@ -166,6 +170,20 @@ export default function EntrepreneurshipScreen() {
   
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+
+  // =====================================================================
+  // 🚀 FUNCIÓN DE COMPARTIR ACTUALIZADA (Sin portapapeles manual)
+  // =====================================================================
+  const handleShare = async (item: Emprendimiento) => {
+    await handleUniversalShare({
+      title: t.entrepreneurshiptab.label+item.name,
+      description: item.description,
+      phone: item.phone,
+      address: item.address,
+      zip: item.zip,
+      image: item.image,
+    });
+  };
 
   const isWeb      = Platform.OS === 'web';
   const isLargeWeb = isWeb && width > 1000;
@@ -438,23 +456,6 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // 🚀 ACTUALIZADO: Función de compartir con URL de imagen incluida y exclusión en web
-  const handleShare = async (item: Emprendimiento) => {
-    try {
-          // 🚀 Mensaje limpio para que WhatsApp detecte la URL al final y dibuje la miniatura de la imagen
-          const shareMessage = `¡Mira este emprendimiento!\n\n*${item.name}*\n${item.description}\n📞 Tel: ${item.phone}\n\n${item.image}`;
-          
-          await Share.share({
-            message: shareMessage,
-            title: item.name,
-            // En iOS, pasamos la URL directa para que el sistema intente adjuntar la tarjeta multimedia
-            url: Platform.OS === 'ios' ? item.image : undefined 
-          });
-        } catch (error) {
-          console.log("Error al compartir:", error);
-        }
-  };
-
   const handleAddReview = async (targetId: string, stars: number, comment: string) => {
     const currentUserId = userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
     const currentItem = detailItem?.id === targetId ? detailItem : (reviewTarget?.id === targetId ? reviewTarget : results.find(r => r.id === targetId));
@@ -719,7 +720,6 @@ export default function EntrepreneurshipScreen() {
               <MaterialCommunityIcons name={savedItems.includes(item.id) ? 'bookmark' : 'bookmark-outline'} size={24} color={savedItems.includes(item.id) ? (isDark ? '#FFF' : '#111') : DC.subtext} />
             </TouchableOpacity>
 
-            {/* 🚀 Ocultamos el botón de compartir si estamos en Web */}
             {!isWeb && (
               <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleShare(item); }}>
                 <MaterialCommunityIcons name="share-variant-outline" size={24} color={DC.subtext} />
@@ -767,6 +767,12 @@ export default function EntrepreneurshipScreen() {
   // =====================================================================
   return (
     <View style={stylesUnified.container}>
+      <Head>
+        <title>Emprendimientos - Viviendo en USA</title>
+        <meta property="og:title" content="Emprendimientos Locales en Viviendo en USA" />
+        <meta property="og:description" content="Apoya y descubre los negocios creados por nuestra comunidad." />
+        <meta property="og:image" content="https://tu-servidor.com/imagen-portada.jpg" />
+      </Head>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
 
@@ -921,111 +927,119 @@ export default function EntrepreneurshipScreen() {
       {/* MODAL DETALLE */}
       <RNModal visible={!!detailItem} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setDetailItem(null)}>
         {detailItem && (
-          <View style={{ flex: 1 }}>
-            <BlurView style={StyleSheet.absoluteFill} intensity={90} tint={isDark ? 'dark' : 'light'} />
-            <View style={{ position: 'relative' }}>
-               {detailItem.image && detailItem.image.length > 5 ? ( <Image source={{ uri: detailItem.image }} style={S.detailHeroImage} resizeMode="cover" /> ) : ( <View style={[S.detailHeroImage, { backgroundColor: DC.inputBg, justifyContent: 'center', alignItems: 'center' }]}><MaterialCommunityIcons name="image-off-outline" size={50} color={DC.subtext} /></View> )}
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.45)']} style={StyleSheet.absoluteFill} />
-              <TouchableOpacity onPress={() => setDetailItem(null)} style={[S.detailCloseBtn, { top: insets.top + 12 }]}><MaterialCommunityIcons name="arrow-left" size={22} color="#FFF" /></TouchableOpacity>
-              {detailItem.rating > 0 && (
-                <View style={S.detailRatingBadge}><MaterialCommunityIcons name="star" size={14} color="#FFC371" /><ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 14, marginLeft: 4 }}>{detailItem.rating.toFixed(1)}</ThemedText></View>
-              )}
-            </View>
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior={isIOS ? 'padding' : 'height'}>
-              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, paddingBottom: insets.bottom + 40 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 }}>
-                  <LinearGradient colors={OG as any} style={[S.cardIconWrap, { width: 48, height: 48, borderRadius: 15, marginRight: 14 }]}><MaterialCommunityIcons name={CATEGORY_ICONS_DICT[CATEGORIES[detailItem.categoryId]] || ICONS_ARRAY[detailItem.categoryId] || 'store' as any} size={24} color="#FFF" /></LinearGradient>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}><ThemedText style={{ fontWeight: '900', fontSize: 20, color: DC.text }}>{detailItem.name}</ThemedText>{detailItem.verified && <MaterialCommunityIcons name="check-decagram" size={20} color="#4FC3F7" />}</View>
-                    <ThemedText style={{ color: DC.subtext, fontSize: 13, fontWeight: '600', marginTop: 2 }}>{CATEGORIES[detailItem.categoryId]}</ThemedText>
-                    
-                    {detailItem.address ? (
-                      <ThemedText style={{ color: '#FF5F6D', fontSize: 14, fontWeight: '700', marginTop: 4 }}>
-                        <MaterialCommunityIcons name="map-marker-outline" size={13} />
-                         {detailItem.zip +' '+detailItem.address}
-                      </ThemedText>
-                    ) : null}
-                  </View>
-                </View>
-                {detailItem.promo && ( <View style={[S.promoBadge, { marginBottom: 16 }]}><MaterialCommunityIcons name="tag-outline" size={14} color="#FFF" style={{ marginRight: 6 }} /><ThemedText style={{ color: '#FFF', fontSize: 13, fontWeight: '800' }}>{detailItem.promo}</ThemedText></View> )}
-                <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><MaterialCommunityIcons name="text-box-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} /><ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.aboutBussines || 'Sobre el negocio'}</ThemedText></View>
-                  <ThemedText style={{ color: DC.subtext, fontSize: 14, lineHeight: 22 }}>{detailItem.description}</ThemedText>
-                </View>
-                <View style={[S.contactRow, { marginBottom: 16, flexWrap: 'wrap' }]}>
-                  <TouchableOpacity onPress={() => { if(detailItem.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${detailItem.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${detailItem.phone}`); } }} style={[S.contactBtn, { backgroundColor: detailItem.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)'), flexGrow: 1, minWidth: 130 }]}>
-                    <MaterialCommunityIcons name={detailItem.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={18} color={detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} />
-                    <ThemedText style={[S.contactBtnText, { color: detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D", fontSize: 14 }]}>{detailItem.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || "Llamar")}</ThemedText>
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg, marginBottom: 20 }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TouchableOpacity onPress={() => handleVote(detailItem.id, 'like')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, backgroundColor: detailItem.userVote === 'like' ? (isDark ? 'rgba(25, 118, 210, 0.35)' : 'rgba(25, 118, 210, 0.25)') : (isDark ? 'rgba(25, 118, 210, 0.15)' : 'rgba(25, 118, 210, 0.1)'), paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}>
-                        <MaterialCommunityIcons name="thumb-up" size={20} color="#1976D2" />
-                        <ThemedText style={{ marginLeft: 6, fontSize: 14, fontWeight: '800', color: '#1976D2' }}>{formatCount(detailItem.likes)}</ThemedText>
-                      </TouchableOpacity>
+          <View style={isLargeWeb ? { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' } : { flex: 1 }}>
+            {isLargeWeb ? (
+              <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setDetailItem(null)} />
+            ) : (
+              <BlurView style={StyleSheet.absoluteFill} intensity={90} tint={isDark ? 'dark' : 'light'} />
+            )}
 
-                      <TouchableOpacity onPress={() => handleVote(detailItem.id, 'dislike')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: detailItem.userVote === 'dislike' ? (isDark ? 'rgba(250, 128, 114, 0.35)' : 'rgba(250, 128, 114, 0.25)') : (isDark ? 'rgba(250, 128, 114, 0.15)' : 'rgba(250, 128, 114, 0.1)'), paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}>
-                        <MaterialCommunityIcons name="thumb-down" size={20} color="#FA8072" />
-                        <ThemedText style={{ marginLeft: 6, fontSize: 14, fontWeight: '800', color: '#FA8072' }}>{formatCount(detailItem.dislikes)}</ThemedText>
-                      </TouchableOpacity>
+            <View style={isLargeWeb ? { width: 550, height: height * 0.85, borderRadius: 32, overflow: 'hidden', backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderWidth: 1, borderColor: DC.border } : { flex: 1 }}>
+              {isLargeWeb && !isAndroid && <BlurView style={StyleSheet.absoluteFill} intensity={100} tint={isDark ? 'dark' : 'light'} />}
+
+              <View style={{ position: 'relative' }}>
+                 {detailItem.image && detailItem.image.length > 5 ? ( <Image source={{ uri: detailItem.image }} style={S.detailHeroImage} resizeMode="cover" /> ) : ( <View style={[S.detailHeroImage, { backgroundColor: DC.inputBg, justifyContent: 'center', alignItems: 'center' }]}><MaterialCommunityIcons name="image-off-outline" size={50} color={DC.subtext} /></View> )}
+                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.45)']} style={StyleSheet.absoluteFill} />
+                <TouchableOpacity onPress={() => setDetailItem(null)} style={[S.detailCloseBtn, { top: isLargeWeb ? 16 : insets.top + 12 }]}><MaterialCommunityIcons name="arrow-left" size={22} color="#FFF" /></TouchableOpacity>
+                {detailItem.rating > 0 && (
+                  <View style={S.detailRatingBadge}><MaterialCommunityIcons name="star" size={14} color="#FFC371" /><ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 14, marginLeft: 4 }}>{detailItem.rating.toFixed(1)}</ThemedText></View>
+                )}
+              </View>
+              <KeyboardAvoidingView style={{ flex: 1 }} behavior={isIOS ? 'padding' : 'height'}>
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, paddingBottom: isLargeWeb ? 40 : insets.bottom + 40 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 }}>
+                    <LinearGradient colors={OG as any} style={[S.cardIconWrap, { width: 48, height: 48, borderRadius: 15, marginRight: 14 }]}><MaterialCommunityIcons name={CATEGORY_ICONS_DICT[CATEGORIES[detailItem.categoryId]] || ICONS_ARRAY[detailItem.categoryId] || 'store' as any} size={24} color="#FFF" /></LinearGradient>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}><ThemedText style={{ fontWeight: '900', fontSize: 20, color: DC.text }}>{detailItem.name}</ThemedText>{detailItem.verified && <MaterialCommunityIcons name="check-decagram" size={20} color="#4FC3F7" />}</View>
+                      <ThemedText style={{ color: DC.subtext, fontSize: 13, fontWeight: '600', marginTop: 2 }}>{CATEGORIES[detailItem.categoryId]}</ThemedText>
+                      
+                      {detailItem.address ? (
+                        <ThemedText style={{ color: '#FF5F6D', fontSize: 14, fontWeight: '700', marginTop: 4 }}>
+                          <MaterialCommunityIcons name="map-marker-outline" size={13} />
+                           {detailItem.zip +' '+detailItem.address}
+                        </ThemedText>
+                      ) : null}
                     </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TouchableOpacity onPress={() => handleSave(detailItem.id)} style={{ marginRight: 16 }}>
-                        <MaterialCommunityIcons name={savedItems.includes(detailItem.id) ? 'bookmark' : 'bookmark-outline'} size={26} color={savedItems.includes(detailItem.id) ? (isDark ? '#FFF' : '#111') : DC.subtext} />
-                      </TouchableOpacity>
-
-                      {/* 🚀 Ocultamos el botón de compartir si estamos en Web dentro del detalle */}
-                      {!isWeb && (
-                        <TouchableOpacity onPress={() => handleShare(detailItem)}>
-                          <MaterialCommunityIcons name="share-variant-outline" size={26} color={DC.subtext} />
+                  </View>
+                  {detailItem.promo && ( <View style={[S.promoBadge, { marginBottom: 16 }]}><MaterialCommunityIcons name="tag-outline" size={14} color="#FFF" style={{ marginRight: 6 }} /><ThemedText style={{ color: '#FFF', fontSize: 13, fontWeight: '800' }}>{detailItem.promo}</ThemedText></View> )}
+                  <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><MaterialCommunityIcons name="text-box-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} /><ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.aboutBussines || 'Sobre el negocio'}</ThemedText></View>
+                    <ThemedText style={{ color: DC.subtext, fontSize: 14, lineHeight: 22 }}>{detailItem.description}</ThemedText>
+                  </View>
+                  <View style={[S.contactRow, { marginBottom: 16, flexWrap: 'wrap' }]}>
+                    <TouchableOpacity onPress={() => { if(detailItem.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${detailItem.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${detailItem.phone}`); } }} style={[S.contactBtn, { backgroundColor: detailItem.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)'), flexGrow: 1, minWidth: 130 }]}>
+                      <MaterialCommunityIcons name={detailItem.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={18} color={detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} />
+                      <ThemedText style={[S.contactBtnText, { color: detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D", fontSize: 14 }]}>{detailItem.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || "Llamar")}</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg, marginBottom: 20 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <TouchableOpacity onPress={() => handleVote(detailItem.id, 'like')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, backgroundColor: detailItem.userVote === 'like' ? (isDark ? 'rgba(25, 118, 210, 0.35)' : 'rgba(25, 118, 210, 0.25)') : (isDark ? 'rgba(25, 118, 210, 0.15)' : 'rgba(25, 118, 210, 0.1)'), paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}>
+                          <MaterialCommunityIcons name="thumb-up" size={20} color="#1976D2" />
+                          <ThemedText style={{ marginLeft: 6, fontSize: 14, fontWeight: '800', color: '#1976D2' }}>{formatCount(detailItem.likes)}</ThemedText>
                         </TouchableOpacity>
+
+                        <TouchableOpacity onPress={() => handleVote(detailItem.id, 'dislike')} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: detailItem.userVote === 'dislike' ? (isDark ? 'rgba(250, 128, 114, 0.35)' : 'rgba(250, 128, 114, 0.25)') : (isDark ? 'rgba(250, 128, 114, 0.15)' : 'rgba(250, 128, 114, 0.1)'), paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}>
+                          <MaterialCommunityIcons name="thumb-down" size={20} color="#FA8072" />
+                          <ThemedText style={{ marginLeft: 6, fontSize: 14, fontWeight: '800', color: '#FA8072' }}>{formatCount(detailItem.dislikes)}</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <TouchableOpacity onPress={() => handleSave(detailItem.id)} style={{ marginRight: 16 }}>
+                          <MaterialCommunityIcons name={savedItems.includes(detailItem.id) ? 'bookmark' : 'bookmark-outline'} size={26} color={savedItems.includes(detailItem.id) ? (isDark ? '#FFF' : '#111') : DC.subtext} />
+                        </TouchableOpacity>
+
+                        {!isWeb && (
+                          <TouchableOpacity onPress={() => handleShare(detailItem)}>
+                            <MaterialCommunityIcons name="share-variant-outline" size={26} color={DC.subtext} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <MaterialCommunityIcons name="comment-text-multiple-outline" size={18} color={DC.accent} style={{ marginRight: 8 }} />
+                        <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.reviews || 'Reseñas'}</ThemedText>
+                        {detailItem.reviews.length > 0 && ( <View style={[S.reviewCountBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}><ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '800' }}>{formatCount(detailItem.reviews.length)}</ThemedText></View> )}
+                      </View>
+                      {!showReviewInput && (
+                          <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 12, overflow: 'hidden' }}>
+                            <LinearGradient colors={OG as any} style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}><MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t.entrepreneurshiptab?.writing || 'Escribir'}</ThemedText></LinearGradient>
+                          </TouchableOpacity>
                       )}
                     </View>
-                  </View>
-                </View>
-
-                <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <MaterialCommunityIcons name="comment-text-multiple-outline" size={18} color={DC.accent} style={{ marginRight: 8 }} />
-                      <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.reviews || 'Reseñas'}</ThemedText>
-                      {detailItem.reviews.length > 0 && ( <View style={[S.reviewCountBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}><ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '800' }}>{formatCount(detailItem.reviews.length)}</ThemedText></View> )}
-                    </View>
-                    {!showReviewInput && (
-                        <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 12, overflow: 'hidden' }}>
-                          <LinearGradient colors={OG as any} style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}><MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t.entrepreneurshiptab?.writing || 'Escribir'}</ThemedText></LinearGradient>
-                        </TouchableOpacity>
+                    {showReviewInput ? ( <ReviewForm isDark={isDark} t={t} onCancel={() => setShowReviewInput(false)} onPublish={(stars: number, comment: string) => handleAddReview(detailItem.id, stars, comment)} />
+                    ) : ( detailItem.reviews.length === 0 ? (
+                          <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}><MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.iconInactive} /><ThemedText style={{ color: DC.iconInactive, marginTop: 10, fontSize: 13 }}>{t.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}</ThemedText></View>
+                        ) : (
+                          <>
+                              {detailItem.reviews.slice(0, 2).map((r: any) => (
+                                <View key={r.id} style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <View style={{ flexDirection: 'row', gap: 3 }}>{[1, 2, 3, 4, 5].map(s => ( <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} /> ))}</View>
+                                    <ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime || 'Nuevo'}</ThemedText>
+                                  </View>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 5 }}>
+                                    {r.image ? ( <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/> ) : ( <MaterialCommunityIcons name="account-circle" size={24} color={DC.subtext} /> )}
+                                    <ThemedText style={{ color: DC.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
+                                  </View> 
+                                  <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
+                                </View>
+                              ))}
+                              {detailItem.reviews.length > 2 && ( <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}><ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t.entrepreneurshiptab?.viewAllreviews || 'Ver todas las reseñas'}</ThemedText></TouchableOpacity> )}
+                          </>
+                        )
                     )}
                   </View>
-                  {showReviewInput ? ( <ReviewForm isDark={isDark} t={t} onCancel={() => setShowReviewInput(false)} onPublish={(stars: number, comment: string) => handleAddReview(detailItem.id, stars, comment)} />
-                  ) : ( detailItem.reviews.length === 0 ? (
-                        <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}><MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.iconInactive} /><ThemedText style={{ color: DC.iconInactive, marginTop: 10, fontSize: 13 }}>{t.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}</ThemedText></View>
-                      ) : (
-                        <>
-                            {detailItem.reviews.slice(0, 2).map((r: any) => (
-                              <View key={r.id} style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <View style={{ flexDirection: 'row', gap: 3 }}>{[1, 2, 3, 4, 5].map(s => ( <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} /> ))}</View>
-                                  <ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime || 'Nuevo'}</ThemedText>
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 5 }}>
-                                  {r.image ? ( <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/> ) : ( <MaterialCommunityIcons name="account-circle" size={24} color={DC.subtext} /> )}
-                                  <ThemedText style={{ color: DC.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
-                                </View> 
-                                <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
-                              </View>
-                            ))}
-                            {detailItem.reviews.length > 2 && ( <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}><ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t.entrepreneurshiptab?.viewAllreviews || 'Ver todas las reseñas'}</ThemedText></TouchableOpacity> )}
-                        </>
-                      )
-                  )}
-                </View>
-              </ScrollView>
-            </KeyboardAvoidingView>
+                </ScrollView>
+              </KeyboardAvoidingView>
+            </View>
           </View>
         )}
       </RNModal>

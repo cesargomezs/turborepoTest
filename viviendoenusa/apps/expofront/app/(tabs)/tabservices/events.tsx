@@ -22,6 +22,7 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 import badWordsData from '../../../utils/babwords.json';
 import { useMockSelector } from '@/redux/slices';
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper';
 
 let BANNED_WORDS: string[] = [];
 try {
@@ -71,8 +72,6 @@ export default function EventsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  /*const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';*/
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
@@ -337,11 +336,14 @@ export default function EventsScreen() {
   };
 
   const handleShare = async (event: any) => {
-    try {
-      await Share.share({
-        message: `¡Mira este evento en ViviendoenUSA! 🇺🇸\n\n📌 ${event.title}\n📅 ${event.date}\n⏰ ${event.time}\n📍 ${event.location}`,
-      });
-    } catch (error) { console.log(error); }
+    await handleUniversalShare({
+      title: event.title,
+      description: event.description,
+      phone: event.phone,
+      address: event.location,
+      zip: event.zip,
+      image: event.image,
+    });
   };
 
   const pickImage = async () => {
@@ -530,15 +532,6 @@ export default function EventsScreen() {
              )}
          </View>
 
-         {/*ev.couponCode ? (
-             <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}>
-                <MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" />
-                <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
-                   Cupón: <ThemedText style={{color: '#4CAF50', fontWeight: '900'}}>{ev.couponCode}</ThemedText>
-                </ThemedText>
-             </View>
-         ) : null*/}
-
          <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
             <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
             <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -570,6 +563,8 @@ export default function EventsScreen() {
             categoryLabels={CATEGORIES_LABELS} 
             internalCategories={INTERNAL_CATEGORIES} 
             renderAdminControls={adminControls} 
+            isWeb={isWeb}
+            handleShare={handleShare}
         />
     );
   };
@@ -744,6 +739,8 @@ export default function EventsScreen() {
                             t={t} 
                             categoryLabels={CATEGORIES_LABELS}
                             internalCategories={INTERNAL_CATEGORIES} 
+                            isWeb={isWeb}
+                            handleShare={handleShare}
                           />
                         ))
                       )}
@@ -879,7 +876,7 @@ export default function EventsScreen() {
                 <TextInput value={formTitle} onChangeText={setFormTitle} autoCapitalize="words" placeholder={t.eventstab?.nameEvent || 'Nombre'} placeholderTextColor={Colors.iconInactive}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 <TextInput value={formLocation} onChangeText={setFormLocation} autoCapitalize="words" placeholder={t.eventstab?.addressEvent || 'Dirección'} placeholderTextColor={Colors.iconInactive} style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} placeholderTextColor={Colors.iconInactive} style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formDescription} onChangeText={setFormDescription} autoCapitalize="sentences" placeholder={t.eventstab?.detailsEvent || 'Detalles'} placeholderTextColor={Colors.iconInactive} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formDescription} onChangeText={setFormDescription} autoCapitalize="sentences" placeholder={t.eventstab?.detailsEvent || 'Detalles'} placeholderTextColor={Colors.iconInactive} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 
                 {/* 🚀 SELECCIONAR PLAN */}
                 <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
@@ -1019,15 +1016,19 @@ export default function EventsScreen() {
                     bgColor={selectedEventDetails.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
                   />
                 )}
-                <ActionBtn 
-                  minWidth={130} 
-                  disabled={!selectedEventDetails?.approved} 
-                  onPress={() => handleShare(selectedEventDetails)} 
-                  icon="share-variant" 
-                  text={t.genericbtn?.sharingbtn || 'Compartir'} 
-                  color={isDark ? '#4FC3F7' : '#1976D2'} 
-                  bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
-                />
+                
+                {/* 🚀 Botón de compartir oculto en la versión web */}
+                {!isWeb && (
+                  <ActionBtn 
+                    minWidth={130} 
+                    disabled={!selectedEventDetails?.approved} 
+                    onPress={() => handleShare(selectedEventDetails)} 
+                    icon="share-variant" 
+                    text={t.genericbtn?.sharingbtn || 'Compartir'} 
+                    color={isDark ? '#4FC3F7' : '#1976D2'} 
+                    bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
+                  />
+                )}
               </View>
 
             </ScrollView>
@@ -1045,12 +1046,11 @@ export default function EventsScreen() {
   );
 }
 
-const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls }: any) => {
+const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls, isWeb, handleShare }: any) => {
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
   const isPending = !item.approved;
   
-  // 🚀 El fondo del componente EventCard (blanco absoluto o gris oscuro)
   const cardBgColor = isPending 
       ? (isDark ? '#1E1E1E' : '#FFFFFF') 
       : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)');
@@ -1061,7 +1061,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
         onPress={() => onOpen(item)} 
         style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
     >
-      {/* 🚀 BARRA DE PENDIENTE PEGADA AL BORDE SUPERIOR */}
       {isPending && (
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
           <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
@@ -1132,15 +1131,19 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
               bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} 
             />
           )}
-          <ActionBtn 
-            flex={1} 
-            disabled={isPending}
-            onPress={(e: any) => { e.stopPropagation?.(); Share.share({ message: item.title }) }} 
-            icon="share-variant" 
-            text={t.genericbtn?.sharingbtn || 'Compartir'} 
-            color={isDark ? '#4FC3F7' : '#1976D2'} 
-            bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
-           />
+
+          {/* 🚀 Botón de compartir oculto en la versión web */}
+          {!isWeb && (
+            <ActionBtn 
+              flex={1} 
+              disabled={isPending}
+              onPress={(e: any) => { e.stopPropagation?.(); handleShare(item); }} 
+              icon="share-variant" 
+              text={t.genericbtn?.sharingbtn || 'Compartir'} 
+              color={isDark ? '#4FC3F7' : '#1976D2'} 
+              bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'} 
+             />
+          )}
         </View>
 
         {renderAdminControls && renderAdminControls()}

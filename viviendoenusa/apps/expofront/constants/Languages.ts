@@ -160,6 +160,7 @@ export const translations = {
       welcome_user: "¡Bienvenido, Cesar!"
     },
     lawyerstab: {
+      labelawyer: "Abogad(@) ",
       label: "Especialidades",
       practiceAreas: ['Todas', 'General', 'Inmigración', 'Familia', 'Accidentes', 'Laboral', 'Criminal', 'Pro Bono', 'Civil', 'Bienes Raíces'],
       //practiceAreas: "all",
@@ -222,6 +223,7 @@ export const translations = {
       description: "Descripción"
     },
     communitytab: {
+      label: "Comunidad ",
       labeltypepost: "Tipo de publicación",
       typepost : ['Todos', 'Experiencia', 'Pregunta', 'Consejo'],
       typepostAdd : ['Experiencia', 'Pregunta', 'Consejo'],
@@ -250,6 +252,7 @@ export const translations = {
       messageNodata: "¡Sé el primero en sugerir un abogado para esta zona!"
     },
     donationstab: {
+        label: "Donación ",
         category: "Categorías",
         placeholInput: "¿Qué buscas hoy?",
         subCategories: ['Todas','Ropa','Alimentos','Muebles','Electrónica','Otros'],
@@ -281,7 +284,7 @@ export const translations = {
         activateBtn: "Activar"
     },
     eventstab: {
-        label: "Eventos",
+        label: "Eventos ",
         filter: "Filtros",
         inputEvents:"Buscar eventos...",
         botonEvent: "Publicar evento",
@@ -301,6 +304,7 @@ export const translations = {
         categoriesList: ["Todos", "Social", "Salud", "Educación", "Deportes"] 
     },
     storestab:{
+      label: "Tiendas ",
       categoriesList: ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'],
       sharemessage: "Mira este establecimiento en ViviendoEnUSA",
       alertmessage: "Atención, Todos los campos son obligatorios.",
@@ -322,6 +326,7 @@ export const translations = {
 
     },
     entrepreneurshiptab:{
+        label: "Emprendimientos ",
         searchentrepre:"Buscar emprendimientos...",
         backBtn: "Volver",
         viewdetail: "Ver detalle",
@@ -357,6 +362,7 @@ export const translations = {
           'Tecnología':'laptop'
           }
     },jobstab:{
+      label: "Empleos ",
       labeljobs: "Publicar Empleo",
       labeladmin: "* Requiere revisión de administrador",
       statusBottonModalDis: "Disponibles",
@@ -440,7 +446,7 @@ export const translations = {
       anycity: "Cualquier Puesto en",
 
     },supporttab:{
-      label: "Red de Apoyo",
+      label: "Red de Apoyo ",
       description: "Encuentra recursos y ayuda en tu comunidad.",
       category: "Categoría",
       subCategories: ['Salud', 'Alimentos', 'Asesoría Legal', 'Apoyo Emocional', 'Otros'],
@@ -603,6 +609,7 @@ export const translations = {
       welcome_user: "Welcome, "
     },
     lawyerstab: {
+      labelawyer: "Lawyer ",
       label: "Specialties",
       practiceAreas:  ['All', 'General', 'Immigration', 'Family', 'Accidents', 'Labor', 'Criminal', 'Pro Bono', 'Civil', 'Real Estate'],
       //practiceAreas: "all",
@@ -666,6 +673,7 @@ export const translations = {
 
     },
     communitytab: {
+      label: "Community ",
       labeltypepost: "Post type",
       typepost : ['All', 'Experience', 'Question', 'Advice'],
       typepostAdd : ['Experience', 'Question', 'Advice'],
@@ -694,6 +702,7 @@ export const translations = {
       messageNodata: "Be the first to suggest a lawyer for this area!"
     },
     donationstab: {
+        label: "Donation ",
         category: "Categories",
         placeholInput: "What are you looking for today?",
         subCategories: ['All','Clothing','Food','Furniture','Electronics','Other'],
@@ -745,6 +754,7 @@ export const translations = {
         categoriesList: ["All", "Social", "Health", "Education", "Sports"] 
       },
       storestab:{
+        label: "Stores ",
         categoriesList: ['All', 'Supermarket', 'Bakery', 'Electronics', 'Other'],
         sharemessage: "Check out this establishment on LivingInUSA",
         alertmessage: "Attention, all fields are required.",
@@ -765,6 +775,7 @@ export const translations = {
         verify: "verify"
       },
     entrepreneurshiptab:{
+        label: "Entrepreneurship ",
         searchentrepre:"Search for ventures...",
         backBtn: "Go back",
         viewdetail: "View detail",
@@ -801,6 +812,7 @@ export const translations = {
           }
         
     },jobstab:{
+        label: "Jobs ",
         labeljobs: "Post a Job",
         labeladmin: "* Requires administrator review",
         statusBottonModalDis: "Available",
@@ -887,7 +899,7 @@ export const translations = {
 
           
     },supporttab:{  
-      label: "Support Network",
+      label: "Support Network ",
       description: "Find resources and help in your community.",
       category: "Category",
       subCategories: ['Health', 'Food', 'Legal Advice', 'Emotional Support', 'Other'],

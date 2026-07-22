@@ -21,6 +21,8 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '@/utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper';
+import { createClient } from '@supabase/supabase-js'; 
 
 const BANNED_WORDS = Array.isArray((badWordsData as any)?.badWordsList) ? (badWordsData as any).badWordsList : []; 
 const validateComment = (text: string): boolean => {
@@ -31,6 +33,7 @@ const validateComment = (text: string): boolean => {
 const API_JOBS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/jobs';
 const API_COMPANIES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/companies';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
+
 
 const usCitiesData: Record<string, string[]> = {
   "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
@@ -60,9 +63,6 @@ export default function JobsScreen() {
   const rawNotifId = paramsGlobal.openJobId || paramsGlobal.id || paramsGlobal.jobId;
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
 
-  /*
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark'; */
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
@@ -410,14 +410,45 @@ export default function JobsScreen() {
       });
   };
 
-  const handleShareJob = async (job: any) => {
-      if (!job) return;
-      try {
-          await Share.share({
-              message: `¡Mira esta oferta de empleo!\n\n📌 Puesto: ${job.title}\n🏢 Empresa: ${job.company}\n📍 Ubicación: ${job.city}, ${job.state}\n💵 Pago: $${job.salaryMin}/hr\n\nPostúlate en Viviendo en USA.`
-          });
-      } catch (error) { console.log(error); }
-  };
+ // 🚀 LÓGICA DE COMPARTIR CORREGIDA (URL Absoluta de la Imagen)
+ const handleShareJob = async (job: any) => {
+  let publicUrl = '';
+
+  try {
+    // 1. Consultar la información de la compañía desde la base de datos
+    const res = await fetch(`${API_COMPANIES_URL}/${job.companyId}`);
+    if (res.ok) {
+      const companyData = await res.json();
+      const logoName = companyData.logoUrl || ''; 
+
+      // 2. Si la empresa tiene un logo guardado, construimos la URL absoluta completa
+      if (logoName) {
+          // Si el backend ya guarda la URL completa, la usamos; si guarda solo el nombre, armamos la ruta absoluta del backend.
+          if (logoName.startsWith('http://') || logoName.startsWith('https://')) {
+              publicUrl = logoName;
+          } else {
+              const cleanName = logoName.startsWith('companies/') ? logoName.replace('companies/', '') : logoName;
+              // Apuntamos al endpoint de imágenes optimizadas de tu backend para que devuelva la imagen real
+              publicUrl = `${process.env.EXPO_PUBLIC_URL_BACKEND}/api/imagen-optimizada/companies/${cleanName}`;
+          }
+      }
+    }
+  } catch (error) {
+    console.error("Error al consultar datos de la compañía para compartir:", error);
+  }
+
+  //console.log("URL absoluta final de la imagen para compartir:", publicUrl);
+
+  // 3. Compartimos la vacante pasando la URL absoluta de la imagen
+  await handleUniversalShare({
+    title: `${jobstabData?.label || 'Vacante: '} ${job.title}`,
+    description: `🏢 Empresa: ${job.company}\n\n📝 ${job.description}\n\n💵 Salario: $${job.salaryMin}/hr`,
+    phone: job.phone,
+    address: `${job.city}, ${job.state}`,
+    zip: job.zip,
+    image: publicUrl, // Ahora viaja la URL completa y funcional
+  });
+};
 
   const handlePickLogo = async () => {
     try {
@@ -1145,9 +1176,14 @@ export default function JobsScreen() {
             
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: 10 }}>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <TouchableOpacity onPress={() => handleShareJob(selectedJobDetail)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
-                        <MaterialCommunityIcons name="share-variant" size={22} color={DynamicColors.text} />
-                    </TouchableOpacity>
+                    
+                    {/* 🚀 BOTÓN COMPARTIR OCULTO EN LA WEB */}
+                    {!isWeb && (
+                      <TouchableOpacity onPress={() => handleShareJob(selectedJobDetail)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
+                          <MaterialCommunityIcons name="share-variant" size={22} color={DynamicColors.text} />
+                      </TouchableOpacity>
+                    )}
+                    
                     <TouchableOpacity onPress={() => toggleSaveJob(selectedJobDetail.id)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
                         <MaterialCommunityIcons 
                           name={savedJobs.includes(selectedJobDetail?.id) ? "bookmark" : "bookmark-outline"} 

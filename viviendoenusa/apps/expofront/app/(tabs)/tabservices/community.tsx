@@ -23,6 +23,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper'; // 🚀 IMPORTAMOS EL HELPER DE COMPARTIR
 
 // --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
@@ -82,10 +83,6 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  /*
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';*/
-
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
@@ -148,7 +145,7 @@ export default function CommunityScreen() {
 
   const defaultTag = (t.communitytab.typepostAdd && t.communitytab.typepostAdd.length > 0) ? t.communitytab.typepostAdd[0] : 'Experience';
   const [selectedTag, setSelectedTag] = useState(defaultTag); 
-  const [selectedSubCategory, setSelectedSubCategory] = useState('All'); // 🚀 Iniciamos en 'All' por defecto
+  const [selectedSubCategory, setSelectedSubCategory] = useState('All'); 
   
   const [activeFilter, setActiveFilter] = useState('All');
   const [activeSubFilter, setActiveSubFilter] = useState('All'); 
@@ -225,6 +222,15 @@ export default function CommunityScreen() {
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) { window.alert(`${title}\n${message}`); } 
     else { Alert.alert(title, message); }
+  };
+
+  // 🚀 NUEVA FUNCIÓN PARA COMPARTIR PUBLICACIONES
+  const handleShare = async (post: any) => {
+    await handleUniversalShare({
+      title: `Comunidad - ${post.tag} • ${post.subCategory}`,
+      description: post.text,
+      image: post.image,
+    });
   };
 
   const handlePost = async () => {
@@ -794,9 +800,13 @@ export default function CommunityScreen() {
                                     <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes || 0}</ThemedText>
                                   </TouchableOpacity>
                                 </View>
-                                <TouchableOpacity onPress={() => Share.share({ message: post.text })}>
-                                  <MaterialCommunityIcons name="share-variant" size={18} color={Colors.iconInactive} />
-                                </TouchableOpacity>
+
+                                {/* 🚀 BOTÓN DE COMPARTIR OCULTO EN LA VERSIÓN WEB */}
+                                {!isWeb && (
+                                  <TouchableOpacity onPress={() => handleShare(post)}>
+                                    <MaterialCommunityIcons name="share-variant" size={18} color={Colors.iconInactive} />
+                                  </TouchableOpacity>
+                                )}
                               </View>
                             </View>
                           ))}

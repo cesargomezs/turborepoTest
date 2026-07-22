@@ -25,6 +25,7 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from '@/constants/Colors';
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper';
 
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
@@ -556,10 +557,18 @@ export default function StoresScreen() {
   };
 
   const handleShare = async (store: any) => {
-    if (!store) return;
+    /*if (!store) return;
     try {
       await Share.share({ message: t.storestab?.sharemessage + ` ${store.name || store.nameStores}\n${store.description || store.descriptionStores}` });
-    } catch (error) { console.log(error); }
+    } catch (error) { console.log(error); }*/
+    await handleUniversalShare({
+      title: t.storestab.label+store.name,
+      description: store.description,
+      phone: store.phone,
+      address: store.address,
+      zip: store.zip,
+      image: store.image,
+    });
   };
 
   const pickImage = async () => {
@@ -983,8 +992,9 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                  </View>
                )}
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={StyleSheet.absoluteFill} />
+               {!isWeb && (
                <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="share-variant" size={22} color="#FFF" /></TouchableOpacity>
-               
+               )}
                <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}>
                  <MaterialCommunityIcons name="close" size={24} color="#FFF" />
                </TouchableOpacity>

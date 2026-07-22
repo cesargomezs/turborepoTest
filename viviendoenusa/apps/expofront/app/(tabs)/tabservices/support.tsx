@@ -17,6 +17,7 @@ import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper';
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 const ICONS_ARRAY = ['apps', 'heart-pulse', 'brain', 'hand-heart', 'dots-horizontal'];
@@ -297,7 +298,16 @@ export default function SupportScreen() {
 
   const handleMarkerSelection = (store: any) => { setResults([store]); setIsFilteredByMap(true); const region = { latitude: store.lat, longitude: store.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 }; if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800); };
 
-  const handleShare = async (store: any) => { if (!store) return; try { await Share.share({ message: t.genericlabel.labelcontacsupp + `${store.name}\n${store.description}` }); } catch (error) {} };
+  const handleShare = async (support: any) => {
+    await handleUniversalShare({
+      title: t.supporttab.label+support.name,
+      description: support.description,
+      phone: support.phone,
+      address: support.address,
+      zip: support.zip,
+      image: support.image,
+    });
+  };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.7 });
@@ -432,7 +442,9 @@ export default function SupportScreen() {
             <View style={{ width: '100%', height: 240 }}>
                <Image source={{ uri: selectedDetail?.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={StyleSheet.absoluteFill} />
+                {!isWeb &&
                <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="share-variant" size={22} color="#FFF" /></TouchableOpacity>
+                }
                <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="close" size={24} color="#FFF" /></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>

@@ -27,6 +27,7 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from 'app/src/context/ThemeContext';
+import { handleUniversalShare } from '@/utils/shareHelper';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/lawyers';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
@@ -85,9 +86,7 @@ const ActionBtn = ({ icon, text, color, bgColor, onPress, flex, width, disabled 
   </TouchableOpacity>
 );
 
-
-
-  const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets }: any) => {
+const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets }: any) => {
   const [renewRefCode, setRenewRefCode] = useState('');
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
@@ -177,7 +176,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   const [formPlan, setFormPlan] = useState('basic');
   const [formCoupon, setFormCoupon] = useState('');
 
-  // 🚀 AQUI SE ARREGLARON LOS ERRORES TS(2304)
   const isFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage && formRefCode.trim());
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
@@ -442,8 +440,6 @@ export default function LawyersScreen() {
   const notificationId = params.id || params.lawyerId || params.referenceId || params.reference_id || params.openEventId;
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null); 
-  //const colorScheme = useColorScheme() ?? 'light';
-  //const isDark = colorScheme === 'dark';
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
@@ -610,9 +606,7 @@ export default function LawyersScreen() {
           timepostEnd: item.timepostEnd || item.timepost_end,
           premiumPlan: item.premiumPlan, 
           couponCode: item.couponCode
-          //,tarrifPlan: item.
         }));
-        //console.log("Mapped Data front:", mappedData);
         const approved = mappedData.filter(s => s.status === 'approved');
         setAllLawyers(approved);
         setLocalData(approved);
@@ -753,16 +747,18 @@ export default function LawyersScreen() {
   };
 
   const handleShare = async (lawyer: any) => {
-    if (!lawyer) return;
-    try {
-      await Share.share({ message: (t.lawyerstab as any)?.sharemessage + ` ${lawyer.name}\n${lawyer.description}` });
-    } catch (error) { console.log(error); }
+    await handleUniversalShare({
+      title: t.lawyerstab.labelawyer+lawyer.name,
+      description: lawyer.description,
+      phone: lawyer.phone,
+      address: lawyer.address,
+      zip: lawyer.zip,
+      image: lawyer.image,
+    });
   };
 
   const approveLawyerField = async (lawyer: any, durationMonths: number) => {
     try {
-
-      
       const response = await fetch(`${API_BASE_URL}/${lawyer.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1102,7 +1098,6 @@ export default function LawyersScreen() {
             setZipCode(formZip);
             handleSearch(undefined, formZip);
           }
-          ///currentevaluetari={ }
         }} 
         currentUserId={currentUserId} currentTariff={currentTariff}  companyTariffs={companyTariffs} t={t} isDark={isDark} Colors={Colors} 
         orangeGradient={orangeGradient} isLargeWeb={isLargeWeb} isAndroid={isAndroid} 
@@ -1128,8 +1123,11 @@ export default function LawyersScreen() {
                  </View>
                )}
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={StyleSheet.absoluteFill} />
-               <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="share-variant" size={22} color="#FFF" /></TouchableOpacity>
-               
+               {!isWeb && (
+                 <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}>
+                   <MaterialCommunityIcons name="share-variant" size={22} color="#FFF" />
+                 </TouchableOpacity>
+               )}
                <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}>
                  <MaterialCommunityIcons name="close" size={24} color="#FFF" />
                </TouchableOpacity>
@@ -1160,14 +1158,16 @@ export default function LawyersScreen() {
                       color="#FF5F6D"
                       bgColor={isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 211, 211, 0.4)'}
                     />
-                    <ActionBtn
-                      flex={1}
-                      onPress={() => handleShare(selectedDetail)}
-                      icon="share-variant"
-                      text={(t.genericbtn as any)?.sharingbtn || 'Compartir'}
-                      color={isDark ? '#4FC3F7' : '#1976D2'}
-                      bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'}
-                    />
+                    {!isWeb && (
+                      <ActionBtn
+                        flex={1}
+                        onPress={() => handleShare(selectedDetail)}
+                        icon="share-variant"
+                        text={(t.genericbtn as any)?.sharingbtn || 'Compartir'}
+                        color={isDark ? '#4FC3F7' : '#1976D2'}
+                        bgColor={isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD'}
+                      />
+                    )}
                 </View>
 
                 <ThemedText style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: Colors.text }}>{(t.lawyerstab as any)?.aboutTitle }</ThemedText>
