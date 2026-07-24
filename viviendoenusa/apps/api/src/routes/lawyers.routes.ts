@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { 
     getLawyers, 
     getLawyerByIdWithReviews, 
@@ -8,16 +8,23 @@ import {
     createRating,
     renewLawyer
 } from '../controllers/lawyers.controller';
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos el middleware y AuthRequest
 
 const router = Router();
 
 // 🔍 GET: Obtener todos los abogados (soporta filtro por código postal y por usuario)
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const zip = req.query.zip as string;
-    const userId = req.query.userId as string; // Para el panel de control (mis abogados)
+    // Validación segura para evitar string | string[]
+    const zipParam = req.query.zip;
+    const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
+
+    const userIdParam = req.query.userId;
+    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined);
     
-    const list = await getLawyers(zip, userId);
+    const currentUserId = req.user?.id || req.user?.userId || queryUserId;
+    
+    const list = await getLawyers(zip, currentUserId);
     return res.status(200).json(list);
   } catch (error: any) {
     console.error("❌ Error en GET /lawyers:", error.message);
@@ -26,9 +33,12 @@ router.get('/', async (req, res) => {
 });
 
 // 🔍 GET: Obtener un abogado específico por ID (incluyendo sus reseñas)
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const lawyer = await getLawyerByIdWithReviews(req.params.id);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const lawyer = await getLawyerByIdWithReviews(id);
     if (!lawyer) {
       return res.status(404).json({ error: "Abogado no encontrado" });
     }
@@ -39,14 +49,20 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 📥 POST: Crear un nuevo registro de abogado (con o sin pago)
-router.post('/', async (req, res) => {
+// 📥 POST: Crear un nuevo registro de abogado (Inyecta automáticamente el userId del token)
+router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newLawyer = await createLawyer(req.body);
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newLawyer = await createLawyer(payload);
     return res.status(201).json(newLawyer);
   } catch (error: any) {
     console.error("❌ Error en POST /lawyers:", error.message);
-    // Manejo especial para el código de Zelle duplicado
     if (error.message.includes("utilizado") || error.message.includes("unique")) {
        return res.status(409).json({ error: error.message });
     }
@@ -55,9 +71,12 @@ router.post('/', async (req, res) => {
 });
 
 // 🔄 PUT: Actualizar un abogado (Aprobar y calcular tarifa dinámica)
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const updatedLawyer = await updateLawyer(req.params.id, req.body);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const updatedLawyer = await updateLawyer(id, req.body);
     if (!updatedLawyer) {
       return res.status(404).json({ error: "Abogado no encontrado o no se pudo actualizar" });
     }
@@ -69,13 +88,19 @@ router.put('/:id', async (req, res) => {
 });
 
 // ⭐ POST: Crear una reseña/calificación para un abogado
-router.post('/rating', async (req, res) => {
+router.post('/rating', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newRating = await createRating(req.body);
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newRating = await createRating(payload);
     return res.status(201).json(newRating);
   } catch (error: any) {
     console.error("❌ Error en POST /lawyers/rating:", error.message);
-    // Manejo especial si el usuario ya reseñó
     if (error.message.includes("ya ha publicado")) {
         return res.status(409).json({ error: error.message });
     }
@@ -84,12 +109,15 @@ router.post('/rating', async (req, res) => {
 });
 
 // 🔄 POST: Renovar un abogado expirado (Genera nuevo pago)
-router.post('/:id/renew', async (req, res) => {
+router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const renewedLawyer = await renewLawyer(req.params.id, req.body);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const renewedLawyer = await renewLawyer(id, req.body);
     return res.status(200).json(renewedLawyer);
   } catch (error: any) {
-    console.error("❌ Error en POST /lawyers/:id/renew :", error.message);
+    console.error("❌ Error en POST /layers/:id/renew :", error.message);
     if (error.message.includes("utilizado") || error.message.includes("unique")) {
        return res.status(409).json({ error: error.message });
     }
@@ -98,9 +126,12 @@ router.post('/:id/renew', async (req, res) => {
 });
 
 // 🗑️ DELETE: Eliminar un abogado
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const deletedLawyer = await deleteLawyer(req.params.id);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const deletedLawyer = await deleteLawyer(id);
     if (!deletedLawyer) {
       return res.status(404).json({ error: "Abogado no encontrado" });
     }

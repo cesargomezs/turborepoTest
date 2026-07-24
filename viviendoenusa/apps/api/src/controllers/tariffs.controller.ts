@@ -93,14 +93,14 @@ export const createTariff = async (data: any) => {
 
     const currentYear = new Date().getFullYear().toString();
 
-    // 🚀 FIX DE TYPESCRIPT: Quitamos los "|| null" porque el esquema espera Strings
     const payload = {
       referenceId: resolvedReferenceId || 'general',
       planType: sanitizeText(data.planType) || currentYear, 
       price: String(Number(data.price || 0).toFixed(2)), 
-      description: sanitizeText(data.description), // sanitizeText ya maneja los vacíos
+      description: sanitizeText(data.description), 
       isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
-      userId: sanitizeText(data.userId) // Eliminado el || null
+      // 🚀 Si viene data.userId (inyectado desde la ruta por el token), lo usamos de forma segura
+      userId: sanitizeText(data.userId) 
     };
 
     const newTariff = await db.insert(tariffs).values(payload).returning();

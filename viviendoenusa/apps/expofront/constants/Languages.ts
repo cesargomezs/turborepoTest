@@ -255,7 +255,8 @@ export const translations = {
         label: "Donación ",
         category: "Categorías",
         placeholInput: "¿Qué buscas hoy?",
-        subCategories: ['Todas','Ropa','Alimentos','Muebles','Electrónica','Otros'],
+        subCategories: ['Todas','Ropa','Alimentos','Muebles','Electrónica','Libros','Otros'],
+        subCategoriesIcon:['apps', 'tshirt-crew', 'sofa', 'food-apple', 'laptop','book'],
         messageMessageDonation: "Nueva donación",
         messageDonation: "¿Qué te gustaría donar o necesitas?",
         closeDonation: "Cerrar",
@@ -301,11 +302,13 @@ export const translations = {
         call : "Llamada",
         informationevent: "Información del evento",
         typeContact: "Método de contacto",
-        categoriesList: ["Todos", "Social", "Salud", "Educación", "Deportes"] 
+        categoriesList: ["Todos", "Social", "Salud", "Educación", "Deportes"],
+        categoriesListIcons:['calendar-range', 'account-group', 'heart-pulse', 'school', 'basketball']
     },
     storestab:{
       label: "Tiendas ",
-      categoriesList: ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'],
+      categoriesList: ['Todas', 'Supermercado', 'Panadería', 'Ropa', 'Restaurantes', 'Ferretería', 'Farmacia', 'Envíos y Paquetería', 'Electrónica', 'Automotriz', 'Otros'],
+      categoriesListIcon: ['apps', 'cart', 'baguette', 'tshirt-crew', 'silverware-fork-knife', 'hammer-wrench', 'pill', 'package-variant-closed', 'laptop', 'car', 'dots-horizontal'],
       sharemessage: "Mira este establecimiento en ViviendoEnUSA",
       alertmessage: "Atención, Todos los campos son obligatorios.",
       sendnewsug: "¡Enviado!, Tu sugerencia será revisada.",
@@ -385,7 +388,10 @@ export const translations = {
         { id: 'Restaurantes', icon: 'silverware-fork-knife' },
         { id: 'Transporte', icon: 'truck-fast' },
         { id: 'Tecnología', icon: 'laptop' }
-      ],titlejobs: "Título del puesto *",
+      ],
+      
+      shifts: ['Mañana', 'Tarde', 'Noche', 'Fines de Semana', 'Flexible'],
+      titlejobs: "Título del puesto *",
       state: "Estado *",
       city: "Ciudad *",
       companie: "Compañía *",
@@ -454,7 +460,9 @@ export const translations = {
       support_btn_title: "Red de Apoyo",
       labelcheck:"Revisaremos la información para agregarla a la Red de Apoyo.",
       phone:"Línea de Crisis 988",
-      labelphone:"Atención en español 24/7"
+      labelphone:"Atención en español 24/7",
+      categoryList:['Todos', 'Psicólogos Pro-Bono', 'Mentores Locales', 'Grupos de Apoyo', 'Asesoría Migratoria', 'Clases de Inglés (ESL)', 'Orientación Laboral', 'Apoyo Alimentario', 'Salud Mental', 'Otros'],
+      categoryListIcon:['apps', 'brain', 'account-group', 'hand-heart', 'passport', 'book-education-outline', 'briefcase-search', 'food-apple-outline', 'emoticon-happy-outline', 'dots-horizontal'] 
     },
     
 
@@ -705,7 +713,8 @@ export const translations = {
         label: "Donation ",
         category: "Categories",
         placeholInput: "What are you looking for today?",
-        subCategories: ['All','Clothing','Food','Furniture','Electronics','Other'],
+        subCategories: ['All','Clothing','Food','Furniture','Electronics','Books','Others'],
+        subCategoriesIcon:['apps', 'tshirt-crew', 'sofa', 'food-apple', 'laptop','book'],
         messageMessageDonation: "New donation",
         messageDonation: "What would you like to donate or need?",
         closeDonation: "Close",
@@ -751,11 +760,13 @@ export const translations = {
         call : "Call",
         informationevent: "Event Information",
         typeContact: "Contact method",
-        categoriesList: ["All", "Social", "Health", "Education", "Sports"] 
+        categoriesList: ["All", "Social", "Health", "Education", "Sports"],
+        categoriesListIcons:['calendar-range', 'account-group', 'heart-pulse', 'school', 'basketball']
       },
       storestab:{
         label: "Stores ",
-        categoriesList: ['All', 'Supermarket', 'Bakery', 'Electronics', 'Other'],
+        categoriesList: ['All', 'Supermarket', 'Bakery', 'Clothing', 'Restaurants', 'Hardware Store', 'Pharmacy', 'Shipping & Courier', 'Electronics', 'Automotive', 'Others'],
+        categoriesListIcon: ['apps', 'cart', 'baguette', 'tshirt-crew', 'silverware-fork-knife', 'hammer-wrench', 'pill', 'package-variant-closed', 'laptop', 'car', 'dots-horizontal'],
         sharemessage: "Check out this establishment on LivingInUSA",
         alertmessage: "Attention, all fields are required.",
         sendnewsug: "Sent! Your suggestion will be reviewed.",
@@ -836,6 +847,7 @@ export const translations = {
           {id: 'Transportation', icon: 'truck-fast' },
           {id: 'Technology', icon: 'laptop' }
           ],
+          shifts: ['Morning', 'Afternoon', 'Night', 'Weekends', 'Flexible'],
           titlejobs: "Job Title *",
           state: "State *",
           city: "City *",  
@@ -907,7 +919,12 @@ export const translations = {
       support_btn_title: "Support Network",
       labelcheck:"We will review the information to add it to the Support Network.",
       phone:"Crisis Line 988",
-      labelphone:"Spanish support 24/7"
+      labelphone:"Spanish support 24/7",
+      categoryList:['All', 'Pro-Bono Psychologists', 'Local Mentors', 'Support Groups', 'Immigration Counseling', 'English Classes (ESL)', 'Job Guidance', 'Food Support', 'Mental Health', 'Other'],
+      categoryListIcon:['apps', 'brain', 'account-group', 'hand-heart', 'passport', 'book-education-outline', 'briefcase-search', 'food-apple-outline', 'emoticon-happy-outline', 'dots-horizontal'] 
+
+      
+      
     }
   }
 };

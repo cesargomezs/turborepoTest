@@ -1,23 +1,31 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { 
   getEntrepreneurships, 
   getEntrepreneurshipById, 
   createEntrepreneurship, 
   updateEntrepreneurship, 
   deleteEntrepreneurship,
-  createEntrepreneurshipReview, // 🚀 1. Importamos la función para reseñas
-  voteEntrepreneurship,          // 🚀 2. Importamos la nueva función para los votos
+  createEntrepreneurshipReview, 
+  voteEntrepreneurship,          
   getEntrepreneurshipsByIds
-} from '../controllers/entrepreneurship.controller'; // Nota: Usa '../' si este archivo está dentro de la carpeta 'routes'
+} from '../controllers/entrepreneurship.controller';
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos seguridad
 
 const router = Router();
 
 // 🔍 GET: Obtener emprendimientos (soporta ?zip=12345)
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const zipCode = req.query.zip as string; 
-    // Ahora pasamos también el userId si viene en la query (útil para saber si el usuario ya votó)
-    const userId = req.query.userId as string; 
+    // 🚀 Extracción segura para evitar string | string[]
+    const zipParam = req.query.zip;
+    const zipCode = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined); 
+    
+    const userIdParam = req.query.userId;
+    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined);
+    
+    // 🚀 Priorizamos el userId validado del token
+    const userId = req.user?.id || req.user?.userId || queryUserId;
+
     const itemsList = await getEntrepreneurships(zipCode, userId);
     res.json(itemsList);
   } catch (error: any) {
@@ -27,11 +35,17 @@ router.get('/', async (req, res) => {
 });
 
 // 📥 🚀 POST: Crear reseña para un emprendimiento
-// (Lo colocamos aquí arriba para que no haya conflictos con la ruta /:id)
-router.post('/reviews', async (req, res) => {
+router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    console.log("📝 Recibiendo reseña:", req.body);
-    const newReview = await createEntrepreneurshipReview(req.body);
+    // 🚀 Inyectamos el ID del usuario directamente desde el token
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    console.log("📝 Recibiendo reseña:", payload);
+    const newReview = await createEntrepreneurshipReview(payload);
     res.status(201).json(newReview);
   } catch (error: any) {
     console.error("❌ Error en POST /entrepreneurship/reviews:", error.message);
@@ -40,11 +54,17 @@ router.post('/reviews', async (req, res) => {
 });
 
 // 👍 🚀 POST: Registrar Voto (Me gusta / No me gusta)
-// (También arriba de /:id para evitar conflictos)
-router.post('/vote', async (req, res) => {
+router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    console.log("👍 Recibiendo voto:", req.body);
-    const result = await voteEntrepreneurship(req.body);
+    // 🚀 Aseguramos que el voto se registre a nombre del usuario autenticado
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    console.log("👍 Recibiendo voto:", payload);
+    const result = await voteEntrepreneurship(payload);
     res.status(200).json(result);
   } catch (error: any) {
     console.error("❌ Error en POST /entrepreneurship/vote:", error.message);
@@ -53,10 +73,18 @@ router.post('/vote', async (req, res) => {
 });
 
 // 🔍 GET: Obtener por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = req.query.userId as string; // Recibimos el userId opcional
+    // 🚀 Extracción segura del ID
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const userIdParam = req.query.userId;
+    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined);
+    
+    // 🚀 Usamos el token como prioridad
+    const userId = req.user?.id || req.user?.userId || queryUserId;
+
     const item = await getEntrepreneurshipById(id, userId);
     if (!item) {
       return res.status(404).json({ error: 'Emprendimiento no encontrado' });
@@ -69,10 +97,17 @@ router.get('/:id', async (req, res) => {
 });
 
 // 📥 POST: Crear nuevo emprendimiento
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    console.log("📦 Datos recibidos POST /entrepreneurship:", JSON.stringify(req.body, null, 2));
-    const newItem = await createEntrepreneurship(req.body);
+    // 🚀 Inyectamos el creador desde el token
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    console.log("📦 Datos recibidos POST /entrepreneurship:", JSON.stringify(payload, null, 2));
+    const newItem = await createEntrepreneurship(payload);
     res.status(201).json(newItem);
   } catch (error: any) {
     console.error("❌ Error en POST /entrepreneurship:", error.message);
@@ -81,9 +116,11 @@ router.post('/', async (req, res) => {
 });
 
 // 🔄 PUT: Actualizar (ej. { verified: true })
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params; 
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
     const updatedItem = await updateEntrepreneurship(id, req.body);
     
     if (!updatedItem) {
@@ -98,9 +135,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // 🗑️ DELETE: Eliminar
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
     const deletedItem = await deleteEntrepreneurship(id);
     
     if (!deletedItem) {
@@ -114,10 +153,14 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Agrega esta nueva ruta:
-router.post('/batch', async (req, res) => {
+// 🚀 POST: Cargar elementos guardados
+router.post('/batch', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { ids, userId } = req.body;
+    // 🚀 Forzamos el userId del token para proteger la privacidad de los guardados
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const userId = userIdFromToken || req.body.userId;
+
+    const { ids } = req.body;
     const items = await getEntrepreneurshipsByIds(ids, userId);
     res.json(items);
   } catch (error: any) {

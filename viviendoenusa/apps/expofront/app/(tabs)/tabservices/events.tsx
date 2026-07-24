@@ -36,8 +36,6 @@ const isTextInappropriate = (text: string): boolean => {
   return BANNED_WORDS.some(word => text.toLowerCase().includes(word.toLowerCase()));
 };
 
-const INTERNAL_CATEGORIES = ['Todos', 'Social', 'Salud', 'Educación', 'Deportes'];
-const ICONS_ARRAY = ['calendar-range', 'account-group', 'heart-pulse', 'school', 'basketball'];
 const COUNTRIES = [ { code: '+1', flag: '🇺🇸', name: 'USA' }, { code: '+1', flag: '🇺🇸', name: 'USA' } ];
 
 const API_EVENTS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/events';
@@ -77,13 +75,24 @@ export default function EventsScreen() {
   
   const stylesUnified = useUnifiedCardStyles();
 
+  const INTERNAL_CATEGORIES = t.eventstab.categoriesList;
+  const ICONS_ARRAY = t.eventstab.categoriesListIcons;
+
   const params = useLocalSearchParams();
   const rawNotifId = params.openEventId || params.id || params.referenceId;
   const eventIdFromNotif = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
 
   const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
+  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
   
+  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
+  useEffect(() => {
+    if (!userToken) {
+      router.replace('/');
+    }
+  }, [userToken]);
+
   const isWeb = Platform.OS === 'web';
   const isLargeWeb = isWeb && width > 1000;
   const isAndroid = Platform.OS === 'android';
@@ -164,7 +173,12 @@ export default function EventsScreen() {
   useEffect(() => {
     const fetchTariff = async () => {
       try {
-        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Event`);
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Event`, {
+          method: 'GET',
+          headers: userToken ? { 'Authorization': `Bearer ${userToken}` } : undefined
+        });
+        if (res.status === 401) { router.replace('/'); return; }
+        
         if (res.ok) {
           const tariffsData = await res.json();
           if (tariffsData && tariffsData.length > 0) {
@@ -198,7 +212,12 @@ export default function EventsScreen() {
         } else {
           const fetchSpecificEvent = async () => {
             try {
-              const res = await fetch(`${API_EVENTS_URL}/${cleanEventId}`);
+              const res = await fetch(`${API_EVENTS_URL}/${cleanEventId}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${userToken}` }
+              });
+              
+              if (res.status === 401) { router.replace('/'); return; }
               
               if (res.ok) {
                 const data = await res.json();
@@ -251,7 +270,13 @@ export default function EventsScreen() {
           ? `${API_EVENTS_URL}?zip=${searchZip.trim()}` 
           : API_EVENTS_URL;
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      
+      if (res.status === 401) { router.replace('/'); return; }
+      
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -395,8 +420,13 @@ export default function EventsScreen() {
         const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/events', {
           method: 'POST',
           body: formData,
-          headers: { 'Accept': 'application/json' },
+          headers: { 
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${userToken}` 
+          },
         });
+
+        if (uploadResponse.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
         const uploadData = await uploadResponse.json();
         if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
@@ -428,10 +458,15 @@ export default function EventsScreen() {
 
       const response = await fetch(API_EVENTS_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify(newEntryPayload)
       });
       
+      if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
+
       const savedFromDB = await response.json();
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando evento");
 
@@ -472,9 +507,14 @@ export default function EventsScreen() {
     try {
       const response = await fetch(`${API_EVENTS_URL}/${event.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        },
         body: JSON.stringify({ approved: true, durationMonths })
       });
+      
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
       
       const approvedEvent = { ...event, approved: true };
@@ -489,8 +529,11 @@ export default function EventsScreen() {
   const rejectEvent = async (id: number) => {
     try {
       const response = await fetch(`${API_EVENTS_URL}/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userToken}` }
       });
+      
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
 
       setPendingEvents(pendingEvents.filter(e => e.id !== id));

@@ -24,7 +24,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import { ThemedText } from '../../components/ThemedText';
 import { Colors } from '../../constants/Colors';
 import { default as ThemedTextInput } from '../../components/ThemedTextInput';
-import { toggleAuth, useMockDispatch, useMockSelector } from '../../redux/slices';
+import { toggleAuth, setUserMetadata, useMockDispatch, useMockSelector } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation';
 import { useAppTheme } from '../src/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
@@ -132,6 +132,9 @@ export default function HomeScreen() {
         setAcceptedTerms(false);
         setShowCompletionModal(true);
       } else {
+        // 🚀 SOLUCIÓN: Guardamos el token al entrar con Google
+        await login(dataRes.user, dataRes.token);
+        dispatch(setUserMetadata({ ...dataRes.user, token: dataRes.token }));
         dispatch(toggleAuth());
       }
     } catch (error) {
@@ -196,6 +199,10 @@ export default function HomeScreen() {
       }
 
       setShowCompletionModal(false);
+      
+      // 🚀 SOLUCIÓN: Loguear e inyectar el token tras completar el registro de Google
+      await login(dataRes.user, dataRes.token);
+      dispatch(setUserMetadata({ ...dataRes.user, token: dataRes.token }));
       dispatch(toggleAuth());
       
     } catch (error: any) {
@@ -266,20 +273,21 @@ export default function HomeScreen() {
       if (!response.ok) {
         throw new Error(dataRes.error || "Error al autenticar");
       }
+      
+      // 🚀 SOLUCIÓN: Guardamos en Contexto Y en Redux
       await login(dataRes.user, dataRes.token);
-
+      dispatch(setUserMetadata({ ...dataRes.user, token: dataRes.token }));
       dispatch(toggleAuth());
 
     } catch (error: any) {
       console.log("Aviso de acceso:", error.message);
       const msg = error.message || "Ocurrió un error al intentar acceder.";
       
-      // 🛡️ SEGURIDAD: Interceptamos el mensaje de cuenta bloqueada
       if (msg.includes("bloqueada por múltiples intentos")) {
         if (isWeb) {
           const resetConfirm = window.confirm(`${msg}\n\n¿Deseas recuperar tu contraseña ahora?`);
           if (resetConfirm) {
-            setResetEmail(form.email); // Pre-llenamos el correo
+            setResetEmail(form.email); 
             setShowResetModal(true);
           }
         } else {
@@ -288,24 +296,15 @@ export default function HomeScreen() {
             msg,
             [
               { text: "Cancelar", style: "cancel" },
-              { 
-                text: "Recuperar", 
-                onPress: () => {
-                  setResetEmail(form.email);
-                  setShowResetModal(true);
-                } 
-              }
+              { text: "Recuperar", onPress: () => { setResetEmail(form.email); setShowResetModal(true); } }
             ]
           );
         }
-        return; // Detenemos la ejecución para que no lance la alerta genérica abajo
+        return; 
       }
       
-      if (isWeb) {
-        window.alert(`Error: ${msg}`);
-      } else {
-        Alert.alert("Error", msg);
-      }
+      if (isWeb) window.alert(`Error: ${msg}`);
+      else Alert.alert("Error", msg);
     }
   };  
 

@@ -33,7 +33,6 @@ const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
-const ICONS_ARRAY = ['apps', 'cart', 'baguette', 'laptop', 'storefront'];
 
 const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' },
@@ -89,7 +88,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 };
 
 // 🚀 COMPONENTE: MODAL DE RENOVACIÓN DE TIENDA
-const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS }: any) => {
+const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, userToken, router }: any) => {
   const [renewRefCode, setRenewRefCode] = useState('');
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
@@ -108,8 +107,14 @@ const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, curre
     try {
       const payload = { referenceCode: renewRefCode, paymentMethod: renewPayMethod, userId: currentUserId };
       const res = await fetch(`${API_STORES_URL}/${storeToRenew.id}/renew`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        }, 
+        body: JSON.stringify(payload)
       });
+      if (res.status === 401) { router.replace('/'); return; }
       if (!res.ok) throw new Error();
       Alert.alert("Éxito", "Solicitud de renovación enviada. Será verificada pronto.");
       onSuccess();
@@ -170,8 +175,6 @@ export default function StoresScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  /*const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';*/
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
@@ -183,8 +186,16 @@ export default function StoresScreen() {
 
   const mapRef = useRef<MapView>(null); 
   const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
+  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
   
+  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
+  useEffect(() => {
+    if (!userToken) {
+      router.replace('/');
+    }
+  }, [userToken]);
+
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
   const isLargeWeb = isWeb && width > 1000;
@@ -204,7 +215,8 @@ export default function StoresScreen() {
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
 
-  const rawCategories = t.storestab?.categoriesList;
+  const ICONS_ARRAY =t.storestab.categoriesListIcon;
+  const rawCategories = t.storestab.categoriesList;
   const CATEGORIES_LIST = Array.isArray(rawCategories) && rawCategories.length > 0
     ? rawCategories
     : ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'];
@@ -272,7 +284,12 @@ export default function StoresScreen() {
   useEffect(() => {
     const fetchTariff = async () => {
       try {
-        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Store`);
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Store`, {
+          method: 'GET',
+          headers: userToken ? { 'Authorization': `Bearer ${userToken}` } : undefined
+        });
+        if (res.status === 401) { router.replace('/'); return; }
+
         if (res.ok) {
           const tariffsData = await res.json();
           if (tariffsData && tariffsData.length > 0 ) {
@@ -294,7 +311,12 @@ export default function StoresScreen() {
   const fetchStoresData = async (searchZip: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`);
+      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      if (res.status === 401) { router.replace('/'); return []; }
+
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -356,7 +378,12 @@ export default function StoresScreen() {
         } else {
           const fetchSpecificStore = async () => {
             try {
-              const res = await fetch(`${API_STORES_URL}/${cleanNotifId}`);
+              const res = await fetch(`${API_STORES_URL}/${cleanNotifId}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${userToken}` }
+              });
+              if (res.status === 401) { router.replace('/'); return; }
+
               if (res.ok) {
                 const data = await res.json();
                 
@@ -448,7 +475,12 @@ export default function StoresScreen() {
   const fetchAllPendingStores = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`); 
+      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      }); 
+      if (res.status === 401) { router.replace('/'); return; }
+
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -557,10 +589,6 @@ export default function StoresScreen() {
   };
 
   const handleShare = async (store: any) => {
-    /*if (!store) return;
-    try {
-      await Share.share({ message: t.storestab?.sharemessage + ` ${store.name || store.nameStores}\n${store.description || store.descriptionStores}` });
-    } catch (error) { console.log(error); }*/
     await handleUniversalShare({
       title: t.storestab.label+store.name,
       description: store.description,
@@ -610,8 +638,13 @@ export default function StoresScreen() {
         const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/stores', {
           method: 'POST',
           body: formData,
-          headers: { 'Accept': 'application/json' },
+          headers: { 
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${userToken}`
+          },
         });
+
+        if (uploadResponse.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
         const uploadData = await uploadResponse.json();
         if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
@@ -648,10 +681,15 @@ export default function StoresScreen() {
 
       const response = await fetch(API_STORES_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        },
         body: JSON.stringify(payload)
       });
       
+      if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
+
       const savedFromDB = await response.json();
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando tienda");
 
@@ -697,9 +735,13 @@ export default function StoresScreen() {
     try {
       const response = await fetch(`${API_STORES_URL}/${store.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        },
         body: JSON.stringify({ approved: true, durationMonths })
       });
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
       
       const updatedStoreFromServer = await response.json();
@@ -736,8 +778,13 @@ export default function StoresScreen() {
 
   const rejectStore = async (id: number) => {
     try {
-      const response = await fetch(`${API_STORES_URL}/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_STORES_URL}/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userToken}` } 
+      });
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
+
       setPendingStores(pendingStores.filter(e => e.id !== id));
       Alert.alert("Rechazado", "Negocio eliminado.");
     } catch (error) {
@@ -971,7 +1018,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         onSuccess={() => { setRenewModalVisible(false); handleSearch(); }} 
         storeToRenew={storeToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
         t={t} isDark={isDark} Colors={DynamicColors} orangeGradient={orangeGradient} 
-        isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} 
+        isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} userToken={userToken} router={router}
       />
 
       {/* MODAL DETALLE */}
@@ -1063,25 +1110,32 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
               </View>
               {!showReviewInput ? (
                 <View style={{ flex: 1 }}>
-                  <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                  <TouchableOpacity onPress={() => { const hasReviewed = selectedStore?.reviews?.some((r: any) => r.userId === currentUserId); if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } setShowReviewInput(true); }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>
                     </LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
+                    {/* 🚀 AQUI SE ACTUALIZO EL RENDERIZADO DE LAS REVIEWS PARA MOSTRAR FOTO Y NOMBRE */}
                     {selectedStore?.reviews?.map((r: any) => (
                        <View key={r.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                         <View style={{ flexDirection: 'row', gap: 2, marginBottom: 8 }}>
-                           {[1, 2, 3, 4, 5].map((s) => (
-                             <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
-                           ))}
+                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                           <View style={{ flexDirection: 'row', gap: 2 }}>
+                             {[1, 2, 3, 4, 5].map((s) => (
+                               <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
+                             ))}
+                           </View>
+                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                             {r.image ? (
+                               <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
+                             ) : (
+                               <MaterialCommunityIcons name="account-circle" size={24} color={DynamicColors.subtext} />
+                             )}
+                             <ThemedText style={{ color: DynamicColors.text, fontSize: 12, fontStyle: 'italic' }}>{r.name || r.userName || 'Anónimo'}</ThemedText>
+                           </View>
                          </View>
-                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                            <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
-                            <ThemedText style={{ color: DynamicColors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
-                         </View> 
-                         <ThemedText style={{ color: DynamicColors.text, fontSize: 14 }}>{r.comment}</ThemedText>
+                         <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.comment}</ThemedText>
                        </View>
                     ))}
                   </ScrollView>
@@ -1102,19 +1156,24 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 
                           const res = await fetch(`${API_STORES_URL}/reviews`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${userToken}` 
+                            },
                             body: JSON.stringify(reviewPayload)
                           });
 
+                          if (res.status === 401) { router.replace('/'); return; }
                           if (!res.ok) throw new Error();
                           const fromDB = await res.json();
 
                           const newReviewFormatted = { 
                             id: fromDB.id || Date.now().toString(), 
                             stars: Number(ratingNum), 
-                            comment: commentStr 
+                            comment: commentStr,
+                            name: fromDB.name || userMetadata?.name || 'Anónimo',
+                            image: fromDB.image || userMetadata?.avatarUrl || null 
                           };
-
                           const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
                           const totalStars = updatedReviews.reduce((sum, r) => sum + r.stars, 0);
                           const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
@@ -1162,7 +1221,9 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                 </TouchableOpacity>
                 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none',color:DynamicColors.text}}>{t.storestab?.category || 'Categoría'}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
+                
+                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap para Web */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {CATEGORIES_LIST.map((cat, index) => {
                     if (index === 0) return null; 
                     const isActive = formCategoryIdx === index;
@@ -1183,7 +1244,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
@@ -1359,28 +1420,54 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                       ))}
                     </View>
                   )} 
+                  
+                  {/* 🚀 CATEGORÍAS ADAPTATIVAS PARA STORES: FlexWrap en Web, Scroll en Móvil */}
                   <View style={{ marginBottom: 15 }}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                      {CATEGORIES_LIST.map((area, index) => {
-                         const iconName = ICONS_ARRAY[index] || 'storefront';
-                         const isActive = selectedCategoryIdx === index;
-                         return (
-                          <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
-                            {isActive ? (
-                               <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                                 <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                                 <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText>
-                               </LinearGradient>
-                             ) : (
-                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                                 <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                                 <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText>
-                               </View>
-                             )}
-                          </TouchableOpacity>
-                         );
-                      })}
-                    </ScrollView>
+                    {isWeb ? (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {CATEGORIES_LIST.map((area, index) => {
+                           const iconName = ICONS_ARRAY[index] || 'storefront';
+                           const isActive = selectedCategoryIdx === index;
+                           return (
+                            <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                              {isActive ? (
+                                 <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                   <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText>
+                                 </LinearGradient>
+                               ) : (
+                                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                                   <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText>
+                                 </View>
+                               )}
+                            </TouchableOpacity>
+                           );
+                        })}
+                      </View>
+                    ) : (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
+                        {CATEGORIES_LIST.map((area, index) => {
+                           const iconName = ICONS_ARRAY[index] || 'storefront';
+                           const isActive = selectedCategoryIdx === index;
+                           return (
+                            <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                              {isActive ? (
+                                 <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                   <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText>
+                                 </LinearGradient>
+                               ) : (
+                                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                                   <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText>
+                                 </View>
+                               )}
+                            </TouchableOpacity>
+                           );
+                        })}
+                      </ScrollView>
+                    )}
                   </View>
 
                   <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>

@@ -170,6 +170,14 @@ export default function EntrepreneurshipScreen() {
   
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+
+  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
+  useEffect(() => {
+    if (!userToken) {
+      router.replace('/');
+    }
+  }, [userToken]);
 
   // =====================================================================
   // 🚀 FUNCIÓN DE COMPARTIR ACTUALIZADA (Sin portapapeles manual)
@@ -190,11 +198,8 @@ export default function EntrepreneurshipScreen() {
   const isAndroid  = Platform.OS === 'android';
   const isIOS      = Platform.OS === 'ios';
 
-  const CATEGORIES = t.entrepreneurshiptab?.categoryentre || ['Todas', 'Venta de garaje', 'Reparaciones', 'Comida', 'Salud', 'Tecnología'];
-  const CATEGORY_ICONS_DICT: Record<string, string> = t.entrepreneurshiptab?.categoryentreicon || {
-      'Todas': 'apps', 'Venta de garaje': 'sale', 'Reparaciones': 'wrench-outline', 
-      'Comida': 'silverware-fork-knife', 'Salud': 'heart-pulse', 'Tecnología': 'laptop',
-  };
+  const CATEGORIES = t.entrepreneurshiptab.categoryentre;
+  const CATEGORY_ICONS_DICT: Record<string, string> = t.entrepreneurshiptab.categoryentreicon;
 
   const DC = {
     text:               isDark ? '#FFFFFF'                  : '#1A1A1A',
@@ -265,7 +270,12 @@ export default function EntrepreneurshipScreen() {
   const fetchEntrepreneurships = async (searchZip: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}?zip=${searchZip.trim()}&userId=${userMetadata?.id || ''}`);
+      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}?zip=${searchZip.trim()}&userId=${userMetadata?.id || ''}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (res.status === 401) { router.replace('/'); return []; }
+
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -307,9 +317,14 @@ export default function EntrepreneurshipScreen() {
     try {
       const res = await fetch(`${API_ENTREPRENEURSHIP_URL}/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify({ ids: savedItems, userId: userMetadata?.id || '' })
       });
+      if (res.status === 401) { router.replace('/'); return; }
+
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -356,7 +371,12 @@ export default function EntrepreneurshipScreen() {
   const fetchAllPending = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}?userId=${userMetadata?.id || ''}`);
+      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}?userId=${userMetadata?.id || ''}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (res.status === 401) { router.replace('/'); return; }
+
       const data = await res.json();
       if (Array.isArray(data)) {
         const mappedData: Emprendimiento[] = data.map((item: any) => ({
@@ -431,11 +451,15 @@ export default function EntrepreneurshipScreen() {
     setDetailItem(prev => prev?.id === id ? applyVote(prev) : prev);
 
     try {
-      await fetch(`${API_ENTREPRENEURSHIP_URL}/vote`, {
+      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}/vote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify({ relationship_id: id, userId: currentUserId, action: type })
       });
+      if (res.status === 401) { router.replace('/'); return; }
     } catch (error) { console.error("Error enviando voto al servidor:", error); }
   };
 
@@ -469,8 +493,15 @@ export default function EntrepreneurshipScreen() {
     try {
       const payload = { reference_id: targetId, stars: stars, comment: comment, userId: currentUserId };
       const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/reviews`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        }, 
+        body: JSON.stringify(payload)
       });
+
+      if (response.status === 401) { router.replace('/'); return; }
 
       if (response.status === 400 || !response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -538,9 +569,15 @@ export default function EntrepreneurshipScreen() {
         }
 
         const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/entrepreneurship', {
-          method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
+          method: 'POST', 
+          body: formData, 
+          headers: { 
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${userToken}`
+          },
         });
 
+        if (uploadResponse.status === 401) { setIsSubmitting(false); router.replace('/'); return; }
         if (!uploadResponse.ok) throw new Error("Error subiendo imagen");
         finalImageName = (await uploadResponse.json()).identificadorArchivo;
       }
@@ -561,8 +598,15 @@ export default function EntrepreneurshipScreen() {
       };
 
       const response = await fetch(API_ENTREPRENEURSHIP_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        }, 
+        body: JSON.stringify(payload)
       });
+      
+      if (response.status === 401) { setIsSubmitting(false); router.replace('/'); return; }
       
       const savedFromDB = await response.json();
       if (!response.ok) throw new Error(savedFromDB.error || "Error al guardar");
@@ -603,9 +647,14 @@ export default function EntrepreneurshipScreen() {
   const approveItem = async (item: any, durationMonths: number) => {
     try {
       const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/${item.id}`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        method: 'PUT', 
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify({ approved: true, durationMonths })
       });
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
       setPendingItems(pendingItems.filter(s => s.id !== item.id));
       Alert.alert("Aprobado", "Emprendimiento activado.");
@@ -615,7 +664,11 @@ export default function EntrepreneurshipScreen() {
 
   const rejectItem = async (id: string) => {
     try {
-      await fetch(`${API_ENTREPRENEURSHIP_URL}/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userToken}` } 
+      });
+      if (response.status === 401) { router.replace('/'); return; }
       setPendingItems(pendingItems.filter(s => s.id !== id));
       Alert.alert("Rechazado", "Emprendimiento eliminado.");
     } catch (error) { Alert.alert("Error", "No se pudo rechazar."); }
@@ -845,28 +898,64 @@ export default function EntrepreneurshipScreen() {
                   </View>
 
                   {!isLargeWeb && (
-                    <View style={{ marginBottom: 12 }}> 
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                        {CATEGORIES.map((areaName, index) => {
+                    <View style={{ marginBottom: 12 }}>
+                      {isWeb ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                          {CATEGORIES.map((areaName, index) => {
                             const isActive = selectedCategoryIdx === index;
                             const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
                             return (
-                                <TouchableOpacity key={index} onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)} style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}>
-                                  {isActive ? (
-                                    <LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
-                                      <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
-                                      <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{areaName}</ThemedText>
-                                    </LinearGradient>
-                                  ) : (
-                                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
-                                      <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
-                                      <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{areaName}</ThemedText>
-                                    </View>
-                                  )}
-                                </TouchableOpacity>
+                              <TouchableOpacity 
+                                key={index} 
+                                onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)} 
+                                style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}
+                              >
+                                {isActive ? (
+                                  <LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
+                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{areaName}</ThemedText>
+                                  </LinearGradient>
+                                ) : (
+                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
+                                    <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{areaName}</ThemedText>
+                                  </View>
+                                )}
+                              </TouchableOpacity>
                             );
-                        })}
-                      </ScrollView>
+                          })}
+                        </View>
+                      ) : (
+                        <ScrollView 
+                          horizontal 
+                          showsHorizontalScrollIndicator={false} 
+                          contentContainerStyle={{ gap: 8, paddingBottom: 6 }}
+                        >
+                          {CATEGORIES.map((areaName, index) => {
+                            const isActive = selectedCategoryIdx === index;
+                            const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
+                            return (
+                              <TouchableOpacity 
+                                key={index} 
+                                onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)} 
+                                style={{ flexShrink: 0, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}
+                              >
+                                {isActive ? (
+                                  <LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
+                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{areaName}</ThemedText>
+                                  </LinearGradient>
+                                ) : (
+                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
+                                    <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{areaName}</ThemedText>
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      )}
                     </View>
                   )}
 
@@ -1109,7 +1198,9 @@ export default function EntrepreneurshipScreen() {
                 </TouchableOpacity>
 
                 <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.viewcategory || 'CATEGORÍA'}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
+                
+                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap para que fluyan en Web */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                   {CATEGORIES.map((catName, index) => {
                     if (index === 0) return null; 
                     const isActive = formCategoryIdx === index;
@@ -1130,7 +1221,7 @@ export default function EntrepreneurshipScreen() {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
                 <TextInput value={formName} onChangeText={setFormName} placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
                 

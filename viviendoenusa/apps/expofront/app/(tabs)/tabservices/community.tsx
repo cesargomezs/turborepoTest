@@ -23,7 +23,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper'; // 🚀 IMPORTAMOS EL HELPER DE COMPARTIR
+import { handleUniversalShare } from '@/utils/shareHelper'; 
 
 // --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
@@ -86,8 +86,16 @@ export default function CommunityScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
-  const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata);
+  const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
+  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
+
+  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN (Ni siquiera intenta renderizar llamadas)
+  useEffect(() => {
+    if (!userToken) {
+      router.replace('/');
+    }
+  }, [userToken]);
   
   const isWeb = Platform.OS === 'web';
   const isLargeWeb = isWeb && width > 1000; 
@@ -98,7 +106,7 @@ export default function CommunityScreen() {
   const segments = useSegments();
   const isCommunityScreen = segments.includes('community');
 
-  const currentUserId =  "baeb641a-3fa4-4fef-9846-d75947d1bca9";
+  const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
@@ -169,7 +177,16 @@ export default function CommunityScreen() {
       setLoadingPosts(true);
       const url = `${API_COMMUNITY_URL}?zip=${searchZip}`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.status === 401) { router.replace('/'); return; }
+
       const textResponse = await response.text();
       
       if (!textResponse) {
@@ -224,7 +241,6 @@ export default function CommunityScreen() {
     else { Alert.alert(title, message); }
   };
 
-  // 🚀 NUEVA FUNCIÓN PARA COMPARTIR PUBLICACIONES
   const handleShare = async (post: any) => {
     await handleUniversalShare({
       title: `Comunidad - ${post.tag} • ${post.subCategory}`,
@@ -275,9 +291,12 @@ export default function CommunityScreen() {
           method: 'POST',
           body: formData,
           headers: { 
-            'Accept': 'application/json' 
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${userToken}`
           },
         });
+
+        if (uploadResponse.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
         const uploadData = await uploadResponse.json();
 
@@ -302,9 +321,14 @@ export default function CommunityScreen() {
       
       const response = await fetch(API_COMMUNITY_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify(newPostPayload)
       });
+
+      if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
       const responseData = await response.json();
 
@@ -362,9 +386,15 @@ export default function CommunityScreen() {
 
       const response = await fetch(`${API_COMMUNITY_URL}/review`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify(reviewPayload)
       });
+      
+      if (response.status === 401) { router.replace('/'); return; }
+      
       const savedReview = await response.json();
 
       const rawCreatedAt = savedReview.createdAt || new Date().toISOString();
@@ -429,13 +459,18 @@ export default function CommunityScreen() {
     try {
       const response = await fetch(`${API_COMMUNITY_URL}/vote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify({ 
           postId: postId,
           userId: currentUserId, 
           voteType: type 
         })
       });
+
+      if (response.status === 401) { router.replace('/'); return; }
 
       if (!response.ok) {
         fetchCommunityPosts(zipCode);
@@ -463,7 +498,6 @@ export default function CommunityScreen() {
   const filteredPosts = useMemo(() => {
     let res = posts.filter(p => {
       const matchTag = (activeFilter === 'All' || activeFilter === 'Todos') || tagMapping[p.tag] === tagMapping[activeFilter];
-      // Si activeSubFilter es 'All', no filtramos por subcategoría
       const matchSub = (activeSubFilter === 'All' || activeSubFilter === 'Todos') || p.subCategory === activeSubFilter;
       return matchTag && matchSub;
     });

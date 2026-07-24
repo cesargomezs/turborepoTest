@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import {
   getCommunityPosts,
   getCommunityPostById,
@@ -6,8 +6,9 @@ import {
   createCommunityReview,
   updateCommunityPost,
   deleteCommunityPost,
-  handlePostVote // 🚀 Importamos nuestra nueva función de votos
+  handlePostVote 
 } from '../controllers/community.controller';
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos el middleware de seguridad
 
 const router = Router();
 
@@ -16,9 +17,12 @@ const router = Router();
 // ==========================================
 
 // 🔍 1. OBTENER TODOS LOS POSTS (con filtro opcional de ZIP)
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const zip = req.query.zip as string | undefined;
+    // 🚀 Extracción segura para evitar el error de string | string[]
+    const zipParam = req.query.zip;
+    const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
+
     const posts = await getCommunityPosts(zip);
     res.json(posts);
   } catch (error: any) {
@@ -28,9 +32,16 @@ router.get('/', async (req, res) => {
 });
 
 // 📥 2. CREAR UN NUEVO POST
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newPost = await createCommunityPost(req.body);
+    // 🚀 Extraemos y aseguramos el ID del usuario desde el token
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newPost = await createCommunityPost(payload);
     res.status(201).json(newPost);
   } catch (error: any) {
     console.error("❌ Error en POST /community:", error.message);
@@ -39,9 +50,16 @@ router.post('/', async (req, res) => {
 });
 
 // 📥 3. CREAR UN COMENTARIO (REVIEW)
-router.post('/review', async (req, res) => {
+router.post('/review', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newReview = await createCommunityReview(req.body);
+    // 🚀 Inyectamos el ID del usuario desde el token
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newReview = await createCommunityReview(payload);
     res.status(201).json(newReview);
   } catch (error: any) {
     console.error("❌ Error en POST /community/review:", error.message);
@@ -50,9 +68,13 @@ router.post('/review', async (req, res) => {
 });
 
 // 🔄 4. PROCESAR UN VOTO (LIKE / DISLIKE) CON RASTREADORES
-router.post('/vote', async (req, res) => {
+router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
   console.log("📥 Petición recibida en /community/vote");
-  const { postId, userId, voteType } = req.body;
+  
+  // 🚀 Obtenemos el userId validado por el token de forma segura
+  const userIdFromToken = req.user?.id || req.user?.userId;
+  const { postId, voteType } = req.body;
+  const userId = userIdFromToken || req.body.userId; // Prioriza el token
   
   if (!postId || !userId || !voteType) {
     console.error("❌ Faltan datos en el body de /vote:", req.body);
@@ -73,9 +95,12 @@ router.post('/vote', async (req, res) => {
 // ==========================================
 
 // 🔍 5. OBTENER UN POST POR SU ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const post = await getCommunityPostById(req.params.id);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const post = await getCommunityPostById(id);
     if (!post) {
       return res.status(404).json({ error: 'Publicación no encontrada' });
     }
@@ -87,9 +112,12 @@ router.get('/:id', async (req, res) => {
 });
 
 // 🔄 6. ACTUALIZAR UN POST EXISTENTE
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const updatedPost = await updateCommunityPost(req.params.id, req.body);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const updatedPost = await updateCommunityPost(id, req.body);
     if (!updatedPost) {
       return res.status(404).json({ error: 'Publicación no encontrada para actualizar' });
     }
@@ -101,9 +129,12 @@ router.put('/:id', async (req, res) => {
 });
 
 // 🗑️ 7. ELIMINAR UN POST
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const deletedPost = await deleteCommunityPost(req.params.id);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const deletedPost = await deleteCommunityPost(id);
     if (!deletedPost) {
       return res.status(404).json({ error: 'Publicación no encontrada para eliminar' });
     }

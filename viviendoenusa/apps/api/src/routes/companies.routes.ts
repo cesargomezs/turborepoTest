@@ -1,19 +1,26 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { 
   getCompanies, 
   getCompanyById, 
   createCompany, 
   updateCompany, 
   deleteCompany,
-  renewCompany // 🚀 NUEVO: Importamos la función de renovación
+  renewCompany 
 } from '../controllers/companies.controller';
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos seguridad
 
 const router = Router();
 
 // 🔍 GET: Obtener todas las empresas (Soporta filtro opcional ?userId=...)
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const currentUserId = req.query.userId as string; 
+    // 🚀 Extracción segura para evitar string | string[]
+    const userIdParam = req.query.userId;
+    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined); 
+    
+    // 🚀 Priorizamos el userId validado del token
+    const currentUserId = req.user?.id || req.user?.userId || queryUserId;
+
     const companiesList = await getCompanies(currentUserId);
     return res.status(200).json(companiesList);
   } catch (error: any) {
@@ -23,9 +30,16 @@ router.get('/', async (req, res) => {
 });
 
 // 📥 POST: Registrar una nueva empresa (Valida unicidad de EIN corporativo y pago)
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newCompany = await createCompany(req.body);
+    // 🚀 Inyectamos el creador desde el token para evitar suplantaciones
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newCompany = await createCompany(payload);
     return res.status(201).json(newCompany);
   } catch (error: any) {
     console.error("❌ Error en POST /companies:", error.message);
@@ -40,10 +54,20 @@ router.post('/', async (req, res) => {
 });
 
 // 🔄 POST: Renovar Suscripción de Empresa (Pago)
-// 🚀 NUEVO: Esta es la ruta a la que llamará el frontend cuando caduque el plan de la empresa
-router.post('/:id/renew', async (req, res) => {
+router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const renewedCompany = await renewCompany(req.params.id, req.body);
+    // 🚀 Extracción segura del ID de la empresa
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    // 🚀 Inyectamos el usuario desde el token por seguridad
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const renewedCompany = await renewCompany(id, payload);
     return res.status(200).json(renewedCompany);
   } catch (error: any) {
     console.error(`❌ Error en POST /companies/${req.params.id}/renew:`, error.message);
@@ -55,9 +79,12 @@ router.post('/:id/renew', async (req, res) => {
 });
 
 // 🔍 GET: Obtener una empresa específica por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    // 🚀 Extracción segura del ID
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
     const company = await getCompanyById(id);
     
     if (!company) {
@@ -72,9 +99,11 @@ router.get('/:id', async (req, res) => {
 });
 
 // 🔄 PUT: Actualizar perfil de empresa (Ideal para que el Admin cambie planes o verifique)
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params; 
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
     const updatedCompany = await updateCompany(id, req.body);
     
     if (!updatedCompany) {
@@ -89,9 +118,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // 🗑️ DELETE: Eliminar perfil corporativo
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
     const deletedCompany = await deleteCompany(id);
     
     if (!deletedCompany) {

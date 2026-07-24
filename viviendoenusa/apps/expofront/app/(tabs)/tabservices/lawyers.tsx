@@ -6,8 +6,8 @@ import {
   Modal, KeyboardAvoidingView, ColorValue, Share
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { useRouter, useLocalSearchParams } from 'expo-router'; 
+import { BlurView } from 'expo-blur'; 
+import { useRouter, useLocalSearchParams, router } from 'expo-router';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import MapView from 'react-native-maps';
@@ -86,7 +86,7 @@ const ActionBtn = ({ icon, text, color, bgColor, onPress, flex, width, disabled 
   </TouchableOpacity>
 );
 
-const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets }: any) => {
+const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets, userToken }: any) => {
   const [renewRefCode, setRenewRefCode] = useState('');
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
@@ -105,8 +105,14 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
     try {
       const payload = { referenceCode: renewRefCode, paymentMethod: renewPayMethod, userId: currentUserId };
       const res = await fetch(`${API_BASE_URL}/${lawyerToRenew.id}/renew`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        }, 
+        body: JSON.stringify(payload)
       });
+      if (res.status === 401) { router.replace('/'); return; }
       if (!res.ok) throw new Error();
       Alert.alert((t.lawyerstab as any)?.successTitle || 'Éxito' , (t.lawyerstab as any)?.renewSuccessMsg || 'Renovación enviada');
       onSuccess();
@@ -161,7 +167,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   );
 });
 
-const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, companyTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets }: any) => {
+const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, companyTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets, userToken, router }: any) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -223,9 +229,16 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         }
 
         const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/lawyers', {
-          method: 'POST', body: formData, headers: { 'Accept': 'application/json' },
+          method: 'POST', 
+          body: formData, 
+          headers: { 
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${userToken}` 
+          },
         });
         
+        if (uploadResponse.status === 401) { setIsPublishing(false); router.replace('/'); return; }
+
         const uploadData = await uploadResponse.json();
         if (!uploadResponse.ok) throw new Error(uploadData.error || (t.lawyerstab as any)?.imageUploadError || "Error subiendo imagen");
         finalImageName = uploadData.identificadorArchivo;
@@ -243,12 +256,19 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         area: PRACTICE_AREAS[formCategoryIdx] || PRACTICE_AREAS[1], zip: formZip, imageUrl: finalImageName,
         lat: lat, lng: lng, phone: fullPhone, userId: currentUserId,
         approved: false, referenceCode: formRefCode, paymentMethod: formPayMethod, durationDays: 30,
-        premiumPlan: formPlan, couponCode: formCoupon.trim(),tariffPlan:(companyTariffs as any)[formPlan]
+        premiumPlan: formPlan, couponCode: formCoupon.trim(), tariffPlan: (companyTariffs as any)[formPlan]
       };
 
       const response = await fetch(API_BASE_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        }, 
+        body: JSON.stringify(payload)
       });
+      if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
+
       const savedFromDB = await response.json();
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando abogado");
 
@@ -288,7 +308,8 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
               </TouchableOpacity>
               
               <ThemedText style={{ fontSize: 12, fontWeight: '900',color:Colors.text, marginBottom: 8, textTransform:'none' }}>{(t.lawyerstab as any)?.label || 'Categoría'}</ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
+              
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
                 {PRACTICE_AREAS.map((cat: string, index: number) => {
                   if (index === 0) return null; 
                   const isActive = formCategoryIdx === index;
@@ -309,7 +330,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                     </TouchableOpacity>
                   );
                 })}
-              </ScrollView>
+              </View>
 
               <TextInput 
                 style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
@@ -444,6 +465,7 @@ export default function LawyersScreen() {
   const localTheme = isDark ? 'dark' : 'light';
   
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+  const userToken = userMetadata?.token || userMetadata?.accessToken;
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
   const stylesUnified = useUnifiedCardStyles();
@@ -581,7 +603,12 @@ export default function LawyersScreen() {
   const fetchLawyersData = async (searchZip: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`);
+      const res = await fetch(`${API_BASE_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      if (res.status === 401) { router.replace('/'); return []; }
+
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -656,7 +683,12 @@ export default function LawyersScreen() {
   const fetchAllPendingLawyers = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`); 
+      const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      }); 
+      if (res.status === 401) { router.replace('/'); return; }
+
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -761,9 +793,13 @@ export default function LawyersScreen() {
     try {
       const response = await fetch(`${API_BASE_URL}/${lawyer.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        },
         body: JSON.stringify({ approved: true, durationMonths })
       });
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError || "Error en servidor");
       
       const updatedLawyerFromServer = await response.json();
@@ -792,7 +828,11 @@ export default function LawyersScreen() {
 
   const rejectLawyer = async (id: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError);
       setPendingLawyers(pendingLawyers.filter(e => e.id !== id));
       Alert.alert((t.lawyerstab as any)?.rejectedTitle, (t.lawyerstab as any)?.rejectedMsg );
@@ -801,7 +841,6 @@ export default function LawyersScreen() {
     }
   };
 
-  // --- USE EFFECTS LÓGICOS ---
   useEffect(() => {
     if (!hasFetchedLocation.current) {
       getCurrentLocation();
@@ -812,7 +851,11 @@ export default function LawyersScreen() {
   useEffect(() => {
     const fetchTariff = async () => {
       try {
-        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Lawyers`);
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Lawyers`, {
+          method: 'GET',
+          headers: userToken ? { 'Authorization': `Bearer ${userToken}` } : undefined
+        });
+        if (res.status === 401) { router.replace('/'); return; }
         if (res.ok) {
           const tariffsData = await res.json();
           if (tariffsData && tariffsData.length > 0) {
@@ -873,7 +916,6 @@ export default function LawyersScreen() {
     ).start();
   }, [ringAnim, pulseRingAnim, pulseOpacityAnim]);
 
-  // 🚀 LÓGICA DE APERTURA POR NOTIFICACIÓN
   useEffect(() => {
     if (notificationId) {
       const cleanNotifId = String(notificationId).trim();
@@ -897,7 +939,11 @@ export default function LawyersScreen() {
         } else {
           const fetchSpecificLawyer = async () => {
             try {
-              const res = await fetch(`${API_BASE_URL}/${cleanNotifId}`);
+              const res = await fetch(`${API_BASE_URL}/${cleanNotifId}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${userToken}` }
+              });
+              if (res.status === 401) { router.replace('/'); return; }
               if (res.ok) {
                 const data = await res.json();
                 
@@ -925,7 +971,6 @@ export default function LawyersScreen() {
     }
   }, [notificationId, allLawyers, pendingLawyers]);
 
-  // --- COMPONENTES INTERNOS ---
   const LawyerCard = ({ lawyer, isReviewMode = false, renderAdminControls }: { lawyer: any, isReviewMode?: boolean, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     const isPending = lawyer.status === 'pending';
@@ -1041,14 +1086,12 @@ export default function LawyersScreen() {
     const adminControls = () => (
       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15 }}>
 
-        {/* 🚀 VISUALIZACIÓN DEL PLAN PARA EL ADMIN */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
             {lawyer.premiumPlan && (
                 <View style={{ backgroundColor: planStyles[lawyer.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || Colors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: planStyles[lawyer.premiumPlan as keyof typeof planStyles]?.selected || Colors.border }}>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: planStyles[lawyer.premiumPlan as keyof typeof planStyles]?.selected || Colors.subtext }}> {(t.genericlabel?.lableplan || 'PLAN ') + lawyer.premiumPlan.toUpperCase()}</ThemedText>
                 </View>
             )}
-            
         </View>
 
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
@@ -1085,7 +1128,7 @@ export default function LawyersScreen() {
         lawyerToRenew={lawyerToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
         t={t} isDark={isDark} Colors={Colors} orangeGradient={orangeGradient} 
         isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} 
-        insets={insets}
+        insets={insets} userToken={userToken}
       />
 
       <SuggestLawyerModal 
@@ -1102,10 +1145,9 @@ export default function LawyersScreen() {
         currentUserId={currentUserId} currentTariff={currentTariff}  companyTariffs={companyTariffs} t={t} isDark={isDark} Colors={Colors} 
         orangeGradient={orangeGradient} isLargeWeb={isLargeWeb} isAndroid={isAndroid} 
         isIOS={isIOS} PRACTICE_AREAS={PRACTICE_AREAS} 
-        insets={insets}
+        insets={insets} userToken={userToken} router={router}
       />
 
-      {/* 🚀 MODAL DETALLE EXPANDIDO CON CIERRE LIMPIO */}
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -1201,7 +1243,6 @@ export default function LawyersScreen() {
         </View>
       </Modal>
 
-      {/* MODAL RESEÑAS */}
       <Modal visible={!!selectedReviews} transparent animationType="slide" statusBarTranslucent>
         <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
@@ -1272,10 +1313,14 @@ export default function LawyersScreen() {
 
                           const res = await fetch(`${API_BASE_URL}/rating`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${userToken}` 
+                            },
                             body: JSON.stringify(reviewPayload)
                           });
 
+                          if (res.status === 401) { router.replace('/'); return; }
                           if (!res.ok) throw new Error();
                           const fromDB = await res.json();
 
@@ -1367,27 +1412,51 @@ export default function LawyersScreen() {
                   )}
 
                   <View style={{ marginBottom: 15 }}>
-                    <ScrollView horizontal showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                      {PRACTICE_AREAS.map((area, index) => {
-                         const iconInfo = AREA_ICONS[area] || AREA_ICONS['Default'];
-                         const isActive = selectedArea === area;
-                         return (
-                          <TouchableOpacity key={index} onPress={() => handleCategorySelect(area)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
-                            {isActive ? (
-                               <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                                 <iconInfo.lib name={iconInfo.name} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                                 <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText>
-                               </LinearGradient>
-                             ) : (
-                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
-                                 <iconInfo.lib name={iconInfo.name} size={14} color={Colors.iconInactive} style={{ marginRight: 5 }} />
-                                 <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText>
-                               </View>
-                             )}
-                          </TouchableOpacity>
-                         );
-                      })}
-                    </ScrollView>
+                    {isWeb ? (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {PRACTICE_AREAS.map((area, index) => {
+                           const iconInfo = AREA_ICONS[area] || AREA_ICONS['Default'];
+                           const isActive = selectedArea === area;
+                           return (
+                            <TouchableOpacity key={index} onPress={() => handleCategorySelect(area)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                              {isActive ? (
+                                 <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                   <iconInfo.lib name={iconInfo.name} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText>
+                                 </LinearGradient>
+                               ) : (
+                                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
+                                   <iconInfo.lib name={iconInfo.name} size={14} color={Colors.iconInactive} style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText>
+                                 </View>
+                               )}
+                            </TouchableOpacity>
+                           );
+                        })}
+                      </View>
+                    ) : (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 2, paddingHorizontal: 2, flexDirection: 'row', gap: 8 }}>
+                        {PRACTICE_AREAS.map((area, index) => {
+                           const iconInfo = AREA_ICONS[area] || AREA_ICONS['Default'];
+                           const isActive = selectedArea === area;
+                           return (
+                            <TouchableOpacity key={index} onPress={() => handleCategorySelect(area)} style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                              {isActive ? (
+                                 <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                   <iconInfo.lib name={iconInfo.name} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText>
+                                 </LinearGradient>
+                               ) : (
+                                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
+                                   <iconInfo.lib name={iconInfo.name} size={14} color={Colors.iconInactive} style={{ marginRight: 5 }} />
+                                   <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText>
+                                 </View>
+                               )}
+                            </TouchableOpacity>
+                           );
+                        })}
+                      </ScrollView>
+                    )}
                   </View>
 
                   <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, position: 'relative' }}>
@@ -1517,7 +1586,6 @@ export default function LawyersScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB para Sugerir Abogado */}
       <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="scale-balance" size={32} color="#FFF" />

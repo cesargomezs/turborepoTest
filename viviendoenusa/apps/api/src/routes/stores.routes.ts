@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { 
     getStores, 
     getStoreById, 
@@ -6,16 +6,24 @@ import {
     updateStore, 
     deleteStore,
     createStoreReview,
-    renewStore // 🚀 Función para renovar la tienda
+    renewStore 
 } from '../controllers/stores.controller';
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos la seguridad
 
 const router = Router();
 
 // 🔍 GET: Obtener todas las tiendas (soporta filtro por código postal)
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const zip = req.query.zip as string;
-    const currentUserId = req.query.userId as string; // Por si envías el userId desde el front
+    // 🚀 Extracción segura para evitar string | string[]
+    const zipParam = req.query.zip;
+    const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
+    
+    const userIdParam = req.query.userId;
+    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined);
+    
+    // 🚀 Priorizamos el ID del token, pero aceptamos el de la query para vistas específicas
+    const currentUserId = req.user?.id || req.user?.userId || queryUserId;
     
     const list = await getStores(zip, currentUserId);
     return res.status(200).json(list);
@@ -26,9 +34,17 @@ router.get('/', async (req, res) => {
 });
 
 // 📥 POST: Crear una nueva tienda (valida código de pago único)
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newStore = await createStore(req.body);
+    // 🚀 Extraemos e inyectamos el userId validado desde el token
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newStore = await createStore(payload);
     return res.status(201).json(newStore);
   } catch (error: any) {
     console.error("❌ Error en POST /stores:", error.message);
@@ -43,10 +59,17 @@ router.post('/', async (req, res) => {
 });
 
 // ⭐ POST: Crear una reseña/rating para una tienda
-// 🚀 FIX: Cambiado de '/rating' a '/reviews' para que coincida con el Frontend
-router.post('/reviews', async (req, res) => {
+router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newReview = await createStoreReview(req.body);
+    // 🚀 Aseguramos que la reseña pertenezca al usuario del token
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newReview = await createStoreReview(payload);
     return res.status(201).json(newReview);
   } catch (error: any) {
     console.error("❌ Error en POST /stores/reviews:", error.message);
@@ -56,9 +79,20 @@ router.post('/reviews', async (req, res) => {
 
 // 🔄 POST: Renovar Tienda (Pago adicional)
 // IMPORTANTE: Va antes del GET /:id genérico
-router.post('/:id/renew', async (req, res) => {
+router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const renewedStore = await renewStore(req.params.id, req.body);
+    // 🚀 Extracción segura del ID de la tienda
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    // 🚀 Inyectamos el usuario desde el token por seguridad
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const renewedStore = await renewStore(id, payload);
     return res.status(200).json(renewedStore);
   } catch (error: any) {
     console.error(`❌ Error en POST /stores/${req.params.id}/renew:`, error.message);
@@ -70,9 +104,12 @@ router.post('/:id/renew', async (req, res) => {
 });
 
 // 🔍 GET: Obtener una tienda específica por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const store = await getStoreById(req.params.id);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const store = await getStoreById(id);
     if (!store) {
       return res.status(404).json({ error: "Tienda no encontrada" });
     }
@@ -84,9 +121,12 @@ router.get('/:id', async (req, res) => {
 });
 
 // 🔄 PUT: Actualizar una tienda (Aprobar, meses dinámicos y procesar pagos)
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const updatedStore = await updateStore(req.params.id, req.body);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const updatedStore = await updateStore(id, req.body);
     if (!updatedStore) {
       return res.status(404).json({ error: "Tienda no encontrada o no se pudo actualizar" });
     }
@@ -98,9 +138,12 @@ router.put('/:id', async (req, res) => {
 });
 
 // 🗑️ DELETE: Eliminar una tienda
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const deletedStore = await deleteStore(req.params.id);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const deletedStore = await deleteStore(id);
     if (!deletedStore) {
       return res.status(404).json({ error: "Tienda no encontrada" });
     }

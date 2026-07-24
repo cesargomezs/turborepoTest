@@ -1,53 +1,60 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { 
     getNotifications, 
     markNotificationAsRead, 
     deleteNotification 
 } from '../controllers/notifications.controller';
-import { verifyToken } from 'src/middleware/authMiddleware'; // 🛡️ SOLO importamos el middleware
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🛡️ Importamos la seguridad unificada
+
 const router = Router();
 
 // 🔍 GET: /notifications -> Trae la lista filtrada por userId
-router.get('/',verifyToken, async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
     console.log("Petición recibida en /notifications con query:", req.query);
     try {
-        // 1. Extraemos el userId de los parámetros de búsqueda (?userId=...)
-        const userId = req.query.userId as string;
+        // 🚀 BLINDAJE: Extraemos el userId de forma SEGURA directamente desde el token
+        const userIdFromToken = req.user?.id || req.user?.userId;
 
-        // 2. Validación básica para asegurarnos de que el ID viene presente
-        if (!userId) {
-            return res.status(400).json({ message: "El ID de usuario es requerido." });
+        // Validación para asegurarnos de que el ID del token existe
+        if (!userIdFromToken) {
+            return res.status(401).json({ message: "No autorizado. Token inválido o sin ID." });
         }
 
-        // 3. Llamamos a nuestra función corregida que filtra en la base de datos
+        // 🚀 Inyectamos el ID seguro en la petición para que el controlador lo use
+        // Esto ignora cualquier ?userId= falso que alguien intente enviar por la URL
+        req.query.userId = userIdFromToken as string;
+
+        // Llamamos a nuestra función que filtra en la base de datos
         const data = await getNotifications(req as any, res);
         
-        // 4. Respondemos con la data obtenida
-        res.status(200).json(data);
+        // Respondemos con la data obtenida (verificando que el controlador no haya respondido ya)
+        if (!res.headersSent) {
+            res.status(200).json(data);
+        }
 
     } catch (error: any) {
         console.error("❌ Error en el endpoint /notifications:", error);
-        res.status(500).json({ message: error.message });
+        if (!res.headersSent) res.status(500).json({ message: error.message });
     }
 });
 
 // 👀 PUT: /notifications/:id -> Marcar como leída
-router.put('/:id',verifyToken, async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
     try {
         const updated = await markNotificationAsRead(req as any, res);
-        res.status(200).json(updated);
+        if (!res.headersSent) res.status(200).json(updated);
     } catch (error: any) {
-        res.status(500).json({ message: error.message });
+        if (!res.headersSent) res.status(500).json({ message: error.message });
     }
 });
 
 // 🗑️ DELETE: /notifications/:id -> Borrarla cuando el usuario la toca/cierra
-router.delete('/:id',verifyToken, async (req, res) => {
+router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
     try {
         await deleteNotification(req as any, res);
-        res.status(200).json({ message: "Notificación eliminada correctamente" });
+        if (!res.headersSent) res.status(200).json({ message: "Notificación eliminada correctamente" });
     } catch (error: any) {
-        res.status(500).json({ message: error.message });
+        if (!res.headersSent) res.status(500).json({ message: error.message });
     }
 });
 

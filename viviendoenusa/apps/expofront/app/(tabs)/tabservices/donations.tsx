@@ -18,7 +18,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper'; // 🚀 IMPORTAMOS EL HELPER DE COMPARTIR
+import { handleUniversalShare } from '@/utils/shareHelper'; 
 
 // --- 1. LÓGICA DE VALIDACIÓN GLOBAL ---
 let BANNED_WORDS: string[] = [];
@@ -43,9 +43,6 @@ const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
 
-const INTERNAL_IDS = ['all', 'clothes', 'furniture', 'food', 'others'];
-const ICONS_ARRAY = ['apps', 'tshirt-crew', 'sofa', 'food-apple', 'dots-horizontal-circle'];
-
 // 📡 URL BASE PARA LAS DONACIONES
 const API_DONATIONS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/donations';
 
@@ -60,7 +57,16 @@ export default function DonationsScreen() {
   const localTheme = isDark ? 'dark' : 'light';
 
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
-  const currentUserName = 'Cesar';
+  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+  
+  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
+  useEffect(() => {
+    if (!userToken) {
+      router.replace('/');
+    }
+  }, [userToken]);
+
+  const currentUserName = userMetadata?.name || 'Usuario';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const stylesUnified = useUnifiedCardStyles();
   
@@ -68,6 +74,9 @@ export default function DonationsScreen() {
   const isLargeWeb = isWeb && width > 1000;
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
+
+  const INTERNAL_IDS = t.donationstab.subCategories;
+  const ICONS_ARRAY = t.donationstab.subCategoriesIcon ;
 
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue] = isDark ? ['#333333', '#444444'] : ['#dddddd', '#cccccc'];
@@ -95,7 +104,7 @@ export default function DonationsScreen() {
   const rawCategories = (t.donationstab as any)?.subCategories || (t.donationstab as any)?.categories;
   const CATEGORY_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_IDS.length
       ? rawCategories 
-      : ['Todos', 'Ropa', 'Muebles', 'Alimentos', 'Otros'];
+      : t.donationstab.subCategories;
 
   // 🚀 ESTADOS
   const [zipCode, setZipCode] = useState('');
@@ -123,7 +132,16 @@ export default function DonationsScreen() {
     if (!searchZip || searchZip.trim().length !== 5) return;
     try {
       setIsLoadingPosts(true);
-      const res = await fetch(`${API_DONATIONS_URL}?zip=${searchZip.trim()}`);
+      const res = await fetch(`${API_DONATIONS_URL}?zip=${searchZip.trim()}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (res.status === 401) { router.replace('/'); return; }
+
       const data = await res.json();
       setDonations(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -143,7 +161,6 @@ export default function DonationsScreen() {
     setSearchQuery('');
   };
 
-  // 🚀 NUEVA FUNCIÓN PARA COMPARTIR DONACIONES
   const handleShare = async (item: any) => {
     await handleUniversalShare({
       title: t.donationstab.label+item.title,
@@ -155,7 +172,6 @@ export default function DonationsScreen() {
     });
   };
 
-  // 🚀 ACTUALIZAR ESTADO DE LA DONACIÓN
   const handleToggleStatus = async (id: any) => {
     const currentItem = donations.find(d => d.id === id);
     if (!currentItem) return;
@@ -166,9 +182,14 @@ export default function DonationsScreen() {
     try {
       const response = await fetch(`${API_DONATIONS_URL}/${id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
         body: JSON.stringify({ status: newStatus })
       });
+      
+      if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Fallo en servidor");
     } catch (e) {
       setDonations(prev => prev.map(d => d.id === id ? { ...d, status: currentItem.status } : d));
@@ -176,7 +197,6 @@ export default function DonationsScreen() {
     }
   };
 
-  // 🚀 PUBLICAR NUEVA DONACIÓN
   const handlePublish = async () => {
     const trimmedTitle = formTitle.trim();
     const trimmedDesc = formDescription.trim();
@@ -207,17 +227,24 @@ export default function DonationsScreen() {
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-      formData.append('imagen', { 
-        uri: formImage, 
-        name: filename, 
-        type 
-      } as any);
+      if (Platform.OS === 'web') {
+        const responseBlob = await fetch(formImage);
+        const blob = await responseBlob.blob();
+        formData.append('imagen', blob as any, filename);
+      } else {
+        formData.append('imagen', { uri: formImage, name: filename, type } as any);
+      }
 
       const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/donations', {
         method: 'POST',
         body: formData,
-        headers: { 'Accept': 'application/json' },
+        headers: { 
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
       });
+
+      if (uploadResponse.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
       const uploadData = await uploadResponse.json();
       if (!uploadResponse.ok) throw new Error(uploadData.error || "Error subiendo imagen");
@@ -241,9 +268,14 @@ export default function DonationsScreen() {
 
       const response = await fetch(API_DONATIONS_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        },
         body: JSON.stringify(newEntryPayload)
       });
+      
+      if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
       
       const savedFromDB = await response.json();
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando registro");
@@ -279,11 +311,7 @@ export default function DonationsScreen() {
   const filteredDonations = useMemo(() => {
     return donations.filter(item => {
       const title = item.title || '';
-      
-      // 🚀 BLINDAJE: Aceptamos 'active' (de la columna estate) o el UUID antiguo
       const isActive = item.status === 'active' || item.statusId === '31a06434-8ed8-45d2-b95f-65bd314bc021';
-
-      // Solo mostramos donaciones activas y filtramos por texto
       return isActive && 
              (selectedCategoryIdx === 0 || Number(item.categoryIdx) === selectedCategoryIdx) && 
              title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -376,29 +404,66 @@ export default function DonationsScreen() {
                     />
                   </View>
 
+                  {/* 🚀 CATEGORÍAS ADAPTATIVAS: Salto de línea (wrap) en Web, Scroll horizontal en Móvil */}
                   {!isLargeWeb && (
-                    <View style={{ height: 50, marginBottom: 15 }}>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 5, paddingHorizontal: 2 }}>
-                        {CATEGORY_LABELS.map((catLabel: string, index: number) => {
-                          const isActive = selectedCategoryIdx === index;
-                          const iconName = ICONS_ARRAY[index] || 'tag';
-                          return (
-                            <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
-                              {isActive ? (
-                                <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                                  <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{catLabel}</ThemedText>
-                                </LinearGradient>
-                              ) : (
-                                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                                  <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                                  <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{catLabel}</ThemedText>
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
+                    <View style={{ marginBottom: 15 }}>
+                      {isWeb ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                          {CATEGORY_LABELS.map((catLabel: string, index: number) => {
+                            const isActive = selectedCategoryIdx === index;
+                            const iconName = ICONS_ARRAY[index] || 'tag';
+                            return (
+                              <TouchableOpacity 
+                                key={index} 
+                                onPress={() => handleCategorySelect(index)} 
+                                style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}
+                              >
+                                {isActive ? (
+                                  <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{catLabel}</ThemedText>
+                                  </LinearGradient>
+                                ) : (
+                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                    <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{catLabel}</ThemedText>
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      ) : (
+                        <ScrollView 
+                          horizontal 
+                          showsHorizontalScrollIndicator={false} 
+                          contentContainerStyle={{ paddingVertical: 2, paddingHorizontal: 2, flexDirection: 'row', gap: 8 }}
+                        >
+                          {CATEGORY_LABELS.map((catLabel: string, index: number) => {
+                            const isActive = selectedCategoryIdx === index;
+                            const iconName = ICONS_ARRAY[index] || 'tag';
+                            return (
+                              <TouchableOpacity 
+                                key={index} 
+                                onPress={() => handleCategorySelect(index)} 
+                                style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}
+                              >
+                                {isActive ? (
+                                  <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{catLabel}</ThemedText>
+                                  </LinearGradient>
+                                ) : (
+                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                                    <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                    <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{catLabel}</ThemedText>
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      )}
                     </View>
                   )}
 
@@ -433,8 +498,8 @@ export default function DonationsScreen() {
                             onToggleStatus={handleToggleStatus}
                             t={t}
                             categoryLabels={CATEGORY_LABELS}
-                            isWeb={isWeb} // 🚀 Pasamos isWeb
-                            handleShare={handleShare} // 🚀 Pasamos la función de compartir
+                            isWeb={isWeb} 
+                            handleShare={handleShare} 
                           />
                         )) : (
                           <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
@@ -480,7 +545,9 @@ export default function DonationsScreen() {
                 </TouchableOpacity>
 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, color:DynamicColors.text  }}>{(t.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
+                
+                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap en Web para salto de línea ordenado */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                   {CATEGORY_LABELS.map((catLabel: string, index: number) => {
                     if (index === 0) return null; 
 
@@ -488,7 +555,11 @@ export default function DonationsScreen() {
                     const iconName = ICONS_ARRAY[index] || 'tag';
 
                     return (
-                      <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ marginRight: 8, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                      <TouchableOpacity 
+                        key={index} 
+                        onPress={() => setFormCategoryIdx(index)} 
+                        style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}
+                      >
                         {isActive ? (
                           <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
                             <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
@@ -503,7 +574,7 @@ export default function DonationsScreen() {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 , color:DynamicColors.text }}>{(t.donationstab as any)?.typeContact || 'Contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>

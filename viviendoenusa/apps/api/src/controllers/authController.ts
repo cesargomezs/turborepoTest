@@ -304,7 +304,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
 
     // 4. Crear el enlace apuntando a tu IP local (o tu dominio web en producción)
-    const resetLink = `http://192.168.1.107:8081/ResetPassword?token=${resetToken}`;
+    const resetLink = `http://192.168.252.243:8081/ResetPassword?token=${resetToken}`;
 
     const mailOptions = {
       from: '"Viviendo en USA" <cesar@viviendoenusa.app>',

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { 
     getEvents, 
     getEventById, 
@@ -6,13 +6,16 @@ import {
     updateEvent, 
     deleteEvent 
 } from '../controllers/events.controller';
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos el middleware de seguridad
 
 const router = Router();
 
 // 🔍 GET: Obtener todos los eventos (soporta filtro por código postal)
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const zip = req.query.zip as string;
+    // 🚀 Extracción segura para evitar el error string | string[]
+    const zipParam = req.query.zip;
+    const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
     
     const list = await getEvents(zip);
     return res.status(200).json(list);
@@ -23,9 +26,13 @@ router.get('/', async (req, res) => {
 });
 
 // 🔍 GET: Obtener un evento específico por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const event = await getEventById(req.params.id);
+    // 🚀 Extracción segura del ID
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const event = await getEventById(id);
     if (!event) {
       return res.status(404).json({ error: "Evento no encontrado" });
     }
@@ -36,10 +43,18 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 📥 POST: Crear un nuevo evento (valida código de pago único)
-router.post('/', async (req, res) => {
+// 📥 POST: Crear un nuevo evento (valida código de pago único e inyecta userId)
+router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const newEvent = await createEvent(req.body);
+    // 🚀 Extraemos y aseguramos el ID del usuario desde el token
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newEvent = await createEvent(payload);
     return res.status(201).json(newEvent);
   } catch (error: any) {
     console.error("❌ Error en POST /events:", error.message);
@@ -54,9 +69,12 @@ router.post('/', async (req, res) => {
 });
 
 // 🔄 PUT: Actualizar un evento (Aprobar y disparar notificaciones/tarifas dinámicas)
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const updatedEvent = await updateEvent(req.params.id, req.body);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const updatedEvent = await updateEvent(id, req.body);
     if (!updatedEvent) {
       return res.status(404).json({ error: "Evento no encontrado o no se pudo actualizar" });
     }
@@ -68,9 +86,12 @@ router.put('/:id', async (req, res) => {
 });
 
 // 🗑️ DELETE: Eliminar un evento
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const deletedEvent = await deleteEvent(req.params.id);
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const deletedEvent = await deleteEvent(id);
     if (!deletedEvent) {
       return res.status(404).json({ error: "Evento no encontrado" });
     }

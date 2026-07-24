@@ -41,9 +41,19 @@ export default function ServicesScreen() {
   const { isDark } = useAppTheme();
 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
+  const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+
   const { t } = useTranslation();
 
   const localStyles = useUnifiedCardStyles();
+
+  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
+  useEffect(() => {
+    if (!userToken) {
+      router.replace('/');
+    }
+  }, [userToken]);
 
   // --- ANIMACIÓN: CORAZÓN LATIENDO ---
   const pulseAnim = useRef(new Animated.Value(1)).current;

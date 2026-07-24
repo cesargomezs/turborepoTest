@@ -18,14 +18,16 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '@/utils/shareHelper';
+import { useAuth } from '@/context/AuthContext';
+
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
-const ICONS_ARRAY = ['apps', 'heart-pulse', 'brain', 'hand-heart', 'dots-horizontal'];
-const CATEGORIES_LIST = ['Todos', 'Psicólogos Pro-Bono', 'Mentores Locales', 'Grupos de Apoyo', 'Otros'];
+
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/support';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
+
 
 const planStyles: any = {
   coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
@@ -71,6 +73,8 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 };
 
 export default function SupportScreen() {
+  const { login } = useAuth();
+
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -78,16 +82,16 @@ export default function SupportScreen() {
   const rawNotifId = paramsGlobal.id || paramsGlobal.supportId || paramsGlobal.referenceId;
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
   const mapRef = useRef<MapView>(null); 
-  /*
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
-  */
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+  const userToken = userMetadata?.token || userMetadata?.accessToken;
   const { t } = useTranslation();
+
+  const ICONS_ARRAY = t.supporttab.categoryListIcon;
+  const CATEGORIES_LIST = t.supporttab.categoryList;
   const stylesUnified = useUnifiedCardStyles();
 
   const isWeb = Platform.OS === 'web';
@@ -167,7 +171,13 @@ export default function SupportScreen() {
   useEffect(() => {
     const fetchTariff = async () => {
       try {
-        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Support`);
+        const res = await fetch(`${API_TARIFFS_URL}?typeCode=Support`, {
+          method: 'GET',
+          headers: userToken ? { 'Authorization': `Bearer ${userToken}` } : undefined
+        });
+        
+        if (res.status === 401) { router.replace('/'); return; }
+        
         if (res.ok) {
           const tariffsData = await res.json();
           if (tariffsData && tariffsData.length > 0) {
@@ -213,7 +223,13 @@ export default function SupportScreen() {
   const fetchAllPendingSupports = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`); 
+      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      
+      if (res.status === 401) { router.replace('/'); return; }
+
       const data = await res.json();
       if (Array.isArray(data)) {
         const mappedData = data.map(item => ({
@@ -229,7 +245,13 @@ export default function SupportScreen() {
   const fetchSupportData = async (searchZip: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`);
+      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      
+      if (res.status === 401) { router.replace('/'); return []; }
+
       const data = await res.json();
       if (Array.isArray(data)) {
         const mappedData = data.map(item => ({
@@ -271,7 +293,13 @@ export default function SupportScreen() {
       if (localMatch) { syncSearchAndDetail(localMatch); } else {
         const fetchSpecificSupport = async () => {
           try {
-            const res = await fetch(`${API_STORES_URL}/${cleanNotifId}`);
+            const res = await fetch(`${API_STORES_URL}/${cleanNotifId}`, {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${userToken}` }
+            });
+            
+            if (res.status === 401) { router.replace('/'); return; }
+            
             if (res.ok) {
               const data = await res.json();
               const mappedSupport = { ...data, name: data.nameSupp || data.name || 'Sin nombre', description: data.descriptionSupp || data.description || '', address: data.addressSupp || data.address || '', image: data.imageSupp || data.image || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800', lat: Number(data.lat) || 34.0934, lng: Number(data.lng) || -117.5847 };
@@ -323,7 +351,15 @@ export default function SupportScreen() {
         if (!(await validarImagenEnServidor(formImage))) { setIsPublishing(false); if (isWeb) { window.alert(`Error\n${t.genericlabel.labelerrorimageinapro}`); } else { Alert.alert("Error", t.genericlabel.labelerrorimageinapro); } return; }
         const formData = new FormData(); const filename = formImage.split('/').pop() || 'imagen.jpg'; const type = `image/${filename.split('.').pop() || 'jpeg'}`;
         formData.append('imagen', { uri: formImage, name: filename, type } as any);
-        const uploadRes = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/support', { method: 'POST', body: formData, headers: { 'Accept': 'application/json' } });
+        const uploadRes = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/support', { 
+          method: 'POST', 
+          body: formData, 
+          headers: { 
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${userToken}` 
+          } 
+        });
+        if (uploadRes.status === 401) { setIsPublishing(false); router.replace('/'); return; }
         const uploadData = await uploadRes.json();
         if (!uploadRes.ok) throw new Error(uploadData.error || t.genericlabel.labelerrorimage);
         finalImageName = uploadData.identificadorArchivo;
@@ -332,7 +368,17 @@ export default function SupportScreen() {
       try { const geo = await Location.geocodeAsync(formZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       const payload = { nameSupp: formName, descriptionSupp: formDesc, addressSupp: formAddress, categoryId: formCategoryIdx, zip: formZip, imageSupp: finalImageName, lat, lng, phone: fullPhone, userId: userMetadata?.id || userMetadata?.userId || null, approved: false, premiumPlan: formPlan, couponCode: formCoupon ? formCoupon.trim() : '', referenceCode: formRefCode, paymentMethod: formPayMethod };
-      const response = await fetch(API_STORES_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      
+      const response = await fetch(API_STORES_URL, { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        }, 
+        body: JSON.stringify(payload) 
+      });
+      if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
+      
       const savedFromDB = await response.json();
       if (!response.ok) throw new Error(savedFromDB.error || t.genericlabel.labelerrorsave);
       const newEntryLocal = { id: savedFromDB.id, name: savedFromDB.nameSupp, description: savedFromDB.descriptionSupp, address: savedFromDB.addressSupp, categoryId: savedFromDB.categoryId, image: formImage || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800', lat, lng, rating: 0, reviews: [], totalReviews: 0, phone: savedFromDB.phone, status: 'pending', userId: currentUserId, timepostEnd: null };
@@ -345,7 +391,16 @@ export default function SupportScreen() {
 
   const approveStore = async (store: any, durationMonths: number) => {
     try {
-      const response = await fetch(`${API_STORES_URL}/${store.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approved: true, durationMonths }) });
+      const response = await fetch(`${API_STORES_URL}/${store.id}`, { 
+        method: 'PUT', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        }, 
+        body: JSON.stringify({ approved: true, durationMonths }) 
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      
       if (!response.ok) throw new Error(t.genericlabel.labelerrorserver);
       const updatedStoreFromServer = await response.json(); const futureDate = new Date(); futureDate.setMonth(futureDate.getMonth() + durationMonths);
       const approvedStore = { ...store, ...updatedStoreFromServer, status: 'approved', timepostEnd: updatedStoreFromServer.timepostEnd || updatedStoreFromServer.timepost_end || futureDate.toISOString() };
@@ -356,7 +411,15 @@ export default function SupportScreen() {
 
   const rejectStore = async (id: number) => {
     try {
-      const response = await fetch(`${API_STORES_URL}/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_STORES_URL}/${id}`, { 
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Accept': 'application/json'
+        } 
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      
       if (!response.ok) throw new Error(t.genericlabel.labelerrorserver);
       setPendingStores(pendingStores.filter(e => e.id !== id)); Alert.alert(t.genericlabel.labelreject, t.genericlabel.labeldeletecontac);
     } catch (error) { Alert.alert("Error", t.genericlabel.labelnoreject); }
@@ -513,7 +576,16 @@ export default function SupportScreen() {
               ) : (
                 <ReviewForm isDark={isDark} t={t} onCancel={() => setShowReviewInput(false)} onPublish={async (ratingNum: number, commentStr: string) => { 
                         try {
-                          const res = await fetch(`${API_STORES_URL}/reviews`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference_id: selectedStore.id, stars: ratingNum, comment: commentStr, userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9" }) });
+                          const res = await fetch(`${API_STORES_URL}/reviews`, { 
+                            method: 'POST', 
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${userToken}` 
+                            }, 
+                            body: JSON.stringify({ reference_id: selectedStore.id, stars: ratingNum, comment: commentStr, userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9" }) 
+                          });
+                          if (res.status === 401) { router.replace('/'); return; }
+                          
                           if (!res.ok) throw new Error();
                           const fromDB = await res.json();
                           // 🚀 SE AGREGO LA IMAGEN Y NOMBRE DEL USUARIO LOGUEADO AL PUBLICAR
@@ -551,7 +623,9 @@ export default function SupportScreen() {
                   {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 ,color:DynamicColors.subtext}}>{t.genericbtn.photo}</ThemedText></View>}
                 </TouchableOpacity>
                 <ThemedText style={{ fontSize: 13, fontWeight: '900', marginBottom: 8,textTransform:'none',color:Colors.text}}>{t.genericlabel.labelcatergory}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6, marginBottom: 14 }}>
+                
+                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap para Web */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {CATEGORIES_LIST.map((cat, index) => {
                     if (index === 0) return null; const isActive = formCategoryIdx === index; const iconName = ICONS_ARRAY[index] || 'heart'; 
                     return (
@@ -568,7 +642,7 @@ export default function SupportScreen() {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
                 <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelnameprof} placeholderTextColor={DynamicColors.subtext} value={formName} onChangeText={setFormName} autoCapitalize="words" />
                 <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelcityaddres} placeholderTextColor={DynamicColors.subtext} value={formAddress} onChangeText={setFormAddress} autoCapitalize="words" />
@@ -651,18 +725,34 @@ export default function SupportScreen() {
                       <View style={{ flex: 1 }}><ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{t.supporttab.phone}</ThemedText><ThemedText style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>{t.supporttab.labelphone}</ThemedText></View>
                     </LinearGradient>
                   </TouchableOpacity>
+                  
+                  {/* 🚀 CATEGORÍAS ADAPTATIVAS: FlexWrap para Web, Scroll para Móvil */}
                   <View style={{ marginBottom: 15 }}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                      {CATEGORIES_LIST.map((area, index) => {
-                         const iconName = ICONS_ARRAY[index] || 'heart'; const isActive = selectedCategoryIdx === index;
-                         return (
-                          <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
-                            {isActive ? ( <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}><MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText></LinearGradient> ) : ( <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}><MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} /><ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText></View> )}
-                          </TouchableOpacity>
-                         );
-                      })}
-                    </ScrollView>
+                    {isWeb ? (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {CATEGORIES_LIST.map((area, index) => {
+                           const iconName = ICONS_ARRAY[index] || 'heart'; const isActive = selectedCategoryIdx === index;
+                           return (
+                            <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                              {isActive ? ( <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}><MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText></LinearGradient> ) : ( <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}><MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} /><ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText></View> )}
+                            </TouchableOpacity>
+                           );
+                        })}
+                      </View>
+                    ) : (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 2, paddingHorizontal: 2, flexDirection: 'row', gap: 8 }}>
+                        {CATEGORIES_LIST.map((area, index) => {
+                           const iconName = ICONS_ARRAY[index] || 'heart'; const isActive = selectedCategoryIdx === index;
+                           return (
+                            <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
+                              {isActive ? ( <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}><MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{area}</ThemedText></LinearGradient> ) : ( <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}><MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} /><ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{area}</ThemedText></View> )}
+                            </TouchableOpacity>
+                           );
+                        })}
+                      </ScrollView>
+                    )}
                   </View>
+
                   <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
                     <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={showMarkers ? results : []} mapKey={mapKey} onMarkerPress={handleMarkerSelection} showsUserLocation={true} />
                     {isWeb && ( <TouchableOpacity onPress={() => getCurrentLocation(true)} style={{ position: 'absolute', bottom: 15, right: 15, backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 25, borderWidth: 1, borderColor: DynamicColors.border, zIndex: 99, elevation: 99 }}><MaterialCommunityIcons name="crosshairs-gps" size={22} color={DynamicColors.text} /></TouchableOpacity> )}
