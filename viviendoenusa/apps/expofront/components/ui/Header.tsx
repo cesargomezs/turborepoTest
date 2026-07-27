@@ -310,22 +310,39 @@ export default function Header({ title }: { title?: string }) {
         const imageFormData = new FormData();
         const filename = profileData.new_image_uri.split('/').pop() || 'upload.jpg';
         
-        imageFormData.append('imagen', {
-          uri: profileData.new_image_uri,
-          name: filename,
-          type: 'image/jpeg', 
-        } as any);
+        // 🚀 BLINDAJE PARA EXPO WEB VS MÓVIL
+        if (Platform.OS === 'web') {
+          // En Web, debemos descargar la URI y convertirla en un Blob binario real
+          const response = await fetch(profileData.new_image_uri);
+          const blob = await response.blob();
+          imageFormData.append('imagen', blob, filename); 
+        } else {
+          // En Móvil, React Native exige este objeto específico
+          imageFormData.append('imagen', {
+            uri: profileData.new_image_uri,
+            name: filename,
+            type: 'image/jpeg', 
+          } as any);
+        }
 
         const uploadRes = await fetch(API_UPLOAD_URL, {
           method: 'POST',
           body: imageFormData,
-          headers: { 'Authorization': `Bearer ${token}` } 
+          headers: { 
+            'Authorization': `Bearer ${token}`
+            // 🚨 NO agregues 'Content-Type' aquí, fetch lo maneja solo.
+          } 
         });
 
-        if (!uploadRes.ok) throw new Error("Error al subir la imagen al servidor");
+        if (!uploadRes.ok) {
+           const errResp = await uploadRes.json();
+           throw new Error(errResp.error || "Error al subir la imagen al servidor");
+        }
+        
         const uploadData = await uploadRes.json();
         
-        finalImageName = uploadData.identificadorArchivo.split('/').pop();
+        // Asumiendo que tu backend devuelve la URL o identificador en 'identificadorArchivo'
+        finalImageName = uploadData.identificadorArchivo ? uploadData.identificadorArchivo.split('/').pop() : uploadData.url;
       }
 
       const payload = {
@@ -356,14 +373,15 @@ export default function Header({ title }: { title?: string }) {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Error en el servidor");
+        throw new Error(errorData.error || "Error en el servidor al actualizar perfil");
       }
       
       Alert.alert("Éxito", isCreatingUser ? "Usuario creado correctamente" : "Perfil actualizado correctamente");
       closeSettingsModal();
+      fetchUserData(); // Refrescar los datos para ver la nueva foto
       
     } catch (error: any) {
-      console.error("Error:", error);
+      console.error("Error al guardar perfil:", error);
       Alert.alert("Error", error.message);
     } finally {
       setIsSavingProfile(false);

@@ -1,16 +1,20 @@
 import { Request, Response } from 'express';
 import { db } from "../../../../packages/db/src"; 
 import { userTermsAcceptance } from "../../../../packages/db/src/schema"; 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm'; // 🚀 Importamos sql
 
-/**
- * Registra la aceptación de los términos y condiciones por parte del usuario.
- */
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
 export const acceptTerms = async (req: Request, res: Response) => {
-  const { userId } = req.body;
+  const userId = sanitizeText(req.body.userId);
   
-  // Captura robusta de IP
-  const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || null;
+  const forwarded = req.headers['x-forwarded-for'];
+  const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const rawIp = ipString ? ipString.split(',')[0].trim() : req.socket.remoteAddress || req.ip || '0.0.0.0';
+  const ipAddress = sanitizeText(rawIp);
 
   try {
     if (!userId) {
@@ -18,40 +22,63 @@ export const acceptTerms = async (req: Request, res: Response) => {
     }
 
     await db.insert(userTermsAcceptance).values({
-      userId: userId, // Drizzle manejará la conversión a UUID si está bien definido en el schema
+      userId: userId, 
       ipAddress: ipAddress,
       acceptedAt: new Date(),
-    });
+      user_id: userId,
+      ip_address: ipAddress,
+      accepted_at: new Date()
+    } as any);
 
     return res.status(201).json({ message: "Términos aceptados correctamente" });
-  } catch (error) {
-    console.error("Error registrando términos:", error);
-    return res.status(500).json({ error: "Error al registrar la aceptación de términos" });
+  } catch (error: any) {
+    console.error("❌ Error registrando términos:", error.message);
+    return res.status(500).json({ error: "Error interno al registrar la aceptación de términos" });
   }
 };
 
-/**
- * Verifica si el usuario ha aceptado la última versión de los términos.
- */
 export const checkTermsStatus = async (req: Request, res: Response) => {
-  const { userId } = req.params;
+  const userId = sanitizeText(req.params.userId);
   
   try {
     if (!userId) {
       return res.status(400).json({ error: "El userId es requerido" });
     }
 
-    // Usamos select().from() con un filtro explícito
-    // Si el error persiste, estamos usando una conversión as any para saltar la validación estricta
     const result = await db
       .select()
       .from(userTermsAcceptance)
-      .where(eq(userTermsAcceptance.userId, userId as any)) 
+      .where(eq((userTermsAcceptance as any).userId || (userTermsAcceptance as any).user_id, userId)) 
       .limit(1);
   
     return res.status(200).json({ hasAccepted: result.length > 0 });
-  } catch (error) {
-    console.error("Error consultando términos:", error);
-    return res.status(500).json({ error: "Error al consultar estado de términos" });
+  } catch (error: any) {
+    console.error("❌ Error consultando términos:", error.message);
+    return res.status(500).json({ error: "Error interno al consultar estado de términos" });
+  }
+};
+
+// 🚀 NUEVA FUNCIÓN: Obtener los términos dinámicos
+export const getActiveTerms = async (req: Request, res: Response) => {
+  try {
+    // Consultamos la tabla public.legal_documents por el documento activo
+    // Drizzle devuelve el array de resultados directamente
+    const result = await db.execute(sql`
+      SELECT version, content_html 
+      FROM public.legal_documents 
+      WHERE is_active = true 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `);
+    
+    // Evaluamos si el array tiene elementos
+    if (result && result.length > 0) {
+      return res.status(200).json(result[0]);
+    }
+    
+    return res.status(404).json({ error: "No hay términos y condiciones activos" });
+  } catch (error: any) {
+    console.error("❌ Error obteniendo términos legales:", error.message);
+    return res.status(500).json({ error: "Error interno al obtener el documento legal" });
   }
 };

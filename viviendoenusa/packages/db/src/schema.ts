@@ -8,7 +8,8 @@ import {
     integer, 
     doublePrecision, 
     numeric, 
-    type AnyPgColumn 
+    type AnyPgColumn, 
+    jsonb
   } from "drizzle-orm/pg-core";
 
   import { relations } from "drizzle-orm";
@@ -331,15 +332,43 @@ export const tariffs = pgTable("tariffs", {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
- // 16. TABLA: user_terms_acceptance (Terminos y condiciones aceptados por el usuario)
+// 16. TABLA: (Terminos y condiciones aceptados por el usuario)
 
-// schema.ts
+export const legalDocuments = pgTable('legal_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  documentType: text('document_type').notNull(),  // ej: 'terms_and_conditions'
+  version: text('version').notNull(),             // ej: '2026.1'
+  contentHtml: text('content_html').notNull(),    // El HTML estructurado
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// 17. TABLA: user_terms_acceptance (Terminos y condiciones aceptados por el usuario)
+
 export const userTermsAcceptance = pgTable('user_terms_acceptance', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => users.id, { onDelete: "cascade" }).notNull(),
   acceptedAt: timestamp('accepted_at').defaultNow(),
   ipAddress: text("ip_address"), 
 });
+
+
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // Aquí usamos "set null" en lugar de "cascade" porque si un usuario se elimina, 
+  // por temas legales/auditoría NO queremos que se borre su historial de acciones.
+  userId: uuid('user_id').references(() => users.id, { onDelete: "set null" }),
+  // Detalles de la acción
+  action: text('action').notNull(), // Ej: 'CREATE_JOB', 'DELETE_STORE', 'ACCEPT_TERMS'
+  entityType: text('entity_type'), // Ej: 'jobs', 'users', 'companies'
+  entityId: text('entity_id'), // ID del registro afectado en la base de datos
+  // Información de trazabilidad
+  ipAddress: text('ip_address'),
+  metadata: jsonb('metadata'), // Cualquier dato extra (ej: { reason: "Incumplió normas" })
+  // Auditoría (Solo necesitamos creación, los logs nunca se actualizan)
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 
   // ==========================================
   // 2. CONFIGURACIÓN DE RELACIONES (Drizzle Relations)

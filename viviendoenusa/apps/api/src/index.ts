@@ -9,6 +9,8 @@ if (!(util as any).isNullOrUndefined) {
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet'; // 🛡️ NUEVO: Seguridad de Cabeceras
+import rateLimit from 'express-rate-limit'; // 🛡️ NUEVO: Anti-Spam / DDoS
 import multer from 'multer';
 
 import sharp from 'sharp';
@@ -43,13 +45,58 @@ const app = express();
 console.log("Puerto desde .env:", process.env.PORT);
 const port = process.env.PORT || 3000;
 
+// ============================================================================
+// 🛡️ 1. CAPA DE SEGURIDAD GLOBAL (ESCUDOS ANTES DE CUALQUIER RUTA)
+// ============================================================================
+
+// A. Helmet: Oculta headers del sistema y previene XSS
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Permitir cargar imágenes externas si es necesario
+}));
+
+// B. CORS Estricto: Solo permite que TUS sitios web hablen con este backend
+const allowedOrigins = [
+  'http://localhost:8081', // Tu entorno local
+  'http://192.168.252.243:8081', // Tu entorno local
+  'https://www.viviendoenusa.app',
+  'https://viviendoenusa.app',
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permite peticiones sin origin (como las apps móviles o herramientas tipo Postman en local)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Bloqueado por CORS: Origen no autorizado'));
+    }
+  },
+  credentials: true, // Permite envío de cookies/tokens de autorización
+}));
+
+// C. Bloqueo de Payloads Pesados: Evita ataques de agotamiento de memoria
+app.use(express.json({ limit: '10mb' })); 
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// D. Rate Limiting: Evita ataques DDoS y consumo masivo de tu API
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 150, // Limita a 150 peticiones por IP cada 15 minutos
+  message: { error: '⚠️ Demasiadas peticiones desde esta IP. Por favor, intenta de nuevo en 15 minutos.' },
+  standardHeaders: true, 
+  legacyHeaders: false, 
+});
+app.use(globalLimiter);
+
+// ============================================================================
+// ☁️ 2. CONFIGURACIONES DE NUBE E IA
+// ============================================================================
+
 // --- CONFIGURACIÓN DE SUPABASE ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
-//const authRoutes = require('./auth/register/auth.routes').default;
-
 
 let model: any = null;
 
@@ -67,8 +114,10 @@ async function loadModel() {
 }
 loadModel();
 
-app.use(cors());
-app.use(express.json());
+
+// ============================================================================
+// 🛤️ 3. RUTAS PROTEGIDAS Y ENDPOINTS
+// ============================================================================
 
 app.use('/lawyers', lawyerRoutes);
 app.use('/events', eventsRoutes);
@@ -212,5 +261,5 @@ app.post('/login', async (req, res) => {
 });
 
 app.listen(Number(port), "192.168.252.243", () => {
-  console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port}`);
+  console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port} 🛡️`);
 });

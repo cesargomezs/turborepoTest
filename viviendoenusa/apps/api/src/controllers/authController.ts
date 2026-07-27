@@ -6,8 +6,9 @@ import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library'; 
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
-import { Request, Response } from 'express'; // ⬅️ Importación necesaria para evitar errores
-import { AuthRequest } from '../middleware/authMiddleware'; // Importamos la interfaz extendida
+import { Request, Response } from 'express'; 
+import { AuthRequest } from '../middleware/authMiddleware'; 
+import { logAuditEvent } from '../services/audit.service'; // 🚀 IMPORTACIÓN CORREGIDA
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -15,6 +16,11 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images';
 
 const googleClient = new OAuth2Client(); 
+
+const sanitizeText = (str: any) => {
+  if (typeof str !== 'string') return null;
+  return str.replace(/<[^>]*>?/gm, '').trim();
+};
 
 // --------------------------------------------------------
 // 1. REGISTRO DE USUARIO CLÁSICO Y GOOGLE
@@ -157,15 +163,37 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
       updateData.verifiedAt = new Date();
       delete updateData.isVerified; 
     }
+    
     if (updateData.authProvider) delete updateData.authProvider;
 
     const updatedRows = await db.update(users).set(updateData).where(query).returning();
+    
+    // Extracción segura de la IP verificando si headers o socket existen en 'data' (por si viene directo del cliente web)
+    const forwarded = data.headers?.['x-forwarded-for'];
+    const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const rawIp = ipString ? ipString.split(',')[0].trim() : data.socket?.remoteAddress || data.ip || '0.0.0.0';
+    const ipAddress = sanitizeText(rawIp);
+
+    // 🚀 MEJORA: Excluimos la contraseña del historial previo por seguridad
+    const { password: _oldPassword, ...previousState } = existingUser;
+
+    logAuditEvent({
+      userId: existingUser.id,
+      action: 'UPDATE_USER',
+      entityType: 'auth',
+      entityId: existingUser.id,
+      ipAddress: ipAddress,
+      metadata: { 
+        reason: "El usuario actualizó su propia información", 
+        previousState: previousState  // ⬅️ Y aquí lo que se insertó nuevo
+      }
+    });
+    
     return updatedRows[0];
   } catch (error: any) {
     throw new Error(`Error al actualizar el usuario: ${error.message}`);
   }
 };
-
 
 // --------------------------------------------------------
 // 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Google + Email)

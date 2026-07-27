@@ -12,6 +12,7 @@ import {
   Alert,
   Modal, 
   TextInput,
+  ActivityIndicator
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -44,9 +45,12 @@ export default function HomeScreen() {
   const [showTermsModal, setShowTermsModal] = useState(false); 
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   
-  // 🚀 NUEVOS ESTADOS PARA RECUPERACIÓN DE CONTRASEÑA
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  
+  // 🚀 ESTADOS PARA TÉRMINOS DINÁMICOS
+  const [termsData, setTermsData] = useState({ version: '', content_html: '' });
+  const [isLoadingTerms, setIsLoadingTerms] = useState(false);
   
   const [isGoogleFlow, setIsGoogleFlow] = useState(false); 
   
@@ -96,6 +100,52 @@ export default function HomeScreen() {
     }
   }, [response]);
 
+  // 🚀 EFECTO PARA DESCARGAR TÉRMINOS AL ABRIR EL MODAL
+  useEffect(() => {
+    if (showTermsModal && !termsData.version) {
+      fetchActiveTerms();
+    }
+  }, [showTermsModal]);
+
+  const fetchActiveTerms = async () => {
+    setIsLoadingTerms(true);
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      const res = await fetch(`${API_URL}/api/terms/active`);
+      if (res.ok) {
+        const data = await res.json();
+        setTermsData(data);
+      }
+    } catch (error) {
+      console.log("No se pudieron cargar los términos dinámicos:", error);
+    } finally {
+      setIsLoadingTerms(false);
+    }
+  };
+
+  // Función para limpiar etiquetas HTML básicas y hacerlas legibles en React Native
+  const stripHtmlTags = (htmlString: string) => {
+    if (!htmlString) return "No hay términos disponibles en este momento.";
+    return htmlString
+      .replace(/<\/(p|div|h[1-6])>/gi, '\n\n') // Cierres de bloque a doble salto
+      .replace(/<br\s*[\/]?>/gi, '\n')         // Etiquetas <br> a salto sencillo
+      .replace(/<li>/gi, '• ')                 // Elementos de lista
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]+>/g, '')                 // Quitar el resto de etiquetas (b, strong, i, etc)
+      .trim();
+  };
+
+  const recordTermsAcceptance = async (userId: string) => {
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      await fetch(`${API_URL}/api/terms/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }) 
+      });
+    } catch (error) {}
+  };
+
   const verifyGoogleUser = async (idToken: string) => {
     try {
       const base64Url = idToken.split('.')[1];
@@ -132,13 +182,11 @@ export default function HomeScreen() {
         setAcceptedTerms(false);
         setShowCompletionModal(true);
       } else {
-        // 🚀 SOLUCIÓN: Guardamos el token al entrar con Google
         await login(dataRes.user, dataRes.token);
         dispatch(setUserMetadata({ ...dataRes.user, token: dataRes.token }));
         dispatch(toggleAuth());
       }
     } catch (error) {
-      console.log("Aviso al verificar usuario de Google:", error);
       isWeb ? window.alert("Ocurrió un error al verificar tu cuenta con el servidor.") : Alert.alert("Error", "Ocurrió un error al verificar tu cuenta con el servidor.");
     }
   };
@@ -200,13 +248,17 @@ export default function HomeScreen() {
 
       setShowCompletionModal(false);
       
-      // 🚀 SOLUCIÓN: Loguear e inyectar el token tras completar el registro de Google
       await login(dataRes.user, dataRes.token);
       dispatch(setUserMetadata({ ...dataRes.user, token: dataRes.token }));
+
+      const newUserId = dataRes.user?.id || dataRes.id;
+      if (acceptedTerms && newUserId) {
+        await recordTermsAcceptance(newUserId);
+      }
+
       dispatch(toggleAuth());
       
     } catch (error: any) {
-      console.log("Aviso guardando en BD:", error.message);
       const msg = error.message || "Ocurrió un error de conexión con el servidor.";
       isWeb ? window.alert(msg) : Alert.alert("Error", msg);
     }
@@ -274,13 +326,26 @@ export default function HomeScreen() {
         throw new Error(dataRes.error || "Error al autenticar");
       }
       
-      // 🚀 SOLUCIÓN: Guardamos en Contexto Y en Redux
+      if (isRegistering) {
+        const newUserId = dataRes.user?.id || dataRes.id;
+        if (acceptedTerms && newUserId) {
+          await recordTermsAcceptance(newUserId);
+        }
+        
+        const successMsg = "Cuenta creada con éxito. Por favor, inicia sesión.";
+        if (isWeb) window.alert(successMsg);
+        else Alert.alert("¡Bienvenido!", successMsg);
+        
+        setIsRegistering(false); 
+        setForm({ ...form, password: '' }); 
+        return; 
+      }
+
       await login(dataRes.user, dataRes.token);
       dispatch(setUserMetadata({ ...dataRes.user, token: dataRes.token }));
       dispatch(toggleAuth());
 
     } catch (error: any) {
-      console.log("Aviso de acceso:", error.message);
       const msg = error.message || "Ocurrió un error al intentar acceder.";
       
       if (msg.includes("bloqueada por múltiples intentos")) {
@@ -291,14 +356,10 @@ export default function HomeScreen() {
             setShowResetModal(true);
           }
         } else {
-          Alert.alert(
-            "Cuenta Bloqueada", 
-            msg,
-            [
+          Alert.alert("Cuenta Bloqueada", msg, [
               { text: "Cancelar", style: "cancel" },
               { text: "Recuperar", onPress: () => { setResetEmail(form.email); setShowResetModal(true); } }
-            ]
-          );
+          ]);
         }
         return; 
       }
@@ -430,24 +491,23 @@ export default function HomeScreen() {
               <MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} />
             </TouchableOpacity>
           </View>
+          
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
-            <ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', marginBottom: 10 }}>Versión 2026.1</ThemedText>
-            <ThemedText style={{ color: DynamicColors.text, marginBottom: 10, lineHeight: 22 }}>
-              <ThemedText style={{ fontWeight: 'bold' }}>1. NATURALEZA Y OBJETIVO:</ThemedText> ViviendoEnUSA.app es un puente tecnológico para conectar servicios, tiendas, profesionales y emprendimientos. La plataforma actúa como facilitador de conexión y no es prestadora directa de servicios legales, comerciales o de apoyo psicológico. La elección de con quién interactuar es responsabilidad exclusiva del usuario.
-            </ThemedText>
-            <ThemedText style={{ color: DynamicColors.text, marginBottom: 10, lineHeight: 22 }}>
-              <ThemedText style={{ fontWeight: 'bold' }}>2. PROTECCIÓN DE DATOS PERSONALES:</ThemedText> Recolectamos Nombre, Apellido, Teléfono, Correo electrónico y Código Postal exclusivamente para gestionar la cuenta y facilitar conexiones seguras. El teléfono no se expone públicamente. Declaramos explícitamente que los datos personales no se venden, intercambian ni alquilan a terceros.
-            </ThemedText>
-            <ThemedText style={{ color: DynamicColors.text, marginBottom: 10, lineHeight: 22 }}>
-              <ThemedText style={{ fontWeight: 'bold' }}>3. PROPIEDAD INTELECTUAL Y COPYRIGHT:</ThemedText> El usuario es responsable de la originalidad del contenido publicado y asume toda responsabilidad frente a reclamaciones por infracción de derechos de autor de terceros.
-            </ThemedText>
-            <ThemedText style={{ color: DynamicColors.text, marginBottom: 10, lineHeight: 22 }}>
-              <ThemedText style={{ fontWeight: 'bold' }}>4. RESEÑAS Y TRANSPARENCIA:</ThemedText> Se permite una sola reseña por usuario por cada servicio. Todo comentario es responsabilidad personal de su autor.
-            </ThemedText>
-            <ThemedText style={{ color: DynamicColors.accent, marginBottom: 20, lineHeight: 22, fontWeight: 'bold' }}>
-              5. CLÁUSULA MAESTRA DE EXONERACIÓN DE RESPONSABILIDAD: El usuario acepta que el Administrador de ViviendoEnUSA.app es un intermediario tecnológico y no asume responsabilidad civil, penal, comercial o económica por ninguna acción, omisión, contenido, producto o servicio derivado de la interacción dentro de esta plataforma. El Administrador queda eximido de toda responsabilidad por daños, perjuicios, o incumplimiento contractual. El usuario asume el riesgo total de su actividad y libera al Administrador de cualquier reclamación judicial o extrajudicial.
-            </ThemedText>
+            {isLoadingTerms ? (
+              <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 20 }} />
+            ) : (
+              <>
+                <ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', marginBottom: 15 }}>
+                  Versión {termsData.version || 'Actual'}
+                </ThemedText>
+                
+                <ThemedText style={{ color: DynamicColors.text, marginBottom: 20, lineHeight: 24 }}>
+                  {stripHtmlTags(termsData.content_html)}
+                </ThemedText>
+              </>
+            )}
           </ScrollView>
+
           <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
             <TouchableOpacity style={[styles.styledLoginButton, { width: '100%', height: 45 }]} onPress={() => handleCloseTermsModal(true)}>
               <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtnStyled}>
@@ -609,7 +669,6 @@ export default function HomeScreen() {
               <View style={{ flex: 1, paddingLeft: isLargeWeb ? 40 : 0 }}>
                 {loggedIn ? (
                   <>
-                    {/* 🚀 CORRECCIÓN: Icono Home alineado a la derecha en Web */}
                     <View style={[styles.topHeaderRow, isLargeWeb && { justifyContent: 'flex-end' }]}>
                       {!isLargeWeb && (
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
