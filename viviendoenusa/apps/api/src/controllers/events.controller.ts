@@ -235,7 +235,7 @@ export const createEvent = async (data: any) => {
           lat: lat, // 🚀 Coordenada de latitud guardada
           lng: lng, // 🚀 Coordenada de longitud guardada
           zip: cleanData.zip ? String(cleanData.zip).trim() : '',
-          estate: 'CA',
+          estate: cleanData.estate || '',
           phone: cleanData.phone || '',
           contactMethod: cleanData.contactMethod || 'whatsapp',
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',

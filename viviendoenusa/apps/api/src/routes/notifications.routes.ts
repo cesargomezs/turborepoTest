@@ -10,7 +10,7 @@ const router = Router();
 
 // 🔍 GET: /notifications -> Trae la lista filtrada por userId
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
-    console.log("Petición recibida en /notifications con query:", req.query);
+    //console.log("Petición recibida en /notifications con query:", req.query);
     try {
         // 🚀 BLINDAJE: Extraemos el userId de forma SEGURA directamente desde el token
         const userIdFromToken = req.user?.id || req.user?.userId;

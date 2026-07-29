@@ -25,7 +25,7 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
         )
         .orderBy(desc(notifications.visibleAt));
   
-      console.log(`📊 [DEBUG] Notificaciones encontradas para ${userId}:`, list.length);
+      //console.log(`📊 [DEBUG] Notificaciones encontradas para ${userId}:`, list.length);
   
       const formattedList = list.map((notif: any) => {
           const rawDate = notif.visibleAt || notif.visible_at || notif.createdAt || notif.created_at;

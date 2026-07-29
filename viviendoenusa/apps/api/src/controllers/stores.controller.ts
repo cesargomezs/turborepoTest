@@ -299,11 +299,15 @@ export const createStore = async (data: any) => {
         phone: sanitizeText(data.phone) || '',
         imageStores: cleanImage,
         descriptionStores: safeDesc,
+        statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
+        estate: sanitizeText(data.estate) || '',
         lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD
         lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         approved: false 
       };
+
+      console.log(data.estate);
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
 

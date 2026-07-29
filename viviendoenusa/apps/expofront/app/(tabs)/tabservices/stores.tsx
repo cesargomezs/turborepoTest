@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, memo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, memo, use } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
@@ -32,6 +32,7 @@ const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
+
 
 
 const COUNTRIES = [
@@ -188,6 +189,8 @@ export default function StoresScreen() {
   const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
+
+  //console.log(userMetadata?.estate);
   
   // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
@@ -335,6 +338,7 @@ export default function StoresScreen() {
           reviews: Array.isArray(item.reviews) ? item.reviews : [],
           totalReviews: Number(item.totalReviews) || 0,
           status: item.approved ? 'approved' : 'pending',
+          estate: item.estate || item.state || '',
           ownerName: item.ownerName,
           referenceCode: item.referenceCode,
           paymentMethod: item.paymentMethod,
@@ -672,6 +676,7 @@ export default function StoresScreen() {
         phone: fullPhone, 
         userId: currentUserId,
         approved: false,
+        estate: userMetadata?.estate || '',
         referenceCode: formRefCode,
         paymentMethod: formPayMethod,
         premiumPlan: formPlan,
@@ -706,6 +711,7 @@ export default function StoresScreen() {
         totalReviews: 0,
         phone: savedFromDB.phone,
         status: 'pending',
+        estate: userMetadata?.estate || '',
         referenceCode: formRefCode,
         paymentMethod: formPayMethod,
         premiumPlan: formPlan,
@@ -1251,7 +1257,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                   placeholderTextColor={DynamicColors.subtext} 
                   placeholder={t.storestab?.placeHoldname || 'Nombre'} 
                   value={formName} 
-                  onChangeText={setFormName} 
+                  onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} 
                   autoCapitalize="words" 
                 />
                 
@@ -1260,7 +1266,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                   placeholderTextColor={DynamicColors.subtext} 
                   placeholder={t.storestab?.placeHoldAddress || 'Dirección'} 
                   value={formAddress} 
-                  onChangeText={setFormAddress} 
+                  onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} 
                   autoCapitalize="words" 
                 />
                 
@@ -1279,7 +1285,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                   placeholderTextColor={DynamicColors.subtext} 
                   placeholder={t.storestab?.description || 'Descripción'} 
                   value={formDesc} 
-                  onChangeText={setFormDesc} 
+                  onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')}
                   multiline 
                   autoCapitalize="sentences" 
                 />

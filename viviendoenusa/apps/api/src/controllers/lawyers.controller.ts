@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
 import { imag } from "@tensorflow/tfjs";
 import NodeGeocoder from 'node-geocoder';
+import { logAuditEvent } from "src/services/audit.service";
 
 // Configuración global del Geocoder (Provider gratuito)
 const geocoder = NodeGeocoder({
@@ -270,9 +271,10 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     } else {
         lawyerFinal.image = lawyerFinal.imageUrl;
     }
-    //lawyerFinal.amount=lawyerFinal.payment.amount;
+    
+    lawyerFinal.amount=lawyerFinal.payment.amount;
 
-    console.log("✅ Abogado obtenido por ID:", lawyerFinal);
+    //console.log("✅ Abogado obtenido por ID:", lawyerFinal);
 
     return lawyerFinal;
   } catch (error: any) {
@@ -280,22 +282,29 @@ export const getLawyerByIdWithReviews = async (id: string) => {
   }
 };
 
-// 📥 3. CREAR ABOGADO
-export const createLawyer = async (data: any) => {
-  try {
+// 📥 3. CREAR ABOGADO (Con extracción de ESTATE y respuestas de Express)
+export const createLawyer = async (req: Request, res: Response) => {
+  const reqAny = req as any;
+  const resAny = res as any;
+  const data = reqAny.body || {};
+  
+  // Extraemos el estado directamente de los headers
+  const headerEstate = reqAny.headers?.['estate'] || reqAny.headers?.['Estate'];
 
-    //console.log(data);
+  try {
     let cleanImage = sanitizeText(data.imageUrl) || '';
     if (cleanImage.startsWith('lawyers/')) {
       cleanImage = cleanImage.replace('lawyers/', '');
     }
 
-    return await db.transaction(async (tx) => {
+    const createdLawyerResult = await db.transaction(async (tx) => {
 
       const { lat, lng } = await getCoordsFromZip(data.zip || '');
       
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+      // Sanitizamos el estado, o usamos 'CA' por defecto
+      const finalEstate = sanitizeText(headerEstate) || 'CA';
 
       const lawyerPayload: any = {
         nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
@@ -310,21 +319,21 @@ export const createLawyer = async (data: any) => {
         lng: data.lng ? Number(data.lng) : null,
         premiumPlan: planSeleccionado, 
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
-        approved: false 
+        approved: false,
+        estate: finalEstate // Guardamos el Estado
       };
       
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
       if (data.referenceCode && data.paymentMethod) {
         const basePrice = await getCurrentLawyerPrice();
-        console.log(data.tariffPlan);
         await tx.insert(payments).values({
           entityType: 'lawyer',
           entityId: newLawyer.id,
           userId: lawyerPayload.userId,
           referenceCode: sanitizeText(data.referenceCode) || '', 
           paymentMethod: sanitizeText(data.paymentMethod) || '', 
-          amount: data.tariffPlan,
+          amount: data.tariffPlan || basePrice,
           durationDays: 30, 
           status: "pending"
         });
@@ -338,35 +347,54 @@ export const createLawyer = async (data: any) => {
          descriptionLawy: safeDesc
       };
     });
+
+    return resAny.status(201).json(createdLawyerResult);
+
   } catch (error: any) { 
     console.error("❌ Error en createLawyer:", error);
     
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
-       throw new Error("Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único.");
+       return resAny.status(409).json({ error: "Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único." });
     }
 
-    throw new Error(`Error al crear el abogado: ${error.message}`);
+    return resAny.status(400).json({ error: `Error al crear el abogado: ${error.message}` });
   }
 };
 
-// 🔄 4. ACTUALIZAR ABOGADO
-export const updateLawyer = async (id: string, data: any) => {
+// 🔄 4. ACTUALIZAR ABOGADO (Con Auditoría y Tipos Seguros)
+export const updateLawyer = async (req: Request, res: Response) => {
+  const reqAny = req as any;
+  const resAny = res as any;
+  const id = reqAny.params?.id;
+  const data = reqAny.body || {};
+
   try {
-
-    // 1. Obtener los datos del abogado
-    const res = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/lawyers/${id}`);
-    const response = await res.json();
-
-    // 2. Acceder al valor directamente (ya que es un objeto, no un arreglo)
-    // Usamos Number() para asegurar que sea un número y || 0 por seguridad
-    const amount = Number(response.payments);
-
     const cleanId = sanitizeText(id);
-    if (!cleanId) throw new Error("ID inválido");
+    if (!cleanId) {
+      return resAny.status(400).json({ error: "ID inválido" });
+    }
 
-    return await db.transaction(async (tx) => {
+    // 1. 🔍 OBTENER EL REGISTRO PREVIO ANTES DE ACTUALIZAR
+    const [existingLawyer] = await db.select().from(lawyers).where(eq(lawyers.id, cleanId));
+    if (!existingLawyer) {
+      return resAny.status(404).json({ error: "Abogado no encontrado" });
+    }
+
+    // 2. Obtener los pagos de forma segura
+    let amount = 0;
+    try {
+      const resPayments = await fetch(`${process.env.EXPO_PUBLIC_URL_BACKEND || 'http://localhost:3000'}/lawyers/${cleanId}`);
+      if (resPayments.ok) {
+        const responsePayments = await resPayments.json();
+        amount = Number(responsePayments?.payments) || 0;
+      }
+    } catch (err) {
+      console.warn("No se pudo obtener el pago de la API interna, usando 0 por defecto");
+    }
+
+    const updatedLawyerResult = await db.transaction(async (tx) => {
       
-      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description','premiumPlan', 'descriptionLawy'];
+      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description', 'premiumPlan', 'descriptionLawy'];
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
@@ -404,10 +432,7 @@ export const updateLawyer = async (id: string, data: any) => {
         
         updatePayload.timepostEnd = expirationDate; 
 
-
-        ///console.log(data.payments);
         const totalAmount = (monthsToAdd * amount).toFixed(2); 
-
         const daysToAdd = monthsToAdd * 30; 
 
         await tx.update(payments)
@@ -429,13 +454,33 @@ export const updateLawyer = async (id: string, data: any) => {
         
       const lawyer = updated[0];
 
+      // 🛡️ EXTRACCIÓN SEGURA DE LA IP PARA LA AUDITORÍA
+      const forwarded = reqAny.headers?.['x-forwarded-for'];
+      const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+      const rawIp = ipString ? ipString.split(',')[0].trim() : reqAny.ip || reqAny.connection?.remoteAddress || '0.0.0.0';
+      const ipAddress = sanitizeText(rawIp);
+
+      // 🚀 REGISTRO DE AUDITORÍA CON EL ESTADO PREVIO Y NUEVO
+      logAuditEvent({
+        userId: reqAny.user?.id || lawyer?.userId, 
+        action: 'UPDATE_LAWYER', 
+        entityType: 'lawyers', 
+        entityId: cleanId, 
+        ipAddress: ipAddress,
+        metadata: { 
+          descripcion: "Se actualizó la información o estatus del abogado", 
+          previousState: existingLawyer,
+          newState: lawyer
+        }
+      });
+
       if (isApproved && lawyer) {
         const notifPayload: any = {
             title: "¡Abogado Verificado! ⚖️",
             description: `El abogado ${lawyer.nameLawy} ahora es parte de la red de servicios. ¡Visita su perfil!`,
             type: "lawyer", 
             visibleAt: new Date(), 
-            userId: lawyer.userId || TEMP_USER_ID, 
+            userId: lawyer.userId || 'TEMP_USER_ID', 
         };
 
         if ('referenceId' in notifications) notifPayload.referenceId = String(lawyer.id);
@@ -447,9 +492,11 @@ export const updateLawyer = async (id: string, data: any) => {
       return lawyer || null;
     });
 
+    return resAny.status(200).json(updatedLawyerResult);
+
   } catch (error: any) { 
     console.error("❌ Error en updateLawyer:", error);
-    throw new Error(`Error al actualizar el abogado: ${error.message}`);
+    return (res as any).status(500).json({ error: `Error al actualizar el abogado: ${error.message}` });
   }
 };
 

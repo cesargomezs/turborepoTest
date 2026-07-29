@@ -9,8 +9,8 @@ if (!(util as any).isNullOrUndefined) {
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet'; // 🛡️ NUEVO: Seguridad de Cabeceras
-import rateLimit from 'express-rate-limit'; // 🛡️ NUEVO: Anti-Spam / DDoS
+import helmet from 'helmet'; // 🛡️ Seguridad de Cabeceras
+import rateLimit from 'express-rate-limit'; // 🛡️ Anti-Spam / DDoS
 import multer from 'multer';
 
 import sharp from 'sharp';
@@ -39,6 +39,8 @@ import companiesRoutes from './routes/companies.routes';
 import authRoutes from '../auth/register/auth.routes';
 import './cron/cron.jobs';
 import termsRoutes from './routes/terms.routes';
+import adminRoutes from './admin/admin.routes';
+
 
 const app = express();
 
@@ -49,39 +51,34 @@ const port = process.env.PORT || 3000;
 // 🛡️ 1. CAPA DE SEGURIDAD GLOBAL (ESCUDOS ANTES DE CUALQUIER RUTA)
 // ============================================================================
 
-// A. Helmet: Oculta headers del sistema y previene XSS
 app.use(helmet({
-  crossOriginResourcePolicy: false, // Permitir cargar imágenes externas si es necesario
+  crossOriginResourcePolicy: false, 
 }));
 
-// B. CORS Estricto: Solo permite que TUS sitios web hablen con este backend
 const allowedOrigins = [
-  'http://localhost:8081', // Tu entorno local
-  'http://192.168.252.243:8081', // Tu entorno local
+  'http://localhost:8081', 
+  'http://192.168.1.171:8081', 
   'https://www.viviendoenusa.app',
   'https://viviendoenusa.app',
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permite peticiones sin origin (como las apps móviles o herramientas tipo Postman en local)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Bloqueado por CORS: Origen no autorizado'));
     }
   },
-  credentials: true, // Permite envío de cookies/tokens de autorización
+  credentials: true, 
 }));
 
-// C. Bloqueo de Payloads Pesados: Evita ataques de agotamiento de memoria
 app.use(express.json({ limit: '10mb' })); 
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// D. Rate Limiting: Evita ataques DDoS y consumo masivo de tu API
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 150, // Limita a 150 peticiones por IP cada 15 minutos
+  windowMs: 15 * 60 * 1000, 
+  max: 150, 
   message: { error: '⚠️ Demasiadas peticiones desde esta IP. Por favor, intenta de nuevo en 15 minutos.' },
   standardHeaders: true, 
   legacyHeaders: false, 
@@ -92,7 +89,6 @@ app.use(globalLimiter);
 // ☁️ 2. CONFIGURACIONES DE NUBE E IA
 // ============================================================================
 
-// --- CONFIGURACIÓN DE SUPABASE ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -133,8 +129,32 @@ app.use('/tariffs', tarrifsRoutes);
 app.use('/companies', companiesRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/terms', termsRoutes);
+app.use('/admin', adminRoutes);
 
-// --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (DINÁMICO Y SEGURO) ---
+// --- 📱 BUZÓN DE ERRORES DEL FRONTEND (TELEGRAM) ---
+app.post('/api/crash-report', express.json(), async (req, res) => {
+  const { errorMessage, errorStack, deviceInfo, userEmail } = req.body;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (botToken && chatId) {
+    const textoMensaje = `📱 *Crash en Celular de Usuario* 📱\n\n` +
+      `*Error:* ${errorMessage}\n` +
+      `*Usuario:* \`${userEmail || 'Anónimo'}\`\n` +
+      `*Dispositivo:* \`${deviceInfo}\`\n\n` +
+      `*Traza:*\n\`\`\`${errorStack?.substring(0, 500) || 'Sin traza'}\`\`\``;
+
+    fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: textoMensaje, parse_mode: 'Markdown' })
+    }).catch(e => console.error("Error enviando crash a Telegram"));
+  }
+
+  res.status(200).json({ received: true });
+});
+
+// --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE ---
 app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {
   console.log(`🚨 [CONEXIÓN] Petición de subida recibida para la sección: ${req.params.carpeta}`);
   
@@ -143,7 +163,6 @@ app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async
     return res.status(400).json({ error: 'Por favor, envía una imagen en el campo "imagen".' });
   }
 
-  // Lógica segura de parseo de directorios para evitar vulnerabilidades de path traversal
   const carpetaParam = String(req.params.carpeta);
   const carpetaSolicitada = carpetaParam.replace(/[^a-zA-Z0-9_-]/g, '');
   const carpetaFinal = (carpetaSolicitada && carpetaSolicitada !== 'undefined') ? carpetaSolicitada : 'general';
@@ -260,6 +279,75 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.listen(Number(port), "192.168.252.243", () => {
+// ============================================================================
+// 🧪 ENDPOINT TEMPORAL PARA PROBAR ALERTAS DE TELEGRAM
+// ============================================================================
+/*
+app.post('/api/test-error', (req, res, next) => {
+  try {
+    // Simulamos un escenario donde un proceso crítico falla
+    const datoInexistente = req.body.campo_falso;
+    
+    // Forzamos un error manualmente
+    throw new Error("¡Este es un error simulado para probar la integración con Telegram! 🐞");
+    
+  } catch (error) {
+    // next(error) es vital: envía el error directamente a tu app.use(async (err, req, res, next) => {...})
+    next(error);
+  }
+});*/
+
+// ============================================================================
+// 🚨 4. MANEJADOR DE ERRORES MAESTRO Y ALERTAS A TELEGRAM (SIEMPRE AL FINAL)
+// ============================================================================
+app.use(async (err: any, req: any, res: any, next: any) => {
+  console.error("🚨 [ERROR GLOBAL CAPTURADO]:", err);
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (botToken && chatId) {
+    try {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Desconocida';
+      const usuarioEmail = req.user?.email || req.body?.email || req.headers['x-user-email'] || 'No autenticado/Desconocido';
+
+      let payloadText = 'Sin datos en el body';
+      if (req.body && Object.keys(req.body).length > 0) {
+        const rawPayload = JSON.stringify(req.body, null, 2);
+        payloadText = rawPayload.length > 500 ? rawPayload.substring(0, 500) + '\n...[truncado]' : rawPayload;
+      }
+
+      const textoMensaje = `🚨 *Error Crítico en VUSA Backend* 🚨\n\n` +
+        `*Mensaje:* ${err.message}\n` +
+        `*Ruta:* \`${req.method} ${req.originalUrl}\`\n` +
+        `*Usuario/Email:* \`${usuarioEmail}\`\n` +
+        `*IP:* \`${ip}\`\n\n` +
+        `*Trama (Body):*\n\`\`\`json\n${payloadText}\n\`\`\`\n` +
+        `*Stack Trace:*\n\`\`\`\n${err.stack?.substring(0, 400) || 'Sin stack'}\n\`\`\``;
+
+      fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: textoMensaje,
+          parse_mode: 'Markdown'
+        })
+      }).catch(e => console.error("Fallo al enviar alerta a Telegram:", e));
+
+    } catch (alertaError) {
+      console.error("Error armando la alerta de Telegram:", alertaError);
+    }
+  }
+
+  res.status(500).json({ 
+    error: "Ocurrió un error interno en el servidor. Nuestro equipo ya fue notificado." 
+  });
+});
+
+// ============================================================================
+// 🚀 INICIO DEL SERVIDOR
+// ============================================================================
+app.listen(Number(port), "192.168.1.171", () => {
   console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port} 🛡️`);
 });

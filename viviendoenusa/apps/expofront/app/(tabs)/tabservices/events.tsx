@@ -452,6 +452,7 @@ export default function EventsScreen() {
         referenceCode: formRefCode,
         paymentMethod: formPayMethod,
         premiumPlan: formPlan,
+        estate: userMetadata?.estate || null,
         couponCode: formCoupon.trim(),
         tariffPlan: (companyTariffs as any)[formPlan]
       };
@@ -916,10 +917,10 @@ export default function EventsScreen() {
                 )}
 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900',  marginBottom: 8, textTransform:'none' , color:Colors.text }}>{t.eventstab?.informationevent || 'Información'}</ThemedText>
-                <TextInput value={formTitle} onChangeText={setFormTitle} autoCapitalize="words" placeholder={t.eventstab?.nameEvent || 'Nombre'} placeholderTextColor={Colors.iconInactive}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formLocation} onChangeText={setFormLocation} autoCapitalize="words" placeholder={t.eventstab?.addressEvent || 'Dirección'} placeholderTextColor={Colors.iconInactive} style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formTitle} autoCapitalize="words" onChangeText={(text) => setFormTitle(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} placeholder={t.eventstab?.nameEvent || 'Nombre'} placeholderTextColor={Colors.iconInactive}  style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formLocation} onChangeText={(text) => setFormLocation(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t.eventstab?.addressEvent || 'Dirección'} placeholderTextColor={Colors.iconInactive} style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 <TextInput value={formZip} onChangeText={setFormZip} placeholder="ZIP Code" keyboardType="numeric" maxLength={5} placeholderTextColor={Colors.iconInactive} style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formDescription} onChangeText={setFormDescription} autoCapitalize="sentences" placeholder={t.eventstab?.detailsEvent || 'Detalles'} placeholderTextColor={Colors.iconInactive} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formDescription} onChangeText={(text) => setFormDescription(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} autoCapitalize="sentences" placeholder={t.eventstab?.detailsEvent || 'Detalles'} placeholderTextColor={Colors.iconInactive} multiline style={{ padding: 15, borderRadius: 18, borderWidth: 1, color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.inputBg, height: 90, textAlignVertical:'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 
                 {/* 🚀 SELECCIONAR PLAN */}
                 <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>

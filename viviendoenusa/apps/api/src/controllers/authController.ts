@@ -310,7 +310,7 @@ const transporter = nodemailer.createTransport({
 
 export const sendPasswordResetEmail = async (email: string) => {
   try {
-    console.log("Solicitud de recuperación para:", email);
+    //console.log("Solicitud de recuperación para:", email);
 
     // 1. Validar que el usuario exista
     const rows = await db.select().from(users).where(eq(users.email, email));
@@ -332,7 +332,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
 
     // 4. Crear el enlace apuntando a tu IP local (o tu dominio web en producción)
-    const resetLink = `http://192.168.252.243:8081/ResetPassword?token=${resetToken}`;
+    const resetLink = `http://192.168.1.171:8081/ResetPassword?token=${resetToken}`;
 
     const mailOptions = {
       from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
@@ -423,3 +423,4 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ error: 'Error al obtener el perfil.' });
   }
 };
+

@@ -8,14 +8,13 @@ import {
     createRating,
     renewLawyer
 } from '../controllers/lawyers.controller';
-import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos el middleware y AuthRequest
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
-// 🔍 GET: Obtener todos los abogados (soporta filtro por código postal y por usuario)
+// 🔍 GET: Obtener todos los abogados
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // Validación segura para evitar string | string[]
     const zipParam = req.query.zip;
     const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
 
@@ -32,7 +31,7 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔍 GET: Obtener un abogado específico por ID (incluyendo sus reseñas)
+// 🔍 GET: Obtener un abogado específico por ID
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -49,45 +48,21 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 📥 POST: Crear un nuevo registro de abogado (Inyecta automáticamente el userId del token)
+// 📥 POST: Crear un nuevo registro de abogado
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const userIdFromToken = req.user?.id || req.user?.userId;
-
-    const payload = {
-      ...req.body,
-      userId: userIdFromToken || req.body.userId
-    };
-
-    const newLawyer = await createLawyer(payload);
-    return res.status(201).json(newLawyer);
-  } catch (error: any) {
-    console.error("❌ Error en POST /lawyers:", error.message);
-    if (error.message.includes("utilizado") || error.message.includes("unique")) {
-       return res.status(409).json({ error: error.message });
-    }
-    return res.status(400).json({ error: error.message });
-  }
+  // Inyectamos el ID seguro del token directamente en el body
+  req.body.userId = req.user?.id || req.user?.userId || req.body.userId;
+  // Delegamos la petición (con Headers y Body) al controlador
+  return await createLawyer(req as any, res as any);
 });
 
 // 🔄 PUT: Actualizar un abogado (Aprobar y calcular tarifa dinámica)
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const idParam = req.params.id;
-    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
-
-    const updatedLawyer = await updateLawyer(id, req.body);
-    if (!updatedLawyer) {
-      return res.status(404).json({ error: "Abogado no encontrado o no se pudo actualizar" });
-    }
-    return res.status(200).json(updatedLawyer);
-  } catch (error: any) {
-    console.error("❌ Error en PUT /lawyers/:id :", error.message);
-    return res.status(400).json({ error: error.message });
-  }
+  // Delegamos la petición completa al controlador
+  return await updateLawyer(req as any, res as any);
 });
 
-// ⭐ POST: Crear una reseña/calificación para un abogado
+// ⭐ POST: Crear una reseña
 router.post('/rating', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const userIdFromToken = req.user?.id || req.user?.userId;
@@ -108,7 +83,7 @@ router.post('/rating', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 POST: Renovar un abogado expirado (Genera nuevo pago)
+// 🔄 POST: Renovar un abogado expirado
 router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -135,7 +110,7 @@ router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
     if (!deletedLawyer) {
       return res.status(404).json({ error: "Abogado no encontrado" });
     }
-    return res.status(200).json({ message: "Abogado eliminado correctamente", lawyer: deletedLawyer });
+    return res.status(200).json({ message: "Abogado eliminado", lawyer: deletedLawyer });
   } catch (error: any) {
     console.error("❌ Error en DELETE /lawyers/:id :", error.message);
     return res.status(400).json({ error: error.message });

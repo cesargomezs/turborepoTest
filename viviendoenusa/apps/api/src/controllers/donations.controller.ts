@@ -139,7 +139,7 @@ export const getDonations = async (zip?: string) => {
             ...dbDonation, 
             image: publicUrl, 
             imageUrl: publicUrl,
-            status: dbDonation.estate || 'active',
+            status: dbDonation.status_id || 'active',
             ownerName: nombreUsuario
         }; 
     }));
@@ -171,11 +171,13 @@ export const createDonation = async (data: any) => {
       lng: lng, // 🚀 Coordenada de longitud guardada
       contactMethod: cleanData.contactMethod || 'whatsapp',
       statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
-      estate: 'active', 
+      estate: cleanData.estate , 
       descriptionDon: cleanData.description || '',
       locationDon: cleanData.location || 'Rancho Cucamonga',
       imageUrl: cleanData.image ? cleanData.image.replace('donations/', '') : '',
     };
+
+    console.log("📦 Payload limpio para DB:", cleanData.estate);
 
     const fallbackUser = await db.select().from(users).limit(1);
     dbPayload.userId = cleanData.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : null);

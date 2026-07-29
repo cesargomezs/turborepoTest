@@ -179,7 +179,7 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
     });
 
     const finalList = await Promise.all(finalListPromises);
-    console.log(finalList);
+    //console.log(finalList);
     return finalList;
   } catch (error) {
     console.error("❌ Error en getEntrepreneurships:", error);
@@ -270,7 +270,7 @@ export const getEntrepreneurshipById = async (id: string, userId?: string) => {
             else if (Number(uVoteRow.dislikes) === 1) itemFinal.userVote = 'dislike';
         }
     }
-    console.log("✅ Emprendimiento final:", itemFinal);
+    //console.log("✅ Emprendimiento final:", itemFinal);
     return itemFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener el emprendimiento por ID: ${error.message}`);
@@ -310,7 +310,7 @@ export const createEntrepreneurship = async (data: any) => {
       zip: data.zip ? String(data.zip).trim() : null,
       lat: lat,
       lng: lng,
-      estate: data.estate || 'active',
+      estate: data.estate,
       userId: validUserId 
     };
 

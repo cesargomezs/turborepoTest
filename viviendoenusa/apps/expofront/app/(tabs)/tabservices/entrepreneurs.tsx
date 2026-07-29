@@ -85,6 +85,7 @@ type Emprendimiento = {
   contactMethod: 'whatsapp' | 'phone'; 
   zip: string;
   status?: 'pending' | 'approved';
+  estate:string;
 };
 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
@@ -288,7 +289,8 @@ export default function EntrepreneurshipScreen() {
           rating: Number(item.rating) || 5.0,
           likes: Number(item.likes) || 0,
           dislikes: Number(item.dislikes) || 0,
-          userVote: item.userVote || null, 
+          userVote: item.userVote || null,
+          estate: item.estate || '', 
           saved: false, 
           reviews: Array.isArray(item.reviews) ? item.reviews : [],
           image: item.imageEntrepren || '',
@@ -338,6 +340,7 @@ export default function EntrepreneurshipScreen() {
           likes: Number(item.likes) || 0,
           dislikes: Number(item.dislikes) || 0,
           userVote: item.userVote || null, 
+          estate: userMetadata.estate,
           saved: true, 
           reviews: Array.isArray(item.reviews) ? item.reviews : [],
           image: item.imageEntrepren || '',
@@ -594,7 +597,8 @@ export default function EntrepreneurshipScreen() {
         saved: false, 
         contactMethod: formContactMethod, 
         zip: formZip.trim(),
-        userId: userMetadata?.id || null
+        userId: userMetadata?.id || null,
+        estate: userMetadata?.estate || ''
       };
 
       const response = await fetch(API_ENTREPRENEURSHIP_URL, {
@@ -629,7 +633,8 @@ export default function EntrepreneurshipScreen() {
         reviews: [],
         contactMethod: savedFromDB.contactMethod, 
         zip: savedFromDB.zip, 
-        status: 'pending'
+        status: 'pending',
+        estate:savedFromDB.estate
       } as Emprendimiento, ...prev]);
       
       setFormName(''); setFormAddress(''); setFormDesc(''); setFormPhone(''); setFormZip(''); setFormPromo(''); setFormImage(null); 
@@ -1223,12 +1228,12 @@ export default function EntrepreneurshipScreen() {
                   })}
                 </View>
 
-                <TextInput value={formName} onChangeText={setFormName} placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formName} onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
                 
-                <TextInput value={formAddress} onChangeText={setFormAddress} placeholder={'Dirección del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formAddress} onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={'Dirección del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TextInput value={formZip} onChangeText={setFormZip} placeholder="Código Postal (Zip)" keyboardType="numeric" maxLength={5} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
-                <TextInput value={formDesc} onChangeText={setFormDesc} placeholder={t.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} multiline numberOfLines={3} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formDesc} onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} multiline autoCapitalize="sentences" placeholder={t.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} numberOfLines={3} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.contactMethod || 'Método de contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
@@ -1252,7 +1257,7 @@ export default function EntrepreneurshipScreen() {
                 </View>
 
                 <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.promotion || 'Promoción'}</ThemedText>
-                <TextInput value={formPromo} onChangeText={setFormPromo} placeholder={t.entrepreneurshiptab?.exampleoffet || 'Ej: 10% de descuento'} placeholderTextColor={isDark ? '#B0BEC5' : '#364045'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formPromo}  onChangeText={(text) => setFormPromo(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t.entrepreneurshiptab?.exampleoffet || 'Ej: 10% de descuento'} placeholderTextColor={isDark ? '#B0BEC5' : '#364045'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TouchableOpacity onPress={handlePublish} disabled={!formName.trim() || !formAddress.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5 || isSubmitting}>
                   <LinearGradient colors={(formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? OG as any : DG as any} style={[S.publishBtn, { opacity: (formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? 1 : 0.55 }]}>

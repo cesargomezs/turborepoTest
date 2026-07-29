@@ -874,7 +874,7 @@ export default function JobsScreen() {
                 {/* 🚀 Botón de Admin y Guardados (Fijo a la derecha para mantener simetría) */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6, width: 70 }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)} style={{ padding: 0 }}>
-                      <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={24} color={showSavedOnly ? DynamicColors.accent : DynamicColors.text} style={{opacity: showSavedOnly ? 1 : 0.6}}/>
+                      <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DynamicColors.accent : DynamicColors.text} style={{opacity: showSavedOnly ? 1 : 0.6}}/>
                   </TouchableOpacity>
                   <TouchableOpacity onLongPress={() => setIsAdminMode(!isAdminMode)} style={{ padding: 0 }}>
                       <MaterialCommunityIcons name="briefcase-search" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.3}}/>
@@ -887,22 +887,8 @@ export default function JobsScreen() {
                   <View style={styles.webSidebar}>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>{jobstabData.filter || 'Filtro'}</ThemedText>
-                      
-                      <TouchableOpacity onPress={() => setShowLocationPickerModal(true)} style={{ marginBottom: 10, borderRadius: 16, overflow: 'hidden', height: 48, borderWidth: 1, borderColor: DynamicColors.border }}>
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
-                              <MaterialCommunityIcons name="map-marker-radius" size={18} color={filterLocations.length > 0 ? DynamicColors.accent : DynamicColors.text} style={{ marginRight: 10 }} />
-                              <ThemedText style={{ color: filterLocations.length > 0 ? DynamicColors.accent : DynamicColors.text, fontWeight: 'bold', fontSize: 14 }}>{filterLocations.length > 0 ? `${filterLocations.length} Ciudades` : 'Ubicación'}</ThemedText>
-                          </View>
-                      </TouchableOpacity>
 
-                      <TouchableOpacity onPress={() => setShowShiftPickerModal(true)} style={{ marginBottom: 10, borderRadius: 16, overflow: 'hidden', height: 48, borderWidth: 1, borderColor: DynamicColors.border }}>
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
-                              <MaterialCommunityIcons name="clock-outline" size={18} color={filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.text} style={{ marginRight: 10 }} />
-                              <ThemedText style={{ color: filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.text, fontWeight: 'bold', fontSize: 14 }}>{filterShift === 'Todos' || filterShift === 'All' ? 'Turnos' : filterShift}</ThemedText>
-                          </View>
-                      </TouchableOpacity>
-
-                      <View style={{ height: 1, backgroundColor: DynamicColors.border, marginVertical: 10 }} />
+                      <View style={{ height: 1, marginVertical: 2 }} />
 
                       {JOB_CATEGORIES.map((cat: any) => {
                         const isActive = activeFilter === cat.id;
@@ -951,16 +937,12 @@ export default function JobsScreen() {
                             <MaterialCommunityIcons name="chevron-down" size={18} color={filterLocations.length > 0 ? DynamicColors.accent : DynamicColors.subtext} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity onPress={() => setShowShiftPickerModal(true)} style={{ width: isLargeWeb ? undefined : 48, flex: isLargeWeb ? 1 : undefined, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: filterShift !== 'Todos' && filterShift !== 'All' ? 'rgba(255, 95, 109, 0.1)' : DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.border, paddingHorizontal: isLargeWeb ? 15 : 0, height: 48 }}>
-                            <MaterialCommunityIcons name="clock-outline" size={isLargeWeb ? 18 : 22} color={filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.subtext} style={{ marginRight: isLargeWeb ? 8 : 0 }} />
-                            {isLargeWeb && (
-                                <>
-                                    <ThemedText style={{ flex: 1, color: filterShift === 'Todos' || filterShift === 'All' ? DynamicColors.subtext : DynamicColors.accent, fontWeight: 'bold', fontSize: 13 }}>
-                                        {filterShift === 'Todos' || filterShift === 'All' ? 'Turno' : filterShift}
-                                    </ThemedText>
-                                    <MaterialCommunityIcons name="chevron-down" size={18} color={filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.subtext} />
-                                </>
-                            )}
+                        <TouchableOpacity onPress={() => setShowShiftPickerModal(true)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: filterShift !== 'Todos' && filterShift !== 'All' ? 'rgba(255, 95, 109, 0.1)' : DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.border, paddingHorizontal: 15, height: 48 }}>
+                            <MaterialCommunityIcons name="clock-outline" size={18} color={filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.subtext} style={{ marginRight: 8 }} />
+                            <ThemedText style={{ flex: 1, color: filterShift === 'Todos' || filterShift === 'All' ? DynamicColors.subtext : DynamicColors.accent, fontWeight: 'bold', fontSize: 13 }}>
+                                {filterShift === 'Todos' || filterShift === 'All' ? 'Turno' : filterShift}
+                            </ThemedText>
+                            <MaterialCommunityIcons name="chevron-down" size={18} color={filterShift !== 'Todos' && filterShift !== 'All' ? DynamicColors.accent : DynamicColors.subtext} />
                         </TouchableOpacity>
                     </View>
 
@@ -1080,7 +1062,6 @@ export default function JobsScreen() {
                                     </TouchableOpacity>
                                 </View>
 
-                                {/* 🚀 BOTÓN DE CERRAR VACANTE (Visible para dueño o Admin, PERO oculto si está agrupado) */}
                                 {(isOwner || isSuperAdmin) && job.groupedCount <= 1 && (
                                     <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ width: '100%', marginTop: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.5)' : 'rgba(76, 175, 80, 0.5)', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.05)' : 'rgba(76, 175, 80, 0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
                                         <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={18} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 6}} />
@@ -1177,9 +1158,7 @@ export default function JobsScreen() {
                                   <ThemedText style={{ fontSize: 12, color: DynamicColors.text, marginLeft: 4 }}>{job.city}, {job.state}</ThemedText>
                               </View>
 
-                              {/* 🚀 BOTONES MEJORADOS EN LA LISTA DE LA EMPRESA */}
                               <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, borderTopWidth: 1, borderColor: DynamicColors.border, paddingTop: 15 }}>
-                                  
                                   <TouchableOpacity 
                                       disabled={!job.isOpen} 
                                       onPress={() => { 
@@ -1192,7 +1171,6 @@ export default function JobsScreen() {
                                       <ThemedText numberOfLines={1} style={{fontSize: 12, fontWeight: 'bold', color: DynamicColors.text, textAlign: 'center', flexShrink: 1}}>Ver Info</ThemedText>
                                   </TouchableOpacity>
 
-                                  {/* 🚀 BOTÓN 'CERRAR VACANTE' (Visible solo para dueño o Admin) */}
                                   {(isJobOwner || isSuperAdmin) && (
                                       <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ flex: 1, height: 40, borderRadius: 12, backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.1)' : 'rgba(76, 175, 80, 0.1)', borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.3)' : 'rgba(76, 175, 80, 0.3)', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 4 }}>
                                           <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={16} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 4}} />
@@ -1220,8 +1198,6 @@ export default function JobsScreen() {
             
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: 10 }}>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
-                    
-                    {/* 🚀 BOTÓN COMPARTIR OCULTO EN LA WEB */}
                     {!isWeb && (
                       <TouchableOpacity onPress={() => handleShareJob(selectedJobDetail)} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 20 }}>
                           <MaterialCommunityIcons name="share-variant" size={22} color={DynamicColors.text} />

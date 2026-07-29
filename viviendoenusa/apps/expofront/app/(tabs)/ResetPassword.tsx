@@ -27,7 +27,7 @@ export default function ResetPassword() {
     try {
       // Intenta despertar la aplicación en iOS/Android
       //await Linking.openURL('viviendoenusa://');
-      await Linking.openURL('exp://192.168.252.243:8081');
+      await Linking.openURL('exp://192.168.1.171:8081');
     } catch (error) {
       // Si falla (ej. escritorio), navega al inicio
       router.replace('/');

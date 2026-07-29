@@ -256,6 +256,7 @@ export default function DonationsScreen() {
         title: trimmedTitle, 
         categoryIdx: formCategoryIdx,
         status: 'active',
+        estate: userMetadata?.estate,
         description: trimmedDesc, 
         image: finalImageName, 
         location: userMetadata?.city || 'Rancho Cucamonga',

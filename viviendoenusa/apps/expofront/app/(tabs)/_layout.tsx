@@ -45,7 +45,7 @@ export default function TabLayout() {
         backgroundColor: isDark ? 'rgba(18, 18, 18, 0.98)' : 'rgba(255, 255, 255, 0.98)',
         borderTopWidth: 0,
         display: loggedIn ? 'flex' : 'none',
-        paddingHorizontal: '25%' as any, 
+        paddingHorizontal: '20%' as any, 
       } as ViewStyle; 
     } 
     
@@ -125,6 +125,18 @@ export default function TabLayout() {
           title: t.tabs.jobs,
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons size={28} name="briefcase-search" color={color} />
+          ),
+        }}
+      />
+
+      {/* 🚀 PESTAÑA DE SOPORTE TÉCNICO / IT (Visible en Web, integrada limpiamente) */}
+      <Tabs.Screen
+        name="support-it"
+        options={{
+          title: 'Soporte IT',
+          href: Platform.OS === 'web' ? '/support-it' : null, // En web se muestra en la barra, en móvil se mantiene accesible desde el header
+          tabBarIcon: ({ color }) => (
+            <MaterialCommunityIcons size={28} name="headset" color={color} />
           ),
         }}
       />

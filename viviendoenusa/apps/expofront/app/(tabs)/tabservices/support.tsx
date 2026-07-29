@@ -72,6 +72,244 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
+// 🚀 MODAL EXTRAÍDO PARA EVITAR REFRESCO DE LA PANTALLA PRINCIPAL AL ESCRIBIR
+const SupportFormModal = memo(({
+  visible, onClose, onSuccess, currentUserId, userToken, userMetadata, companyTariffs,
+  t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
+  CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height // 👈 Se inyecta la altura original para conservar tu diseño en la web
+}: any) => {
+  const [formName, setFormName] = useState('');
+  const [formDesc, setFormDesc] = useState('');
+  const [formAddress, setFormAddress] = useState(''); 
+  const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
+  const [formZip, setFormZip] = useState('');
+  const [formPhone, setFormPhone] = useState(''); 
+  const [countryIdx, setCountryIdx] = useState(0); 
+  const [formImage, setFormImage] = useState<string | null>(null);
+  const [formPlan, setFormPlan] = useState('basic');
+  const [formCoupon, setFormCoupon] = useState('');
+  const [formRefCode, setFormRefCode] = useState('');
+  const [formPayMethod, setFormPayMethod] = useState('Zelle');
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  const isFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage && formRefCode.trim());
+
+  const textlabel = t.genericlabel.labelmessagepay || "";
+  const parts = textlabel.split("{amount}");
+  const before = parts[0] || "";
+  const after = parts[1] || ""; 
+
+  useEffect(() => {
+    if (visible) {
+      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
+      setFormImage(null); setFormCategoryIdx(1); setFormPlan('basic'); setFormCoupon(''); 
+      setFormRefCode(''); setFormPayMethod('Zelle'); 
+    }
+  }, [visible]);
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.7 });
+    if (!result.canceled) setFormImage(result.assets[0].uri);
+  };
+
+  const handlePublishStore = async () => {
+    if (!formName.trim() || !formAddress.trim() || formZip.length < 5) { 
+      return Platform.OS === 'web' ? window.alert(t.genericlabel.labelfields) : Alert.alert("Atención", t.genericlabel.labelfields); 
+    }
+    setIsPublishing(true);
+    try {
+      let finalImageName = '';
+      if (formImage) {
+        if (!(await validarImagenEnServidor(formImage))) { 
+          setIsPublishing(false); 
+          if (Platform.OS === 'web') { window.alert(`Error\n${t.genericlabel.labelerrorimageinapro}`); } 
+          else { Alert.alert("Error", t.genericlabel.labelerrorimageinapro); } 
+          return; 
+        }
+
+        const formData = new FormData(); 
+        const filename = formImage.split('/').pop() || 'imagen.jpg'; 
+        const type = `image/${filename.split('.').pop() || 'jpeg'}`;
+        
+        if (Platform.OS === 'web') {
+          const responseBlob = await fetch(formImage);
+          const blob = await responseBlob.blob();
+          formData.append('imagen', blob as any, filename);
+        } else {
+          formData.append('imagen', { uri: formImage, name: filename, type } as any);
+        }
+
+        const uploadRes = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/support', { 
+          method: 'POST', 
+          body: formData, 
+          headers: { 
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${userToken}` 
+          } 
+        });
+
+        if (uploadRes.status === 401) { setIsPublishing(false); return; }
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error || t.genericlabel.labelerrorimage);
+        finalImageName = uploadData.identificadorArchivo;
+      }
+
+      let lat = 34.0934, lng = -117.5847;
+      try { const geo = await Location.geocodeAsync(formZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
+      
+      const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
+      
+      const payload = { 
+        nameSupp: formName.trim(),
+        descriptionSupp: formDesc.trim(), 
+        addressSupp: formAddress.trim(), 
+        categoryId: formCategoryIdx, 
+        zip: formZip.trim(), 
+        imageSupp: finalImageName, 
+        lat, 
+        lng, 
+        phone: fullPhone, 
+        userId: userMetadata?.id || userMetadata?.userId || null, 
+        estate: userMetadata?.estate || 'California', 
+        approved: false, 
+        premiumPlan: formPlan, 
+        couponCode: formCoupon ? formCoupon.trim() : '', 
+        referenceCode: formRefCode, 
+        paymentMethod: formPayMethod 
+      };
+      
+      const response = await fetch(API_STORES_URL, { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        }, 
+        body: JSON.stringify(payload) 
+      });
+
+      if (response.status === 401) { setIsPublishing(false); return; }
+      
+      const savedFromDB = await response.json();
+      if (!response.ok) throw new Error(savedFromDB.error || t.genericlabel.labelerrorsave);
+
+      const newEntryLocal = { 
+        id: savedFromDB.id, 
+        name: savedFromDB.nameSupp, 
+        description: savedFromDB.descriptionSupp, 
+        address: savedFromDB.addressSupp, 
+        categoryId: savedFromDB.categoryId, 
+        image: formImage || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800', 
+        lat, 
+        lng, 
+        rating: 0, 
+        reviews: [], 
+        totalReviews: 0, 
+        phone: savedFromDB.phone, 
+        status: 'pending', 
+        userId: currentUserId, 
+        timepostEnd: null 
+      };
+
+      onSuccess(newEntryLocal, formZip);
+      Platform.OS === 'web' ? window.alert(t.supporttab.labelcheck) : Alert.alert(t.genericlabel.labelsendreq, t.supporttab.labelcheck);
+    } catch (err: any) { 
+      Alert.alert("Error", err.message || t.genericlabel.labelerrorsend); 
+    } finally { 
+      setIsPublishing(false); 
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && onClose()} />
+        <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 550 : '100%' }}>
+          
+          {/* 🚀 AQUI ESTÁ LA ALTURA RESTAURADA A LA VERSIÓN ORIGINAL */}
+          <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: Colors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
+            {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
+              <ThemedText style={{fontSize: 20, fontWeight:'bold',color: Colors.text}}>{t.genericlabel.labeljoinred}</ThemedText>
+              <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+            </View>
+            
+            <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
+              <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: Colors.border }}>
+                {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 ,color:Colors.subtext}}>{t.genericbtn.photo}</ThemedText></View>}
+              </TouchableOpacity>
+              
+              <ThemedText style={{ fontSize: 13, fontWeight: '900', marginBottom: 8,textTransform:'none',color:Colors.text}}>{t.genericlabel.labelcatergory}</ThemedText>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6, marginBottom: 14 }}>
+                {CATEGORIES_LIST.map((cat: string, index: number) => {
+                  if (index === 0) return null; const isActive = formCategoryIdx === index; const iconName = ICONS_ARRAY[index] || 'heart'; 
+                  return (
+                    <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
+                      {isActive ? ( <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                        <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
+                        <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'none' }}>{cat}</ThemedText>
+                        </LinearGradient> 
+                        ) : (
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: Colors.categoryUnselected }}>
+                          <MaterialCommunityIcons name={iconName as any} size={14} color={Colors.iconInactive} style={{ marginRight: 6 }} />
+                          <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600',textTransform:'none' }}>{cat}</ThemedText>
+                        </View> )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* 🚀 FORMATEO EN TIEMPO REAL: Título para Nombre y Ciudad, Oración para Descripción */}
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelnameprof} placeholderTextColor={Colors.subtext} value={formName} onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" />
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelcityaddres} placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" />
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelzipcde} placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.lablelespecia} placeholderTextColor={Colors.subtext} value={formDesc} onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} multiline autoCapitalize="sentences" />
+
+              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
+              <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                  {[  
+                      { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc }, 
+                      { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc }, 
+                      { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc }, 
+                      { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
+                  ].map(plan => {
+                      const pStyle = planStyles[plan.id as keyof typeof planStyles]; const isSelected = formPlan === plan.id;
+                      return (
+                      <TouchableOpacity key={plan.id} onPress={() => setFormPlan(plan.id)} style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : Colors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><View style={{ flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} /><ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : Colors.text, marginLeft: 8 }}>{plan.name}</ThemedText></View><ThemedText style={{ fontWeight: '900', fontSize: 16, color: Colors.text }}>${plan.price}</ThemedText></View>
+                          <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : Colors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                      </TouchableOpacity>
+                  )})}
+              </View>
+              
+              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none' }}>{t.genericlabel.labelphonecont}</ThemedText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, overflow: 'hidden' }}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => setCountryIdx(prev => (prev === 0 ? 0 : 0))} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}><ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText><ThemedText style={{ fontWeight: '800', color: Colors.text, marginRight: 4 }}>{COUNTRIES[countryIdx].code}</ThemedText></TouchableOpacity>
+                <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.subtext} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+              </View>
+
+              <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>{t.genericlabel.labelcheckpay}</ThemedText>
+                <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>{before}<ThemedText style={{ fontWeight: '900', color: Colors.accent }}>${(companyTariffs as any)[formPlan]} USD</ThemedText>{after}   </ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                  {['Zelle'].map((method) => ( <TouchableOpacity key={method} onPress={() => setFormPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? Colors.accent : Colors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}><ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText></TouchableOpacity> ))}
+                </View>
+                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelconfirmpay + `${formPayMethod}...`} placeholderTextColor={Colors.subtext} value={formRefCode} onChangeText={(text) => setFormRefCode(text.toUpperCase())} autoCapitalize="characters" />
+              </View>
+              <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
+                <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}<ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.genericbtn.sendrequest}</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+});
+
 export default function SupportScreen() {
   const { login } = useAuth();
 
@@ -112,10 +350,7 @@ export default function SupportScreen() {
     iconInactive: isDark ? '#B0BEC5' : '#364045',  
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
   };
-  const Colors = DynamicColors;
-  const textlabel = t.genericlabel.labelmessagepay;
-  const [before, after] = textlabel.split("{amount}"); 
-
+  
   const [zipCode, setZipCode] = useState('');
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [loading, setLoading] = useState(false);
@@ -129,20 +364,8 @@ export default function SupportScreen() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
   const [isModalVisible, setModalVisible] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [formName, setFormName] = useState('');
-  const [formDesc, setFormDesc] = useState('');
-  const [formAddress, setFormAddress] = useState(''); 
-  const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
-  const [formZip, setFormZip] = useState('');
-  const [formPhone, setFormPhone] = useState(''); 
-  const [countryIdx, setCountryIdx] = useState(0); 
-  const [formImage, setFormImage] = useState<string | null>(null);
-  const [formPlan, setFormPlan] = useState('basic');
-  const [formCoupon, setFormCoupon] = useState('');
+  
   const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' });
-  const [formRefCode, setFormRefCode] = useState('');
-  const [formPayMethod, setFormPayMethod] = useState('Zelle');
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
@@ -151,7 +374,6 @@ export default function SupportScreen() {
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
-  const isFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage && formRefCode.trim());
 
   const ringAnim = useRef(new Animated.Value(0)).current;
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
@@ -337,58 +559,6 @@ export default function SupportScreen() {
     });
   };
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.7 });
-    if (!result.canceled) setFormImage(result.assets[0].uri);
-  };
-
-  const handlePublishStore = async () => {
-    if (!formName.trim() || !formAddress.trim() || formZip.length < 5) { return isWeb ? window.alert(t.genericlabel.labelfields) : Alert.alert("Atención", t.genericlabel.labelfields); }
-    setIsPublishing(true);
-    try {
-      let finalImageName = '';
-      if (formImage) {
-        if (!(await validarImagenEnServidor(formImage))) { setIsPublishing(false); if (isWeb) { window.alert(`Error\n${t.genericlabel.labelerrorimageinapro}`); } else { Alert.alert("Error", t.genericlabel.labelerrorimageinapro); } return; }
-        const formData = new FormData(); const filename = formImage.split('/').pop() || 'imagen.jpg'; const type = `image/${filename.split('.').pop() || 'jpeg'}`;
-        formData.append('imagen', { uri: formImage, name: filename, type } as any);
-        const uploadRes = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/support', { 
-          method: 'POST', 
-          body: formData, 
-          headers: { 
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${userToken}` 
-          } 
-        });
-        if (uploadRes.status === 401) { setIsPublishing(false); router.replace('/'); return; }
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadData.error || t.genericlabel.labelerrorimage);
-        finalImageName = uploadData.identificadorArchivo;
-      }
-      let lat = 34.0934, lng = -117.5847;
-      try { const geo = await Location.geocodeAsync(formZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
-      const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
-      const payload = { nameSupp: formName, descriptionSupp: formDesc, addressSupp: formAddress, categoryId: formCategoryIdx, zip: formZip, imageSupp: finalImageName, lat, lng, phone: fullPhone, userId: userMetadata?.id || userMetadata?.userId || null, approved: false, premiumPlan: formPlan, couponCode: formCoupon ? formCoupon.trim() : '', referenceCode: formRefCode, paymentMethod: formPayMethod };
-      
-      const response = await fetch(API_STORES_URL, { 
-        method: 'POST', 
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}` 
-        }, 
-        body: JSON.stringify(payload) 
-      });
-      if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
-      
-      const savedFromDB = await response.json();
-      if (!response.ok) throw new Error(savedFromDB.error || t.genericlabel.labelerrorsave);
-      const newEntryLocal = { id: savedFromDB.id, name: savedFromDB.nameSupp, description: savedFromDB.descriptionSupp, address: savedFromDB.addressSupp, categoryId: savedFromDB.categoryId, image: formImage || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800', lat, lng, rating: 0, reviews: [], totalReviews: 0, phone: savedFromDB.phone, status: 'pending', userId: currentUserId, timepostEnd: null };
-      setPendingStores(prev => [newEntryLocal, ...prev]); setModalVisible(false);
-      setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); setFormImage(null); setFormCategoryIdx(1); setFormPlan('basic'); setFormCoupon(''); setFormRefCode(''); setFormPayMethod('Zelle'); 
-      if (!zipCode || zipCode.length < 5) { setZipCode(formZip); handleSearch(0, formZip); }
-      isWeb ? window.alert(t.supporttab.labelcheck) : Alert.alert(t.genericlabel.labelsendreq, t.supporttab.labelcheck);
-    } catch (err: any) { Alert.alert("Error", err.message || t.genericlabel.labelerrorsend); } finally { setIsPublishing(false); }
-  };
-
   const approveStore = async (store: any, durationMonths: number) => {
     try {
       const response = await fetch(`${API_STORES_URL}/${store.id}`, { 
@@ -495,6 +665,34 @@ export default function SupportScreen() {
 
   return (
     <View style={stylesUnified.container}>
+      <SupportFormModal 
+        visible={isModalVisible} 
+        onClose={() => setModalVisible(false)} 
+        onSuccess={(newEntryLocal: any, formZip: string) => {
+          setPendingStores(prev => [newEntryLocal, ...prev]);
+          setModalVisible(false);
+          if (!zipCode || zipCode.length < 5) {
+            setZipCode(formZip);
+            handleSearch(0, formZip);
+          }
+        }}
+        currentUserId={currentUserId}
+        userToken={userToken}
+        userMetadata={userMetadata}
+        companyTariffs={companyTariffs}
+        t={t}
+        isDark={isDark}
+        Colors={DynamicColors}
+        orangeGradient={orangeGradient}
+        disabledGradient={disabledGradient}
+        isLargeWeb={isLargeWeb}
+        isAndroid={isAndroid}
+        isIOS={isIOS}
+        CATEGORIES_LIST={CATEGORIES_LIST}
+        ICONS_ARRAY={ICONS_ARRAY}
+        COUNTRIES={COUNTRIES}
+        height={height} 
+      />
 
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -608,87 +806,6 @@ export default function SupportScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal visible={isModalVisible} animationType="slide" transparent statusBarTranslucent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
-          <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 550 : '100%' }}>
-            <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: DynamicColors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
-              {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-              {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}><ThemedText style={{fontSize: 20, fontWeight:'bold'}}>{t.genericlabel.labeljoinred}</ThemedText><TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity></View>
-              <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
-                <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8 ,color:DynamicColors.subtext}}>{t.genericbtn.photo}</ThemedText></View>}
-                </TouchableOpacity>
-                <ThemedText style={{ fontSize: 13, fontWeight: '900', marginBottom: 8,textTransform:'none',color:Colors.text}}>{t.genericlabel.labelcatergory}</ThemedText>
-                
-                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap para Web */}
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6, marginBottom: 14 }}>
-                  {CATEGORIES_LIST.map((cat, index) => {
-                    if (index === 0) return null; const isActive = formCategoryIdx === index; const iconName = ICONS_ARRAY[index] || 'heart'; 
-                    return (
-                      <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
-                        {isActive ? ( <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                          <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 6 }} />
-                          <ThemedText style={{ color: '#FFF', fontSize: 11, fontWeight: '800',textTransform:'none' }}>{cat}</ThemedText>
-                          </LinearGradient> 
-                          ) : (
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                            <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 6 }} />
-                            <ThemedText style={{ color: Colors.iconInactive, fontSize: 11, fontWeight: '600',textTransform:'none' }}>{cat}</ThemedText>
-                          </View> )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelnameprof} placeholderTextColor={DynamicColors.subtext} value={formName} onChangeText={setFormName} autoCapitalize="words" />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelcityaddres} placeholderTextColor={DynamicColors.subtext} value={formAddress} onChangeText={setFormAddress} autoCapitalize="words" />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelzipcde} placeholderTextColor={DynamicColors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.lablelespecia} placeholderTextColor={DynamicColors.subtext} value={formDesc} onChangeText={setFormDesc} multiline autoCapitalize="sentences" />
-
-                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
-                <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                    {[  
-                        { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc }, 
-                        { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc }, 
-                        { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc }, 
-                        { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
-                    ].map(plan => {
-                        const pStyle = planStyles[plan.id as keyof typeof planStyles]; const isSelected = formPlan === plan.id;
-                        return (
-                        <TouchableOpacity key={plan.id} onPress={() => setFormPlan(plan.id)} style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : DynamicColors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : DynamicColors.inputBg }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><View style={{ flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : DynamicColors.subtext} /><ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : DynamicColors.text, marginLeft: 8 }}>{plan.name}</ThemedText></View><ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText></View>
-                            <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
-                        </TouchableOpacity>
-                    )})}
-                </View>
-                
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none' }}>{t.genericlabel.labelphonecont}</ThemedText>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => setCountryIdx(prev => (prev === 0 ? 0 : 0))} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: DynamicColors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}><ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText><ThemedText style={{ fontWeight: '800', color: DynamicColors.text, marginRight: 4 }}>{COUNTRIES[countryIdx].code}</ThemedText></TouchableOpacity>
-                  <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={DynamicColors.subtext} keyboardType="phone-pad" style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                </View>
-
-                <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
-                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>{t.genericlabel.labelcheckpay}</ThemedText>
-                  <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: DynamicColors.text }}>{before}<ThemedText style={{ fontWeight: '900', color: DynamicColors.accent }}>${(companyTariffs as any)[formPlan]} USD</ThemedText>{after}   </ThemedText>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                    {['Zelle'].map((method) => ( <TouchableOpacity key={method} onPress={() => setFormPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}><ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText></TouchableOpacity> ))}
-                  </View>
-                  <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelconfirmpay + `${formPayMethod}...`} placeholderTextColor={DynamicColors.subtext} value={formRefCode} onChangeText={(text) => setFormRefCode(text.toUpperCase())} autoCapitalize="characters" />
-                </View>
-                <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
-                  <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}<ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.genericbtn.sendrequest}</ThemedText>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
       </Modal>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">

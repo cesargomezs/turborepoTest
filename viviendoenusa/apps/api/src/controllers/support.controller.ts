@@ -303,6 +303,7 @@ export const createSupport = async (data: any) => {
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         premiumPlan: planSeleccionado, 
         couponCode: sanitizeText(data.couponCode) || '', 
+        estate: data.estate,
         approved: false 
       };
       

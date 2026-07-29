@@ -254,6 +254,7 @@ export const getCommunityPostById = async (id: string) => {
 // =====================================================================
 export const createCommunityPost = async (data: any) => {
   try {
+    
     // 🛡️ Sanitizamos absolutamente todo el cuerpo de la petición
     const cleanPayload = sanitizePayload(data);
 
@@ -298,10 +299,6 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
     const cleanUserId = sanitizeText(userId);
 
     if (!cleanPostId || !cleanUserId) throw new Error("Parámetros de voto inválidos");
-
-    console.log("\n==========================================");
-    console.log(`⚙️ [CTRL-VOTO] NUEVA PETICIÓN DE VOTO`);
-    console.log("==========================================");
 
     const targetColName = (countlikes as any).communityId ? 'communityId' : 'relationshipId';
     const targetColumn = (countlikes as any)[targetColName];

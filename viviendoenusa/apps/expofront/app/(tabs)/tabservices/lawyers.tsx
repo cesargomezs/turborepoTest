@@ -337,7 +337,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 placeholder={(t.lawyerstab as any)?.placeHoldname || 'Nombre' } 
                 placeholderTextColor={Colors.subtext} 
                 value={formName} 
-                onChangeText={setFormName} 
+                onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} 
                 autoCapitalize="words"
               />
               <TextInput 
@@ -345,7 +345,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 placeholder={(t.lawyerstab as any)?.placeHoldAddress || 'Dirección' } 
                 placeholderTextColor={Colors.subtext} 
                 value={formAddress} 
-                onChangeText={setFormAddress} 
+                onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} 
                 autoCapitalize="words"
               />
               <TextInput 
@@ -361,7 +361,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 placeholder={(t.lawyerstab as any)?.description || 'Descripción'} 
                 placeholderTextColor={Colors.subtext} 
                 value={formDesc} 
-                onChangeText={setFormDesc} 
+                onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')}
                 multiline 
                 autoCapitalize="sentences"
               />
@@ -468,6 +468,10 @@ export default function LawyersScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken;
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
+
+  // 🚀 AGREGA ESTA LÍNEA AQUÍ
+  const selectedLanguage = useMockSelector((state: any) => state.language.code);
+  
   const stylesUnified = useUnifiedCardStyles();
   const styles = getContentCardStyles(isDark);
 
@@ -635,6 +639,9 @@ export default function LawyersScreen() {
           couponCode: item.couponCode
         }));
         const approved = mappedData.filter(s => s.status === 'approved');
+        //console.log(selectedLanguage);
+        //console.log(approved[0].description);
+
         setAllLawyers(approved);
         setLocalData(approved);
         
@@ -958,7 +965,7 @@ export default function LawyersScreen() {
                     status: data.approved ? 'approved' : 'pending',
                     timepostEnd: data.timepostEnd || data.timepost_end
                 };
-
+                
                 syncSearchAndDetail(mappedSupport);
               }
             } catch (e) {

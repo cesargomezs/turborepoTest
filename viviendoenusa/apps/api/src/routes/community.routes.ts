@@ -69,7 +69,7 @@ router.post('/review', verifyToken, async (req: AuthRequest, res: Response) => {
 
 // 🔄 4. PROCESAR UN VOTO (LIKE / DISLIKE) CON RASTREADORES
 router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
-  console.log("📥 Petición recibida en /community/vote");
+  //console.log("📥 Petición recibida en /community/vote");
   
   // 🚀 Obtenemos el userId validado por el token de forma segura
   const userIdFromToken = req.user?.id || req.user?.userId;

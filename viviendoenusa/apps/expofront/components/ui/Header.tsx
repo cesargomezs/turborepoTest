@@ -17,10 +17,9 @@ import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage } from '
 import { useTranslation } from '../../hooks/useTranslation'; 
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
 import { useAuth } from '../../context/AuthContext';
+import ITSupportButton from './ITSupportButton';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND || process.env.EXPO_PUBLIC_URL_BACKEND;
-console.log("🌐 API_BASE_URL:", API_BASE_URL);
-console.log(process.env.EXPO_PUBLIC_URL_BACKEND);
 const API_NOTIFICATIONS_URL = `${API_BASE_URL}/notifications`;
 const API_USERS_URL = `${API_BASE_URL}/auth/profile`; 
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
@@ -99,6 +98,11 @@ export default function Header({ title }: { title?: string }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false); 
 
+  // 🚀 ESTADOS PARA IT SUPPORT (SOPORTE TÉCNICO)
+  const [itMessage, setItMessage] = useState('');
+  const [isSendingIT, setIsSendingIT] = useState(false);
+  const [showITSupportModal, setShowITSupportModal] = useState(false);
+
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
@@ -119,6 +123,7 @@ export default function Header({ title }: { title?: string }) {
     birth: '',
     typeDetail: '',
     password: '', 
+    estate: '',
     image_url: null as string | null,
     new_image_uri: null as string | null,
   });
@@ -151,6 +156,7 @@ export default function Header({ title }: { title?: string }) {
       const userData = await res.json();
       if (userData && !userData.error) {
         setActiveProfileRole(userData.typeDetail || 'User');
+        
         setProfileData(prev => ({
           ...prev,
           email: userData.email || '',
@@ -158,11 +164,17 @@ export default function Header({ title }: { title?: string }) {
           last_name: userData.lastName || userData.last_name || '',
           phone: userData.phone || '',
           zip: userData.zip || '',
+          estate: userData.estate || userData.state || '',
           birth: userData.birth ? new Date(userData.birth).toISOString().split('T')[0] : '',
           typeDetail: userData.typeDetail || '', 
           image_url: userData.imageUrl || userData.image_url || null,
           password: '', 
           new_image_uri: null,
+        }));
+
+        dispatch(setUserMetadata({
+          ...userMetadata,
+          estate: userData.estate || userData.state || ''
         }));
       }
     } catch (error) { console.error("Error al obtener datos:", error); }
@@ -268,15 +280,46 @@ export default function Header({ title }: { title?: string }) {
     } catch (error) {}
   };
 
-  const clearAllNotifications = () => {
-    setNotifications([]);
+  // 🚀 FUNCIÓN PARA ENVIAR EL MENSAJE DE IT SUPPORT AL BACKEND Y TELEGRAM
+  const handleSendITSupport = async () => {
+    if (!itMessage.trim()) {
+      return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
+    }
+
+    setIsSendingIT(true);
+    try {
+      // 🚀 Ajusta esta ruta según cómo tengas montado admin.routes.ts en tu index.ts del backend (ej: /api/admin/it-support)
+      const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({
+          email: profileData.email,
+          userName: `${profileData.name} ${profileData.last_name}`,
+          message: itMessage
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el mensaje");
+
+      Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
+      setItMessage('');
+      setShowITSupportModal(false);
+    } catch (error) {
+      console.error("Error enviando IT Support:", error);
+      Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo.");
+    } finally {
+      setIsSendingIT(false);
+    }
   };
 
   const toggleCreateMode = (create: boolean) => {
     setIsCreatingUser(create);
     setShowPassword(false);
     if (create) {
-      setProfileData({ email: '', name: '', last_name: '', phone: '', zip: '', birth: '', password: '', typeDetail: 'User', image_url: null, new_image_uri: null });
+      setProfileData({ email: '', name: '', last_name: '', phone: '', zip: '', birth: '', password: '', typeDetail: 'User', image_url: null, new_image_uri: null ,estate: ''});
       setActiveProfileRole('User');
     } else {
       fetchUserData(); 
@@ -310,14 +353,11 @@ export default function Header({ title }: { title?: string }) {
         const imageFormData = new FormData();
         const filename = profileData.new_image_uri.split('/').pop() || 'upload.jpg';
         
-        // 🚀 BLINDAJE PARA EXPO WEB VS MÓVIL
         if (Platform.OS === 'web') {
-          // En Web, debemos descargar la URI y convertirla en un Blob binario real
           const response = await fetch(profileData.new_image_uri);
           const blob = await response.blob();
           imageFormData.append('imagen', blob, filename); 
         } else {
-          // En Móvil, React Native exige este objeto específico
           imageFormData.append('imagen', {
             uri: profileData.new_image_uri,
             name: filename,
@@ -330,7 +370,6 @@ export default function Header({ title }: { title?: string }) {
           body: imageFormData,
           headers: { 
             'Authorization': `Bearer ${token}`
-            // 🚨 NO agregues 'Content-Type' aquí, fetch lo maneja solo.
           } 
         });
 
@@ -340,8 +379,6 @@ export default function Header({ title }: { title?: string }) {
         }
         
         const uploadData = await uploadRes.json();
-        
-        // Asumiendo que tu backend devuelve la URL o identificador en 'identificadorArchivo'
         finalImageName = uploadData.identificadorArchivo ? uploadData.identificadorArchivo.split('/').pop() : uploadData.url;
       }
 
@@ -354,6 +391,7 @@ export default function Header({ title }: { title?: string }) {
           zip: profileData.zip,
           birth: profileData.birth,
           typeDetail: activeProfileRole,
+          estate: profileData?.estate || '',
           ...(profileData.password ? { password: profileData.password } : {})
         },
         newImageUri: profileData.new_image_uri ? finalImageName : null 
@@ -378,7 +416,7 @@ export default function Header({ title }: { title?: string }) {
       
       Alert.alert("Éxito", isCreatingUser ? "Usuario creado correctamente" : "Perfil actualizado correctamente");
       closeSettingsModal();
-      fetchUserData(); // Refrescar los datos para ver la nueva foto
+      fetchUserData(); 
       
     } catch (error: any) {
       console.error("Error al guardar perfil:", error);
@@ -411,25 +449,32 @@ export default function Header({ title }: { title?: string }) {
           </View>
           
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
-              <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
-              {hasUnread && <View style={styles.unreadBadge} />}
-            </TouchableOpacity>
+            {/* 🚀 BOTÓN DIRECTO DE SOPORTE IT (VISIBLE EN TODAS PARTES) */}
+            <TouchableOpacity 
+                onPress={() => setShowITSupportModal(true)} 
+                activeOpacity={0.7} 
+                style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+              >
+                <MaterialCommunityIcons size={22} style={{ color: isDark ? '#4FC3F7' : '#007AFF' , fontWeight: 'bold' }} name="headset" />
+              </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setSettingsModalVisible(true)} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-              <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name="cog" />
-            </TouchableOpacity>
+              <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
+                <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
+                {hasUnread && <View style={styles.unreadBadge} />}
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => setSettingsModalVisible(true)} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+                <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name="cog" />
+              </TouchableOpacity>
           </View>
         </View>
 
-        {/* 🚀 TÍTULO HABILITADO PARA TODAS LAS PLATAFORMAS (INCLUYENDO WEB)
-        #0a7ea4 -----#007AFF
-        */}
         <View style={styles.titleContainer}>
           <ThemedText className="text-center text-2xl" style={{ color: isDark ? '#4FC3F7' : '#007AFF' , fontWeight: 'bold' }}>{title}</ThemedText>
         </View>
       </BlurView>
-
+      
+      {/* 🚀 MODAL DE CONFIGURACIÓN */}
       <Modal visible={settingsModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeSettingsModal}>
         <View style={styles.notifModalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSavingProfile && closeSettingsModal()} />
@@ -506,6 +551,18 @@ export default function Header({ title }: { title?: string }) {
                     </View>
                   </View>
                 </View>
+
+                {/* 🚀 BOTÓN DE SOPORTE TÉCNICO / IT SUPPORT */}
+                <TouchableOpacity 
+                  onPress={() => setShowITSupportModal(true)} 
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="headset" size={22} color="#4FC3F7" style={{ marginRight: 10 }} />
+                    <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Soporte Técnico / IT</ThemedText>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={isDark ? '#B0BEC5' : '#666'} />
+                </TouchableOpacity>
 
                 {isSuperAdmin && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16 }}>
@@ -588,6 +645,19 @@ export default function Header({ title }: { title?: string }) {
                 </View>
 
                 <View style={{ width: '100%', marginBottom: 15 }}>
+                  <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Estado (Ej: CA)</ThemedText>
+                  <TextInput 
+                    value={profileData.estate} 
+                    onChangeText={(val) => setProfileData({...profileData, estate: val})} 
+                    maxLength={2}
+                    autoCapitalize="characters"
+                    placeholder="CA"
+                    placeholderTextColor={isDark ? '#666' : '#999'}
+                    style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} 
+                  />
+                </View>
+
+                <View style={{ width: '100%', marginBottom: 15 }}>
                   <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.birth}</ThemedText>
                   <View style={{ position: 'relative' }}>
                     <View style={[styles.profileInput, { marginBottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
@@ -633,6 +703,44 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </Modal>
 
+      {/* 🚀 MODAL PARA ESCRIBIR EL MENSAJE DE IT SUPPORT */}
+      <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>Soporte Técnico / IT</ThemedText>
+              <TouchableOpacity onPress={() => setShowITSupportModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={Colors[localTheme].text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#B0BEC5' : '#666', marginBottom: 15 }}>
+              Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
+            </ThemedText>
+
+            <TextInput 
+              value={itMessage}
+              onChangeText={setItMessage}
+              placeholder="¿Qué inconveniente presentas?"
+              placeholderTextColor={isDark ? '#666' : '#999'}
+              multiline
+              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 12, borderRadius: 12, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+            />
+
+            <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 14, overflow: 'hidden' }}>
+              <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>
+                  {isSendingIT ? "Enviando..." : "Enviar a Soporte IT"}
+                </ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🚀 MODAL DE NOTIFICACIONES */}
       <Modal animationType="slide" transparent={true} visible={notifModalVisible} onRequestClose={() => setNotifModalVisible(false)}>
         <View style={styles.notifModalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNotifModalVisible(false)} />
@@ -648,7 +756,6 @@ export default function Header({ title }: { title?: string }) {
                 </TouchableOpacity>
                 
                 <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>{t.headertab.notification}</ThemedText>
-                
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>

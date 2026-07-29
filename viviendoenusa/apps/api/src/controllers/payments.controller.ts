@@ -47,7 +47,7 @@ export const approveGenericPayment = async (paymentId: string) => {
         .returning(); // Trae la fila actualizada
 
       // 🚀 Ahora imprimimos el resultado exacto, no la transacción entera
-      console.log("✅ Fila de pago actualizada:", updatedPayment[0]);
+      //console.log("✅ Fila de pago actualizada:", updatedPayment[0]);
 
       switch (payment.entityType) {
         case 'lawyer':

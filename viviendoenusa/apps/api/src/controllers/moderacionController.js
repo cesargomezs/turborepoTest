@@ -20,7 +20,7 @@ const validarImagen = async (req, res) => {
             (p.className === 'Porn' || p.className === 'Hentai') && p.probability > threshold
         );
 
-        console.log(`🔍 Validación completa. ¿Es segura?: ${isSafe}`);
+        //console.log(`🔍 Validación completa. ¿Es segura?: ${isSafe}`);
         return res.json({ isSafe });
 
     } catch (error) {

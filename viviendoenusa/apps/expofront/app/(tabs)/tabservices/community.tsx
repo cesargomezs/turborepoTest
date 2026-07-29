@@ -926,9 +926,12 @@ export default function CommunityScreen() {
                 </View>
 
                 <TextInput 
-                  value={postText} onChangeText={setPostText} 
+                  value={postText}
                   placeholder={t.communitytab.messageNewPost} placeholderTextColor={Colors.iconInactive} 
-                  multiline style={{ color: Colors.text, backgroundColor: Colors.inputBg, borderRadius: 18, padding: 15, fontSize: 15, fontWeight: '600', borderColor: Colors.border, borderWidth: 1, height: 120, textAlignVertical: 'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  onChangeText={(text) => setPostText(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')}
+                  multiline 
+                  autoCapitalize="sentences"
+                  style={{ color: Colors.text, backgroundColor: Colors.inputBg, borderRadius: 18, padding: 15, fontSize: 15, fontWeight: '400', borderColor: Colors.border, borderWidth: 1, height: 120, textAlignVertical: 'top', marginBottom: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                 />
 
                 {selectedImage && (
