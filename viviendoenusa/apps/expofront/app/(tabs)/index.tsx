@@ -36,6 +36,18 @@ import { toggleAuth, setUserMetadata, useMockDispatch, useMockSelector } from '.
 import { useTranslation } from '../../hooks/useTranslation';
 import { useAppTheme } from '../src/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { createClient } from '@supabase/supabase-js'; 
+
+// 🚀 CREDENCIALES DE SUPABASE 🚀
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+// Inicializamos el cliente de Supabase con las credenciales
+const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null;
+
+const NOMBRE_BUCKET = 'images'; 
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -51,13 +63,51 @@ if (Platform.OS !== 'web') {
   });
 }
 
-const SERVICES_DATA = [
-  { id: '1', img: "https://raw.githubusercontent.com/cesargomezs/monorepoempty/refs/heads/main/shell/apps/web/src/assets/images/0.png", title: "Emprendimientos", desc: "Impulsa tu negocio o descubre lo mejor del talento local." },
-  { id: '2', img: "https://raw.githubusercontent.com/cesargomezs/monorepoempty/refs/heads/main/shell/apps/web/src/assets/images/1.png", title: "Bolsa de Empleos", desc: "Encuentra el trabajo ideal o contrata personal de confianza." },
-  { id: '3', img: "https://raw.githubusercontent.com/cesargomezs/monorepoempty/refs/heads/main/shell/apps/web/src/assets/images/2.png", title: "Eventos Locales", desc: "Asiste a encuentros culturales, talleres y eventos en tu ciudad." },
-  { id: '4', img: "https://raw.githubusercontent.com/cesargomezs/monorepoempty/refs/heads/main/shell/apps/web/src/assets/images/3.png", title: "Donaciones", desc: "Participa en nuestra red de apoyo e intercambio solidario." },
-  { id: '5', img: "https://raw.githubusercontent.com/cesargomezs/monorepoempty/refs/heads/main/shell/apps/web/src/assets/images/4.png", title: "Comunidad Viva", desc: "Crea lazos duraderos y siéntete como en casa, estés donde estés." },
+// 🚀 ESTRUCTURA INICIAL DE RUTAS (Rutas internas de Supabase) 🚀
+const INITIAL_SERVICES_DATA = [
+  { id: '1', path: `logoorimages/0.webp`, title: "Emprendimientos", desc: "Impulsa tu negocio o descubre lo mejor del talento local.", img: '' },
+  { id: '2', path: `logoorimages/1.webp`, title: "Bolsa de Empleos", desc: "Encuentra el trabajo ideal o contrata personal de confianza.", img: '' },
+  { id: '3', path: `logoorimages/2.webp`, title: "Eventos Locales", desc: "Asiste a encuentros culturales, talleres y eventos en tu ciudad.", img: '' },
+  { id: '4', path: `logoorimages/3.webp`, title: "Donaciones", desc: "Participa en nuestra red de apoyo e intercambio solidario.", img: '' },
+  { id: '5', path: `logoorimages/4.webp`, title: "Comunidad Viva", desc: "Crea lazos duraderos y siéntete como en casa, estés donde estés.", img: '' },
 ];
+
+// 🚀 COMPONENTE DE ESTADÍSTICA ANIMADA (SOCIAL PROOF) 🚀
+const AnimatedStat = ({ endValue, label, icon, isDark }: { endValue: number, label: string, icon: string, isDark: boolean }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const duration = 2000; 
+    const increment = endValue / (duration / 16); 
+    
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= endValue) {
+        setCount(endValue);
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(start));
+      }
+    }, 16);
+
+    return () => clearInterval(timer);
+  }, [endValue]);
+
+  return (
+    <View style={{ alignItems: 'center', padding: 20, minWidth: 150 }}>
+      <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.1)', padding: 15, borderRadius: 50, marginBottom: 15 }}>
+        <MaterialCommunityIcons name={icon as any} size={36} color="#FF5F6D" />
+      </View>
+      <Text style={{ fontSize: 42, fontWeight: '900', color: isDark ? '#FFFFFF' : '#1E3A8A' }}>
+        {count.toLocaleString()}+
+      </Text>
+      <Text style={{ fontSize: 16, fontWeight: '600', color: isDark ? '#B0BEC5' : '#607D8B', marginTop: 5 }}>
+        {label}
+      </Text>
+    </View>
+  );
+};
 
 export default function HomeScreen() {
   const router = useRouter(); 
@@ -98,6 +148,13 @@ export default function HomeScreen() {
     email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() 
   });
 
+  // 🚀 ESTADO PARA LAS ESTADÍSTICAS REALES
+  const [platformStats, setPlatformStats] = useState({ users: 1250, jobs: 340, companies: 180 });
+
+  // 🚀 ESTADOS PARA LAS IMÁGENES FIRMADAS DE SUPABASE 🚀
+  const [mainLogoUrl, setMainLogoUrl] = useState<string>('');
+  const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
+
   const dispatch = useMockDispatch();
   const { t } = useTranslation();
 
@@ -111,6 +168,60 @@ export default function HomeScreen() {
       }
     }, [isWebPlatform])
   );
+
+  // 🚀 CARGA ASÍNCRONA DE IMÁGENES FIRMADAS 🚀
+  useEffect(() => {
+    const loadSignedImages = async () => {
+      if (!supabase) return;
+      
+      try {
+        // 1. Cargamos el background/logo
+        const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); // 7 días de validez
+        if (logoData?.signedUrl) {
+          setMainLogoUrl(logoData.signedUrl);
+        }
+
+        // 2. Cargamos las tarjetas de servicios del carrusel
+        const signedServices = await Promise.all(
+          INITIAL_SERVICES_DATA.map(async (service) => {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
+            return { ...service, img: data?.signedUrl || '' };
+          })
+        );
+        
+        setServicesData(signedServices);
+      } catch (error) {
+        console.error("❌ Error cargando imágenes de Supabase:", error);
+      }
+    };
+
+    loadSignedImages();
+  }, []);
+
+  // 🚀 CONSULTA DE ESTADÍSTICAS EN TIEMPO REAL
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        const response = await fetch(`${API_URL}/auth/stats`); 
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPlatformStats({
+            users: data.users > 0 ? data.users : 1250,
+            jobs: data.jobs > 0 ? data.jobs : 340,
+            companies: data.companies > 0 ? data.companies : 180
+          });
+        }
+      } catch (error) {
+        console.log("Aviso: Usando estadísticas por defecto (Error de conexión)");
+      }
+    };
+    
+    if (isWebPlatform && showWebLanding && !loggedIn) {
+      fetchStats();
+    }
+  }, [loggedIn, showWebLanding, isWebPlatform]);
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
@@ -126,12 +237,12 @@ export default function HomeScreen() {
     
   const getCardHeight = () => {
     if (isWebPlatform) return undefined; 
-    if (isRegistering) return height * 0.88;
+    if (isRegistering) return height * 0.92; 
     if (loggedIn) return isAndroid ? height * 0.67 : height * 0.69;
-    return height * 0.68; 
+    return height * 0.72; 
   };
   const finalCardHeight = getCardHeight();
-  const dynamicMinHeight = (!loggedIn && !isRegistering) ? height * 0.68 : undefined;
+  const dynamicMinHeight = (!loggedIn && !isRegistering) ? height * 0.72 : undefined;
   const verticalOffset = loggedIn ? (isWebPlatform ? -90 : (isIOS ? -85 : -100)) : 0;
 
   const DynamicColors = {
@@ -151,21 +262,29 @@ export default function HomeScreen() {
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
 
   useEffect(() => {
-    if (!showWebLanding || loggedIn) return;
+    if (!showWebLanding || loggedIn || servicesData.length === 0) return;
+    
+    // Solo iniciamos el carrusel si la primera imagen ya tiene URL
+    if (!servicesData[0].img) return;
+
     const interval = setInterval(() => {
       setCurrentSlide(prev => {
-        const nextSlide = (prev + 1) % SERVICES_DATA.length;
-        carouselRef.current?.scrollToIndex({ index: nextSlide, animated: true });
+        const nextSlide = (prev + 1) % servicesData.length;
+        if (carouselRef.current) {
+          carouselRef.current.scrollToIndex({ index: nextSlide, animated: true });
+        }
         return nextSlide;
       });
     }, 4500); 
     return () => clearInterval(interval);
-  }, [showWebLanding, loggedIn]); 
+  }, [showWebLanding, loggedIn, servicesData]); 
 
   const handleNextSlide = () => {
     setCurrentSlide(prev => {
-      const next = Math.min(SERVICES_DATA.length - 1, prev + 1);
-      carouselRef.current?.scrollToIndex({ index: next, animated: true });
+      const next = Math.min(servicesData.length - 1, prev + 1);
+      if (carouselRef.current) {
+        carouselRef.current.scrollToIndex({ index: next, animated: true });
+      }
       return next;
     });
   };
@@ -173,7 +292,9 @@ export default function HomeScreen() {
   const handlePrevSlide = () => {
     setCurrentSlide(prev => {
       const prevSlide = Math.max(0, prev - 1);
-      carouselRef.current?.scrollToIndex({ index: prevSlide, animated: true });
+      if (carouselRef.current) {
+        carouselRef.current.scrollToIndex({ index: prevSlide, animated: true });
+      }
       return prevSlide;
     });
   };
@@ -468,14 +589,55 @@ export default function HomeScreen() {
   };
 
   // =========================================================================
-  // VISTA 1: LANDING PAGE WEB PÚBLICA (NO LOGUEADO)
+  // VISTA 1: LANDING PAGE WEB PÚBLICA (NO LOGUEADO) - OPTIMIZADA PARA SEO & IA
   // =========================================================================
   if (isWebPlatform && showWebLanding && !loggedIn) {
     return (
       <>
+        {/* 🚀 ETIQUETAS SEO, OPEN GRAPH & DATOS ESTRUCTURADOS DE IA 🚀 */}
         <Head>
           <title>Viviendo en USA | La App de la Comunidad Hispana</title>
+          
+          <meta name="description" content="Únete a Viviendo en USA, la red principal para la comunidad hispana. Encuentra abogados, médicos, emprendimientos, red de apoyo, empleos y negocios locales." />
+          <meta name="keywords" content="hispanos en usa, comunidad latina, abogados para hispanos, asesoría legal, red de apoyo, emprendimientos latinos, buscar empleo, negocios hispanos, servicios médicos, latinos en estados unidos, directorio hispano" />
+          <meta name="robots" content="index, follow" />
+          
+          <meta property="og:title" content="Viviendo en USA | Directorio y Comunidad Hispana" />
+          <meta property="og:description" content="Encuentra abogados, emprendimientos, red de apoyo y oportunidades para la comunidad hispana en Estados Unidos." />
+          <meta property="og:type" content="website" />
+          <meta property="og:url" content="https://viviendoenusa.app" />
+          <meta property="og:image" content={mainLogoUrl} />
+          
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content="Viviendo en USA | Directorio Hispano" />
+          <meta name="twitter:description" content="Encuentra abogados, emprendimientos, empleos y red de apoyo para latinos en USA." />
+          <meta name="twitter:image" content={mainLogoUrl} />
+          
+          <script 
+            type="application/ld+json" 
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "SoftwareApplication",
+                "name": "Viviendo en USA",
+                "operatingSystem": "Web, iOS, Android",
+                "applicationCategory": "SocialNetworkingApplication",
+                "description": "Plataforma y directorio para hispanos en Estados Unidos. Incluye abogados, servicios de salud, red de apoyo, emprendimientos, bolsa de empleo y eventos locales.",
+                "keywords": "abogados, red de apoyo, emprendimientos, hispanos, latinos, empleos, negocios, salud, usa",
+                "offers": {
+                  "@type": "Offer",
+                  "price": "0",
+                  "priceCurrency": "USD"
+                },
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Viviendo en USA"
+                }
+              })
+            }} 
+          />
         </Head>
+
         <ScrollView 
           ref={landingScrollRef}
           style={{ flex: 1, backgroundColor: '#13112E' }} 
@@ -508,7 +670,7 @@ export default function HomeScreen() {
                 Conectando corazones, celebrando cultura y construyendo futuro juntos. Un espacio donde cada voz cuenta y cada historia importa.
               </Text>
 
-              <TouchableOpacity onPress={scrollToBottom} style={{ alignSelf: 'flex-start' }}>
+              <TouchableOpacity accessibilityRole="button" onPress={scrollToBottom} style={{ alignSelf: 'flex-start' }}>
                 <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primaryWrapper}>
                   <View style={styles.gradientContainer}>
                     <Text style={styles.primaryText}>:: Únete ahora ::</Text>
@@ -519,32 +681,44 @@ export default function HomeScreen() {
           </View>
 
           <View style={{ paddingVertical: 80, paddingHorizontal: 20, alignItems: 'center', backgroundColor: isDark ? '#111827' : '#FFFFFF' }}>
-            <Text style={{ fontSize: isLargeWeb ? 40 : 30, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 50, textAlign: 'center' }}>
+            <Text accessibilityRole="header" aria-level={2} style={{ fontSize: isLargeWeb ? 40 : 30, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 50, textAlign: 'center' }}>
               Acerca de nosotros
             </Text>
 
             <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: 30, maxWidth: 1100, width: '100%', justifyContent: 'center' }}>
               <View style={[styles.aboutCard, { backgroundColor: DynamicColors.cardBg, borderColor: DynamicColors.border }]}>
                  <MaterialCommunityIcons name="bullseye-arrow" size={50} color="#3B82F6" style={{ marginBottom: 20 }} />
-                 <Text style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.about?.vision || 'Visión'}</Text>
+                 <Text accessibilityRole="header" aria-level={3} style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.hometab?.vision || 'Visión'}</Text>
                  <Text style={[styles.aboutCardText, { color: DynamicColors.subtext }]}>
-                   {t?.about?.visiondesc || 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.'}
+                   {t?.hometab?.visiondesc || 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.'}
                  </Text>
               </View>
 
               <View style={[styles.aboutCard, { backgroundColor: DynamicColors.cardBg, borderColor: DynamicColors.border }]}>
                  <MaterialCommunityIcons name="rocket-launch" size={50} color="#F59E0B" style={{ marginBottom: 20 }} />
-                 <Text style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.about?.mission || 'Misión'}</Text>
+                 <Text accessibilityRole="header" aria-level={3} style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.hometab?.mission || 'Misión'}</Text>
                  <Text style={[styles.aboutCardText, { color: DynamicColors.subtext }]}>
-                   {t?.about?.missiondesc || 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.'}
+                   {t?.hometab?.missiondesc || 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.'}
                  </Text>
               </View>
             </View>
           </View>
 
+          <View style={{ paddingVertical: 60, backgroundColor: isDark ? '#1F2937' : '#F8FAFC', alignItems: 'center', borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
+            <Text accessibilityRole="header" aria-level={2} style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 40, textAlign: 'center', paddingHorizontal: 20 }}>
+              El impacto de nuestra red en tiempo real
+            </Text>
+            
+            <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: isLargeWeb ? 60 : 30, justifyContent: 'center', alignItems: 'center' }}>
+              <AnimatedStat endValue={platformStats.users} label="Miembros Activos" icon="account-group" isDark={isDark} />
+              <AnimatedStat endValue={platformStats.jobs} label="Oportunidades de Empleo" icon="briefcase-search" isDark={isDark} />
+              <AnimatedStat endValue={platformStats.companies} label="Negocios Conectados" icon="storefront" isDark={isDark} />
+            </View>
+          </View>
+
           <View style={{ paddingVertical: 80, backgroundColor: isDark ? '#1F2937' : '#F1F5F9', alignItems: 'center', width: '100%' }}>
             <View style={{ maxWidth: 800, paddingHorizontal: 20, marginBottom: 40, alignItems: 'center' }}>
-               <Text style={{ fontSize: isLargeWeb ? 36 : 28, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 15, textAlign: 'center' }}>
+               <Text accessibilityRole="header" aria-level={2} style={{ fontSize: isLargeWeb ? 36 : 28, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 15, textAlign: 'center' }}>
                  Explora Nuestros Servicios
                </Text>
                <Text style={{ fontSize: 16, color: DynamicColors.subtext, textAlign: 'center', lineHeight: 24 }}>
@@ -554,57 +728,82 @@ export default function HomeScreen() {
 
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingHorizontal: 10 }}>
               {isWebPlatform && width > 768 && (
-                 <TouchableOpacity onPress={handlePrevSlide} style={styles.carouselArrowButton}>
+                 <TouchableOpacity accessibilityRole="button" onPress={handlePrevSlide} style={styles.carouselArrowButton}>
                     <MaterialCommunityIcons name="chevron-left" size={30} color={isDark ? '#FFF' : '#1A1A1A'} />
                  </TouchableOpacity>
               )}
 
               <View style={{ width: width > 768 ? '85%' : '100%', maxWidth: 1200 }}>
-                <FlatList
-                  ref={carouselRef}
-                  data={SERVICES_DATA}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  snapToInterval={FULL_ITEM_WIDTH} 
-                  snapToAlignment="start"
-                  decelerationRate="fast"
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={{ paddingHorizontal: width > 768 ? 10 : 20, paddingBottom: 20 }}
-                  onScroll={(event) => {
-                    const index = Math.round(event.nativeEvent.contentOffset.x / FULL_ITEM_WIDTH);
-                    if (index !== currentSlide && index >= 0 && index < SERVICES_DATA.length) {
-                      setCurrentSlide(index);
-                    }
-                  }}
-                  scrollEventThrottle={16}
-                  renderItem={({ item }) => (
-                    <View style={{ width: CAROUSEL_ITEM_WIDTH, marginRight: SPACING, borderRadius: 24, overflow: 'hidden', backgroundColor: DynamicColors.cardBg, elevation: 5, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, borderColor: DynamicColors.border, borderWidth: 1 }}>
-                        <Image source={{ uri: item.img }} style={{ width: '100%', height: 200 }} resizeMode="cover" />
-                        <View style={{ padding: 24 }}>
-                          <Text style={{ fontSize: 20, fontWeight: '800', color: '#FF5F6D', marginBottom: 10 }}>{item.title}</Text>
-                          <Text style={{ fontSize: 14, color: DynamicColors.subtext, lineHeight: 22 }}>{item.desc}</Text>
-                        </View>
-                    </View>
-                  )}
-                />
+                {servicesData[0]?.img ? (
+                  <FlatList
+                    ref={carouselRef}
+                    data={servicesData}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    snapToInterval={FULL_ITEM_WIDTH} 
+                    snapToAlignment="start"
+                    decelerationRate="fast"
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={{ paddingHorizontal: width > 768 ? 10 : 20, paddingBottom: 20 }}
+                    getItemLayout={(data, index) => ({
+                      length: FULL_ITEM_WIDTH,
+                      offset: FULL_ITEM_WIDTH * index,
+                      index,
+                    })}
+                    onScrollToIndexFailed={(info) => {
+                      const wait = new Promise(resolve => setTimeout(resolve, 100));
+                      wait.then(() => {
+                        if (carouselRef.current) {
+                          carouselRef.current.scrollToIndex({ index: info.index, animated: true });
+                        }
+                      });
+                    }}
+                    onScroll={(event) => {
+                      const index = Math.round(event.nativeEvent.contentOffset.x / FULL_ITEM_WIDTH);
+                      if (index !== currentSlide && index >= 0 && index < servicesData.length) {
+                        setCurrentSlide(index);
+                      }
+                    }}
+                    scrollEventThrottle={16}
+                    renderItem={({ item }) => (
+                      <View style={{ width: CAROUSEL_ITEM_WIDTH, marginRight: SPACING, borderRadius: 24, overflow: 'hidden', backgroundColor: DynamicColors.cardBg, elevation: 5, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, borderColor: DynamicColors.border, borderWidth: 1 }}>
+                          {item.img ? (
+                             <Image source={{ uri: item.img }} style={{ width: '100%', height: 200 }} resizeMode="cover" accessibilityLabel={item.title} />
+                          ) : (
+                             <View style={{ width: '100%', height: 200, backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color="#FF5F6D" />
+                             </View>
+                          )}
+                          <View style={{ padding: 24 }}>
+                            <Text accessibilityRole="header" aria-level={3} style={{ fontSize: 20, fontWeight: '800', color: '#FF5F6D', marginBottom: 10 }}>{item.title}</Text>
+                            <Text style={{ fontSize: 14, color: DynamicColors.subtext, lineHeight: 22 }}>{item.desc}</Text>
+                          </View>
+                      </View>
+                    )}
+                  />
+                ) : (
+                  <View style={{ height: 300, justifyContent: 'center', alignItems: 'center' }}>
+                     <ActivityIndicator size="large" color="#FF5F6D" />
+                  </View>
+                )}
               </View>
 
               {isWebPlatform && width > 768 && (
-                 <TouchableOpacity onPress={handleNextSlide} style={styles.carouselArrowButton}>
+                 <TouchableOpacity accessibilityRole="button" onPress={handleNextSlide} style={styles.carouselArrowButton}>
                     <MaterialCommunityIcons name="chevron-right" size={30} color={isDark ? '#FFF' : '#1A1A1A'} />
                  </TouchableOpacity>
               )}
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 10, gap: 8 }}>
-              {SERVICES_DATA.map((_, idx) => (
+              {servicesData.map((_, idx) => (
                 <View key={idx} style={{ width: currentSlide === idx ? 24 : 8, height: 8, borderRadius: 4, backgroundColor: currentSlide === idx ? '#FF5F6D' : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)') }} />
               ))}
             </View>
           </View>
 
           <View style={{ backgroundColor: DynamicColors.heroBg, paddingVertical: 80, paddingHorizontal: 20, alignItems: 'center' }}>
-            <Text style={{ fontSize: 32, fontWeight: '900', color: DynamicColors.text, marginBottom: 5, textAlign: 'center' }}>
+            <Text accessibilityRole="header" aria-level={2} style={{ fontSize: 32, fontWeight: '900', color: DynamicColors.text, marginBottom: 5, textAlign: 'center' }}>
               Viviendo en <Text style={{ color: '#FF5F6D' }}>USA</Text>
             </Text>
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#F5A623', marginBottom: 25, textAlign: 'center' }}>
@@ -615,7 +814,7 @@ export default function HomeScreen() {
             </Text>
 
             <View style={[styles.landingButtonsContainer, { flexDirection: width > 900 ? 'row' : 'column' }]}>
-              <TouchableOpacity onPress={() => window.open('https://apps.apple.com/', '_blank')} style={styles.storeButtonBlackBig}>
+              <TouchableOpacity accessibilityRole="link" onPress={() => window.open('https://apps.apple.com/', '_blank')} style={styles.storeButtonBlackBig}>
                 <MaterialCommunityIcons name="apple" size={32} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
                   <Text style={styles.storeButtonSubBig}>Descárgalo en el</Text>
@@ -623,7 +822,7 @@ export default function HomeScreen() {
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => window.open('https://play.google.com/store/', '_blank')} style={styles.storeButtonBlackBig}>
+              <TouchableOpacity accessibilityRole="link" onPress={() => window.open('https://play.google.com/store/', '_blank')} style={styles.storeButtonBlackBig}>
                 <MaterialCommunityIcons name="google-play" size={28} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
                   <Text style={styles.storeButtonSubBig}>DISPONIBLE EN</Text>
@@ -631,7 +830,7 @@ export default function HomeScreen() {
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => setShowWebLanding(false)} style={[styles.storeButtonLightBig, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF', borderColor: DynamicColors.accent }]}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowWebLanding(false)} style={[styles.storeButtonLightBig, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF', borderColor: DynamicColors.accent }]}>
                 <MaterialCommunityIcons name="web" size={30} color={DynamicColors.accent} />
                 <View style={{ marginLeft: 12 }}>
                   <Text style={[styles.storeButtonSubBig, { color: DynamicColors.subtext }]}>Navegar en</Text>
@@ -643,7 +842,7 @@ export default function HomeScreen() {
 
           <View style={{ paddingVertical: 40, alignItems: 'center', backgroundColor: '#0B0A1D' }}>
              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 20 }}>
-                {t?.copyright || '© 2024 Viviendo en USA. Todos los derechos reservados.'}
+                {t?.hometab.copyright || '© 2024 Viviendo en USA. Todos los derechos reservados.'}
              </Text>
              <View style={{ width: 60, height: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
           </View>
@@ -661,17 +860,20 @@ export default function HomeScreen() {
     <>
       <Head>
         <title>{loggedIn ? 'Panel de Inicio | Viviendo en USA' : 'Ingresar | Viviendo en USA'}</title>
+        <meta name="robots" content={loggedIn ? "noindex, nofollow" : "index, follow"} />
       </Head>
       <RootComponent behavior={isIOS ? 'padding' : undefined} style={styles.container}>
         
         {/* FONDO GIGANTE DE MANOS: SÓLO APARECE SI NO ESTÁS LOGUEADO */}
         {isWebPlatform && !loggedIn && (
           <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
-            <Image 
-              source={require('../../assets/images/backgroundusajpg.jpg')} 
-              style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} 
-              resizeMode="cover" 
-            />
+            {mainLogoUrl ? (
+              <Image 
+                source={{ uri: mainLogoUrl }} 
+                style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} 
+                resizeMode="cover" 
+              />
+            ) : null}
             <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.2)' }]} />
           </View>
         )}
@@ -688,7 +890,7 @@ export default function HomeScreen() {
               { 
                 width: cardWidth, 
                 height: isWebPlatform ? undefined : finalCardHeight, 
-                minHeight: isWebPlatform ? (loggedIn ? 500 : (isRegistering ? 740 : 500)) : dynamicMinHeight, 
+                minHeight: isWebPlatform ? (loggedIn ? 500 : (isRegistering ? 760 : 520)) : dynamicMinHeight, 
                 borderColor: DynamicColors.border, 
                 backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent',
                 paddingBottom: loggedIn ? 20 : 15
@@ -712,7 +914,13 @@ export default function HomeScreen() {
                   {isLargeWeb && !loggedIn && (
                     <View style={[styles.webSidebar, { justifyContent: 'space-between', paddingBottom: 10 }]}>
                       <View>
-                        <Image source={require('../../assets/images/backgroundusajpg.jpg')} style={[styles.sidebarLogo, { width: 100, height: 100, borderRadius: 50 }]} resizeMode="cover" />
+                        {mainLogoUrl ? (
+                          <Image source={{ uri: mainLogoUrl }} style={[styles.sidebarLogo, { width: 100, height: 100, borderRadius: 50 }]} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.sidebarLogo, { width: 100, height: 100, borderRadius: 50, backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }]}>
+                            <ActivityIndicator size="small" color="#FF5F6D" />
+                          </View>
+                        )}
                         <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>Viviendo en USA</ThemedText>
                         <ThemedText style={{ color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>Portal de recursos</ThemedText>
 
@@ -758,11 +966,13 @@ export default function HomeScreen() {
                               shadowOpacity: 0.1,
                               shadowRadius: 10,
                             }}>
-                               <Image 
-                                  source={require('../../assets/images/backgroundusajpg.jpg')} 
-                                  style={{ width: '92%', height: '92%', borderRadius: 100 }} 
-                                  resizeMode="cover" 
-                               />
+                               {mainLogoUrl ? (
+                                 <Image 
+                                    source={{ uri: mainLogoUrl }} 
+                                    style={{ width: '92%', height: '92%', borderRadius: 100 }} 
+                                    resizeMode="cover" 
+                                 />
+                               ) : <ActivityIndicator size="small" color="#FF5F6D" />}
                             </View>
                             <ThemedText style={{ fontSize: 22, fontWeight: '800', color: DynamicColors.text, marginTop: 15 }}>
                               ¡Bienvenido! 👋
@@ -799,21 +1009,47 @@ export default function HomeScreen() {
                         </ScrollView>
                       </View>
                     ) : (
-                      // LOGIN / REGISTRO FORMULARIO LIMPIO Y DESAHOGADO
+                      // LOGIN / REGISTRO FORMULARIO
                       <View style={styles.loginFullContainer}>
                         <View style={{ flex: 1 }}>
                           
                           {isWebPlatform && (
-                            <TouchableOpacity onPress={() => setShowWebLanding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, paddingVertical: 4 }}>
+                            <TouchableOpacity onPress={() => setShowWebLanding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 2 }}>
                               <MaterialCommunityIcons name="arrow-left" size={18} color={DynamicColors.text} />
                               <Text style={{ color: DynamicColors.text, marginLeft: 5, fontWeight: '600', fontSize: 13 }}>Volver a la Portada</Text>
                             </TouchableOpacity>
                           )}
 
-                          {/* TÍTULO PRINCIPAL LIMPIO (SIN SUBTÍTULO SATURADO) */}
-                          <View style={styles.brandHeaderContainer}>
-                            <ThemedText style={[styles.brandMainTitle, { color: DynamicColors.text }]}>Viviendo en USA</ThemedText>
-                          </View>
+                          {/* 🚀 LOGO REDONDO DE VIVIENDO EN USA (SOLO PARA MÓVIL Y PANTALLAS PEQUEÑAS) 🚀 */}
+                          {!isLargeWeb && (
+                            <View style={styles.brandHeaderContainer}>
+                              <View style={{ 
+                                width: 72, 
+                                height: 72, 
+                                borderRadius: 36, 
+                                backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+                                justifyContent: 'center', 
+                                alignItems: 'center',
+                                borderWidth: 1.5,
+                                borderColor: DynamicColors.border,
+                                marginBottom: 6,
+                                elevation: 3,
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.1,
+                                shadowRadius: 4,
+                              }}>
+                                {mainLogoUrl ? (
+                                  <Image 
+                                    source={{ uri: mainLogoUrl }} 
+                                    style={{ width: '92%', height: '92%', borderRadius: 36 }} 
+                                    resizeMode="cover" 
+                                  />
+                                ) : <ActivityIndicator size="small" color="#FF5F6D" />}
+                              </View>
+                              <ThemedText style={[styles.brandMainTitle, { color: DynamicColors.text }]}>Viviendo en USA</ThemedText>
+                            </View>
+                          )}
 
                           {/* TABS SUPERIORES */}
                           <View style={styles.customTabsWrapper}>
@@ -835,7 +1071,7 @@ export default function HomeScreen() {
                             </TouchableOpacity>
                           </View>
 
-                          {/* 🚀 SCROLLVIEW CON ESPACIADO INTERIOR ÓPTIMO PARA CELULARES Y WEB 🚀 */}
+                          {/* SCROLLVIEW CON ESPACIADO INTERIOR ÓPTIMO */}
                           <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, paddingBottom: 50, paddingTop: 2 }}>
                             <View style={styles.inputGap}>
                               {isRegistering ? (
@@ -888,7 +1124,7 @@ export default function HomeScreen() {
                               )}
                             </View>
 
-                            {/* BOTONES REDISEÑADOS CON EXCELENTE ESPACIADO */}
+                            {/* BOTONES REDISEÑADOS */}
                             <View style={styles.actionsContainer}>
                               <TouchableOpacity activeOpacity={0.85} onPress={handleAuthAction} disabled={isSubmitDisabled} style={[styles.primaryWrapper, isSubmitDisabled && { opacity: 0.4 }]}>
                                 <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
@@ -1048,9 +1284,9 @@ const styles = StyleSheet.create({
   separator: { width: '100%', height: 1, marginVertical: 10 },
   loginFullContainer: { flex: 1, width: '100%' },
   
-  // CABECERA LIMPIA Y ELEGANTE
-  brandHeaderContainer: { alignItems: 'center', marginBottom: 32, marginTop: 6 },
-  brandMainTitle: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
+  // CABECERA LIMPIA
+  brandHeaderContainer: { alignItems: 'center', marginBottom: 10, marginTop: 2 },
+  brandMainTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
   
   customTabsWrapper: {
     flexDirection: 'row',

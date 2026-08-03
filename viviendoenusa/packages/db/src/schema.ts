@@ -40,6 +40,7 @@ import {
     verifiedAt: timestamp("verified_at"),
     failedLoginAttempts: integer('failed_login_attempts').default(0),
     isLocked: boolean('is_locked').default(false),
+    updatedAt: timestamp('updated_at').defaultNow().$onUpdateFn(() => new Date()),
   });
   
   // 1. TABLA: TYPE DETAIL

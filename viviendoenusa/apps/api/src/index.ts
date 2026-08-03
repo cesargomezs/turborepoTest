@@ -57,7 +57,7 @@ app.use(helmet({
 
 const allowedOrigins = [
   'http://localhost:8081', 
-  'http://192.168.1.203:8081', 
+  'http://192.168.252.243:8081', 
   'https://www.viviendoenusa.app',
   'https://viviendoenusa.app',
 ];
@@ -348,6 +348,6 @@ app.use(async (err: any, req: any, res: any, next: any) => {
 // ============================================================================
 // 🚀 INICIO DEL SERVIDOR
 // ============================================================================
-app.listen(Number(port), "192.168.1.203", () => {
+app.listen(Number(port), "192.168.252.243", () => {
   console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port} 🛡️`);
 });

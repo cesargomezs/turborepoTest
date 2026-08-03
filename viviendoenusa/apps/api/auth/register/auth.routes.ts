@@ -9,8 +9,10 @@ import {
   updatePassword,
   sendPasswordResetEmail // ⬅️ Faltaba importar esta función
   ,getMiPerfil,
-  saveDeviceToken
+  saveDeviceToken,
+  deleteUserAccount
 } from '../../src/controllers/authController';
+import { getPlatformStats } from 'src/controllers/publicController';
 
 const router = Router();
 
@@ -114,5 +116,10 @@ router.post('/save-device-token', verifyToken, saveDeviceToken);
 
 // 🔐 ACTUALIZAR LA CONTRASEÑA
 router.post('/update-password', updatePassword);
+
+// 🗑️ 2. RUTA PARA DAR DE BAJA / ELIMINAR CUENTA (Protegida)
+router.delete('/delete-account', verifyToken, deleteUserAccount);
+
+router.get('/stats', getPlatformStats);
 
 export default router;

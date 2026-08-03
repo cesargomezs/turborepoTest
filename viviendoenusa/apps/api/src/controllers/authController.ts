@@ -310,8 +310,6 @@ const transporter = nodemailer.createTransport({
 
 export const sendPasswordResetEmail = async (email: string) => {
   try {
-    //console.log("Solicitud de recuperación para:", email);
-
     // 1. Validar que el usuario exista
     const rows = await db.select().from(users).where(eq(users.email, email));
     const user = rows[0];
@@ -324,32 +322,53 @@ export const sendPasswordResetEmail = async (email: string) => {
       throw new Error("Esta cuenta usa autenticación de Google. Inicia sesión directamente con Google.");
     }
 
-    // 2. 🚨 TRUCO DE SEGURIDAD: Combinar el secreto del .env con el password actual
+    // 2. Combinar el secreto del .env con el password actual
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
 
-    // 3. Generar un token seguro firmado con ESA combinación (válido por 1 hora)
+    // 3. Generar un token seguro
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
 
-    // 4. Crear el enlace apuntando a tu IP local (o tu dominio web en producción)
-    const resetLink = `http://192.168.1.203:8081/ResetPassword?token=${resetToken}`;
+    // 4. Crear el enlace
+    const resetLink = `http://192.168.252.243:8081/ResetPassword?token=${resetToken}`;
+
+    const { data, error } = await supabase
+    .storage.from(NOMBRE_BUCKET).createSignedUrl('logo&images/backgroundusa.webp', 3600);
 
     const mailOptions = {
       from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
       to: user.email as string, 
       subject: 'Recuperación de Contraseña - Viviendo en USA',
       html: `
-        <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-          <h2>Recuperación de Contraseña</h2>
-          <p>Hola ${user.name},</p>
-          <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.</p>
-          <p>Haz clic en el botón de abajo para crear una nueva (este enlace expirará en 1 hora o al usarse):</p>
-          <br>
-          <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold;">
-            Restablecer Contraseña
-          </a>
-          <br><br>
-          <p>Si no solicitaste este cambio, simplemente ignora este correo.</p>
+        <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
+          <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            
+            <!-- 🚀 LOGO CARGADO DESDE SERVIDOR SEGURO 🚀 -->
+            <div style="margin-bottom: 20px;">
+              <img src="${data?.signedUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
+            </div>
+            
+            <h2 style="color: #1A1A1A; margin-bottom: 10px;">Recuperación de Contraseña</h2>
+            <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 15px;">Hola <strong>${user.name}</strong>,</p>
+            <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
+              Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.
+            </p>
+            
+            <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(255, 95, 109, 0.3);">
+              Restablecer Contraseña
+            </a>
+            
+            <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 20px;">
+              Este enlace expirará en 1 hora o después de ser utilizado.
+            </p>
+            <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 30px;">
+              Si no solicitaste este cambio, por favor ignora este correo. Tu cuenta seguirá segura.
+            </p>
+            
+            <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
+              &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
+            </div>
+          </div>
         </div>
       `
     };
@@ -467,5 +486,125 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error("Error al guardar el token del dispositivo:", error);
     return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
+  }
+};
+
+// --------------------------------------------------------
+// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (AUDITORÍA, ANONIMIZACIÓN Y CORREO)
+// --------------------------------------------------------
+export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: "No autorizado. Se requiere una sesión válida." });
+    }
+
+    // 1. Buscar al usuario antes de anonimizar para obtener su correo y foto
+    const [userRecord] = await db
+      .select({ email: users.email, name: users.name, imageUrl: users.imageUrl })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!userRecord) {
+      return res.status(404).json({ error: "Usuario no encontrado en la base de datos." });
+    }
+
+    // 2. Eliminar la foto física del Storage (Bucket) de Supabase si existe
+    if (userRecord.imageUrl && !userRecord.imageUrl.startsWith('http')) {
+      const filePath = userRecord.imageUrl.startsWith('users/') 
+        ? userRecord.imageUrl 
+        : `users/${userRecord.imageUrl.split('/').pop()}`;
+
+      await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]);
+    }
+
+    // 3. Registrar el evento en la Auditoría (Fecha, ID, Acción y Trama de respaldo)
+    const forwarded = req.headers?.['x-forwarded-for'];
+    const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const rawIp = ipString ? ipString.split(',')[0].trim() : req.socket?.remoteAddress || req.ip || '0.0.0.0';
+    const ipAddress = sanitizeText(rawIp);
+
+    logAuditEvent({
+      userId: userId,
+      action: 'DELETE_ACCOUNT_REQUEST',
+      entityType: 'auth',
+      entityId: userId,
+      ipAddress: ipAddress,
+      metadata: {
+        reason: "Solicitud voluntaria de baja de cuenta por parte del usuario",
+        deletedAt: new Date().toISOString(),
+        previousEmail: userRecord.email,
+        tramaAccion: "Anonimización de PII, limpieza de Storage y baja de Auth"
+      }
+    });
+
+    // 4. Anonimizar el perfil en la Base de Datos (Salvando reseñas)
+    await db
+      .update(users)
+      .set({
+        name: "Usuario",
+        lastName: "Anónimo",
+        email: `deleted_${userId}@viviendoenusa.app`,
+        phone: null,
+        zip: null,
+        imageUrl: null,
+        estate: null,
+        password: null,
+        isLocked: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    // 5. Eliminar credenciales de Supabase Auth
+    await supabase.auth.admin.deleteUser(userId);
+
+    // 6. Enviar correo electrónico de despedida con formato HTML
+    if (userRecord.email && !userRecord.email.includes('deleted_')) {
+      try {
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('logo&images/backgroundusa.webp', 3600);
+        const mailOptions = {
+          from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
+          to: userRecord.email,
+          subject: 'Lamentamos que te vayas - Viviendo en USA',
+          html: `
+            <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
+              <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <!-- Logo circular o imagen representativa -->
+                <div style="margin-bottom: 20px;">
+                  <img src="https://raw.githubusercontent.com/cesargomezs/monorepoempty/refs/heads/main/shell/apps/web/src/assets/images/backgroundusajpg.jpg" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
+                </div>
+                <h2 style="color: #1A1A1A; margin-bottom: 10px;">¡Te extrañaremos, ${userRecord.name}!</h2>
+                <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
+                  Hemos procesado la baja de tu cuenta exitosamente. Tus datos personales y accesos han sido eliminados de nuestros sistemas de acuerdo con tus preferencias.
+                </p>
+                <p style="font-size: 14px; color: #888888; line-height: 20px; margin-bottom: 30px;">
+                  Si en el futuro deseas regresar y ser parte nuevamente de nuestra comunidad hispana, las puertas de <strong>Viviendo en USA</strong> estarán abiertas para ti.
+                </p>
+                <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
+                  &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
+                </div>
+              </div>
+            </div>
+          `
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log("✅ [DELETE ACCOUNT] Correo de despedida enviado con éxito.");
+      } catch (mailError) {
+        console.warn("⚠️ [DELETE ACCOUNT] No se pudo enviar el correo de despedida, pero la cuenta fue dada de baja:", mailError);
+      }
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      message: "Cuenta dada de baja correctamente." 
+    });
+
+  } catch (error: any) {
+    console.error("❌ [DELETE ACCOUNT] Error crítico:", error);
+    return res.status(500).json({ error: `Error interno del servidor: ${error.message}` });
   }
 };

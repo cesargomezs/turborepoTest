@@ -138,7 +138,8 @@ export const translations = {
         ready: "Listo",   
         missiondesc: "Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.",
         vision: "Nuestra Visión",
-        visiondesc: "Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local y facilitando un ecosistema de intercambio y colaboración."
+        visiondesc: "Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local y facilitando un ecosistema de intercambio y colaboración.",
+        copyright: "© 2025 ViviendoEnUSA. Todos los derechos reservados.",
     },
     servicestab:{
       service1: "Abogados",
@@ -595,7 +596,8 @@ export const translations = {
         ready: "Ready", 
         missiondesc: "Create more united, participative and supportive communities, where every resident feels connected, safe and proud of their neighborhood.",
         vision: "Our Vision",
-        visiondesc: "Strengthen local economies by connecting residents with the businesses and services in their neighborhood, promoting local consumption and facilitating an ecosystem of exchange and collaboration."
+        visiondesc: "Strengthen local economies by connecting residents with the businesses and services in their neighborhood, promoting local consumption and facilitating an ecosystem of exchange and collaboration.",
+        copyright: "© 2025 ViviendoEnUSA. All rights reserved.",
     },
     servicestab:{
       service1: "Lawyers",

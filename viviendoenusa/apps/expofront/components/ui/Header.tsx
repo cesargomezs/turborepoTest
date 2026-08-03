@@ -24,6 +24,7 @@ const API_NOTIFICATIONS_URL = `${API_BASE_URL}/notifications`;
 const API_USERS_URL = `${API_BASE_URL}/auth/profile`; 
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
 const API_UPLOAD_URL = `${API_BASE_URL}/api/subir-imagen-optimizada/users`; 
+const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`; // 🚀 Endpoint para dar de baja la cuenta
 
 // ==========================================
 // 🚀 COMPONENTE: ITEM DESLIZABLE (SWIPE TO DELETE)
@@ -78,7 +79,7 @@ const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, 
 
 export default function Header({ title }: { title?: string }) {
   // 🔐 ESTADO GLOBAL DE AUTENTICACIÓN
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth(); // Incluimos logout para limpiar sesión al dar de baja
 
   const REAL_USER_ID = user?.id;
 
@@ -190,9 +191,6 @@ export default function Header({ title }: { title?: string }) {
     }
   }, [pathname]);
 
-  // =================================================================
-  // 🚀 CONSULTA DE NOTIFICACIONES CORREGIDA (SE DISPARA AL CARGAR EL ID)
-  // =================================================================
   const fetchNotifications = async () => {
     if (!REAL_USER_ID || !token) return;
 
@@ -212,7 +210,6 @@ export default function Header({ title }: { title?: string }) {
       }
 
       const data = await res.json();
-     //console.log(data);
       
       let fetchedNotifs: any[] = [];
       if (Array.isArray(data)) {
@@ -223,7 +220,6 @@ export default function Header({ title }: { title?: string }) {
         fetchedNotifs = data.notifications;
       }
 
-      // 🚀 Ordenar tipando explícitamente (a: any, b: any) para cumplir con TypeScript
       fetchedNotifs.sort((a: any, b: any) => {
         const dateA = new Date(a.createdAt || a.created_at || a.visibleAt || 0).getTime();
         const dateB = new Date(b.createdAt || b.created_at || b.visibleAt || 0).getTime();
@@ -236,7 +232,6 @@ export default function Header({ title }: { title?: string }) {
     }
   };
 
-  // Se ejecuta cada vez que el ID de usuario o el token se vuelvan válidos tras el login
   useEffect(() => {
     if (REAL_USER_ID && token) {
       fetchNotifications();
@@ -245,7 +240,6 @@ export default function Header({ title }: { title?: string }) {
     }
   }, [REAL_USER_ID, token]);
 
-  // Validar si hay notificaciones sin leer contemplando todas las variantes de nombres de columnas
   const hasUnread = notifications.some(n => n.read === false || n.isRead === false || n.is_read === false);
 
   const getNotificationIcon = (type: string) => {
@@ -327,6 +321,68 @@ export default function Header({ title }: { title?: string }) {
       Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo.");
     } finally {
       setIsSendingIT(false);
+    }
+  };
+
+  // =====================================================================
+  // 🚀 FUNCIÓN PARA DAR DE BAJA LA CUENTA (MANTIENE RESEÑAS ANÓNIMAS)
+  // =====================================================================
+  const handleDeleteAccount = () => {
+    const confirmTitle = "Eliminar Cuenta Definitivamente";
+    const confirmMessage = "⚠️ Esta acción es irreversible. Se borrarán tus datos personales y credenciales de acceso de nuestros servidores, aunque tus reseñas y publicaciones permanecerán de forma anónima en la comunidad.";
+
+    const executeDelete = async () => {
+      try {
+        const response = await fetch(API_DELETE_ACCOUNT_URL, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo eliminar la cuenta. Intenta más tarde.");
+        }
+
+        if (isWeb) {
+          window.alert("Tu cuenta y datos personales han sido eliminados con éxito.");
+        } else {
+          Alert.alert("Cuenta Eliminada", "Tus datos personales han sido borrados con éxito.");
+        }
+        
+        closeSettingsModal();
+        if (typeof logout === 'function') {
+          await logout();
+        }
+        router.replace('/');
+        
+      } catch (error: any) {
+        if (isWeb) {
+          window.alert(`Error: ${error.message}`);
+        } else {
+          Alert.alert("Error", error.message);
+        }
+      }
+    };
+
+    if (isWeb) {
+      if (window.confirm(`${confirmTitle}\n\n${confirmMessage}`)) {
+        executeDelete();
+      }
+    } else {
+      Alert.alert(
+        confirmTitle,
+        confirmMessage,
+        [
+          { text: "Cancelar", style: "cancel" },
+          { 
+            text: "Sí, eliminar mi cuenta", 
+            style: "destructive", 
+            onPress: () => executeDelete() 
+          }
+        ]
+      );
     }
   };
 
@@ -711,6 +767,30 @@ export default function Header({ title }: { title?: string }) {
                   </LinearGradient>
                 </TouchableOpacity>
 
+                {/* 🚀 BOTÓN PARA DAR DE BAJA / ELIMINAR CUENTA (CUMPLE CON REQUISITOS DE APPLE/GOOGLE) */}
+                {!isCreatingUser && (
+                  <TouchableOpacity 
+                    onPress={handleDeleteAccount} 
+                    style={{ 
+                      marginTop: 25, 
+                      paddingVertical: 15, 
+                      paddingHorizontal: 20, 
+                      borderRadius: 16, 
+                      borderWidth: 1, 
+                      borderColor: '#EF4444', 
+                      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)', 
+                      flexDirection: 'row', 
+                      alignItems: 'center', 
+                      justifyContent: 'center' 
+                    }}
+                  >
+                    <MaterialCommunityIcons name="delete-forever" size={22} color="#EF4444" />
+                    <ThemedText style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 15, marginLeft: 10 }}>
+                      Eliminar mi cuenta y datos
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
@@ -778,7 +858,6 @@ export default function Header({ title }: { title?: string }) {
                     const iconConfig = getNotificationIcon(notif.type);
                     const isRead = notif.read === true || notif.isRead === true || notif.is_read === true;
                     const timeString = notif.time || notif.createdAt || notif.created_at || notif.visibleAt || '';
-                    //const displayTime = timeString ? new Date(timeString).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';  
                     const displayTime = notif.time || '';
 
                     return (
