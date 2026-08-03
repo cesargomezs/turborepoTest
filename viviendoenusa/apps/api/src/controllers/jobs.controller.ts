@@ -1,48 +1,117 @@
 import { db } from "../../../../packages/db/src"; 
-import { jobs, users, rating as ratingTable, reviews as reviewsTable, notifications, tariffs, typeDetail, companies } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and } from "drizzle-orm";
+import { jobs, users, rating as ratingTable, reviews as reviewsTable, notifications, tariffs, typeDetail, companies, userDevices } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
-import { imag } from "@tensorflow/tfjs";
-import NodeGeocoder from 'node-geocoder';
+import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
-
-// Configuración global del Geocoder (Provider gratuito)
-const geocoder = NodeGeocoder({
-  provider: 'openstreetmap'
-});
-
-// Función que sí utiliza 'geocoder'
-const getCoordsFromZip = async (zip: string) => {
-  try {
-    // 🚀 AQUÍ SE USA 'geocoder', por eso ya no dará error de TS(6133)
-    const res = await geocoder.geocode(`${zip}, USA`);
-    if (res && res.length > 0) {
-      return { lat: res[0].latitude, lng: res[0].longitude };
-    }
-  } catch (err) {
-    console.error("Error al geocodificar:", err);
-  }
-  // Coordenadas por defecto si el zip no se encuentra
-  return { lat: 34.0934, lng: -117.5847 };
-};
-
+// =====================================================================
+// ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
+// =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
 const ANON_UUID = "bb50c6a4-d284-4cdd-8263-cf6b4a74de25";
-const TEMP_USER_ID = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
+// =====================================================================
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
+// =====================================================================
+const getCoordsFromZip = (zip: string) => {
+  if (!zip) return { lat: 34.0934, lng: -117.5847 };
+  
+  // 🚀 bypass de TypeScript con as any
+  const locationInfo = zipcodes.lookup(zip as any);
+  
+  if (locationInfo) {
+    return { 
+      lat: locationInfo.latitude, 
+      lng: locationInfo.longitude 
+    };
+  }
+  
+  return { lat: 34.0934, lng: -117.5847 };
+};
+
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any): string => {
   if (typeof str !== 'string') return '';
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🔍 1. CONSULTA GENERAL (Candado de Empresa Aprobada Integrado)
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// ============================================================================
+const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH MASIVO EMPLEOS] Ningún usuario cercano tiene dispositivos registrados.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "job", referenceId: payload.referenceId },
+    }));
+
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    console.log(`📱 [PUSH MASIVO EMPLEOS] Enviando ${messages.length} notificaciones en la zona...`);
+
+    for (const chunk of chunks) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✅ [PUSH MASIVO EMPLEOS] ¡Envío completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH MASIVO EMPLEOS] Error enviando notificaciones:", error);
+  }
+};
+
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL CON FILTRO DE RADIO Y CANDADO DE EMPRESA
+// =====================================================================
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) : '';
+
+    // 🚀 Lógica Base: Candado de Empresa Aprobada
+    let baseConditions = currentUserId 
+      ? sql`(${jobs.userId} = ${currentUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)))`
+      : sql`(${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL))`;
+
+    let finalConditions: any = baseConditions;
+
+    // 🚀 Lógica de Geofencing Súper Rápida
+    if (zip && zip.length === 5) {
+      const nearbyZips = zipcodes.radius(zip as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        finalConditions = and(baseConditions, inArray(jobs.zip, nearbyZips as string[]));
+      } else {
+        finalConditions = and(baseConditions, eq(jobs.zip, zip));
+      }
+    }
 
     let query = db
     .select()
@@ -51,18 +120,8 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(users, eq(ratingTable.userId, users.id))
     .leftJoin(companies, eq(jobs.companyId, companies.id))
-    .where(
-      // 🚀 MAGIA: Si el usuario es el dueño, la ve. Si no, DEBE estar abierta y la empresa APROBADA.
-      currentUserId 
-        ? sql`${jobs.userId} = ${currentUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL))`
-        : sql`${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)`
-    )
-    .orderBy(desc(jobs.createdAt))
-    .$dynamic();
-
-    if (zip && zip.length === 5) {
-      query = query.where(sql`${jobs.zip}::text = ${zip}`); 
-    }
+    .where(finalConditions)
+    .orderBy(desc(jobs.createdAt));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -87,7 +146,7 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
       if (row.rating && row.rating.id) {
         const commentText = row.reviews ? (row.reviews as any).review || (row.reviews as any).text || (row.reviews as any).comment || '' : '';
         const reviewUserId = row.reviews ? (row.reviews as any).userId : null;
-        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name  + ' ' + row.users?.lastName?.substring(0,1) || 'Anónimo');
+        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name  + ' ' + (row.users?.lastName ? row.users.lastName.substring(0,1) : '') || 'Anónimo');
 
         const { data, error } = await supabase
         .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
@@ -129,6 +188,9 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
   }
 };
 
+// =====================================================================
+// 🔍 2. CONSULTA INDIVIDUAL POR ID
+// =====================================================================
 export const getJobById = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -159,7 +221,7 @@ export const getJobById = async (id: string) => {
       if (row.rating && row.rating.id) {
         const commentText = row.reviews ? (row.reviews as any).review || (row.reviews as any).text || (row.reviews as any).comment || '' : '';
         const reviewUserId = row.reviews ? (row.reviews as any).userId : null;
-        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name + ' ' + row.users?.lastName || 'Anónimo');
+        const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0,1) : '') || 'Anónimo');
 
         const { data, error } = await supabase
         .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
@@ -192,17 +254,28 @@ export const getJobById = async (id: string) => {
   }
 };
 
+// =====================================================================
+// 📥 3. CREAR OFERTA DE EMPLEO
+// =====================================================================
 export const createJob = async (data: any) => {
   try {
-    return await db.transaction(async (tx) => {
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
+    const validUserId = sanitizeText(data.userId);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para publicar un empleo.");
+    }
+
+    let pushNotificationData: any = null;
+
+    const newJobResult = await db.transaction(async (tx) => {
       
       const safeDesc = sanitizeText(data.descriptionJob || data.description);
       const companyId = sanitizeText(data.companyId);
 
       if (!companyId) throw new Error("Debes seleccionar una empresa registrada para publicar un empleo.");
 
-      // 🚀 Llamamos a la función que SÍ usa el geocoder
-      //const { lat, lng } = await getCoordsFromZip(data.zip);
+      // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
+      const { lat, lng } = getCoordsFromZip(data.zip || '');
 
       const jobPayload: any = {
         nameJobs: sanitizeText(data.nameJobs || data.title) || 'Sin título',
@@ -220,24 +293,62 @@ export const createJob = async (data: any) => {
         salaryMin: sanitizeText(data.salaryMin),
         salaryMax: sanitizeText(data.salaryMax),
         descriptionJob: safeDesc,
-        //lat: lat,
-        //lng: lng,
+        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD DIRECTAMENTE
+        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD DIRECTAMENTE
         isOpen: data.isOpen !== undefined ? data.isOpen : true,
-        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
         userNameId: sanitizeText(data.userNameId || data.userName) || 'Anónimo',
         approved: true, 
       };
 
       const [newJob] = await tx.insert(jobs).values(jobPayload).returning();
 
-      await tx.insert(notifications).values({
-        title: "¡Nueva Oferta de Empleo! 💼",
-        description: `${jobPayload.company} busca: ${jobPayload.title}. ¡Aplica ya!`,
-        type: "job", 
-        visibleAt: new Date(), 
-        userId: jobPayload.userId || TEMP_USER_ID, 
-        referenceId: String(newJob.id)
-      });
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL CREAR LA OFERTA
+      console.log("✅ [DEBUG PUSH EMPLEOS] Oferta publicada. Calculando candidatos en zona...");
+
+      const titleText = "¡Nueva Oferta de Empleo! 💼";
+      const bodyText = `${jobPayload.company} busca: ${jobPayload.title}. ¡Aplica ya!`;
+      
+      let usersToNotify: { id: string }[] = [];
+
+      if (jobPayload.zip) {
+        const nearbyZips = zipcodes.radius(jobPayload.zip as any, Number(radiusMiles)); 
+
+        if (nearbyZips && nearbyZips.length > 0) {
+          usersToNotify = await tx.select({ id: users.id })
+                                  .from(users)
+                                  .where(inArray(users.zip, nearbyZips as string[]));
+        } else {
+          usersToNotify = await tx.select({ id: users.id })
+                                  .from(users)
+                                  .where(eq(users.zip, String(jobPayload.zip)));
+        }
+      }
+
+      if (usersToNotify.length > 0) {
+        const notificationsToInsert = usersToNotify.map(u => {
+          const payload: any = {
+            title: titleText,
+            description: bodyText,
+            type: "job", 
+            visibleAt: new Date(), 
+            userId: u.id,
+            isRead: false
+          };
+          if ('referenceId' in notifications) payload.referenceId = String(newJob.id);
+          else if ('reference_id' in notifications) payload.reference_id = String(newJob.id);
+          return payload;
+        });
+
+        await tx.insert(notifications).values(notificationsToInsert);
+
+        pushNotificationData = {
+          title: titleText,
+          body: bodyText,
+          referenceId: String(newJob.id),
+          userIds: usersToNotify.map(u => u.id) 
+        };
+      }
 
       return {
          ...newJob,
@@ -245,11 +356,24 @@ export const createJob = async (data: any) => {
          descriptionJob: safeDesc
       };
     });
+
+    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH] Falló el Push Notification de empleos:", err);
+      });
+    }
+
+    return newJobResult;
+
   } catch (error: any) { 
     throw new Error(`Error al crear la oferta de empleo: ${error.message}`);
   }
 };
 
+// =====================================================================
+// 🔄 4. ACTUALIZAR OFERTA DE EMPLEO
+// =====================================================================
 export const updateJob = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
@@ -257,12 +381,12 @@ export const updateJob = async (id: string, data: any) => {
 
     return await db.transaction(async (tx) => {
       
-      const allowedFields = ['nameJobs', 'title', 'company', 'companyId', 'category', 'stateCountry', 'city', 'zip', 'contactMethod', 'phoneCode', 'phone', 'shifts', 'salaryMin', 'salaryMax', 'descriptionJob', 'isOpen'];
+      const allowedFields = ['nameJobs', 'title', 'company', 'companyId', 'category', 'stateCountry', 'city', 'zip', 'contactMethod', 'phoneCode', 'phone', 'shifts', 'salaryMin', 'salaryMax', 'descriptionJob', 'isOpen', 'lat', 'lng'];
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
         if (data[key] !== undefined) {
-           updatePayload[key] = data[key];
+           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : data[key];
         }
       }
 
@@ -285,9 +409,19 @@ export const updateJob = async (id: string, data: any) => {
   }
 };
 
+// =====================================================================
+// 🚀 5. INGRESO DE RATING Y RESEÑA
+// =====================================================================
 export const createJobReview = async (data: any) => {
   try {
-    const realUserId = sanitizeText(data.userId) || TEMP_USER_ID; 
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID (A menos que sea Anónimo voluntario)
+    const realUserId = sanitizeText(data.userId);
+    if (!realUserId && data.isAnonymous !== true) {
+        throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
+    }
+    
+    // Si la sesión es válida pero elige ser anónimo en la UI, el sistema usará el UUID Anónimo internamente para la visualización, pero debe rastrear la reseña.
+    const trackingUserId = realUserId || ANON_UUID;
     const targetJobId = sanitizeText(data.reference_id || data.referenceId);
 
     if (!targetJobId) throw new Error("No se envió el ID de la vacante.");
@@ -299,24 +433,26 @@ export const createJobReview = async (data: any) => {
     }
     const resolvedCompanyId = targetJob[0].companyId;
 
-    const existingRating = await db.select({ id: ratingTable.id })
-      .from(ratingTable)
-      .innerJoin(jobs, eq(ratingTable.referenceId, jobs.id))
-      .where(
-        and(
-          eq(ratingTable.userId, realUserId),
-          eq(jobs.companyId, resolvedCompanyId)
+    if (trackingUserId !== ANON_UUID) {
+      const existingRating = await db.select({ id: ratingTable.id })
+        .from(ratingTable)
+        .innerJoin(jobs, eq(ratingTable.referenceId, jobs.id))
+        .where(
+          and(
+            eq(ratingTable.userId, trackingUserId),
+            eq(jobs.companyId, resolvedCompanyId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (existingRating && existingRating.length > 0) {
-        throw new Error("ALREADY_REVIEWED");
+      if (existingRating && existingRating.length > 0) {
+          throw new Error("ALREADY_REVIEWED");
+      }
     }
 
     const ratingPayload: any = {
       rating: String(Number(data.stars || data.rating || 5)), 
-      userId: realUserId, 
+      userId: trackingUserId, 
     };
 
     if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'jobs';
@@ -331,7 +467,7 @@ export const createJobReview = async (data: any) => {
     let savedComment = '';
     const incomingText = sanitizeText(data.comment || data.text || data.review);
     
-    const reviewUserId = data.isAnonymous === true ? ANON_UUID : realUserId;
+    const reviewUserId = data.isAnonymous === true ? ANON_UUID : trackingUserId;
     let assignedUserName = 'Anónimo'; 
 
     if (incomingText && incomingText !== '') {
@@ -356,8 +492,8 @@ export const createJobReview = async (data: any) => {
       savedComment = (reviewRows[0] as any).comment || (reviewRows[0] as any).text || (reviewRows[0] as any).review || '';
     }
 
-    if (data.isAnonymous !== true) {
-      const userObj = await db.select({ name: users.name }).from(users).where(eq(users.id, realUserId)).limit(1);
+    if (data.isAnonymous !== true && trackingUserId !== ANON_UUID) {
+      const userObj = await db.select({ name: users.name }).from(users).where(eq(users.id, trackingUserId)).limit(1);
       if (userObj.length > 0 && userObj[0].name) assignedUserName = userObj[0].name;
       else assignedUserName = sanitizeText(data.userName) || 'Cesar Gomez';
     }
@@ -374,6 +510,9 @@ export const createJobReview = async (data: any) => {
   }
 };
 
+// =====================================================================
+// 🗑️ 6. ELIMINAR OFERTA DE EMPLEO
+// =====================================================================
 export const deleteJob = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);

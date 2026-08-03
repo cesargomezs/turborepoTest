@@ -1,52 +1,47 @@
 import { db } from "../../../../packages/db/src"; 
-import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and } from "drizzle-orm";
+import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
 import { imag } from "@tensorflow/tfjs";
-import NodeGeocoder from 'node-geocoder';
 import { logAuditEvent } from "src/services/audit.service";
-
-// Configuración global del Geocoder (Provider gratuito)
-const geocoder = NodeGeocoder({
-  provider: 'openstreetmap'
-});
-
-// Función para convertir ZIP a coordenadas (Lat, Lng)
-const getCoordsFromZip = async (zip: string) => {
-  try {
-    const res = await geocoder.geocode(`${zip}, USA`);
-    if (res && res.length > 0) {
-      return { lat: res[0].latitude, lng: res[0].longitude };
-    }
-  } catch (err) {
-    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
-  }
-  
-  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
-  return { lat: 34.0934, lng: -117.5847 };
-};
+import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
-
-// 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
-const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+// =====================================================================
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
+// =====================================================================
+const getCoordsFromZip = (zip: string) => {
+  if (!zip) return { lat: 34.0934, lng: -117.5847 };
+  
+  // 🚀 bypass de TypeScript con as any
+  const locationInfo = zipcodes.lookup(zip as any);
+  
+  if (locationInfo) {
+    return { 
+      lat: locationInfo.latitude, 
+      lng: locationInfo.longitude 
+    };
+  }
+  
+  return { lat: 34.0934, lng: -117.5847 };
+};
+
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
-// 🚀 CORRECCIÓN: Ahora filtra por el año actual en el campo 'plan_type'
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
 const getCurrentLawyerPrice = async () => {
   try {
-    // Obtener el año actual dinámicamente (ej: "2024")
     const currentYear = new Date().getFullYear().toString();
 
     const activeTariff = await db.select({ price: tariffs.priceBasic })
@@ -70,56 +65,87 @@ const getCurrentLawyerPrice = async () => {
   return "50.00";
 };
 
-// 🔍 1. CONSULTA GENERAL
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// ============================================================================
+const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH MASIVO] Ningún usuario cercano tiene dispositivos registrados.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "lawyer", referenceId: payload.referenceId },
+    }));
+
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    console.log(`📱 [PUSH MASIVO] Se enviarán ${messages.length} notificaciones a celulares cercanos...`);
+
+    for (const chunk of chunks) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✅ [PUSH MASIVO] ¡Envío geolocalizado completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH MASIVO] Error enviando notificaciones:", error);
+  }
+};
+
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL (Refactorizada con zipcodes)
+// =====================================================================
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
 
-    // Obtenemos lat y lng del ZIP
-    const { lat, lng } = await getCoordsFromZip(cleanZipParam || ''); 
-    const radiusMiles = 4; // Definimos el radio
+    let baseConditions = currentUserId 
+      ? sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${currentUserId})`
+      : sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW())`;
 
-    // 🚀 1. Fórmula de Distancia Haversine (Segura para Drizzle ORM)
-    const distanceFormula = sql`(
-      3959 * acos(
-        LEAST(1.0, GREATEST(-1.0,
-          cos(radians(${lat}::numeric)) * cos(radians(${lawyers.lat}::numeric)) * cos(radians(${lawyers.lng}::numeric) - radians(${lng}::numeric)) + 
-          sin(radians(${lat}::numeric)) * sin(radians(${lawyers.lat}::numeric))
-        ))
-      )
-    )`;
+    let finalConditions: any = baseConditions;
+
+    // 🚀 LÓGICA DE GEOFENCING SÚPER RÁPIDA
+    if (cleanZipParam && cleanZipParam.length === 5) {
+      const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        finalConditions = and(baseConditions, inArray(lawyers.zip, nearbyZips as string[]));
+      } else {
+        finalConditions = and(baseConditions, eq(lawyers.zip, cleanZipParam));
+      }
+    }
 
     let query = db
-    .select()
-    .from(lawyers)
-    .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
-    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
-    .leftJoin(users, eq(ratingTable.userId, users.id))
-    .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
-    .where(
-      currentUserId 
-        ? sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${currentUserId}`
-        : sql`${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW()`
-    )
-    .orderBy(desc(lawyers.createdAt))
-    .$dynamic();
-
-    // 3. Aplicamos filtros de manera acumulativa
-    if (cleanZipParam && cleanZipParam.length === 5) {
-      query = query.where(
-        and(
-          sql`${distanceFormula} <= ${radiusMiles}`
-          //,eq(lawyers.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021')
-        )
-      );
-      // Ordenamos por distancia (más cerca primero)
-      query = query.orderBy(distanceFormula);
-    } else {
-      // Si no hay zip, solo filtramos por estado
-      //query = query.where(eq(lawyers.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'));
-      query = query.orderBy(desc(lawyers.timepostEnd));
-    }
+      .select()
+      .from(lawyers)
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+      .leftJoin(users, eq(ratingTable.userId, users.id))
+      .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
+      .where(finalConditions)
+      .orderBy(desc(lawyers.timepostEnd)); 
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -146,12 +172,11 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         const { data, error } = await supabase
         .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
         
-
         lawyersMap.get(lawyerId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
-           name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+           name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
            image: data?.signedUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
@@ -177,8 +202,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       if (lawyer.imageUrl && lawyer.imageUrl.trim() !== '' && !lawyer.imageUrl.startsWith('http')) {
           const rutaArchivo = lawyer.imageUrl.startsWith('lawyers/') 
               ? lawyer.imageUrl : `lawyers/${lawyer.imageUrl}`;
-
-          //console.log("🔑 Generando URL firmada para:", rutaArchivo);
           
           const { data, error } = await supabase
               .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
@@ -188,11 +211,8 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
           }
       }
 
-      
       return { ...lawyer, image: lawyer.imageUrl }; 
     }));
-
-    //console.log("✅ Abogados obtenidos:", finalResult);
 
     return finalResult;
   } catch (error: any) {
@@ -201,7 +221,9 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
   }
 };
 
+// =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID
+// =====================================================================
 export const getLawyerByIdWithReviews = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -212,7 +234,6 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       .from(lawyers)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-          // 👇 ASÍ QUEDA EL JOIN CORREGIDO 👇
       .leftJoin(users, eq(ratingTable.userId, users.id))
       .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
       .where(eq(lawyers.id, cleanId));
@@ -228,7 +249,6 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     };
 
     for (const row of rows) {
-
       const { data, error } = await supabase
       .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
@@ -238,14 +258,13 @@ export const getLawyerByIdWithReviews = async (id: string) => {
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+          name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
           image: data?.signedUrl,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
       }
-
     }
-    //lawyerFinal.amount = lawyerFinal.;
+
     lawyerFinal.totalReviews = lawyerFinal.reviews.length;
     if (lawyerFinal.totalReviews > 0) {
       const sum = lawyerFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
@@ -272,9 +291,7 @@ export const getLawyerByIdWithReviews = async (id: string) => {
         lawyerFinal.image = lawyerFinal.imageUrl;
     }
     
-    lawyerFinal.amount=lawyerFinal.payment.amount;
-
-    //console.log("✅ Abogado obtenido por ID:", lawyerFinal);
+    lawyerFinal.amount = lawyerFinal.payment?.amount;
 
     return lawyerFinal;
   } catch (error: any) {
@@ -282,28 +299,34 @@ export const getLawyerByIdWithReviews = async (id: string) => {
   }
 };
 
-// 📥 3. CREAR ABOGADO (Con extracción de ESTATE y respuestas de Express)
+// =====================================================================
+// 📥 3. CREAR ABOGADO
+// =====================================================================
 export const createLawyer = async (req: Request, res: Response) => {
   const reqAny = req as any;
   const resAny = res as any;
   const data = reqAny.body || {};
   
-  // Extraemos el estado directamente de los headers
   const headerEstate = reqAny.headers?.['estate'] || reqAny.headers?.['Estate'];
 
   try {
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
+    const validUserId = sanitizeText(data.userId);
+    if (!validUserId) {
+      return resAny.status(400).json({ error: "El ID del usuario es obligatorio para registrar un abogado." });
+    }
+
     let cleanImage = sanitizeText(data.imageUrl) || '';
     if (cleanImage.startsWith('lawyers/')) {
       cleanImage = cleanImage.replace('lawyers/', '');
     }
 
     const createdLawyerResult = await db.transaction(async (tx) => {
-
-      const { lat, lng } = await getCoordsFromZip(data.zip || '');
+      // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
+      const { lat, lng } = getCoordsFromZip(data.zip || '');
       
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
-      // Sanitizamos el estado, o usamos 'CA' por defecto
       const finalEstate = sanitizeText(headerEstate) || 'CA';
 
       const lawyerPayload: any = {
@@ -315,12 +338,12 @@ export const createLawyer = async (req: Request, res: Response) => {
         imageUrl: cleanImage,
         description: safeDesc,
         descriptionLawy: safeDesc,
-        lat: data.lat ? Number(data.lat) : null,
-        lng: data.lng ? Number(data.lng) : null,
+        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD DIRECTAMENTE
+        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD DIRECTAMENTE
         premiumPlan: planSeleccionado, 
-        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
         approved: false,
-        estate: finalEstate // Guardamos el Estado
+        estate: finalEstate 
       };
       
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
@@ -361,7 +384,9 @@ export const createLawyer = async (req: Request, res: Response) => {
   }
 };
 
-// 🔄 4. ACTUALIZAR ABOGADO (Con Auditoría y Tipos Seguros)
+// =====================================================================
+// 🔄 4. ACTUALIZAR ABOGADO Y NOTIFICAR
+// =====================================================================
 export const updateLawyer = async (req: Request, res: Response) => {
   const reqAny = req as any;
   const resAny = res as any;
@@ -374,13 +399,11 @@ export const updateLawyer = async (req: Request, res: Response) => {
       return resAny.status(400).json({ error: "ID inválido" });
     }
 
-    // 1. 🔍 OBTENER EL REGISTRO PREVIO ANTES DE ACTUALIZAR
     const [existingLawyer] = await db.select().from(lawyers).where(eq(lawyers.id, cleanId));
     if (!existingLawyer) {
       return resAny.status(404).json({ error: "Abogado no encontrado" });
     }
 
-    // 2. Obtener los pagos de forma segura
     let amount = 0;
     try {
       const resPayments = await fetch(`${process.env.EXPO_PUBLIC_URL_BACKEND || 'http://localhost:3000'}/lawyers/${cleanId}`);
@@ -391,6 +414,8 @@ export const updateLawyer = async (req: Request, res: Response) => {
     } catch (err) {
       console.warn("No se pudo obtener el pago de la API interna, usando 0 por defecto");
     }
+
+    let pushNotificationData: any = null;
 
     const updatedLawyerResult = await db.transaction(async (tx) => {
       
@@ -454,13 +479,11 @@ export const updateLawyer = async (req: Request, res: Response) => {
         
       const lawyer = updated[0];
 
-      // 🛡️ EXTRACCIÓN SEGURA DE LA IP PARA LA AUDITORÍA
       const forwarded = reqAny.headers?.['x-forwarded-for'];
       const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
       const rawIp = ipString ? ipString.split(',')[0].trim() : reqAny.ip || reqAny.connection?.remoteAddress || '0.0.0.0';
       const ipAddress = sanitizeText(rawIp);
 
-      // 🚀 REGISTRO DE AUDITORÍA CON EL ESTADO PREVIO Y NUEVO
       logAuditEvent({
         userId: reqAny.user?.id || lawyer?.userId, 
         action: 'UPDATE_LAWYER', 
@@ -474,23 +497,65 @@ export const updateLawyer = async (req: Request, res: Response) => {
         }
       });
 
-      if (isApproved && lawyer) {
-        const notifPayload: any = {
-            title: "¡Abogado Verificado! ⚖️",
-            description: `El abogado ${lawyer.nameLawy} ahora es parte de la red de servicios. ¡Visita su perfil!`,
-            type: "lawyer", 
-            visibleAt: new Date(), 
-            userId: lawyer.userId || 'TEMP_USER_ID', 
-        };
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
+      const wasApprovedBefore = existingLawyer.approved === true;
 
-        if ('referenceId' in notifications) notifPayload.referenceId = String(lawyer.id);
-        else if ('reference_id' in notifications) notifPayload.reference_id = String(lawyer.id);
+      if (isApproved && !wasApprovedBefore && lawyer) {
+        console.log("✅ [DEBUG PUSH] Abogado nuevo aprobado. Calculando usuarios locales...");
 
-        await tx.insert(notifications).values(notifPayload);
+        const titleText = "¡Nuevo Abogado en tu área! ⚖️";
+        const bodyText = `El abogado ${lawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
+
+        let usersToNotify: { id: string }[] = [];
+
+        if (lawyer.zip) {
+          const nearbyZips = zipcodes.radius(lawyer.zip as any, Number(radiusMiles)); 
+
+          if (nearbyZips && nearbyZips.length > 0) {
+            usersToNotify = await tx.select({ id: users.id })
+                                    .from(users)
+                                    .where(inArray(users.zip, nearbyZips as string[]));
+          } else {
+            usersToNotify = await tx.select({ id: users.id })
+                                    .from(users)
+                                    .where(eq(users.zip, String(lawyer.zip)));
+          }
+        }
+
+        if (usersToNotify.length > 0) {
+          const notificationsToInsert = usersToNotify.map(u => {
+            const payload: any = {
+              title: titleText,
+              description: bodyText,
+              type: "lawyer", 
+              visibleAt: new Date(), 
+              userId: u.id,
+              isRead: false
+            };
+            if ('referenceId' in notifications) payload.referenceId = String(lawyer.id);
+            else if ('reference_id' in notifications) payload.reference_id = String(lawyer.id);
+            return payload;
+          });
+
+          await tx.insert(notifications).values(notificationsToInsert);
+
+          pushNotificationData = {
+            title: titleText,
+            body: bodyText,
+            referenceId: String(lawyer.id),
+            userIds: usersToNotify.map(u => u.id) 
+          };
+        }
       }
 
       return lawyer || null;
     });
+
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH] Falló el Push Notification:", err);
+      });
+    }
 
     return resAny.status(200).json(updatedLawyerResult);
 
@@ -500,12 +565,15 @@ export const updateLawyer = async (req: Request, res: Response) => {
   }
 };
 
+// =====================================================================
 // 🚀 5. INGRESO DE RATING Y RESEÑA
+// =====================================================================
 export const createRating = async (data: any) => {
   try {
-    let validUserId = sanitizeText(data.userId) || null;
+    // 🚀 VALIDACIÓN ESTRICTA
+    const validUserId = sanitizeText(data.userId);
     if (!validUserId || validUserId.length < 20) {
-        validUserId = TEMP_USER_ID; 
+        throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
     }
 
     const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
@@ -589,7 +657,9 @@ export const createRating = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 🗑️ 6. ELIMINAR ABOGADO 
+// =====================================================================
 export const deleteLawyer = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -602,12 +672,20 @@ export const deleteLawyer = async (id: string) => {
   }
 };
 
+// =====================================================================
 // 🔄 7. RENOVAR ABOGADO
+// =====================================================================
 export const renewLawyer = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
     const refCode = sanitizeText(data.referenceCode);
     const payMethod = sanitizeText(data.paymentMethod);
+
+    // 🚀 VALIDACIÓN ESTRICTA
+    const validUserId = sanitizeText(data.userId);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para renovar.");
+    }
 
     if (!refCode || !payMethod || !cleanId) {
       throw new Error("Se requiere el código de referencia y método de pago.");
@@ -619,7 +697,7 @@ export const renewLawyer = async (id: string, data: any) => {
       await tx.insert(payments).values({
         entityType: 'lawyer',
         entityId: cleanId,
-        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
         referenceCode: refCode, 
         paymentMethod: payMethod, 
         amount: basePrice, 

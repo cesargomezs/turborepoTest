@@ -2,39 +2,46 @@ import { Response } from 'express';
 import { db } from "../../../../packages/db/src"; 
 import { notifications } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
-import { AuthRequest } from '../middleware/authMiddleware'; // ⬅️ Ajusta la ruta a tu middleware
+import { AuthRequest } from '../middleware/authMiddleware'; 
 
-// 🔍 OBTENER NOTIFICACIONES (Filtrado por token y fecha)
+// ⏱️ FUNCIÓN AUXILIAR: Calcula el tiempo relativo de forma amigable
+const formatRelativeTime = (dateInput: any) => {
+    if (!dateInput) return 'N/A';
+    
+    const notifDate = new Date(dateInput);
+    const now = new Date();
+    const diffMs = now.getTime() - notifDate.getTime();
+    
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return "hace un momento";
+    if (diffMins < 60) return `hace ${diffMins} min`;
+    if (diffHours < 24) return `hace ${diffHours} h`;
+    if (diffDays === 1) return "ayer";
+    if (diffDays < 7) return `hace ${diffDays} días`;
+    
+    // Si tiene más de una semana, devuelve "15 oct"
+    return notifDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+};
+
+// 🔍 OBTENER NOTIFICACIONES (Filtrado por token, sin restricción de tiempo)
 export const getNotifications = async (req: AuthRequest, res: Response) => {
-    // 🛡️ PROTECCIÓN CRÍTICA: Validamos que el middleware haya inyectado el usuario
     if (!req.user || !req.user.id) {
         return res.status(401).json({ error: "No autorizado: Usuario no identificado." });
     }
     try {
-      // 🔒 Tomamos el ID directamente del token verificado, no de la URL
       const userId = req.user.id; 
 
-      // 🚀 Usamos SQL puro para comparar con la fecha actual del servidor de base de datos
       const list = await db.select()
         .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, userId),
-            sql`visible_at <= CURRENT_TIMESTAMP` // SQL puro de Postgres, más robusto
-          )
-        )
+        .where(eq(notifications.userId, userId))
         .orderBy(desc(notifications.visibleAt));
-  
-      //console.log(`📊 [DEBUG] Notificaciones encontradas para ${userId}:`, list.length);
   
       const formattedList = list.map((notif: any) => {
           const rawDate = notif.visibleAt || notif.visible_at || notif.createdAt || notif.created_at;
           
-          let safeTime = 'N/A';
-          if (rawDate) {
-              safeTime = new Date(rawDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          }
-  
           return {
               id: notif.id,
               title: notif.title || 'Notificación',
@@ -42,7 +49,8 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
               type: notif.type || 'alert',
               referenceId: notif.referenceId || notif.reference_id || null,
               read: notif.isRead !== undefined ? notif.isRead : (notif.is_read || false),
-              time: safeTime
+              // 🚀 APLICAMOS LA FUNCIÓN DE TIEMPO RELATIVO AQUÍ
+              time: formatRelativeTime(rawDate)
           };
       });
 
@@ -56,7 +64,6 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
 // 👀 MARCAR COMO LEÍDA (Protegida)
 export const markNotificationAsRead = async (req: AuthRequest, res: Response) => {
     try {
-        // 🚀 SOLUCIÓN: Convertir explícitamente a string
         const userId = String(req.user.id); 
         const notificationId = String(req.params.id);
 
@@ -83,7 +90,6 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
 // 🗑️ ELIMINAR NOTIFICACIÓN (Protegida)
 export const deleteNotification = async (req: AuthRequest, res: Response) => {
     try {
-        // 🚀 SOLUCIÓN: Convertir explícitamente a string
         const userId = String(req.user.id); 
         const notificationId = String(req.params.id);
 

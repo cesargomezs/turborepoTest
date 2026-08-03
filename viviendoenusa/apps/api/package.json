@@ -32,7 +32,8 @@
     "node-geocoder": "^4.4.1",
     "nodemailer": "^9.0.3",
     "nsfwjs": "^4.2.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "zipcodes": "^8.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
@@ -44,6 +45,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/node-geocoder": "^4.2.6",
     "@types/nodemailer": "^8.0.1",
+    "@types/zipcodes": "^8.0.5",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },

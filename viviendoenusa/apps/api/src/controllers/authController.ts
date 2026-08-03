@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { users } from "../../../../packages/db/src/schema";
+import { users , userDevices} from "../../../../packages/db/src/schema";
 import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
@@ -332,7 +332,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
 
     // 4. Crear el enlace apuntando a tu IP local (o tu dominio web en producción)
-    const resetLink = `http://192.168.1.171:8081/ResetPassword?token=${resetToken}`;
+    const resetLink = `http://192.168.1.203:8081/ResetPassword?token=${resetToken}`;
 
     const mailOptions = {
       from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
@@ -424,3 +424,48 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// --------------------------------------------------------
+// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO
+// --------------------------------------------------------
+export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { token, deviceType } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "No autorizado." });
+    }
+
+    if (!token) {
+      return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
+    }
+
+    // Verificamos si el token ya existe en la base de datos
+    const existingDevice = await db.select()
+      .from(userDevices)
+      .where(eq(userDevices.expoPushToken, token))
+      .limit(1);
+
+    if (existingDevice.length > 0) {
+      // Si ya existe, actualizamos su fecha y lo asociamos al usuario actual por si cambió de cuenta
+      await db.update(userDevices)
+        .set({ 
+          userId: userId,
+          updatedAt: new Date() 
+        })
+        .where(eq(userDevices.expoPushToken, token));
+    } else {
+      // Si es un dispositivo nuevo, lo insertamos
+      await db.insert(userDevices).values({
+        userId: userId,
+        expoPushToken: token,
+        deviceType: deviceType || 'unknown',
+      });
+    }
+
+    return res.status(200).json({ message: "Dispositivo registrado con éxito." });
+  } catch (error: any) {
+    console.error("Error al guardar el token del dispositivo:", error);
+    return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
+  }
+};

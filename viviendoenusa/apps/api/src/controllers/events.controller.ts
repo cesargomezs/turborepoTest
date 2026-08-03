@@ -1,36 +1,33 @@
 import { db } from "../../../../packages/db/src"; 
-import { events, users, notifications, payments, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and } from "drizzle-orm"; 
+import { events, users, notifications, payments, tariffs, typeDetail, userDevices } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
-import NodeGeocoder from 'node-geocoder';
-
-
-// Configuración global del Geocoder (Provider gratuito)
-const geocoder = NodeGeocoder({
-  provider: 'openstreetmap'
-});
-
-// Función para convertir ZIP a coordenadas (Lat, Lng)
-const getCoordsFromZip = async (zip: string) => {
-  try {
-    const res = await geocoder.geocode(`${zip}, USA`);
-    if (res && res.length > 0) {
-      return { lat: res[0].latitude, lng: res[0].longitude };
-    }
-  } catch (err) {
-    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
-  }
-  
-  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
-  return { lat: 34.0934, lng: -117.5847 };
-};
-
+import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
+const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
+
+// =====================================================================
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
+// =====================================================================
+const getCoordsFromZip = (zip: string) => {
+  if (!zip) return { lat: 34.0934, lng: -117.5847 };
+  
+  // 🚀 bypass de TypeScript con as any
+  const locationInfo = zipcodes.lookup(zip as any);
+  
+  if (locationInfo) {
+    return { 
+      lat: locationInfo.latitude, 
+      lng: locationInfo.longitude 
+    };
+  }
+  
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any): string => {
@@ -52,14 +49,13 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
 const getCurrentEventPrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
 
     const activeTariff = await db.select({ price: tariffs.priceBasic })
     .from(tariffs)
-    // 🚀 FIX CRÍTICO: Forzamos el ::text para que Postgres no rechace el cruce UUID vs TEXT
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
     .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
     .where(
@@ -75,64 +71,96 @@ const getCurrentEventPrice = async () => {
       return activeTariff[0].price;
     }
   } catch (error) {
-    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $120.00 por defecto");
+    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $50.00 por defecto");
   }
   return "50.00";
 };
 
-// 🔍 1. CONSULTA GENERAL CON PAGOS Y DISTANCIA
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// ============================================================================
+const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH MASIVO EVENTOS] Ningún usuario cercano tiene dispositivos registrados.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "event", referenceId: payload.referenceId },
+    }));
+
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    console.log(`📱 [PUSH MASIVO EVENTOS] Enviando ${messages.length} notificaciones en la zona...`);
+
+    for (const chunk of chunks) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✅ [PUSH MASIVO EVENTOS] ¡Envío completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH MASIVO EVENTOS] Error enviando notificaciones:", error);
+  }
+};
+
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL (Optimizada con Geofencing Local)
+// =====================================================================
 export const getEvents = async (zip?: string) => {
   try {
-    // Sanitizamos el código postal
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
+    
+    // Condición base de visibilidad
+    let baseConditions = eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021');
+    let finalConditions: any = baseConditions;
 
-    // Obtenemos lat y lng del ZIP
-    const { lat, lng } = await getCoordsFromZip(cleanZipParam || ''); 
-    const radiusMiles = 4; // Definimos el radio
- 
-    // 🚀 1. Fórmula de Distancia Haversine (Segura para Drizzle ORM)
-    const distanceFormula = sql`(
-      3959 * acos(
-        LEAST(1.0, GREATEST(-1.0,
-          cos(radians(${lat}::numeric)) * cos(radians(${events.lat}::numeric)) * cos(radians(${events.lng}::numeric) - radians(${lng}::numeric)) + 
-          sin(radians(${lat}::numeric)) * sin(radians(${events.lat}::numeric))
-        ))
-      )
-    )`;
+    // 🚀 Lógica de Geofencing Súper Rápida
+    if (cleanZipParam && cleanZipParam.length === 5) {
+      const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
-    // 2. Construimos la consulta base
+      if (nearbyZips && nearbyZips.length > 0) {
+        finalConditions = and(baseConditions, inArray(events.zip, nearbyZips as string[]));
+      } else {
+        finalConditions = and(baseConditions, eq(events.zip, cleanZipParam));
+      }
+    }
+
     let query = db
       .select({
         events: events,
         users: users,
         payments: payments,
-        distance: distanceFormula.as('distance')
       })
       .from(events)
       .leftJoin(users, eq(events.userId, users.id)) 
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
-      .$dynamic(); 
-
-    // 3. Aplicamos filtros de manera acumulativa
-    if (cleanZipParam && cleanZipParam.length === 5) {
-      query = query.where(
-        and(
-          sql`${distanceFormula} <= ${radiusMiles}`,
-          eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021')
-        )
-      );
-      // Ordenamos por distancia (más cerca primero)
-      query = query.orderBy(distanceFormula);
-    } else {
-      // Si no hay zip, solo filtramos por estado
-      query = query.where(eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'));
-      query = query.orderBy(desc(events.timepostEnd));
-    }
+      .where(finalConditions)
+      .orderBy(desc(events.timepostEnd));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
-    // Mapeo final (se mantiene igual)
     return await Promise.all(rows.map(async (row: any) => {
         const dbEvent = row.events;
         const dbUser = row.users;
@@ -162,7 +190,9 @@ export const getEvents = async (zip?: string) => {
   }
 };
 
+// =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID CON PAGOS
+// =====================================================================
 export const getEventById = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -206,12 +236,21 @@ export const getEventById = async (id: string) => {
   }
 };
 
+// =====================================================================
 // 📥 3. CREAR EVENTO
+// =====================================================================
 export const createEvent = async (data: any) => {
   try {
     const cleanData = sanitizePayload(data);
-    // 🚀 Obtenemos las coordenadas a partir del ZIP y las guardamos
-    const { lat, lng } = await getCoordsFromZip(cleanData.zip || '');
+    
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID (Eliminada la falla del Fallback User)
+    const validUserId = sanitizeText(cleanData.userId);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para registrar un evento.");
+    }
+
+    // 🚀 Coordenadas sincrónicas locales
+    const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
 
     let cleanImage = cleanData.imageEven || '';
     if (typeof cleanImage === 'string' && cleanImage.startsWith('events/')) {
@@ -232,23 +271,20 @@ export const createEvent = async (data: any) => {
           descriptionEven: cleanData.descriptionEven || '',
           imageEven: cleanImage,
           locationEven: cleanData.locationEven || '',
-          lat: lat, // 🚀 Coordenada de latitud guardada
-          lng: lng, // 🚀 Coordenada de longitud guardada
+          lat: lat,
+          lng: lng,
           zip: cleanData.zip ? String(cleanData.zip).trim() : '',
           estate: cleanData.estate || '',
           phone: cleanData.phone || '',
           contactMethod: cleanData.contactMethod || 'whatsapp',
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
           premiumPlan: planSeleccionado,
+          userId: validUserId, // 🚀 SE USA EL ID VALIDADO Y SEGURO
           approved: false, 
         };
 
-        const fallbackUser = await db.select().from(users).limit(1);
-        payload.userId = cleanData.userId || (fallbackUser.length > 0 ? fallbackUser[0].id : '');
-
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
-        // 🚀 INSERCIÓN EN TABLA DE PAGOS (Dinámica)
         if (cleanData.referenceCode && cleanData.paymentMethod) {
             
             const today = new Date();
@@ -256,16 +292,13 @@ export const createEvent = async (data: any) => {
             const diffTime = eventDate.getTime() - today.getTime();
             const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-            // 💰 Obtenemos el precio desde la tabla tariffs para la categoría Events
-            //const currentPrice = await getCurrentEventPrice();
-
             await tx.insert(payments).values({
               entityType: 'event', 
               entityId: newEvent.id,
-              userId: payload.userId as string, 
+              userId: validUserId, 
               referenceCode: String(cleanData.referenceCode).trim(), 
               paymentMethod: String(cleanData.paymentMethod).trim(), 
-              amount: data.tariffPlan, // 🚀 Guardado del precio consultado
+              amount: data.tariffPlan || await getCurrentEventPrice(),
               durationDays: daysLeft, 
               timepost_end: eventDate,
               status: "pending"
@@ -280,29 +313,35 @@ export const createEvent = async (data: any) => {
     });
   } catch (error: any) { 
     console.error("❌ Error en createEvent:", error);
-    
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
        throw new Error("Ese código de referencia de pago ya fue utilizado.");
     }
-
     throw new Error(`Error al crear el evento: ${error.message}`);
   }
 };
 
+// =====================================================================
 // 🔄 4. ACTUALIZAR EVENTO Y PROGRAMAR NOTIFICACIONES
+// =====================================================================
 export const updateEvent = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
     const cleanPayload = sanitizePayload(data);
+    let pushNotificationData: any = null;
 
     if (cleanPayload.imageEven && typeof cleanPayload.imageEven === 'string' && cleanPayload.imageEven.startsWith('events/')) {
         cleanPayload.imageEven = cleanPayload.imageEven.replace('events/', '');
     }
     
-    return await db.transaction(async (tx) => {
-        // 🚀 ACTUALIZACIÓN DE FECHA: Reiniciamos createdAt al aprobar para saltar al top
+    // 🚀 Obtenemos el registro actual para validar si ya había sido aprobado
+    const [existingEvent] = await db.select().from(events).where(eq(events.id, cleanId));
+    if (!existingEvent) throw new Error("Evento no encontrado");
+    
+    const wasApprovedBefore = existingEvent.approved === true;
+
+    const eventResult = await db.transaction(async (tx) => {
         if (cleanPayload.approved === true) {
             cleanPayload.createdAt = new Date();
         }
@@ -312,12 +351,8 @@ export const updateEvent = async (id: string, data: any) => {
 
         if (!event) throw new Error("No se pudo encontrar el evento actualizado");
 
-        // ACTUALIZACIÓN DE PAGO AL APROBAR
         if (cleanPayload.approved === true) {
             const expirationDate = event.dateEvent ? new Date(event.dateEvent) : new Date();
-
-            // 💰 Nos aseguramos que el pago refleje la tarifa correcta al momento de la aprobación
-            const currentPrice = await getCurrentEventPrice();
 
             await tx.update(payments)
                 .set({ 
@@ -328,43 +363,29 @@ export const updateEvent = async (id: string, data: any) => {
                 .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));
         }
 
-        // 🚀 GENERAR NOTIFICACIONES
-        if (cleanPayload.approved === true && event && event.dateEvent) {
+        // 🚀 LÓGICA DE NOTIFICACIONES (Solo si se aprueba ahora mismo)
+        if (cleanPayload.approved === true && !wasApprovedBefore && event && event.dateEvent) {
             const today = new Date();
             const eventDate = new Date(event.dateEvent);
-            
             const diffTime = eventDate.getTime() - today.getTime();
             const totalDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            if (totalDaysLeft >= 0) {
-                let safeUserId = event.userId;
-                if (!safeUserId) {
-                    const fallbackUser = await db.select().from(users).limit(1);
-                    safeUserId = fallbackUser.length > 0 ? fallbackUser[0].id : '';
-                }
-
+            // 1. Recordatorios programados para el DUEÑO del evento (Si existe un ID válido)
+            if (totalDaysLeft >= 0 && event.userId) {
                 const notifsToInsert = [];
-                let hasTodayNotification = false;
-
-                // Ciclo normal de recordatorios programados
                 for (let i = 0; i <= totalDaysLeft; i++) {
                     const daysRemaining = totalDaysLeft - i;
                     const showDate = new Date(today.getTime() + (i * 24 * 60 * 60 * 1000));
-                    
                     let shouldCreate = false;
                     let message = "";
 
                     if (daysRemaining === 0) {
                         shouldCreate = true;
                         message = `¡Es hoy! No te pierdas: ${event.title}`;
-                        // Si el evento es hoy, marcamos que ya generamos la notificación de "hoy"
-                        if (i === 0) hasTodayNotification = true; 
-                    } 
-                    else if (daysRemaining > 0 && daysRemaining <= 10) {
+                    } else if (daysRemaining > 0 && daysRemaining <= 10) {
                         shouldCreate = true;
                         message = `¡Faltan solo ${daysRemaining} días para ${event.title}!`;
-                    } 
-                    else if (daysRemaining > 10) {
+                    } else if (daysRemaining > 10) {
                         if (daysRemaining % 2 === 0) { 
                             shouldCreate = true;
                             message = `Faltan ${daysRemaining} días para el evento: ${event.title}`;
@@ -377,7 +398,7 @@ export const updateEvent = async (id: string, data: any) => {
                             description: message,
                             type: "event", 
                             visibleAt: showDate, 
-                            userId: safeUserId as string, 
+                            userId: event.userId as string, 
                         };
 
                         if ('referenceId' in notifications) notifObj.referenceId = String(event.id);
@@ -387,39 +408,78 @@ export const updateEvent = async (id: string, data: any) => {
                     }
                 }
 
-                // 🚀 REGLA DE SATISFACCIÓN DEL CLIENTE:
-                // Si el evento NO es hoy, forzamos la creación de una notificación "Instantánea" 
-                // para que el cliente vea que su pago funcionó de inmediato.
-                if (!hasTodayNotification) {
-                    const instantNotif: any = {
-                        title: "¡Nuevo Evento Anunciado! 🎉",
-                        description: `Se ha publicado: ${event.title}. ¡Revisa los detalles!`,
-                        type: "event", 
-                        visibleAt: today, // 🚀 Se publica AHORA MISMO
-                        userId: safeUserId as string, 
-                    };
-
-                    if ('referenceId' in notifications) instantNotif.referenceId = String(event.id);
-                    else if ('reference_id' in notifications) instantNotif.reference_id = String(event.id);
-
-                    notifsToInsert.push(instantNotif);
-                }
-
                 if (notifsToInsert.length > 0) {
                     await tx.insert(notifications).values(notifsToInsert);
-                    console.log(`✅ ${notifsToInsert.length} notificaciones programadas para: ${event.title}`);
                 }
+            }
+
+            // 2. 🚀 NUEVA LÓGICA MASIVA: Notificar a todos en un radio de 20 millas
+            console.log("✅ [DEBUG PUSH EVENTOS] Evento aprobado. Buscando usuarios cercanos...");
+            
+            const titleText = "¡Nuevo Evento en tu área! 🎉";
+            const bodyText = `Se ha publicado: ${event.title}. ¡Revisa los detalles!`;
+            let usersToNotify: { id: string }[] = [];
+
+            if (event.zip) {
+                const nearbyZips = zipcodes.radius(event.zip as any, Number(radiusMiles)); 
+
+                if (nearbyZips && nearbyZips.length > 0) {
+                    usersToNotify = await tx.select({ id: users.id })
+                                            .from(users)
+                                            .where(inArray(users.zip, nearbyZips as string[]));
+                } else {
+                    usersToNotify = await tx.select({ id: users.id })
+                                            .from(users)
+                                            .where(eq(users.zip, String(event.zip)));
+                }
+            }
+
+            if (usersToNotify.length > 0) {
+                const massNotifs = usersToNotify.map(u => {
+                    const payload: any = {
+                        title: titleText,
+                        description: bodyText,
+                        type: "event", 
+                        visibleAt: new Date(), 
+                        userId: u.id,
+                        isRead: false
+                    };
+                    if ('referenceId' in notifications) payload.referenceId = String(event.id);
+                    else if ('reference_id' in notifications) payload.reference_id = String(event.id);
+                    return payload;
+                });
+
+                await tx.insert(notifications).values(massNotifs);
+
+                pushNotificationData = {
+                    title: titleText,
+                    body: bodyText,
+                    referenceId: String(event.id),
+                    userIds: usersToNotify.map(u => u.id) 
+                };
             }
         }
 
         return event || null;
     });
+
+    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+        sendMassPushNotification(pushNotificationData).catch(err => {
+           console.error("❌ [DEBUG PUSH] Falló el Push Notification:", err);
+        });
+    }
+
+    return eventResult;
+
   } catch (error: any) { 
     throw new Error(`Error al actualizar el evento: ${error.message}`);
   }
 };
 
+// =====================================================================
 // 🗑️ 5. ELIMINAR EVENTO
+// =====================================================================
 export const deleteEvent = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);

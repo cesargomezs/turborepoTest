@@ -741,13 +741,15 @@ export default function EventsScreen() {
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* SECCIÓN ADMIN MODIFICADA SIN EL FONDO AMARILLO */}
+                    {/* 🚀 AQUI LA MAGIA FLEXWRAP PARA EVENTOS PENDIENTES */}
                     {isAdminMode && pendingEvents.length > 0 && (
                       <View style={{ marginBottom: 20 }}>
                         <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>
                           Revisión ({pendingEvents.length})
                         </ThemedText>
-                        {pendingEvents.map(ev => <PendingEventItem key={ev.id} ev={ev} />)}
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                          {pendingEvents.map(ev => <PendingEventItem key={ev.id} ev={ev} />)}
+                        </View>
                       </View>
                     )}
 

@@ -1,44 +1,44 @@
 import { db } from "../../../../packages/db/src"; 
-import { community, reviews, countlikes, users } from "../../../../packages/db/src/schema"; 
+import { community, reviews, countlikes, users, notifications, userDevices } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
 import { eq, desc, and, sql, inArray } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
-import NodeGeocoder from 'node-geocoder';
+import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
 // =====================================================================
-// 🌍 CONFIGURACIÓN DE GEOCODER
+// ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
 // =====================================================================
-const geocoder = NodeGeocoder({
-  provider: 'openstreetmap'
-});
-
-const getCoordsFromZip = async (zip: string) => {
-  try {
-    const res = await geocoder.geocode(`${zip}, USA`);
-    if (res && res.length > 0) {
-      return { lat: res[0].latitude, lng: res[0].longitude };
-    }
-  } catch (err) {
-    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
-  }
-  
-  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
-  return { lat: 34.0934, lng: -117.5847 };
-};
-
-// 🚀 1. Inicializamos Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
+const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+// =====================================================================
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
+// =====================================================================
+const getCoordsFromZip = (zip: string) => {
+  if (!zip) return { lat: 34.0934, lng: -117.5847 };
+  
+  // 🚀 bypass de TypeScript con as any
+  const locationInfo = zipcodes.lookup(zip as any);
+  
+  if (locationInfo) {
+    return { 
+      lat: locationInfo.latitude, 
+      lng: locationInfo.longitude 
+    };
+  }
+  
+  return { lat: 34.0934, lng: -117.5847 };
+};
+
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🛡️ BARRERA DE SANITIZACIÓN PARA OBJETOS: Limpia todos los textos de un payload
+// 🛡️ BARRERA DE SANITIZACIÓN PARA OBJETOS
 const sanitizePayload = (data: any) => {
   if (!data || typeof data !== 'object') return data;
   const sanitizedData: any = {};
@@ -52,53 +52,88 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// ============================================================================
+const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH MASIVO COMUNIDAD] Ningún usuario cercano tiene dispositivos registrados.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "community", referenceId: payload.referenceId },
+    }));
+
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    console.log(`📱 [PUSH MASIVO COMUNIDAD] Enviando ${messages.length} notificaciones en la zona...`);
+
+    for (const chunk of chunks) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✅ [PUSH MASIVO COMUNIDAD] ¡Envío completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH MASIVO COMUNIDAD] Error enviando notificaciones:", error);
+  }
+};
+
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado a 4 Millas)
+// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado)
 // =====================================================================
 export const getCommunityPosts = async (zip?: string) => {
   try {
     const cleanZip = zip ? sanitizeText(String(zip)) : null;
 
-    // 🛡️ Si enviaron un ZIP pero es inválido, devolvemos vacío
     if (zip && (!cleanZip || cleanZip.length !== 5)) {
       return []; 
     }
-    
-    // 🚀 Obtenemos lat y lng del ZIP
-    const { lat, lng } = await getCoordsFromZip(cleanZip || ''); 
-    const radiusMiles = 4; // Rango de búsqueda: 4 millas
-
-    // 🚀 Fórmula de Distancia Haversine (Segura para Drizzle ORM)
-    const distanceFormula = sql`(
-      3959 * acos(
-        LEAST(1.0, GREATEST(-1.0,
-          cos(radians(${lat}::numeric)) * cos(radians(${community.lat}::numeric)) * cos(radians(${community.lng}::numeric) - radians(${lng}::numeric)) + 
-          sin(radians(${lat}::numeric)) * sin(radians(${community.lat}::numeric))
-        ))
-      )
-    )`;
 
     let query = db
       .select({
         community: community,
         reviews: reviews,
         users: users,
-        distance: distanceFormula.as('distance') // Agregamos la distancia al resultado
       })
       .from(community)
       .leftJoin(reviews, eq(reviews.relationshipId, community.id)) 
       .leftJoin(users, eq(reviews.userId, users.id)) 
       .$dynamic(); 
 
-    // 🚀 APLICAMOS EL FILTRO CONDICIONALMENTE
+    // 🚀 Lógica de Geofencing Súper Rápida
     if (cleanZip) {
-      query = query.where(sql`${distanceFormula} <= ${radiusMiles}`);
-      // Ordenamos para mostrar los más cercanos primero
-      query = query.orderBy(distanceFormula);
-    } else {
-      // Si no hay código postal, simplemente traemos todas de la más nueva a la más vieja
-      query = query.orderBy(desc(community.id));
-    }
+      const nearbyZips = zipcodes.radius(cleanZip as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        query = query.where(inArray(community.zip, nearbyZips as string[]));
+      } else {
+        query = query.where(eq(community.zip, cleanZip));
+      }
+    } 
+    
+    query = query.orderBy(desc(community.id));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -124,7 +159,7 @@ export const getCommunityPosts = async (zip?: string) => {
       if (row.reviews && row.reviews.id) {
         
         const usr = row.users as any;
-        const nombreUsuario = usr?.name + ' ' + usr?.lastName?.substring(0, 1) || 'Usuario Anónimo';
+        const nombreUsuario = usr?.name + ' ' + (usr?.lastName ? usr.lastName.substring(0, 1) : '') || 'Usuario Anónimo';
 
         const { data, error } = await supabase
         .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+usr?.imageUrl, 3600);
@@ -139,7 +174,6 @@ export const getCommunityPosts = async (zip?: string) => {
 
     const rawPosts = Array.from(postsMap.values());
 
-    // 🔗 CONEXIÓN DIRECTA A LA TABLA COUNTLIKES PARA LOS TOTALES
     if (rawPosts.length > 0) {
       const postIds = rawPosts.map(post => post.id);
       
@@ -203,7 +237,7 @@ export const getCommunityPostById = async (id: string) => {
         const usr = row.users as any;
         return {
           ...row.reviews,
-          userName: usr?.name + ' ' + usr?.lastName?.substring(0, 1) || 'Usuario Anónimo'
+          userName: usr?.name + ' ' + (usr?.lastName ? usr.lastName.substring(0, 1) : '') || 'Usuario Anónimo'
         };
       });
       
@@ -250,26 +284,95 @@ export const getCommunityPostById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR POST (CON GEOLOCALIZACIÓN AUTOMÁTICA)
+// 📥 3. CREAR POST (CON GEOLOCALIZACIÓN AUTOMÁTICA Y PUSH)
 // =====================================================================
 export const createCommunityPost = async (data: any) => {
   try {
-    
-    // 🛡️ Sanitizamos absolutamente todo el cuerpo de la petición
     const cleanPayload = sanitizePayload(data);
 
-    // 🚀 Obtenemos las coordenadas a partir del ZIP y las guardamos
-    const { lat, lng } = await getCoordsFromZip(cleanPayload.zip || '');
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
+    const validUserId = sanitizeText(cleanPayload.userId);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para crear una publicación en la comunidad.");
+    }
+
+    // 🚀 OBTENEMOS LAS COORDENADAS SÍNCRONAS
+    const { lat, lng } = getCoordsFromZip(cleanPayload.zip || '');
     
-    // Aseguramos que la latitud y longitud se incluyan en el payload
     cleanPayload.lat = cleanPayload.lat ? Number(cleanPayload.lat) : lat;
     cleanPayload.lng = cleanPayload.lng ? Number(cleanPayload.lng) : lng;
 
     if (cleanPayload.imageUrl && cleanPayload.imageUrl.startsWith('community/')) {
       cleanPayload.imageUrl = cleanPayload.imageUrl.replace('community/', '');
     }
-    const newPost = await db.insert(community).values(cleanPayload).returning();
-    return newPost[0];
+
+    let pushNotificationData: any = null;
+
+    const createdPostResult = await db.transaction(async (tx) => {
+      const newPost = await tx.insert(community).values(cleanPayload).returning();
+      const postRecord = newPost[0];
+
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS)
+      console.log("✅ [DEBUG PUSH COMUNIDAD] Post creado. Calculando usuarios en zona...");
+
+      const titleText = "¡Nueva publicación en tu comunidad! 🏘️";
+      
+      const rawText = cleanPayload.text || cleanPayload.textContent || cleanPayload.text_content || 'Alguien ha compartido algo nuevo en tu área.';
+      const bodyText = rawText.length > 40 ? rawText.substring(0, 40) + '...' : rawText;
+      
+      let usersToNotify: { id: string }[] = [];
+
+      if (cleanPayload.zip) {
+        const nearbyZips = zipcodes.radius(cleanPayload.zip as any, Number(radiusMiles)); 
+
+        if (nearbyZips && nearbyZips.length > 0) {
+          usersToNotify = await tx.select({ id: users.id })
+                                  .from(users)
+                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${validUserId}`)); 
+        } else {
+          usersToNotify = await tx.select({ id: users.id })
+                                  .from(users)
+                                  .where(and(eq(users.zip, String(cleanPayload.zip)), sql`${users.id} != ${validUserId}`));
+        }
+      }
+
+      if (usersToNotify.length > 0) {
+        const notificationsToInsert = usersToNotify.map(u => {
+          const payload: any = {
+            title: titleText,
+            description: bodyText,
+            type: "community", 
+            visibleAt: new Date(), 
+            userId: u.id,
+            isRead: false
+          };
+          if ('referenceId' in notifications) payload.referenceId = String(postRecord.id);
+          else if ('reference_id' in notifications) payload.reference_id = String(postRecord.id);
+          return payload;
+        });
+
+        await tx.insert(notifications).values(notificationsToInsert);
+
+        pushNotificationData = {
+          title: titleText,
+          body: bodyText,
+          referenceId: String(postRecord.id),
+          userIds: usersToNotify.map(u => u.id) 
+        };
+      }
+
+      return postRecord;
+    });
+
+    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH] Falló el Push Notification de la comunidad:", err);
+      });
+    }
+
+    return createdPostResult;
+
   } catch (error: any) { 
     throw new Error(`Error al crear la publicación: ${error.message}`);
   }
@@ -280,8 +383,13 @@ export const createCommunityPost = async (data: any) => {
 // =====================================================================
 export const createCommunityReview = async (data: any) => {
   try {
-    // 🛡️ Sanitizamos todo el cuerpo del comentario para evitar inyecciones en el hilo
     const cleanPayload = sanitizePayload(data);
+
+    // 🚀 VALIDACIÓN ESTRICTA
+    const validUserId = sanitizeText(cleanPayload.userId);
+    if (!validUserId) {
+        throw new Error("No estás autorizado para comentar. Se requiere iniciar sesión.");
+    }
 
     const newReview = await db.insert(reviews).values(cleanPayload).returning();
     return newReview[0];
@@ -298,7 +406,11 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
     const cleanPostId = sanitizeText(postId);
     const cleanUserId = sanitizeText(userId);
 
-    if (!cleanPostId || !cleanUserId) throw new Error("Parámetros de voto inválidos");
+    // 🚀 VALIDACIÓN ESTRICTA
+    if (!cleanUserId) {
+      throw new Error("Debes iniciar sesión para votar en una publicación.");
+    }
+    if (!cleanPostId) throw new Error("Parámetros de voto inválidos.");
 
     const targetColName = (countlikes as any).communityId ? 'communityId' : 'relationshipId';
     const targetColumn = (countlikes as any)[targetColName];
@@ -368,7 +480,6 @@ export const updateCommunityPost = async (id: string, data: any) => {
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
-    // 🛡️ Sanitizamos antes de actualizar
     const cleanPayload = sanitizePayload(data);
 
     const updated = await db.update(community).set(cleanPayload).where(eq(community.id, cleanId)).returning();

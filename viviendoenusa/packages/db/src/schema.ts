@@ -352,6 +352,7 @@ export const userTermsAcceptance = pgTable('user_terms_acceptance', {
   ipAddress: text("ip_address"), 
 });
 
+// 17. TABLA: audit_logs (auditoria para tener trazabilidad de los registros previos)
 
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -368,6 +369,29 @@ export const auditLogs = pgTable('audit_logs', {
   // Auditoría (Solo necesitamos creación, los logs nunca se actualizan)
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// 18. TABLA: user_devices (Identificar el token del dispositivo para envio de notificaciones)
+
+export const userDevices = pgTable('user_devices', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  // Relación con el usuario. Usamos "cascade" o "set null" según prefieras 
+  // (aquí usaremos cascade para que si el usuario se elimina, se limpie su token del dispositivo).
+  userId: uuid('user_id')
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull(),
+    
+  // Token de Expo (único por dispositivo para evitar duplicados)
+  expoPushToken: text('expo_push_token').notNull().unique(),
+  
+  // Información del dispositivo (ej: 'ios', 'android')
+  deviceType: text('device_type'),
+  
+  // Trazabilidad temporal
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 
 
   // ==========================================

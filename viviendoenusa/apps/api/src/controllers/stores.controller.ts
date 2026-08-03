@@ -1,29 +1,8 @@
 import { db } from "../../../../packages/db/src"; 
-import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and } from "drizzle-orm";
+import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
-import NodeGeocoder from 'node-geocoder';
-
-// =====================================================================
-// 🌍 CONFIGURACIÓN DE GEOCODER
-// =====================================================================
-const geocoder = NodeGeocoder({
-  provider: 'openstreetmap'
-});
-
-const getCoordsFromZip = async (zip: string) => {
-  try {
-    const res = await geocoder.geocode(`${zip}, USA`);
-    if (res && res.length > 0) {
-      return { lat: res[0].latitude, lng: res[0].longitude };
-    }
-  } catch (err) {
-    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
-  }
-  
-  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
-  return { lat: 34.0934, lng: -117.5847 };
-};
+import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
 // =====================================================================
 // ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
@@ -32,9 +11,26 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
+const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
 
-// 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
-const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+// =====================================================================
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
+// =====================================================================
+const getCoordsFromZip = (zip: string) => {
+  if (!zip) return { lat: 34.0934, lng: -117.5847 };
+  
+  // 🚀 bypass de TypeScript con as any
+  const locationInfo = zipcodes.lookup(zip as any);
+  
+  if (locationInfo) {
+    return { 
+      lat: locationInfo.latitude, 
+      lng: locationInfo.longitude 
+    };
+  }
+  
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any) => {
@@ -68,6 +64,54 @@ const getCurrentStorePrice = async () => {
   return "50.00";
 };
 
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// ============================================================================
+const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH MASIVO NEGOCIOS] Ningún usuario cercano tiene dispositivos registrados.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "store", referenceId: payload.referenceId },
+    }));
+
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    console.log(`📱 [PUSH MASIVO NEGOCIOS] Enviando ${messages.length} notificaciones en la zona...`);
+
+    for (const chunk of chunks) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✅ [PUSH MASIVO NEGOCIOS] ¡Envío completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH MASIVO NEGOCIOS] Error enviando notificaciones:", error);
+  }
+};
+
 // =====================================================================
 // 🔍 1. CONSULTA GENERAL CON FILTRO DE RADIO Y VISIBILIDAD
 // =====================================================================
@@ -75,21 +119,24 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
 
-    // Obtenemos lat y lng del ZIP
-    const { lat, lng } = await getCoordsFromZip(zip || ''); 
-    const radiusMiles = 4; // Rango de búsqueda: 4 millas
+    // 🚀 Lógica de Visibilidad 
+    let baseConditions = currentUserId
+      ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${currentUserId})`
+      : sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW())`;
 
-     // 🚀 Fórmula de Distancia Haversine (Segura)
-     const distanceFormula = sql`(
-      3959 * acos(
-        LEAST(1.0, GREATEST(-1.0,
-          cos(radians(${lat}::numeric)) * cos(radians(${stores.lat}::numeric)) * cos(radians(${stores.lng}::numeric) - radians(${lng}::numeric)) + 
-          sin(radians(${lat}::numeric)) * sin(radians(${stores.lat}::numeric))
-        ))
-      )
-    )`;
+    let finalConditions: any = baseConditions;
 
-    // 🚀 Definimos explícitamente el select incluyendo la distancia
+    // 🚀 Lógica de Geofencing Súper Rápida
+    if (zip && zip.length === 5) {
+      const nearbyZips = zipcodes.radius(zip as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        finalConditions = and(baseConditions, inArray(stores.zip, nearbyZips as string[]));
+      } else {
+        finalConditions = and(baseConditions, eq(stores.zip, zip));
+      }
+    }
+
     let query = db
     .select({
       stores: stores,
@@ -97,35 +144,14 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       rating: ratingTable,
       reviews: reviewsTable,
       payments: payments,
-      distance: distanceFormula.as('distance')
     })
     .from(stores)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(users, eq(ratingTable.userId, users.id))
     .leftJoin(payments, and(eq(payments.entityId, stores.id), eq(payments.entityType, 'store')))
-    .$dynamic();
-
-    // 🚀 Lógica de Visibilidad 
-    const visibilityCondition = currentUserId
-      ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${currentUserId})`
-      : sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW())`;
-
-    // 🚀 Aplicamos los filtros sin sobreescribir (usando AND)
-    if (zip && zip.length === 5) {
-      query = query.where(
-        and(
-          sql`${distanceFormula} <= ${radiusMiles}`,
-          visibilityCondition 
-        )
-      );
-      // Ordenamos para mostrar los más cercanos primero
-      query = query.orderBy(distanceFormula);
-    } else {
-      // Si no buscaron ZIP, solo aplicamos la visibilidad
-      query = query.where(visibilityCondition);
-      query = query.orderBy(desc(stores.createdAt));
-    }
+    .where(finalConditions)
+    .orderBy(desc(stores.createdAt));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -156,7 +182,7 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
-           name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+           name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
            image: data?.signedUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
@@ -235,7 +261,7 @@ export const getStoreById = async (id: string) => {
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
+          name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
           image: data?.signedUrl,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
@@ -279,13 +305,19 @@ export const getStoreById = async (id: string) => {
 // =====================================================================
 export const createStore = async (data: any) => {
   try {
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
+    const validUserId = sanitizeText(data.userId);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para registrar un negocio.");
+    }
+
     let cleanImage = sanitizeText(data.imageStores) || '';
     if (cleanImage.startsWith('stores/')) {
       cleanImage = cleanImage.replace('stores/', '');
     }
 
-    // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP 
-    const { lat, lng } = await getCoordsFromZip(data.zip || '');
+    // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
+    const { lat, lng } = getCoordsFromZip(data.zip || '');
 
     return await db.transaction(async (tx) => {
       
@@ -301,13 +333,11 @@ export const createStore = async (data: any) => {
         descriptionStores: safeDesc,
         statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
         estate: sanitizeText(data.estate) || '',
-        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD
-        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD
-        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD DIRECTAMENTE
+        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD DIRECTAMENTE
+        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
         approved: false 
       };
-
-      console.log(data.estate);
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
 
@@ -344,7 +374,7 @@ export const createStore = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR NEGOCIO
+// 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR
 // =====================================================================
 export const updateStore = async (id: string, data: any) => {
   try {
@@ -355,7 +385,14 @@ export const updateStore = async (id: string, data: any) => {
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
-    return await db.transaction(async (tx) => {
+    // 🚀 Obtenemos el registro actual para validar si ya había sido aprobado
+    const [existingStore] = await db.select().from(stores).where(eq(stores.id, cleanId));
+    if (!existingStore) throw new Error("Negocio no encontrado");
+
+    const wasApprovedBefore = existingStore.approved === true;
+    let pushNotificationData: any = null;
+
+    const updatedStoreResult = await db.transaction(async (tx) => {
       
       const allowedFields = ['nameStores', 'categoryId', 'addressStores', 'zip', 'phone', 'lat', 'lng', 'imageStores', 'descriptionStores'];
       const updatePayload: any = {};
@@ -416,23 +453,66 @@ export const updateStore = async (id: string, data: any) => {
         
       const store = updated[0];
 
-      if (isApproved && store) {
-        const notifPayload: any = {
-            title: "¡Negocio Verificado! 🏪",
-            description: `El negocio ${store.nameStores} ahora es parte de la red de servicios. ¡Visita su perfil!`,
-            type: "store", 
-            visibleAt: new Date(), 
-            userId: store.userId || TEMP_USER_ID, 
-        };
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
+      if (isApproved && !wasApprovedBefore && store) {
+        console.log("✅ [DEBUG PUSH NEGOCIOS] Negocio verificado. Calculando usuarios en zona...");
 
-        if ('referenceId' in notifications) notifPayload.referenceId = String(store.id);
-        else if ('reference_id' in notifications) notifPayload.reference_id = String(store.id);
+        const titleText = "¡Nuevo Negocio en tu área! 🏪";
+        const bodyText = `El negocio ${store.nameStores} ahora es parte de la red. ¡Visita su perfil!`;
 
-        await tx.insert(notifications).values(notifPayload);
+        let usersToNotify: { id: string }[] = [];
+
+        if (store.zip) {
+          const nearbyZips = zipcodes.radius(store.zip as any, Number(radiusMiles)); 
+
+          if (nearbyZips && nearbyZips.length > 0) {
+            usersToNotify = await tx.select({ id: users.id })
+                                    .from(users)
+                                    .where(inArray(users.zip, nearbyZips as string[]));
+          } else {
+            usersToNotify = await tx.select({ id: users.id })
+                                    .from(users)
+                                    .where(eq(users.zip, String(store.zip)));
+          }
+        }
+
+        if (usersToNotify.length > 0) {
+          const notificationsToInsert = usersToNotify.map(u => {
+            const payload: any = {
+              title: titleText,
+              description: bodyText,
+              type: "store", 
+              visibleAt: new Date(), 
+              userId: u.id,
+              isRead: false
+            };
+            if ('referenceId' in notifications) payload.referenceId = String(store.id);
+            else if ('reference_id' in notifications) payload.reference_id = String(store.id);
+            return payload;
+          });
+
+          await tx.insert(notifications).values(notificationsToInsert);
+
+          pushNotificationData = {
+            title: titleText,
+            body: bodyText,
+            referenceId: String(store.id),
+            userIds: usersToNotify.map(u => u.id) 
+          };
+        }
       }
 
       return store || null;
     });
+
+    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH] Falló el Push Notification de negocios:", err);
+      });
+    }
+
+    return updatedStoreResult;
 
   } catch (error: any) { 
     console.error("❌ Error en updateStore:", error);
@@ -445,9 +525,10 @@ export const updateStore = async (id: string, data: any) => {
 // =====================================================================
 export const createStoreReview = async (data: any) => {
   try {
-    let validUserId = sanitizeText(data.userId) || null;
+    // 🚀 VALIDACIÓN ESTRICTA
+    const validUserId = sanitizeText(data.userId);
     if (!validUserId || validUserId.length < 20) {
-        validUserId = TEMP_USER_ID; 
+        throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
     }
 
     const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
@@ -556,6 +637,12 @@ export const renewStore = async (id: string, data: any) => {
     const cleanId = sanitizeText(id);
     const refCode = sanitizeText(data.referenceCode);
     const payMethod = sanitizeText(data.paymentMethod);
+    
+    // 🚀 VALIDACIÓN ESTRICTA
+    const validUserId = sanitizeText(data.userId);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para renovar.");
+    }
 
     if (!refCode || !payMethod || !cleanId) {
       throw new Error("Se requiere el código de referencia y método de pago.");
@@ -567,7 +654,7 @@ export const renewStore = async (id: string, data: any) => {
       await tx.insert(payments).values({
         entityType: 'store',
         entityId: cleanId,
-        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
         referenceCode: refCode, 
         paymentMethod: payMethod, 
         amount: basePrice, 

@@ -190,6 +190,9 @@ export default function Header({ title }: { title?: string }) {
     }
   }, [pathname]);
 
+  // =================================================================
+  // 🚀 CONSULTA DE NOTIFICACIONES CORREGIDA (SE DISPARA AL CARGAR EL ID)
+  // =================================================================
   const fetchNotifications = async () => {
     if (!REAL_USER_ID || !token) return;
 
@@ -204,32 +207,46 @@ export default function Header({ title }: { title?: string }) {
         }
       });
 
-      if (!res) {
-        throw new Error("No hubo respuesta del servidor");
-      }
-
       if (!res.ok) {
-        const status = res.status || 500;
-        const errorText = await res.text().catch(() => "Error desconocido");
-        throw new Error(`Error ${status}: ${errorText}`);
+        throw new Error(`Error ${res.status}`);
       }
 
       const data = await res.json();
+     //console.log(data);
+      
+      let fetchedNotifs: any[] = [];
       if (Array.isArray(data)) {
-        setNotifications(data);
+        fetchedNotifs = data;
+      } else if (data && Array.isArray(data.data)) {
+        fetchedNotifs = data.data;
+      } else if (data && Array.isArray(data.notifications)) {
+        fetchedNotifs = data.notifications;
       }
+
+      // 🚀 Ordenar tipando explícitamente (a: any, b: any) para cumplir con TypeScript
+      fetchedNotifs.sort((a: any, b: any) => {
+        const dateA = new Date(a.createdAt || a.created_at || a.visibleAt || 0).getTime();
+        const dateB = new Date(b.createdAt || b.created_at || b.visibleAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      setNotifications(fetchedNotifs);
     } catch (error: any) { 
       console.error("Error al cargar notificaciones:", error?.message || "Error desconocido"); 
     }
   };
 
+  // Se ejecuta cada vez que el ID de usuario o el token se vuelvan válidos tras el login
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(() => fetchNotifications(), 60000); 
-    return () => clearInterval(interval);
+    if (REAL_USER_ID && token) {
+      fetchNotifications();
+      const interval = setInterval(() => fetchNotifications(), 60000); 
+      return () => clearInterval(interval);
+    }
   }, [REAL_USER_ID, token]);
 
-  const hasUnread = notifications.some(n => !n.read);
+  // Validar si hay notificaciones sin leer contemplando todas las variantes de nombres de columnas
+  const hasUnread = notifications.some(n => n.read === false || n.isRead === false || n.is_read === false);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -280,7 +297,6 @@ export default function Header({ title }: { title?: string }) {
     } catch (error) {}
   };
 
-  // 🚀 FUNCIÓN PARA ENVIAR EL MENSAJE DE IT SUPPORT AL BACKEND Y TELEGRAM
   const handleSendITSupport = async () => {
     if (!itMessage.trim()) {
       return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
@@ -288,7 +304,6 @@ export default function Header({ title }: { title?: string }) {
 
     setIsSendingIT(true);
     try {
-      // 🚀 Ajusta esta ruta según cómo tengas montado admin.routes.ts en tu index.ts del backend (ej: /api/admin/it-support)
       const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
         method: 'POST',
         headers: { 
@@ -449,7 +464,6 @@ export default function Header({ title }: { title?: string }) {
           </View>
           
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {/* 🚀 BOTÓN DIRECTO DE SOPORTE IT (VISIBLE EN TODAS PARTES) */}
             <TouchableOpacity 
                 onPress={() => setShowITSupportModal(true)} 
                 activeOpacity={0.7} 
@@ -758,24 +772,29 @@ export default function Header({ title }: { title?: string }) {
                 <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>{t.headertab.notification}</ThemedText>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 , flexGrow: 1 }}>
                 {notifications.length > 0 ? (
                   notifications.map((notif) => {
                     const iconConfig = getNotificationIcon(notif.type);
+                    const isRead = notif.read === true || notif.isRead === true || notif.is_read === true;
+                    const timeString = notif.time || notif.createdAt || notif.created_at || notif.visibleAt || '';
+                    //const displayTime = timeString ? new Date(timeString).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';  
+                    const displayTime = notif.time || '';
+
                     return (
                       <SwipeableNotificationItem key={notif.id} onSwipeRight={() => handleDeleteNotificationOnly(notif.id)}>
                         <TouchableOpacity 
                           activeOpacity={0.7} 
                           onPress={() => handleNotificationPress(notif)} 
-                          style={[styles.notifItem, { marginBottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', borderWidth: 1 }, !notif.read && { backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : 'rgba(79, 195, 247, 0.1)' }]}
+                          style={[styles.notifItem, { marginBottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', borderWidth: 1 }, !isRead && { backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : 'rgba(79, 195, 247, 0.1)' }]}
                         >
                           <View style={[styles.notifIconWrapper, { backgroundColor: `${iconConfig.color}20` }]}><MaterialCommunityIcons name={iconConfig.name as any} size={22} color={iconConfig.color} /></View>
                           <View style={{ flex: 1, paddingLeft: 12 }}>
-                            <ThemedText style={{ fontSize: 15, fontWeight: !notif.read ? 'bold' : '600', color: Colors[localTheme].text }}>{notif.title}</ThemedText>
-                            <ThemedText style={{ fontSize: 13, color: isDark ? '#B0BEC5' : '#546E7A', marginTop: 4, lineHeight: 18 }}>{notif.description}</ThemedText>
-                            <ThemedText style={{ fontSize: 11,  marginTop: 8, fontWeight: 'bold', color: Colors[localTheme].text }}>{notif.time}</ThemedText>
+                            <ThemedText style={{ fontSize: 15, fontWeight: !isRead ? 'bold' : '600', color: Colors[localTheme].text }}>{notif.title}</ThemedText>
+                            <ThemedText style={{ fontSize: 13, color: isDark ? '#B0BEC5' : '	#0e1425', marginTop: 4, lineHeight: 18 }}>{notif.description}</ThemedText>
+                            <ThemedText style={{ fontSize: 11,  marginTop: 8, fontWeight: 'bold', color: Colors[localTheme].text }}>{displayTime}</ThemedText>
                           </View>
-                          {!notif.read && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4FC3F7', alignSelf: 'center', marginLeft: 8 }} />}
+                          {!isRead && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4FC3F7', alignSelf: 'center', marginLeft: 8 }} />}
                         </TouchableOpacity>
                       </SwipeableNotificationItem>
                     );

@@ -1,38 +1,40 @@
 import { db } from "../../../../packages/db/src"; 
-import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and } from "drizzle-orm"; 
+import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable, notifications, userDevices } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
+import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
 import { alias } from "drizzle-orm/pg-core"; 
 import { createClient } from '@supabase/supabase-js';
-import NodeGeocoder from 'node-geocoder'; // Importación
-import { add } from "@tensorflow/tfjs";
+import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
-// Configuración global del Geocoder (Provider gratuito)
-const geocoder = NodeGeocoder({
-  provider: 'openstreetmap'
-});
-
-// Función que sí utiliza 'geocoder'
-const getCoordsFromZip = async (zip: string) => {
-  try {
-    // 🚀 AQUÍ SE USA 'geocoder', por eso ya no dará error de TS(6133)
-    const res = await geocoder.geocode(`${zip}, USA`);
-    if (res && res.length > 0) {
-      return { lat: res[0].latitude, lng: res[0].longitude };
-    }
-  } catch (err) {
-    console.error("Error al geocodificar:", err);
-  }
-  // Coordenadas por defecto si el zip no se encuentra
-  return { lat: 34.0934, lng: -117.5847 };
-};
-
+// =====================================================================
+// ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
+// =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
 // 🚀 Declaramos el alias de la tabla users para los que escriben reseñas
 const reviewers = alias(users, 'reviewers');
+
+// =====================================================================
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
+// =====================================================================
+const getCoordsFromZip = (zip: string) => {
+  if (!zip) return { lat: 34.0934, lng: -117.5847 };
+  
+  // 🚀 bypass de TypeScript con as any
+  const locationInfo = zipcodes.lookup(zip as any);
+  
+  if (locationInfo) {
+    return { 
+      lat: locationInfo.latitude, 
+      lng: locationInfo.longitude 
+    };
+  }
+  
+  return { lat: 34.0934, lng: -117.5847 };
+};
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any) => {
@@ -40,15 +42,60 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🔍 1. CONSULTA GENERAL CON BÚSQUEDA POR RADIO DE MILLAS
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// ============================================================================
+const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH MASIVO EMPRENDIMIENTOS] Ningún usuario cercano tiene dispositivos registrados.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "entrepreneurship", referenceId: payload.referenceId },
+    }));
+
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    console.log(`📱 [PUSH MASIVO EMPRENDIMIENTOS] Enviando ${messages.length} notificaciones en la zona...`);
+
+    for (const chunk of chunks) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✅ [PUSH MASIVO EMPRENDIMIENTOS] ¡Envío completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH MASIVO EMPRENDIMIENTOS] Error enviando notificaciones:", error);
+  }
+};
+
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL CON BÚSQUEDA POR RADIO ULTRARRÁPIDA
+// =====================================================================
 export const getEntrepreneurships = async (zip?: string, userId?: string) => {
   try {
-    // Obtenemos lat y lng del ZIP
-    const { lat, lng } = await getCoordsFromZip(zip || ''); 
-    const radiusMiles = 4; // Tu rango de 8 millas
-
-    // 🚀 1. EXTRAEMOS LA FÓRMULA A UNA CONSTANTE
-    const distanceFormula = sql`(3959 * acos(cos(radians(${lat})) * cos(radians(entrepreneurship.lat)) * cos(radians(entrepreneurship.lng) - radians(${lng})) + sin(radians(${lat})) * sin(radians(entrepreneurship.lat))))`;
+    const cleanZip = zip ? sanitizeText(String(zip)) : null;
 
     let query = db
       .select({
@@ -57,8 +104,6 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
         rating: ratingTable,
         reviews: reviewsTable,
         reviewers: reviewers,
-        // Usamos la constante en el select
-        distance: distanceFormula.as('distance') 
       })
       .from(entrepreneurship)
       .leftJoin(users, eq(entrepreneurship.userId, users.id))
@@ -67,21 +112,24 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .$dynamic(); 
 
-    // 🚀 2. APLICAMOS EL FILTRO (Usando la fórmula completa, NO el alias)
-    if (zip) {
-      query = query.where(sql`${distanceFormula} <= ${radiusMiles}`);
-      // Opcional y muy recomendado: Ordenar del más cercano al más lejano
-      query = query.orderBy(distanceFormula);
-    } else {
-      query = query.orderBy(desc(entrepreneurship.createdAt));
-    }
+    // 🚀 APLICAMOS EL FILTRO GEOGRÁFICO DE FORMA LOCAL
+    if (cleanZip && cleanZip.length === 5) {
+      const nearbyZips = zipcodes.radius(cleanZip as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        query = query.where(inArray(entrepreneurship.zip, nearbyZips as string[]));
+      } else {
+        query = query.where(eq(entrepreneurship.zip, cleanZip));
+      }
+    } 
+    
+    query = query.orderBy(desc(entrepreneurship.createdAt));
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
     const itemsMap = new Map<string, any>();
 
-    // ... (El resto de tu ciclo FOR y la lógica de Votos y Promesas se mantiene EXACTAMENTE IGUAL)
     for (const row of rows) {
       const itemId = row.entrepreneurship.id;
 
@@ -121,14 +169,13 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       }
     }
 
-    // 🚀 LECTURA DE VOTOS (countlikes) CON SOPORTE SEGURO
+    // 🚀 LECTURA DE VOTOS
     const likesRes = await db.execute(sql`
       SELECT relationship_id, SUM(likes) as t_likes, SUM(dislikes) as t_dislikes 
       FROM public.countlikes 
       GROUP BY relationship_id
     `) as any;
     
-    // Validamos la estructura devuelta por Drizzle dependiendo del driver
     const likesData = Array.isArray(likesRes) ? likesRes : (likesRes?.rows || []);
 
     let userVotesData: any[] = [];
@@ -147,14 +194,12 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
           ? Math.round((item.reviews.reduce((sum: number, r: any) => sum + r.stars, 0) / item.totalReviews) * 10) / 10 
           : 0;
 
-        // Integración de likes totales
         const itemLikes = likesData.find((ld: any) => ld.relationship_id === item.id);
         if (itemLikes) {
             item.likes = Number(itemLikes.t_likes) || 0;
             item.dislikes = Number(itemLikes.t_dislikes) || 0;
         }
 
-        // Integración del voto del usuario actual para mantener el color activo
         const uVote = userVotesData.find(uv => uv.relationship_id === item.id);
         if (uVote) {
            if (Number(uVote.likes) === 1) item.userVote = 'like';
@@ -179,7 +224,6 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
     });
 
     const finalList = await Promise.all(finalListPromises);
-    //console.log(finalList);
     return finalList;
   } catch (error) {
     console.error("❌ Error en getEntrepreneurships:", error);
@@ -187,7 +231,9 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
   }
 };
 
+// =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID 
+// =====================================================================
 export const getEntrepreneurshipById = async (id: string, userId?: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -270,14 +316,16 @@ export const getEntrepreneurshipById = async (id: string, userId?: string) => {
             else if (Number(uVoteRow.dislikes) === 1) itemFinal.userVote = 'dislike';
         }
     }
-    //console.log("✅ Emprendimiento final:", itemFinal);
+    
     return itemFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener el emprendimiento por ID: ${error.message}`);
   }
 };
 
-// 📥 3. CREAR EMPRENDIMIENTO
+// =====================================================================
+// 📥 3. CREAR EMPRENDIMIENTO (CON VALIDACIÓN ESTRICTA Y PUSH)
+// =====================================================================
 export const createEntrepreneurship = async (data: any) => {
   try {
     let cleanImage = data.imageEntrepren || '';
@@ -285,16 +333,14 @@ export const createEntrepreneurship = async (data: any) => {
         cleanImage = cleanImage.replace('entrepreneurship/', '');
     }
 
-    let validUserId = null;
-    if (data.userId && typeof data.userId === 'string' && data.userId.length > 20) {
-        validUserId = data.userId;
-    } else {
-        const fallbackUser = await db.select().from(users).limit(1);
-        if (fallbackUser.length > 0) validUserId = fallbackUser[0].id;
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID (Eliminado el Fallback)
+    const validUserId = sanitizeText(data.userId);
+    if (!validUserId) {
+        throw new Error("El ID del usuario es obligatorio para registrar un emprendimiento.");
     }
 
-    // 🚀 Llamamos a la función que SÍ usa el geocoder
-    const { lat, lng } = await getCoordsFromZip(data.zip);
+    // 🚀 Llamamos a la función sincrónica local
+    const { lat, lng } = getCoordsFromZip(data.zip || '');
 
     const payload: any = {
       nameEntrepren: data.nameEntrepren || 'Sin nombre',
@@ -314,15 +360,80 @@ export const createEntrepreneurship = async (data: any) => {
       userId: validUserId 
     };
 
-    const newItem = await db.insert(entrepreneurship).values(payload).returning();
-    return newItem[0];
+    let pushNotificationData: any = null;
+
+    const createdItemResult = await db.transaction(async (tx) => {
+      const newItem = await tx.insert(entrepreneurship).values(payload).returning();
+      const record = newItem[0];
+
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS)
+      console.log("✅ [DEBUG PUSH] Emprendimiento registrado. Calculando usuarios locales...");
+
+      const titleText = "¡Nuevo Emprendimiento local! 🚀";
+      const bodyText = `Apoya el talento de tu zona: ${record.nameEntrepren} está cerca de ti.`;
+      
+      let usersToNotify: { id: string }[] = [];
+
+      if (record.zip) {
+        const nearbyZips = zipcodes.radius(record.zip as any, Number(radiusMiles)); 
+
+        if (nearbyZips && nearbyZips.length > 0) {
+          usersToNotify = await tx.select({ id: users.id })
+                                  .from(users)
+                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${validUserId}`)); 
+        } else {
+          usersToNotify = await tx.select({ id: users.id })
+                                  .from(users)
+                                  .where(and(eq(users.zip, String(record.zip)), sql`${users.id} != ${validUserId}`));
+        }
+      }
+
+      if (usersToNotify.length > 0) {
+        const notificationsToInsert = usersToNotify.map(u => {
+          const notifPayload: any = {
+            title: titleText,
+            description: bodyText,
+            type: "entrepreneurship", 
+            visibleAt: new Date(), 
+            userId: u.id,
+            isRead: false
+          };
+          if ('referenceId' in notifications) notifPayload.referenceId = String(record.id);
+          else if ('reference_id' in notifications) notifPayload.reference_id = String(record.id);
+          return notifPayload;
+        });
+
+        await tx.insert(notifications).values(notificationsToInsert);
+
+        pushNotificationData = {
+          title: titleText,
+          body: bodyText,
+          referenceId: String(record.id),
+          userIds: usersToNotify.map(u => u.id) 
+        };
+      }
+
+      return record;
+    });
+
+    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH] Falló el Push Notification:", err);
+      });
+    }
+
+    return createdItemResult;
+
   } catch (error: any) { 
     console.error("❌ Error en createEntrepreneurship:", error);
     throw new Error(`Error al crear el emprendimiento: ${error.message}`);
   }
 };
 
+// =====================================================================
 // 🔄 4. ACTUALIZAR EMPRENDIMIENTO 
+// =====================================================================
 export const updateEntrepreneurship = async (id: string, data: any) => {
   try {
     if (data.imageEntrepren && data.imageEntrepren.startsWith('entrepreneurship/')) {
@@ -335,7 +446,9 @@ export const updateEntrepreneurship = async (id: string, data: any) => {
   }
 };
 
+// =====================================================================
 // 🗑️ 5. ELIMINAR EMPRENDIMIENTO
+// =====================================================================
 export const deleteEntrepreneurship = async (id: string) => {
   try {
     const deleted = await db.delete(entrepreneurship).where(eq(entrepreneurship.id, id)).returning();
@@ -345,12 +458,16 @@ export const deleteEntrepreneurship = async (id: string) => {
   }
 };
 
+// =====================================================================
 // 📥 6. CREAR RESEÑA 
+// =====================================================================
 export const createEntrepreneurshipReview = async (data: any) => {
   try {
-    const validUserId = data.userId; 
+    const validUserId = data.userId;
+    if (!validUserId) {
+        throw new Error("Se requiere iniciar sesión para dejar una reseña.");
+    } 
 
-    // 🚀 VALIDACIÓN CORRECTA CON DRIZZLE PURA PARA EVITAR DUPLICADOS
     const existingReview = await db
       .select()
       .from(ratingTable)
@@ -401,7 +518,9 @@ export const createEntrepreneurshipReview = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 🚀 7. FUNCIÓN PARA VOTAR (ME GUSTA / NO ME GUSTA)
+// =====================================================================
 export const voteEntrepreneurship = async (data: any) => {
   try {
     const { relationship_id, userId, action } = data;
@@ -421,15 +540,12 @@ export const voteEntrepreneurship = async (data: any) => {
       const currentLikes = Number(existingRows[0].likes);
       const currentDislikes = Number(existingRows[0].dislikes);
 
-      // Si presiona el mismo botón, anula el voto (Toggle)
       if ((action === 'like' && currentLikes === 1) || (action === 'dislike' && currentDislikes === 1)) {
         await db.execute(sql`UPDATE public.countlikes SET likes = 0, dislikes = 0 WHERE id = ${voteId}`);
       } else {
-        // Cambia de opinión (ej: de dislike a like)
         await db.execute(sql`UPDATE public.countlikes SET likes = ${isLike}, dislikes = ${isDislike} WHERE id = ${voteId}`);
       }
     } else {
-      // Es su primer voto
       await db.execute(
         sql`INSERT INTO public.countlikes (relationship_id, user_id, likes, dislikes, created_at) VALUES (${relationship_id}, ${userId}, ${isLike}, ${isDislike}, NOW())`
       );
@@ -442,7 +558,9 @@ export const voteEntrepreneurship = async (data: any) => {
   }
 };
 
+// =====================================================================
 // 🔍 8. CONSULTA POR LOTE (BATCH) PARA GUARDADOS
+// =====================================================================
 export const getEntrepreneurshipsByIds = async (ids: string[], userId?: string) => {
   try {
     if (!ids || ids.length === 0) return [];

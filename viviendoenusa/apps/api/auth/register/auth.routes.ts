@@ -8,7 +8,8 @@ import {
   updateUser, 
   updatePassword,
   sendPasswordResetEmail // ⬅️ Faltaba importar esta función
-  ,getMiPerfil
+  ,getMiPerfil,
+  saveDeviceToken
 } from '../../src/controllers/authController';
 
 const router = Router();
@@ -107,6 +108,9 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+// 📱 Registrar o actualizar el token push del dispositivo (Protegida)
+router.post('/save-device-token', verifyToken, saveDeviceToken);
 
 // 🔐 ACTUALIZAR LA CONTRASEÑA
 router.post('/update-password', updatePassword);
