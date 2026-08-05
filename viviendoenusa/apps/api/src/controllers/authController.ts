@@ -332,8 +332,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     // 4. Crear el enlace
     const resetLink = `http://192.168.252.243:8081/ResetPassword?token=${resetToken}`;
 
-    const { data, error } = await supabase
-    .storage.from(NOMBRE_BUCKET).createSignedUrl('logo&images/backgroundusa.webp', 3600);
+    const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
 
     const mailOptions = {
       from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
@@ -366,7 +365,7 @@ export const sendPasswordResetEmail = async (email: string) => {
             </p>
             
             <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-              &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
+              &copy; ${'2025 '} Viviendo en USA. Todos los derechos reservados.
             </div>
           </div>
         </div>
@@ -518,6 +517,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
         : `users/${userRecord.imageUrl.split('/').pop()}`;
 
       await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]);
+      console.log("✅ Imagen de perfil eliminada de Supabase Storage.");
     }
 
     // 3. Registrar el evento en la Auditoría (Fecha, ID, Acción y Trama de respaldo)
@@ -557,14 +557,14 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       })
       .where(eq(users.id, userId));
 
-    // 5. Eliminar credenciales de Supabase Auth
-    await supabase.auth.admin.deleteUser(userId);
+    // 🚀 NOTA: Eliminado 'supabase.auth.admin.deleteUser' porque no usan Supabase Auth.
 
-    // 6. Enviar correo electrónico de despedida con formato HTML
+    // 5. Enviar correo electrónico de despedida con formato HTML y Logo Firmado
     if (userRecord.email && !userRecord.email.includes('deleted_')) {
       try {
         const { data, error } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('logo&images/backgroundusa.webp', 3600);
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
+        
         const mailOptions = {
           from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
           to: userRecord.email,
@@ -572,9 +572,9 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           html: `
             <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
               <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-                <!-- Logo circular o imagen representativa -->
+                <!-- 🚀 Logo dinámico desde Supabase -->
                 <div style="margin-bottom: 20px;">
-                  <img src="https://raw.githubusercontent.com/cesargomezs/monorepoempty/refs/heads/main/shell/apps/web/src/assets/images/backgroundusajpg.jpg" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
+                  <img src="${data?.signedUrl || ''}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
                 </div>
                 <h2 style="color: #1A1A1A; margin-bottom: 10px;">¡Te extrañaremos, ${userRecord.name}!</h2>
                 <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
@@ -584,7 +584,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
                   Si en el futuro deseas regresar y ser parte nuevamente de nuestra comunidad hispana, las puertas de <strong>Viviendo en USA</strong> estarán abiertas para ti.
                 </p>
                 <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-                  &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
+                  &copy; ${'2025 '} Viviendo en USA. Todos los derechos reservados.
                 </div>
               </div>
             </div>

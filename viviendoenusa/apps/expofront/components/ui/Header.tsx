@@ -13,7 +13,7 @@ import { ThemedText } from '../ThemedText';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useRouter, usePathname } from 'expo-router'; 
-import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage } from '../../redux/slices'; 
+import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage, toggleAuth } from '../../redux/slices'; 
 import { useTranslation } from '../../hooks/useTranslation'; 
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
 import { useAuth } from '../../context/AuthContext';
@@ -24,7 +24,7 @@ const API_NOTIFICATIONS_URL = `${API_BASE_URL}/notifications`;
 const API_USERS_URL = `${API_BASE_URL}/auth/profile`; 
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
 const API_UPLOAD_URL = `${API_BASE_URL}/api/subir-imagen-optimizada/users`; 
-const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`; // 🚀 Endpoint para dar de baja la cuenta
+const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`; 
 
 // ==========================================
 // 🚀 COMPONENTE: ITEM DESLIZABLE (SWIPE TO DELETE)
@@ -79,7 +79,7 @@ const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, 
 
 export default function Header({ title }: { title?: string }) {
   // 🔐 ESTADO GLOBAL DE AUTENTICACIÓN
-  const { user, token, logout } = useAuth(); // Incluimos logout para limpiar sesión al dar de baja
+  const { user, token, logout } = useAuth(); 
 
   const REAL_USER_ID = user?.id;
 
@@ -325,7 +325,7 @@ export default function Header({ title }: { title?: string }) {
   };
 
   // =====================================================================
-  // 🚀 FUNCIÓN PARA DAR DE BAJA LA CUENTA (MANTIENE RESEÑAS ANÓNIMAS)
+  // 🚀 FUNCIÓN PARA DAR DE BAJA LA CUENTA (INTEGRACIÓN REDUX + REDIRECT)
   // =====================================================================
   const handleDeleteAccount = () => {
     const confirmTitle = "Eliminar Cuenta Definitivamente";
@@ -352,10 +352,20 @@ export default function Header({ title }: { title?: string }) {
         }
         
         closeSettingsModal();
+        
+        // 🚀 LIMPIEZA DE SESIÓN
         if (typeof logout === 'function') {
           await logout();
         }
-        router.replace('/');
+        dispatch(setUserMetadata({} as any)); 
+        dispatch(toggleAuth()); 
+
+        // 🚀 REDIRECCIÓN A LA PORTADA LARGA (Forzamos ?login=false o limpiamos la URL)
+        if (Platform.OS === 'web') {
+          window.location.replace('/'); // Esto recarga limpio y muestra la portada que me enviaste en la foto
+        } else {
+          router.replace('/');
+        }
         
       } catch (error: any) {
         if (isWeb) {

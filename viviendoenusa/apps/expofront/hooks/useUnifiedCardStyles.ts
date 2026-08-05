@@ -105,7 +105,7 @@ export const useUnifiedCardStyles = () => {
     textContainerMobile: { alignItems: 'center', marginTop: 8 },
     textContainerWeb: { marginLeft: 15, flex: 1, justifyContent: 'center' },
     buttonText: { fontSize: 13, color: 'white', fontWeight: '800' },
-    descriptionText: { color: 'white', fontSize: 11, opacity: 0.85, marginTop: 2, fontWeight: '400' },
+    descriptionText: { color: isDark ? '#ffffff' : '#ffffff', fontSize: 11, opacity: 0.85, marginTop: 2, fontWeight: '400' },
     iconContainerWeb: { backgroundColor: 'rgba(255, 255, 255, 0.2)', padding: 8, borderRadius: 12 },
 
     // --- COMUNIDAD ---

@@ -20,3 +20,8 @@ android
 
 # Temporary files created by Metro to check the health of the file watcher
 .metro-health-check*
+
+# Archivos de entorno y secretos
+.env
+.env.*
+!.env.example

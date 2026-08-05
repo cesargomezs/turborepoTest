@@ -23,11 +23,12 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 
 import Head from 'expo-router/head'; 
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { ThemedText } from '../../components/ThemedText';
 import { Colors } from '../../constants/Colors';
@@ -38,11 +39,10 @@ import { useAppTheme } from '../src/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { createClient } from '@supabase/supabase-js'; 
 
-// 🚀 CREDENCIALES DE SUPABASE 🚀
+// 🚀 CREDENCIALES DE SUPABASE DESDE .ENV 🚀
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Inicializamos el cliente de Supabase con las credenciales
 const supabase = supabaseUrl && supabaseAnonKey 
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
@@ -63,7 +63,6 @@ if (Platform.OS !== 'web') {
   });
 }
 
-// 🚀 ESTRUCTURA INICIAL DE RUTAS (Rutas internas de Supabase) 🚀
 const INITIAL_SERVICES_DATA = [
   { id: '1', path: `logoorimages/0.webp`, title: "Emprendimientos", desc: "Impulsa tu negocio o descubre lo mejor del talento local.", img: '' },
   { id: '2', path: `logoorimages/1.webp`, title: "Bolsa de Empleos", desc: "Encuentra el trabajo ideal o contrata personal de confianza.", img: '' },
@@ -72,7 +71,6 @@ const INITIAL_SERVICES_DATA = [
   { id: '5', path: `logoorimages/4.webp`, title: "Comunidad Viva", desc: "Crea lazos duraderos y siéntete como en casa, estés donde estés.", img: '' },
 ];
 
-// 🚀 COMPONENTE DE ESTADÍSTICA ANIMADA (SOCIAL PROOF) 🚀
 const AnimatedStat = ({ endValue, label, icon, isDark }: { endValue: number, label: string, icon: string, isDark: boolean }) => {
   const [count, setCount] = useState(0);
 
@@ -111,6 +109,7 @@ const AnimatedStat = ({ endValue, label, icon, isDark }: { endValue: number, lab
 
 export default function HomeScreen() {
   const router = useRouter(); 
+  const params = useLocalSearchParams(); 
   const { login } = useAuth();
   const { width, height } = useWindowDimensions();
   const { isDark } = useAppTheme();
@@ -131,13 +130,20 @@ export default function HomeScreen() {
   const carouselRef = useRef<FlatList>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  const [showWebLanding, setShowWebLanding] = useState(isWebPlatform);
+  const [showWebLanding, setShowWebLanding] = useState(() => {
+    if (isWebPlatform) {
+      if (params?.login === 'true') return false;
+      return true;
+    }
+    return false;
+  });
   
   const [isRegistering, setIsRegistering] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false); 
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [returnToCompletion, setReturnToCompletion] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   
@@ -148,10 +154,8 @@ export default function HomeScreen() {
     email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() 
   });
 
-  // 🚀 ESTADO PARA LAS ESTADÍSTICAS REALES
   const [platformStats, setPlatformStats] = useState({ users: 1250, jobs: 340, companies: 180 });
 
-  // 🚀 ESTADOS PARA LAS IMÁGENES FIRMADAS DE SUPABASE 🚀
   const [mainLogoUrl, setMainLogoUrl] = useState<string>('');
   const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
 
@@ -160,45 +164,35 @@ export default function HomeScreen() {
 
   const orangeGradient: readonly [string, string, ...string[]] = ['#FF5F6D', '#FFC371'];
 
-  const [blurKey, setBlurKey] = useState(Date.now());
-  useFocusEffect(
-    useCallback(() => {
-      if (isWebPlatform) {
-        setBlurKey(Date.now());
-      }
-    }, [isWebPlatform])
-  );
-
-  // 🚀 CARGA ASÍNCRONA DE IMÁGENES FIRMADAS 🚀
   useEffect(() => {
     const loadSignedImages = async () => {
       if (!supabase) return;
       
       try {
-        // 1. Cargamos el background/logo
-        const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); // 7 días de validez
+        const { data: logoData, error: logoError } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
         if (logoData?.signedUrl) {
           setMainLogoUrl(logoData.signedUrl);
+        } else {
+          console.warn("No se pudo cargar el logo:", logoError);
         }
 
-        // 2. Cargamos las tarjetas de servicios del carrusel
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
-            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
+            const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
+            if (error) console.warn(`Error en ${service.path}:`, error);
             return { ...service, img: data?.signedUrl || '' };
           })
         );
         
         setServicesData(signedServices);
       } catch (error) {
-        console.error("❌ Error cargando imágenes de Supabase:", error);
+        console.error("❌ Error consumiendo imágenes de Supabase:", error);
       }
     };
 
     loadSignedImages();
   }, []);
 
-  // 🚀 CONSULTA DE ESTADÍSTICAS EN TIEMPO REAL
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -223,27 +217,43 @@ export default function HomeScreen() {
     }
   }, [loggedIn, showWebLanding, isWebPlatform]);
 
+  useEffect(() => {
+    if (!loggedIn && isWebPlatform) {
+      if (params?.login === 'true') {
+        setShowWebLanding(false);
+        setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() });
+      }
+    }
+  }, [params, loggedIn, isWebPlatform]);
+
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_ANDROID_CLIENT_ID,
-  },{
-    scheme: 'viviendoenusa'
+    redirectUri: AuthSession.makeRedirectUri({
+      scheme: 'viviendoenusa'
+    })
   });
 
+  // =========================================================================
+  // 🚀 TAMAÑOS EXACTOS ORIGINALES 🚀
+  // =========================================================================
   const cardWidth = loggedIn 
     ? (isLargeWeb ? '96%' : (width > 768 ? 500 : width * 0.92))
     : (isLargeWeb ? 900 : (width > 768 ? 500 : width * 0.92));
     
   const getCardHeight = () => {
-    if (isWebPlatform) return undefined; 
-    if (isRegistering) return height * 0.92; 
-    if (loggedIn) return isAndroid ? height * 0.67 : height * 0.69;
-    return height * 0.72; 
+    if (loggedIn) {
+       return isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : height * 0.69);
+    }
+    return undefined; 
   };
   const finalCardHeight = getCardHeight();
-  const dynamicMinHeight = (!loggedIn && !isRegistering) ? height * 0.72 : undefined;
-  const verticalOffset = loggedIn ? (isWebPlatform ? -90 : (isIOS ? -85 : -100)) : 0;
+  
+  const verticalOffset = loggedIn 
+    ? (isWebPlatform ? -90 : (isIOS ? -85 : -100))
+    : (isWebPlatform ? -20 : 0);
+  // =========================================================================
 
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
@@ -253,7 +263,8 @@ export default function HomeScreen() {
     accent: '#FF5F6D',
     modalBg: isDark ? '#121212' : '#FFFFFF', 
     heroBg: isDark ? '#0F172A' : '#F8FAFC',
-    cardBg: isDark ? '#1E293B' : '#FFFFFF'
+    cardBg: isDark ? '#1E293B' : '#FFFFFF',
+    iconInactive: isDark ? '#B0BEC5' : '#364045',  
   };
 
   const isSubmitDisabled = isRegistering && !acceptedTerms;
@@ -263,8 +274,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!showWebLanding || loggedIn || servicesData.length === 0) return;
-    
-    // Solo iniciamos el carrusel si la primera imagen ya tiene URL
     if (!servicesData[0].img) return;
 
     const interval = setInterval(() => {
@@ -534,6 +543,17 @@ export default function HomeScreen() {
 
     } catch (error: any) {
       const msg = error.message || "Ocurrió un error al intentar acceder.";
+      
+      if (msg.toLowerCase().includes("google") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("credenciales")) {
+        const customMsg = "Esta cuenta utiliza Google para iniciar sesión. Por favor, usa el botón 'Continuar con Google' abajo.";
+        if (isWebPlatform) {
+          window.alert(customMsg);
+        } else {
+          Alert.alert("Inicio con Google", customMsg);
+        }
+        return;
+      }
+
       if (msg.includes("bloqueada por múltiples intentos")) {
         if (isWebPlatform) {
           if (window.confirm(`${msg}\n\n¿Deseas recuperar tu contraseña ahora?`)) {
@@ -588,13 +608,9 @@ export default function HomeScreen() {
     );
   };
 
-  // =========================================================================
-  // VISTA 1: LANDING PAGE WEB PÚBLICA (NO LOGUEADO) - OPTIMIZADA PARA SEO & IA
-  // =========================================================================
   if (isWebPlatform && showWebLanding && !loggedIn) {
     return (
       <>
-        {/* 🚀 ETIQUETAS SEO, OPEN GRAPH & DATOS ESTRUCTURADOS DE IA 🚀 */}
         <Head>
           <title>Viviendo en USA | La App de la Comunidad Hispana</title>
           
@@ -612,30 +628,6 @@ export default function HomeScreen() {
           <meta name="twitter:title" content="Viviendo en USA | Directorio Hispano" />
           <meta name="twitter:description" content="Encuentra abogados, emprendimientos, empleos y red de apoyo para latinos en USA." />
           <meta name="twitter:image" content={mainLogoUrl} />
-          
-          <script 
-            type="application/ld+json" 
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
-                "@context": "https://schema.org",
-                "@type": "SoftwareApplication",
-                "name": "Viviendo en USA",
-                "operatingSystem": "Web, iOS, Android",
-                "applicationCategory": "SocialNetworkingApplication",
-                "description": "Plataforma y directorio para hispanos en Estados Unidos. Incluye abogados, servicios de salud, red de apoyo, emprendimientos, bolsa de empleo y eventos locales.",
-                "keywords": "abogados, red de apoyo, emprendimientos, hispanos, latinos, empleos, negocios, salud, usa",
-                "offers": {
-                  "@type": "Offer",
-                  "price": "0",
-                  "priceCurrency": "USD"
-                },
-                "publisher": {
-                  "@type": "Organization",
-                  "name": "Viviendo en USA"
-                }
-              })
-            }} 
-          />
         </Head>
 
         <ScrollView 
@@ -802,7 +794,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <View style={{ backgroundColor: DynamicColors.heroBg, paddingVertical: 80, paddingHorizontal: 20, alignItems: 'center' }}>
+          <View style={{ paddingVertical: 80, backgroundColor: DynamicColors.heroBg, paddingHorizontal: 20, alignItems: 'center' }}>
             <Text accessibilityRole="header" aria-level={2} style={{ fontSize: 32, fontWeight: '900', color: DynamicColors.text, marginBottom: 5, textAlign: 'center' }}>
               Viviendo en <Text style={{ color: '#FF5F6D' }}>USA</Text>
             </Text>
@@ -864,8 +856,8 @@ export default function HomeScreen() {
       </Head>
       <RootComponent behavior={isIOS ? 'padding' : undefined} style={styles.container}>
         
-        {/* FONDO GIGANTE DE MANOS: SÓLO APARECE SI NO ESTÁS LOGUEADO */}
-        {isWebPlatform && !loggedIn && (
+        {/* 🚀 EL FONDO GIGANTE SE MUESTRA SIEMPRE EN LA WEB PARA QUE EL CRISTAL TENGA QUÉ REFLEJAR 🚀 */}
+        {isWebPlatform && (
           <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
             {mainLogoUrl ? (
               <Image 
@@ -879,7 +871,12 @@ export default function HomeScreen() {
         )}
 
         <ScrollView 
-          contentContainerStyle={{ flexGrow: 1, justifyContent: loggedIn ? 'flex-start' : 'center', alignItems: isWebPlatform ? undefined : 'center', paddingVertical: isWebPlatform ? 30 : 0 }} 
+          contentContainerStyle={{ 
+            flexGrow: 1, 
+            justifyContent: loggedIn ? 'flex-start' : 'center', 
+            alignItems: isWebPlatform ? undefined : 'center', 
+            paddingVertical: loggedIn ? 0 : (isWebPlatform ? 30 : 50) 
+          }} 
           keyboardShouldPersistTaps="handled" 
           showsVerticalScrollIndicator={false}
         >
@@ -888,23 +885,37 @@ export default function HomeScreen() {
             <View style={[
               styles.mainCard, 
               { 
+                flexShrink: 1, 
                 width: cardWidth, 
-                height: isWebPlatform ? undefined : finalCardHeight, 
-                minHeight: isWebPlatform ? (loggedIn ? 500 : (isRegistering ? 760 : 520)) : dynamicMinHeight, 
+                height: finalCardHeight, 
+                minHeight: !loggedIn && isWebPlatform ? (isRegistering ? 760 : 520) : (!loggedIn ? 480 : undefined), 
                 borderColor: DynamicColors.border, 
                 backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent',
-                paddingBottom: loggedIn ? 20 : 15
+                paddingBottom: loggedIn ? 1 : 1
               }
             ]}>
               
-              {/* CRISTAL NATIVO BLINDADO */}
-              {!isAndroid && (
-                <BlurView 
-                  key={`blur-${blurKey}`}
-                  intensity={isDark ? 100 : 75} 
-                  tint={isDark ? 'dark' : 'light'} 
-                  style={StyleSheet.absoluteFill} 
+              {/* 🚀 CRISTAL BLINDADO CONTRA BUGS DE EXPO EN WEB 🚀 */}
+              {Platform.OS === 'web' ? (
+                <View 
+                  style={[
+                    StyleSheet.absoluteFill, 
+                    { 
+                      backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.45)',
+                      // @ts-ignore
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)'
+                    }
+                  ]} 
                 />
+              ) : (
+                !isAndroid && (
+                  <BlurView 
+                    intensity={isDark ? 100 : 75} 
+                    tint={isDark ? 'dark' : 'light'} 
+                    style={StyleSheet.absoluteFill} 
+                  />
+                )
               )}
 
               <View style={[styles.cardContent, { zIndex: 1 }]}>
@@ -944,7 +955,7 @@ export default function HomeScreen() {
                               Viviendo en USA
                             </ThemedText>
                           </View>
-                          <MaterialCommunityIcons name="home-variant" size={32} color={DynamicColors.text} style={{ opacity: 0.2 }} />
+                          <MaterialCommunityIcons name="home-variant" size={40} color={DynamicColors.text} style={{ opacity: 0.2 }} />
                         </View>
                         
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
@@ -987,7 +998,7 @@ export default function HomeScreen() {
                                  <MaterialCommunityIcons name="bullseye-arrow" size={28} color="#3B82F6" style={{ marginRight: 10 }} />
                                  <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t.vision || 'Visión'}</ThemedText>
                                </View>
-                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.subtext }}>
+                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>
                                  {t.hometab?.visiondesc || 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.'}
                                </ThemedText>
                             </View>
@@ -999,7 +1010,7 @@ export default function HomeScreen() {
                                  <MaterialCommunityIcons name="rocket-launch" size={28} color="#F59E0B" style={{ marginRight: 10 }} />
                                  <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t.mision || 'Misión'}</ThemedText>
                                </View>
-                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.subtext }}>
+                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>
                                  {t.hometab?.missiondesc || 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.'}
                                </ThemedText>
                             </View>
@@ -1072,7 +1083,16 @@ export default function HomeScreen() {
                           </View>
 
                           {/* SCROLLVIEW CON ESPACIADO INTERIOR ÓPTIMO */}
-                          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, paddingBottom: 50, paddingTop: 2 }}>
+                          <ScrollView 
+                            showsVerticalScrollIndicator={false} 
+                            style={{ flex: 1 }} 
+                            contentContainerStyle={{ 
+                              flexGrow: 1, 
+                              paddingBottom: 40, 
+                              paddingTop: 2,
+                              justifyContent: !isRegistering ? 'center' : 'flex-start'
+                            }}
+                          >
                             <View style={styles.inputGap}>
                               {isRegistering ? (
                                 <>
@@ -1172,27 +1192,6 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        <Modal visible={showTermsModal} transparent={true} animationType="slide" onRequestClose={() => setShowTermsModal(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: cardWidth, maxHeight: height * 0.8 }]}>
-              <View style={[styles.modalHeader, { borderBottomColor: DynamicColors.border }]}>
-                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>Términos y Condiciones</ThemedText>
-                <TouchableOpacity onPress={() => setShowTermsModal(false)} style={{ padding: 5 }}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
-              </View>
-              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
-                {isLoadingTerms ? <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 20 }} /> : <><ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', marginBottom: 15 }}>Versión {termsData.version || 'Actual'}</ThemedText><ThemedText style={{ color: DynamicColors.text, marginBottom: 20, lineHeight: 24 }}>{stripHtmlTags(termsData.content_html)}</ThemedText></>}
-              </ScrollView>
-              <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
-                <TouchableOpacity style={[styles.primaryWrapper, { width: '100%', height: 45 }]} onPress={() => { setAcceptedTerms(true); setShowTermsModal(false); }}>
-                  <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                    <Text style={styles.primaryText}>Aceptar y Cerrar</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-
         <Modal visible={showCompletionModal} transparent={true} animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: width > 768 ? 500 : width * 0.92 }]}>
@@ -1232,7 +1231,12 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.termsContainer}>
                     <TouchableOpacity onPress={() => setAcceptedTerms(!acceptedTerms)} style={{ padding: 4 }}><MaterialCommunityIcons name={acceptedTerms ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={acceptedTerms ? DynamicColors.accent : DynamicColors.subtext} /></TouchableOpacity>
-                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>He leído y acepto los <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {setShowCompletionModal(false); setTimeout(() => setShowTermsModal(true), 200);}}>Términos y Condiciones</ThemedText></ThemedText>
+                    {/* 🚀 EL CLICK AQUI CIERRA Y RECUERDA EL MODAL 🚀 */}
+                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>He leído y acepto los <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
+                        setReturnToCompletion(true);
+                        setShowCompletionModal(false);
+                        setTimeout(() => setShowTermsModal(true), 300);
+                    }}>Términos y Condiciones</ThemedText></ThemedText>
                   </View>
                 </View>
               </ScrollView>
@@ -1246,6 +1250,45 @@ export default function HomeScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* 🚀 MODAL DE TERMINOS MOVIDO AL FINAL PARA QUE CUBRA TODO 🚀 */}
+        <Modal visible={showTermsModal} transparent={true} animationType="slide" onRequestClose={() => {
+            setShowTermsModal(false);
+            if (returnToCompletion) {
+                setTimeout(() => { setShowCompletionModal(true); setReturnToCompletion(false); }, 300);
+            }
+        }}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: cardWidth, maxHeight: height * 0.8 }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: DynamicColors.border }]}>
+                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>Términos y Condiciones</ThemedText>
+                <TouchableOpacity onPress={() => {
+                    setShowTermsModal(false);
+                    if (returnToCompletion) {
+                        setTimeout(() => { setShowCompletionModal(true); setReturnToCompletion(false); }, 300);
+                    }
+                }} style={{ padding: 5 }}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
+              </View>
+              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
+                {isLoadingTerms ? <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 20 }} /> : <><ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', marginBottom: 15 }}>Versión {termsData.version || 'Actual'}</ThemedText><ThemedText style={{ color: DynamicColors.text, marginBottom: 20, lineHeight: 24 }}>{stripHtmlTags(termsData.content_html)}</ThemedText></>}
+              </ScrollView>
+              <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
+                <TouchableOpacity style={[styles.primaryWrapper, { width: '100%', height: 45 }]} onPress={() => { 
+                    setAcceptedTerms(true); 
+                    setShowTermsModal(false); 
+                    if (returnToCompletion) {
+                        setTimeout(() => { setShowCompletionModal(true); setReturnToCompletion(false); }, 300);
+                    }
+                }}>
+                  <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
+                    <Text style={styles.primaryText}>Aceptar y Cerrar</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
       </RootComponent>
     </>
   );

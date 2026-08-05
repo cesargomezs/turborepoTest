@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express'; 
+import rateLimit from 'express-rate-limit'; // 🚀 1. Importamos la librería de seguridad
 import { AuthRequest, verifyToken } from 'src/middleware/authMiddleware'; // El candado
 import { db } from '../../../../packages/db/src/index';
 import { 
@@ -7,8 +8,8 @@ import {
   registerUser, 
   updateUser, 
   updatePassword,
-  sendPasswordResetEmail // ⬅️ Faltaba importar esta función
-  ,getMiPerfil,
+  sendPasswordResetEmail,
+  getMiPerfil,
   saveDeviceToken,
   deleteUserAccount
 } from '../../src/controllers/authController';
@@ -16,11 +17,23 @@ import { getPlatformStats } from 'src/controllers/publicController';
 
 const router = Router();
 
+// 🚀 2. CREAMOS EL GUARDIA DE SEGURIDAD (Rate Limiter)
+// Bloquea temporalmente a cualquier IP que intente atacar o hacer spam
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos de memoria
+  max: 10, // Máximo 10 intentos por IP
+  message: { 
+    error: "Demasiados intentos desde esta IP. Por favor, espera 15 minutos antes de volver a intentar." 
+  },
+  standardHeaders: true, // Envía información del límite en los headers
+  legacyHeaders: false,
+});
+
 // Esta ruta está protegida: solo alguien con un token válido puede entrar
 router.get('/mi-perfil', verifyToken, getMiPerfil);
 
-// ➕ Crear usuario
-router.post('/register', async (req: Request, res: Response) => {
+// ➕ Crear usuario (Le ponemos el limiter para evitar spam de cuentas falsas)
+router.post('/register', authLimiter, async (req: Request, res: Response) => {
   try {
     const { data, newImageUri } = req.body;
     const newUser = await registerUser(data, newImageUri);
@@ -83,7 +96,8 @@ router.put('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
 });
 
 // 🚀 RUTA CENTRALIZADA DE LOGIN (Google + Email)
-router.post('/login', async (req: Request, res: Response) => {
+// Protegida con limiter para evitar ataques de fuerza bruta adivinando contraseñas
+router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password, idToken, isGoogle } = req.body;
     const result = await authenticateUser({ 
@@ -100,7 +114,8 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // 📧 ENVIAR CORREO DE RECUPERACIÓN (La ruta que faltaba)
-router.post('/reset-password', async (req: Request, res: Response) => {
+// Protegida con limiter para evitar spam de correos
+router.post('/reset-password', authLimiter, async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
     console.log("Solicitud de reseteo recibida para:", email); 
