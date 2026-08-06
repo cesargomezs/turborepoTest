@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'; 
 import rateLimit from 'express-rate-limit'; // 🚀 1. Importamos la librería de seguridad
 import { AuthRequest, verifyToken } from 'src/middleware/authMiddleware'; // El candado
-import { db } from '../../../../packages/db/src/index';
+import { db } from '../../../../../packages/db/src/index';
 import { 
   authenticateUser, 
   getUser, 
@@ -12,7 +12,7 @@ import {
   getMiPerfil,
   saveDeviceToken,
   deleteUserAccount
-} from '../../src/controllers/authController';
+} from '../../controllers/authController';
 import { getPlatformStats } from 'src/controllers/publicController';
 
 const router = Router();

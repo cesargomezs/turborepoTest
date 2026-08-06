@@ -20,8 +20,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 import * as tf from '@tensorflow/tfjs';
 import * as nsfwjs from 'nsfwjs';
-import { db } from '@viviendoenusa/db';
-import { community, jobs, notifications, stores, typeDetail, users } from '@viviendoenusa/db/schema';
+import { db, community, jobs, notifications, stores, typeDetail, users } from '@viviendoenusa/db';
 import { eq } from 'drizzle-orm';
 
 import lawyerRoutes from './routes/lawyers.routes';
@@ -36,7 +35,7 @@ import notificationsRoutes from './routes/notifications.routes';
 import paymentsRoutes from './routes/payments.routes';
 import tarrifsRoutes from './routes/tariffs.routes';
 import companiesRoutes from './routes/companies.routes';
-import authRoutes from '../auth/register/auth.routes';
+import authRoutes from './auth/register/auth.routes';
 import './cron/cron.jobs';
 import termsRoutes from './routes/terms.routes';
 import adminRoutes from './admin/admin.routes';

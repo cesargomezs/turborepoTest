@@ -2,7 +2,7 @@
   "name": "@viviendoenusa/db",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "migrate:dev": "drizzle-kit generate:migration --schema ./src/schema.ts --out ./drizzle/migrations --driver pg --db-url $DATABASE_URL",

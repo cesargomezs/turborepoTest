@@ -4,10 +4,7 @@
       "module": "ESNext",
       "moduleResolution": "node",
       "baseUrl": ".",
-      "paths": {
-        "@viviendoenusa/db": ["../../packages/db/src/index.ts"],
-        "@viviendoenusa/db/*": ["../../packages/db/src/*"]
-      },
+      "outDir": "./dist",
       "esModuleInterop": true,
       "skipLibCheck": true,
       "strict": true
