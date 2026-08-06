@@ -6,11 +6,19 @@ import { createClient } from '@supabase/supabase-js';
 import { imag } from "@tensorflow/tfjs";
 import { logAuditEvent } from "../services/audit.service.js";
 import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import ws from "ws";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+if (!(global as any).WebSocket) {
+  (global as any).WebSocket = ws;
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false }
+})
 const NOMBRE_BUCKET = 'images'; 
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 
