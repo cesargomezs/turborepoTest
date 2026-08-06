@@ -57,6 +57,7 @@ app.use(helmet({
 const allowedOrigins = [
   'http://localhost:8081', 
   'http://192.168.252.243:8081', 
+  'http://192.168.1.17',
   'https://www.viviendoenusa.app',
   'https://viviendoenusa.app',
 ];
