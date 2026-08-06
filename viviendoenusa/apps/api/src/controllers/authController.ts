@@ -8,7 +8,7 @@ import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express'; 
 import { AuthRequest } from '../middleware/authMiddleware'; 
-import { logAuditEvent } from '../services/audit.service'; // 🚀 IMPORTACIÓN CORREGIDA
+import { logAuditEvent } from '../services/audit.service.js'; // 🚀 IMPORTACIÓN CORREGIDA
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';

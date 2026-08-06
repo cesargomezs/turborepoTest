@@ -4,7 +4,7 @@ import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
 import { imag } from "@tensorflow/tfjs";
-import { logAuditEvent } from "src/services/audit.service";
+import { logAuditEvent } from "../services/audit.service.js";
 import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
