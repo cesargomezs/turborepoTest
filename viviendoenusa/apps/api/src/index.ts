@@ -61,7 +61,7 @@ const allowedOrigins = [
   'https://www.viviendoenusa.app',
   'https://viviendoenusa.app',
 ];
-
+/*
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -71,6 +71,10 @@ app.use(cors({
     }
   },
   credentials: true, 
+}));*/
+app.use(cors({
+  origin: true, // Esto hace que el backend acepte dinámicamente CUALQUIER origen que lo llame
+  credentials: true,
 }));
 
 app.use(express.json({ limit: '10mb' })); 
