@@ -280,24 +280,6 @@ app.post('/login', async (req, res) => {
 });
 
 // ============================================================================
-// 🧪 ENDPOINT TEMPORAL PARA PROBAR ALERTAS DE TELEGRAM
-// ============================================================================
-/*
-app.post('/api/test-error', (req, res, next) => {
-  try {
-    // Simulamos un escenario donde un proceso crítico falla
-    const datoInexistente = req.body.campo_falso;
-    
-    // Forzamos un error manualmente
-    throw new Error("¡Este es un error simulado para probar la integración con Telegram! 🐞");
-    
-  } catch (error) {
-    // next(error) es vital: envía el error directamente a tu app.use(async (err, req, res, next) => {...})
-    next(error);
-  }
-});*/
-
-// ============================================================================
 // 🚨 4. MANEJADOR DE ERRORES MAESTRO Y ALERTAS A TELEGRAM (SIEMPRE AL FINAL)
 // ============================================================================
 app.use(async (err: any, req: any, res: any, next: any) => {
@@ -348,6 +330,6 @@ app.use(async (err: any, req: any, res: any, next: any) => {
 // ============================================================================
 // 🚀 INICIO DEL SERVIDOR
 // ============================================================================
-app.listen(Number(port), "192.168.252.243", () => {
+app.listen(Number(port), "0.0.0.0", () => {
   console.log(`🚀 Servidor Express activo y listo para recibir peticiones en el puerto ${port} 🛡️`);
 });
