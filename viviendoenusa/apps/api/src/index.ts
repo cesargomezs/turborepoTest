@@ -73,9 +73,12 @@ app.use(cors({
   credentials: true, 
 }));*/
 app.use(cors({
-  origin: true, // Esto hace que el backend acepte dinámicamente CUALQUIER origen que lo llame
-  credentials: true,
+  origin: '*', // Acepta TODO sin restricciones
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
+
+app.options('*', cors());
 
 app.use(express.json({ limit: '10mb' })); 
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
