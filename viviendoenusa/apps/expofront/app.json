@@ -34,10 +34,12 @@
       "tsconfigPaths": true
     },
     "plugins": [
-      "expo-router",
-      {
-        "origin": "https://viviendoenusa.app" 
-      },
+      [
+        "expo-router",
+        {
+          "origin": "https://viviendoenusa.app" 
+        }
+      ],
       "expo-asset",
       "expo-font",
       [
