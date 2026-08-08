@@ -28,7 +28,8 @@
     },
     "web": {
       "favicon": "./assets/images/backgroundusajpg.jpg",
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "static"
     },
     "experiments": {
       "tsconfigPaths": true
