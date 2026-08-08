@@ -1,16 +1,15 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const { withNativeWind } = require('nativewind/metro');
 const path = require('path');
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
-const config = getDefaultConfig(projectRoot);
+let config = getDefaultConfig(projectRoot);
 
 // 1. Configuración de Activos (Assets)
-// Filtramos 'bin' de sourceExts para que Metro NO intente leerlo como código
 config.resolver.sourceExts = config.resolver.sourceExts.filter(ext => ext !== 'bin');
 
-// Aseguramos que 'bin' esté en assetExts para que se trate como binario crudo
 if (!config.resolver.assetExts.includes('bin')) {
   config.resolver.assetExts.push('bin');
 }
@@ -22,12 +21,13 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// 3. (Opcional) Optimización para archivos grandes
+// 3. Optimización
 config.transformer.getTransformOptions = async () => ({
   transform: {
     experimentalImportSupport: false,
-    inlineRequires: true, // Ayuda con el rendimiento de carga
+    inlineRequires: true,
   },
 });
 
-module.exports = config;
+// 4. Envolvemos con NativeWind apuntando a tu global.css
+module.exports = withNativeWind(config, { input: './global.css' });
