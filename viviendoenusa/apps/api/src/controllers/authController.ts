@@ -330,12 +330,12 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
 
     // 4. Crear el enlace
-    const resetLink = `http://192.168.252.243:8081/ResetPassword?token=${resetToken}`;
+    const resetLink = `http://viviendoenusa.app/ResetPassword?token=${resetToken}`;
 
     const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
 
     const mailOptions = {
-      from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
+      from: '"Viviendo en USA" <noreply@viviendoenusa.app>',
       to: user.email as string, 
       subject: 'Recuperación de Contraseña - Viviendo en USA',
       html: `
@@ -566,7 +566,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
         .storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
         
         const mailOptions = {
-          from: '"Viviendo en USA" <cesar@viviendoenusa.app>',
+          from: '"Viviendo en USA" <noreply@viviendoenusa.app>',
           to: userRecord.email,
           subject: 'Lamentamos que te vayas - Viviendo en USA',
           html: `

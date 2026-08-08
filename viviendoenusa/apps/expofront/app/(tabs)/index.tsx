@@ -958,7 +958,7 @@ export default function HomeScreen() {
                           <MaterialCommunityIcons name="home-variant" size={40} color={DynamicColors.text} style={{ opacity: 0.2 }} />
                         </View>
                         
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWebPlatform ? 10 : 80 }}>
                           
                           {/* Logo Circular Centrado */}
                           <View style={{ alignItems: 'center', marginBottom: 30, marginTop: 10 }}>
@@ -1003,7 +1003,7 @@ export default function HomeScreen() {
                                </ThemedText>
                             </View>
 
-                            {!isLargeWeb && <View style={[styles.separator, { backgroundColor: DynamicColors.border, marginVertical: 0, marginBottom: 20 }]} />}
+                            {!isLargeWeb && <View style={[styles.separator, { backgroundColor: DynamicColors.border, marginVertical: 0, marginBottom: 30 }]} />}
 
                             <View style={{ flex: isLargeWeb ? 1 : undefined, backgroundColor: isLargeWeb ? DynamicColors.inputBg : 'transparent', padding: isLargeWeb ? 25 : 0, borderRadius: 24, borderWidth: isLargeWeb ? 1 : 0, borderColor: DynamicColors.border }}>
                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
