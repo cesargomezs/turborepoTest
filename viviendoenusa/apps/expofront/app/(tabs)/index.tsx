@@ -150,6 +150,9 @@ export default function HomeScreen() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   
+  // 🚀 ESTADO PARA MOSTRAR/OCULTAR LA CONTRASEÑA 🚀
+  const [showPassword, setShowPassword] = useState(false);
+  
   const [termsData, setTermsData] = useState({ version: '', content_html: '' });
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
   
@@ -1080,7 +1083,7 @@ export default function HomeScreen() {
 
                           <View style={styles.customTabsWrapper}>
                             <TouchableOpacity 
-                              onPress={() => { setIsRegistering(false); setAcceptedTerms(false); }} 
+                              onPress={() => { setIsRegistering(false); setAcceptedTerms(false); setShowPassword(false); }} 
                               style={[styles.singleTab, !isRegistering && styles.activeTabStyle]}
                             >
                               <Text style={[styles.tabText, { color: !isRegistering ? '#FFFFFF' : DynamicColors.subtext }]}>
@@ -1088,7 +1091,7 @@ export default function HomeScreen() {
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity 
-                              onPress={() => { setIsRegistering(true); setAcceptedTerms(false); }} 
+                              onPress={() => { setIsRegistering(true); setAcceptedTerms(false); setShowPassword(false); }} 
                               style={[styles.singleTab, isRegistering && styles.activeTabStyle]}
                             >
                               <Text style={[styles.tabText, { color: isRegistering ? '#FFFFFF' : DynamicColors.subtext }]}>
@@ -1135,15 +1138,28 @@ export default function HomeScreen() {
                                       </View>
                                   )}
 
-                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA (PREMIUM UI) 🚀 */}
+                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA Y BOTÓN DE VER 🚀 */}
                                   <View style={{ width: '100%', marginBottom: 10 }}>
-                                    <ThemedTextInput 
-                                      label="Contraseña" 
-                                      value={form.password} 
-                                      onChangeText={(v: string) => setForm({...form, password: v})} 
-                                      placeholder="********" 
-                                      secureTextEntry={true} 
-                                    />
+                                    <View style={{ position: 'relative', justifyContent: 'center' }}>
+                                      <ThemedTextInput 
+                                        label="Contraseña" 
+                                        value={form.password} 
+                                        onChangeText={(v: string) => setForm({...form, password: v})} 
+                                        placeholder="********" 
+                                        secureTextEntry={!showPassword} 
+                                      />
+                                      <TouchableOpacity 
+                                        onPress={() => setShowPassword(!showPassword)}
+                                        style={{ position: 'absolute', right: 15, bottom: 12, zIndex: 10 }}
+                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                                      >
+                                        <MaterialCommunityIcons 
+                                          name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                                          size={22} 
+                                          color={DynamicColors.subtext} 
+                                        />
+                                      </TouchableOpacity>
+                                    </View>
                                     
                                     {(() => {
                                       const pwd = form.password || "";
@@ -1237,7 +1253,28 @@ export default function HomeScreen() {
                               ) : (
                                 <>
                                   <ThemedTextInput label="Correo electrónico" value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" autoCapitalize="none" keyboardType="email-address" />
-                                  <ThemedTextInput label="Contraseña" value={form.password} onChangeText={(v: string) => setForm({...form, password: v})} placeholder="********" secureTextEntry={true} />
+                                  
+                                  {/* 🚀 BOTÓN DE VER CONTRASEÑA EN LOGIN TAMBIÉN 🚀 */}
+                                  <View style={{ position: 'relative', justifyContent: 'center' }}>
+                                    <ThemedTextInput 
+                                      label="Contraseña" 
+                                      value={form.password} 
+                                      onChangeText={(v: string) => setForm({...form, password: v})} 
+                                      placeholder="********" 
+                                      secureTextEntry={!showPassword} 
+                                    />
+                                    <TouchableOpacity 
+                                      onPress={() => setShowPassword(!showPassword)}
+                                      style={{ position: 'absolute', right: 15, bottom: 12, zIndex: 10 }}
+                                      hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                                    >
+                                      <MaterialCommunityIcons 
+                                        name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                                        size={22} 
+                                        color={DynamicColors.subtext} 
+                                      />
+                                    </TouchableOpacity>
+                                  </View>
                                   
                                   <TouchableOpacity onPress={() => setShowResetModal(true)} style={{ alignSelf: 'flex-end', marginBottom: 10, padding: 5 }}>
                                     <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '700' }}>¿Olvidaste tu contraseña?</ThemedText>
