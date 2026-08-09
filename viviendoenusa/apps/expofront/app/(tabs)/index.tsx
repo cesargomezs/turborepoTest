@@ -112,7 +112,10 @@ export default function HomeScreen() {
   const params = useLocalSearchParams(); 
   const { login } = useAuth();
   const { width, height } = useWindowDimensions();
-  const { isDark } = useAppTheme();
+  
+  // 🚀 IMPORTAMOS toggleTheme PARA EL MODO OSCURO/CLARO 🚀
+  const { isDark, toggleTheme } = useAppTheme();
+  
   const colorScheme = isDark ? 'dark' : 'light';
 
   const isWebPlatform = Platform.OS === 'web';
@@ -235,9 +238,6 @@ export default function HomeScreen() {
     })
   });
 
-  // =========================================================================
-  // 🚀 TAMAÑOS EXACTOS ORIGINALES 🚀
-  // =========================================================================
   const cardWidth = loggedIn 
     ? (isLargeWeb ? '96%' : (width > 768 ? 500 : width * 0.92))
     : (isLargeWeb ? 900 : (width > 768 ? 500 : width * 0.92));
@@ -253,7 +253,6 @@ export default function HomeScreen() {
   const verticalOffset = loggedIn 
     ? (isWebPlatform ? -90 : (isIOS ? -85 : -100))
     : (isWebPlatform ? -20 : 0);
-  // =========================================================================
 
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
@@ -267,7 +266,16 @@ export default function HomeScreen() {
     iconInactive: isDark ? '#B0BEC5' : '#364045',  
   };
 
-  const isSubmitDisabled = isRegistering && !acceptedTerms;
+  // 🚀 LÓGICA DE VALIDACIÓN DE CONTRASEÑA 🚀
+  const currentPwd = form.password || "";
+  const isPasswordStrong = 
+    currentPwd.length >= 8 && 
+    /[A-Z]/.test(currentPwd) && 
+    /[a-z]/.test(currentPwd) && 
+    /[0-9]/.test(currentPwd) && 
+    /[^A-Za-z0-9]/.test(currentPwd);
+
+  const isSubmitDisabled = isRegistering && (!acceptedTerms || !isPasswordStrong);
 
   const scrollToBottom = () => { landingScrollRef.current?.scrollToEnd({ animated: true }); };
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
@@ -637,7 +645,25 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]} 
         >
+          {/* 🚀 BARRA DE NAVEGACIÓN DE LA PORTADA CON EL BOTÓN DE MODO CLARO/OSCURO A LA IZQUIERDA 🚀 */}
           <View style={{ width: '100%', height: 65, backgroundColor: '#13112E', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', zIndex: 100 }}>
+            
+            <TouchableOpacity 
+              onPress={() => toggleTheme(isDark ? 'light' : 'dark')} 
+              style={{ position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+            >
+              <MaterialCommunityIcons 
+                name={isDark ? "weather-sunny" : "weather-night"} 
+                size={24} 
+                color="#FFF" 
+              />
+              {isLargeWeb && (
+                 <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>
+                   {isDark ? 'Modo Claro' : 'Modo Oscuro'}
+                 </Text>
+              )}
+            </TouchableOpacity>
+
             <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 }}>Viviendo en USA</Text>
           </View>
 
@@ -806,21 +832,22 @@ export default function HomeScreen() {
             </Text>
 
             <View style={[styles.landingButtonsContainer, { flexDirection: width > 900 ? 'row' : 'column' }]}>
-              <TouchableOpacity accessibilityRole="link" onPress={() => window.open('https://apps.apple.com/', '_blank')} style={styles.storeButtonBlackBig}>
+              {/* Botones de tiendas bloqueados temporalmente */}
+              <View style={[styles.storeButtonBlackBig, { opacity: 0.5 }]}>
                 <MaterialCommunityIcons name="apple" size={32} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.storeButtonSubBig}>Descárgalo en el</Text>
+                  <Text style={styles.storeButtonSubBig}>PRÓXIMAMENTE EN</Text>
                   <Text style={styles.storeButtonTitleBig}>App Store</Text>
                 </View>
-              </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity accessibilityRole="link" onPress={() => window.open('https://play.google.com/store/', '_blank')} style={styles.storeButtonBlackBig}>
+              <View style={[styles.storeButtonBlackBig, { opacity: 0.5 }]}>
                 <MaterialCommunityIcons name="google-play" size={28} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.storeButtonSubBig}>DISPONIBLE EN</Text>
+                  <Text style={styles.storeButtonSubBig}>PRÓXIMAMENTE EN</Text>
                   <Text style={styles.storeButtonTitleBig}>Google Play</Text>
                 </View>
-              </TouchableOpacity>
+              </View>
 
               <TouchableOpacity accessibilityRole="button" onPress={() => setShowWebLanding(false)} style={[styles.storeButtonLightBig, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF', borderColor: DynamicColors.accent }]}>
                 <MaterialCommunityIcons name="web" size={30} color={DynamicColors.accent} />
@@ -843,9 +870,6 @@ export default function HomeScreen() {
     );
   }
 
-  // =========================================================================
-  // VISTA PRINCIPAL (LOGUEADO Y LOGIN)
-  // =========================================================================
   const RootComponent = isWebPlatform ? View : KeyboardAvoidingView;
 
   return (
@@ -856,7 +880,6 @@ export default function HomeScreen() {
       </Head>
       <RootComponent behavior={isIOS ? 'padding' : undefined} style={styles.container}>
         
-        {/* 🚀 EL FONDO GIGANTE SE MUESTRA SIEMPRE EN LA WEB PARA QUE EL CRISTAL TENGA QUÉ REFLEJAR 🚀 */}
         {isWebPlatform && (
           <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
             {mainLogoUrl ? (
@@ -895,7 +918,6 @@ export default function HomeScreen() {
               }
             ]}>
               
-              {/* 🚀 CRISTAL BLINDADO CONTRA BUGS DE EXPO EN WEB 🚀 */}
               {Platform.OS === 'web' ? (
                 <View 
                   style={[
@@ -921,7 +943,6 @@ export default function HomeScreen() {
               <View style={[styles.cardContent, { zIndex: 1 }]}>
                 <View style={{ flex: 1, flexDirection: 'row' }}>
                   
-                  {/* SIDEBAR WEB DE LOGIN */}
                   {isLargeWeb && !loggedIn && (
                     <View style={[styles.webSidebar, { justifyContent: 'space-between', paddingBottom: 10 }]}>
                       <View>
@@ -946,7 +967,6 @@ export default function HomeScreen() {
 
                   <View style={{ flex: 1, paddingLeft: (isLargeWeb && !loggedIn) ? 40 : 0 }}>
                     {loggedIn ? (
-                      // DASHBOARD LOGUEADO PREMIUM
                       <View style={{ flex: 1, width: '100%', alignSelf: 'center', paddingHorizontal: isLargeWeb ? 40 : 10 }}>
                         
                         <View style={[styles.topHeaderRow, { justifyContent: 'space-between', marginBottom: 20 }]}>
@@ -960,7 +980,6 @@ export default function HomeScreen() {
                         
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWebPlatform ? 10 : 80 }}>
                           
-                          {/* Logo Circular Centrado */}
                           <View style={{ alignItems: 'center', marginBottom: 30, marginTop: 10 }}>
                             <View style={{ 
                               width: isLargeWeb ? 160 : 140, 
@@ -990,7 +1009,6 @@ export default function HomeScreen() {
                             </ThemedText>
                           </View>
 
-                          {/* Tarjetas de Visión y Misión */}
                           <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: isLargeWeb ? 20 : 0, justifyContent: 'space-between' }}>
                             
                             <View style={{ flex: isLargeWeb ? 1 : undefined, backgroundColor: isLargeWeb ? DynamicColors.inputBg : 'transparent', padding: isLargeWeb ? 25 : 0, borderRadius: 24, borderWidth: isLargeWeb ? 1 : 0, borderColor: DynamicColors.border, marginBottom: isLargeWeb ? 0 : 20 }}>
@@ -1020,7 +1038,6 @@ export default function HomeScreen() {
                         </ScrollView>
                       </View>
                     ) : (
-                      // LOGIN / REGISTRO FORMULARIO
                       <View style={styles.loginFullContainer}>
                         <View style={{ flex: 1 }}>
                           
@@ -1031,7 +1048,6 @@ export default function HomeScreen() {
                             </TouchableOpacity>
                           )}
 
-                          {/* 🚀 LOGO REDONDO DE VIVIENDO EN USA (SOLO PARA MÓVIL Y PANTALLAS PEQUEÑAS) 🚀 */}
                           {!isLargeWeb && (
                             <View style={styles.brandHeaderContainer}>
                               <View style={{ 
@@ -1062,7 +1078,6 @@ export default function HomeScreen() {
                             </View>
                           )}
 
-                          {/* TABS SUPERIORES */}
                           <View style={styles.customTabsWrapper}>
                             <TouchableOpacity 
                               onPress={() => { setIsRegistering(false); setAcceptedTerms(false); }} 
@@ -1082,7 +1097,6 @@ export default function HomeScreen() {
                             </TouchableOpacity>
                           </View>
 
-                          {/* SCROLLVIEW CON ESPACIADO INTERIOR ÓPTIMO */}
                           <ScrollView 
                             showsVerticalScrollIndicator={false} 
                             style={{ flex: 1 }} 
@@ -1121,7 +1135,95 @@ export default function HomeScreen() {
                                       </View>
                                   )}
 
-                                  <ThemedTextInput label="Contraseña" value={form.password} onChangeText={(v: string) => setForm({...form, password: v})} placeholder="********" secureTextEntry={true} />
+                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA (PREMIUM UI) 🚀 */}
+                                  <View style={{ width: '100%', marginBottom: 10 }}>
+                                    <ThemedTextInput 
+                                      label="Contraseña" 
+                                      value={form.password} 
+                                      onChangeText={(v: string) => setForm({...form, password: v})} 
+                                      placeholder="********" 
+                                      secureTextEntry={true} 
+                                    />
+                                    
+                                    {(() => {
+                                      const pwd = form.password || "";
+                                      const reqs = {
+                                        length: pwd.length >= 8,
+                                        upper: /[A-Z]/.test(pwd),
+                                        lower: /[a-z]/.test(pwd),
+                                        num: /[0-9]/.test(pwd),
+                                        spec: /[^A-Za-z0-9]/.test(pwd),
+                                      };
+                                      
+                                      const score = Object.values(reqs).filter(Boolean).length;
+                                      
+                                      let strengthText = "";
+                                      let strengthColor = DynamicColors.border; 
+                                      let barWidth = "0%";
+                                      
+                                      if (pwd.length > 0) {
+                                        if (score <= 2) { 
+                                          strengthText = "Débil"; 
+                                          strengthColor = "#FF5F6D"; 
+                                          barWidth = "33%"; 
+                                        }
+                                        else if (score <= 4) { 
+                                          strengthText = "Buena"; 
+                                          strengthColor = "#F5A623"; 
+                                          barWidth = "66%"; 
+                                        }
+                                        else { 
+                                          strengthText = "Fuerte"; 
+                                          strengthColor = "#4CAF50"; 
+                                          barWidth = "100%"; 
+                                        }
+                                      }
+
+                                      const ValidationItem = ({ label, isValid }: { label: string, isValid: boolean }) => (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                          <MaterialCommunityIcons 
+                                            name={isValid ? "check-circle" : "close-circle-outline"} 
+                                            size={14} 
+                                            color={isValid ? "#4CAF50" : (isDark ? '#555' : '#AAA')} 
+                                          />
+                                          <Text style={{ 
+                                            fontSize: 11, 
+                                            color: isValid ? (isDark ? '#FFF' : '#333') : (isDark ? '#777' : '#999'), 
+                                            fontWeight: isValid ? '700' : '500' 
+                                          }}>
+                                            {label}
+                                          </Text>
+                                        </View>
+                                      );
+
+                                      return (
+                                        <View style={{ marginTop: 10, paddingHorizontal: 4 }}>
+                                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                                            <Text style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
+                                              Fuerza de la contraseña
+                                            </Text>
+                                            {score > 0 && (
+                                              <Text style={{ fontSize: 12, color: strengthColor, fontWeight: '800' }}>
+                                                {strengthText}
+                                              </Text>
+                                            )}
+                                          </View>
+
+                                          <View style={{ height: 4, width: '100%', backgroundColor: DynamicColors.border, borderRadius: 2, marginBottom: 12, overflow: 'hidden' }}>
+                                            <View style={{ height: '100%', width: barWidth as any, backgroundColor: strengthColor, borderRadius: 2 }} />
+                                          </View>
+
+                                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                                            <ValidationItem label="8 Chars" isValid={reqs.length} />
+                                            <ValidationItem label="A-Z" isValid={reqs.upper} />
+                                            <ValidationItem label="a-z" isValid={reqs.lower} />
+                                            <ValidationItem label="123" isValid={reqs.num} />
+                                            <ValidationItem label="@#$" isValid={reqs.spec} />
+                                          </View>
+                                        </View>
+                                      );
+                                    })()}
+                                  </View>
 
                                   <View style={styles.termsContainer}>
                                     <TouchableOpacity onPress={() => setAcceptedTerms(!acceptedTerms)} style={{ padding: 4 }}>
@@ -1144,7 +1246,6 @@ export default function HomeScreen() {
                               )}
                             </View>
 
-                            {/* BOTONES REDISEÑADOS */}
                             <View style={styles.actionsContainer}>
                               <TouchableOpacity activeOpacity={0.85} onPress={handleAuthAction} disabled={isSubmitDisabled} style={[styles.primaryWrapper, isSubmitDisabled && { opacity: 0.4 }]}>
                                 <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
@@ -1158,6 +1259,7 @@ export default function HomeScreen() {
                                 <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t.hometab?.googleacount || "Continuar con Google"}</Text>
                               </TouchableOpacity>
                             </View>
+
                           </ScrollView>
                         </View>
                       </View>
@@ -1169,7 +1271,6 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
         
-        {/* Modales */}
         <Modal visible={showResetModal} transparent={true} animationType="fade" onRequestClose={() => setShowResetModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 400) }]}>
@@ -1231,7 +1332,6 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.termsContainer}>
                     <TouchableOpacity onPress={() => setAcceptedTerms(!acceptedTerms)} style={{ padding: 4 }}><MaterialCommunityIcons name={acceptedTerms ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={acceptedTerms ? DynamicColors.accent : DynamicColors.subtext} /></TouchableOpacity>
-                    {/* 🚀 EL CLICK AQUI CIERRA Y RECUERDA EL MODAL 🚀 */}
                     <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>He leído y acepto los <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
                         setReturnToCompletion(true);
                         setShowCompletionModal(false);
@@ -1251,7 +1351,6 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* 🚀 MODAL DE TERMINOS MOVIDO AL FINAL PARA QUE CUBRA TODO 🚀 */}
         <Modal visible={showTermsModal} transparent={true} animationType="slide" onRequestClose={() => {
             setShowTermsModal(false);
             if (returnToCompletion) {
@@ -1327,7 +1426,6 @@ const styles = StyleSheet.create({
   separator: { width: '100%', height: 1, marginVertical: 10 },
   loginFullContainer: { flex: 1, width: '100%' },
   
-  // CABECERA LIMPIA
   brandHeaderContainer: { alignItems: 'center', marginBottom: 10, marginTop: 2 },
   brandMainTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
   

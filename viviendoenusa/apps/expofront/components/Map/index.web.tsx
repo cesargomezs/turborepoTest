@@ -1,143 +1,85 @@
-import React, { useEffect } from 'react';
-import { View, Platform, StyleSheet } from 'react-native';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css'; 
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 
-// 1. Icono para los Abogados (Rojo tipo Google)
-const lawyerIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+// 1. Declaramos las variables globales para Leaflet
+let MapContainer: any, TileLayer: any, Marker: any, Popup: any, L: any;
 
-// 2. Icono para TU Ubicación (Círculo azul pulsante o pin azul)
-const userIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+// 2. Cargamos Leaflet de forma dinámica SOLO si estamos en el navegador
+if (typeof window !== 'undefined') {
+  const ReactLeaflet = require('react-leaflet');
+  MapContainer = ReactLeaflet.MapContainer;
+  TileLayer = ReactLeaflet.TileLayer;
+  Marker = ReactLeaflet.Marker;
+  Popup = ReactLeaflet.Popup;
 
-function RecenterMap({ center }: { center: [number, number] }) {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo(center, 14, { animate: true, duration: 1.5 });
-  }, [center]);
-  return null;
+  L = require('leaflet');
+  require('leaflet/dist/leaflet.css');
+
+  // 🚀 FIX OBLIGATORIO: Repara el error de íconos rotos en Leaflet Web
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
+    iconUrl: require('leaflet/dist/images/marker-icon.png'),
+    shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+  });
 }
 
-export default function MapComponent({ userLocation, dataSource, isDark }: any) {
-  const isWeb = Platform.OS === 'web';
-
-  if (!userLocation) {
+// 3. Componente Principal
+export default function MapComponent() {
+  
+  // FASE DE SERVIDOR/LOCAL: Si window no existe, mostramos vista de carga
+  if (typeof window === 'undefined') {
     return (
-      <View style={styles.placeholder}>
-        <MaterialCommunityIcons name="map-search" size={50} color="#4285F4" style={{ opacity: 0.4 }} />
-        <ThemedText style={styles.placeholderText}>Detectando ubicación...</ThemedText>
+      <View style={styles.loadingContainer}>
+        <MaterialCommunityIcons name="map-marker-radius" size={40} color="#888" />
+        <ThemedText style={styles.loadingText}>Cargando mapa...</ThemedText>
       </View>
     );
   }
 
-  if (isWeb) {
-    const center: [number, number] = [userLocation.latitude, userLocation.longitude];
-    
-    // CAPA ESTILO GOOGLE MAPS:
-    // s,t,m,h = Satélite, Terreno, Mapa estándar, solo carreteras
-    const googleMapsUrl = "http://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}";
-
-    return (
-      <View style={styles.container}>
-        <MapContainer 
-          center={center} 
-          zoom={14} 
-          style={{ height: '100%', width: '100%' }}
-        >
-          <RecenterMap center={center} />
-          
-          {/* Capa de Google Maps Estándar */}
-          <TileLayer
-            url={googleMapsUrl}
-            attribution='&copy; Google Maps'
-          />
-
-          {/* MARCADOR DE TU UBICACIÓN (AZUL) */}
-          <Marker position={center} icon={userIcon}>
-            <Popup>
-              <div style={{ fontWeight: 'bold', color: '#4285F4' }}>Tu ubicación actual</div>
-            </Popup>
-          </Marker>
-
-          {/* MARCADORES DE ABOGADOS (ROJOS) */}
-          {dataSource.map((lawyer: any) => (
-            <Marker 
-              key={lawyer.id} 
-              position={[lawyer.lat, lawyer.lng]} 
-              icon={lawyerIcon}
-            >
-              <Popup>
-                <div style={popupStyles.card}>
-                  <img src={lawyer.image} style={popupStyles.image} />
-                  <div style={popupStyles.info}>
-                    <strong style={popupStyles.name}>{lawyer.name}</strong>
-                    <span style={popupStyles.area}>{lawyer.area}</span>
-                    <div style={{fontSize: '10px', marginTop: '4px'}}>
-                        {lawyer.rating} ⭐ • 📞 {lawyer.phone}
-                    </div>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-      </View>
-    );
-  }
-
+  // FASE NAVEGADOR: Renderizamos el mapa con normalidad
   return (
-    <View style={styles.placeholder}>
-       <MaterialCommunityIcons name="google-maps" size={40} color="#34A853" />
-       <ThemedText>Preparando vista de mapa...</ThemedText>
+    <View style={styles.container}>
+      <MapContainer 
+        center={[34.1083, -117.5931]} // Puedes cambiar estas coordenadas por las que necesites
+        zoom={13} 
+        style={{ height: '100%', width: '100%', zIndex: 0 }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={[34.1083, -117.5931]}>
+          <Popup>
+            <ThemedText>¡Aquí está tu ubicación!</ThemedText>
+          </Popup>
+        </Marker>
+      </MapContainer>
     </View>
   );
 }
 
-const popupStyles = {
-  card: { display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px' },
-  image: { width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #FF5F6D' },
-  info: { display: 'flex', flexDirection: 'column' as 'column' },
-  name: { fontSize: '12px', marginBottom: '2px' },
-  area: { fontSize: '10px', color: '#FF5F6D', fontWeight: 'bold' as 'bold' }
-};
-
+// 4. Estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    height: '100%',
+    height: 400, 
     width: '100%',
-    borderRadius: 20,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#ddd'
   },
-  placeholder: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    height: 400,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
-    minHeight: 250
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
   },
-  placeholderText: {
-    opacity: 0.6,
+  loadingText: {
     marginTop: 10,
-    fontSize: 14
+    color: '#888',
   }
 });
