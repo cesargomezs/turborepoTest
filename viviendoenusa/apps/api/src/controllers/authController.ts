@@ -299,17 +299,21 @@ export const authenticateUser = async (credentials: {
 // 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
 // --------------------------------------------------------
 
-// 🚀 TRANSPORTER DEFINITIVO: Sin configuraciones obsoletas que bloqueen la red
+// 🚀 TRANSPORTER DEFINITIVO: Bloqueando la tarjeta de red IPv6 local
 const transporter = nodemailer.createTransport({
   host: 'smtp.office365.com', 
   port: 587,
-  secure: false, // Usar STARTTLS en lugar de SSL directo
-  requireTLS: true, // Exigido por Microsoft 365 moderno
+  secure: false, 
+  requireTLS: true, 
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  // Agregamos timeouts para evitar que se quede colgado (hanging) y genere un error 502
+  // 🚀 LA LLAVE MÁGICA: Obliga al servidor a usar la interfaz de red IPv4
+  localAddress: '0.0.0.0', 
+  tls: {
+    rejectUnauthorized: false
+  },
   connectionTimeout: 10000, 
   greetingTimeout: 10000,
   socketTimeout: 10000
