@@ -298,11 +298,20 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
-  }
+  },
+  tls: {
+    ciphers: 'SSLv3',
+    rejectUnauthorized: false // 🚀 CRUCIAL PARA SERVIDORES EN LA NUBE
+  },
+  // 🚀 TIMEOUTS: Evita que el servidor se quede cargando infinitamente
+  connectionTimeout: 10000, 
+  greetingTimeout: 10000,
+  socketTimeout: 10000
 });
 
 export const sendPasswordResetEmail = async (email: string) => {
   try {
+    console.log(`🔍 [1/4] Buscando usuario con correo: ${email}`);
     const rows = await db.select().from(users).where(eq(users.email, email));
     const user = rows[0];
 
@@ -314,22 +323,21 @@ export const sendPasswordResetEmail = async (email: string) => {
       throw new Error("Esta cuenta usa autenticación de Google. Inicia sesión directamente con Google.");
     }
 
+    console.log("🔑 [2/4] Generando token de recuperación...");
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
-
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
+    const resetLink = `https://viviendoenusa.app/ResetPassword?token=${resetToken}`;
 
-    const resetLink = `https://viviendoenusa.app/ResetPassword?token=${resetToken}`; // 🚀 Asegurado con HTTPS
-
-    // 🚀 BLINDADO: Obtención segura del logo para que no crashee el servidor 🚀
-    let logoUrl = 'https://viviendoenusa.app/favicon.ico'; // Respaldo genérico
+    let logoUrl = 'https://viviendoenusa.app/favicon.ico'; 
     try {
+      console.log("☁️ [3/4] Obteniendo logo de Supabase...");
       const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
       if (!error && data?.signedUrl) {
         logoUrl = data.signedUrl;
       }
     } catch (storageErr) {
-      console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo. Usando respaldo.", storageErr);
+      console.warn("⚠️ No se pudo obtener el logo, usando respaldo.");
     }
 
     const mailOptions = {
@@ -339,42 +347,27 @@ export const sendPasswordResetEmail = async (email: string) => {
       html: `
         <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
           <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-            
             <div style="margin-bottom: 20px;">
-              <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
+              <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
             </div>
-            
             <h2 style="color: #1A1A1A; margin-bottom: 10px;">Recuperación de Contraseña</h2>
             <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 15px;">Hola <strong>${user.name}</strong>,</p>
-            <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
-              Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.
-            </p>
-            
-            <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(255, 95, 109, 0.3);">
-              Restablecer Contraseña
-            </a>
-            
-            <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 20px;">
-              Este enlace expirará en 1 hora o después de ser utilizado.
-            </p>
-            <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 30px;">
-              Si no solicitaste este cambio, por favor ignora este correo. Tu cuenta seguirá segura.
-            </p>
-            
-            <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-              &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
-            </div>
+            <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.</p>
+            <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; margin-bottom: 25px;">Restablecer Contraseña</a>
+            <p style="font-size: 13px; color: #888888; margin-bottom: 20px;">Este enlace expirará en 1 hora.</p>
           </div>
         </div>
       `
     };
 
+    console.log("📨 [4/4] Enviando correo con Nodemailer a los servidores de Outlook...");
     await transporter.sendMail(mailOptions);
+    console.log("✅ [ÉXITO] ¡Correo enviado correctamente!");
 
     return { message: "Correo enviado con éxito. Revisa tu bandeja de entrada." };
   } catch (error: any) {
-    console.error("❌ Error enviando correo:", error.message);
-    throw new Error(error.message);
+    console.error("❌ [ERROR CRÍTICO EN RESET PASSWORD]:", error.message);
+    throw new Error(error.message); // Lanza el error para que la ruta lo capture
   }
 };
 

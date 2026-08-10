@@ -115,14 +115,20 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
 
 // 📧 ENVIAR CORREO DE RECUPERACIÓN (La ruta que faltaba)
 // Protegida con limiter para evitar spam de correos
-router.post('/reset-password', authLimiter, async (req: Request, res: Response) => {
+router.post('/reset-password', async (req, res) => {
   try {
     const { email } = req.body;
-    console.log("Solicitud de reseteo recibida para:", email); 
-    const result = await sendPasswordResetEmail(email);
-    res.status(200).json(result);
+    console.log(`Solicitud de reseteo recibida para: ${email}`); // Este es el log que vimos en Railway
+    
+    // Ejecutamos la función
+    const resultado = await sendPasswordResetEmail(email);
+    
+    // 🚀 CRUCIAL: Debes enviar el resultado al frontend para que deje de cargar
+    res.status(200).json(resultado); 
+
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    // Si la función lanza un error, se lo enviamos al frontend
+    res.status(400).json({ error: error.message }); 
   }
 });
 
