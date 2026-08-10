@@ -4,18 +4,14 @@ import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library'; 
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend'; // 🚀 IMPORTAMOS RESEND
 import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express'; 
 import { AuthRequest } from '../middleware/authMiddleware'; 
 import { logAuditEvent } from '../services/audit.service.js';
 
-// 🚀 1. IMPORTA EL MÓDULO DNS NATIVO DE NODE
-import dns from 'dns';
-
-// 🚀 2. LA OPCIÓN NUCLEAR: Obliga a Node.js a resolver TODO por IPv4
-// Esto evita el bloqueo ENETUNREACH con direcciones IPv6 (2603:...) en Railway
-dns.setDefaultResultOrder('ipv4first');
+// 🚀 INICIALIZAMOS LA API DE CORREOS
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -296,28 +292,8 @@ export const authenticateUser = async (credentials: {
 
 
 // --------------------------------------------------------
-// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
+// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA (CON RESEND)
 // --------------------------------------------------------
-
-// 🚀 TRANSPORTER DEFINITIVO: Bloqueando la tarjeta de red IPv6 local
-const transporter = nodemailer.createTransport({
-  host: 'smtp.office365.com', 
-  port: 587,
-  secure: false, 
-  requireTLS: true, 
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  // 🚀 LA LLAVE MÁGICA: Obliga al servidor a usar la interfaz de red IPv4
-  localAddress: '0.0.0.0', 
-  tls: {
-    rejectUnauthorized: false
-  },
-  connectionTimeout: 10000, 
-  greetingTimeout: 10000,
-  socketTimeout: 10000
-} as any);
 
 export const sendPasswordResetEmail = async (email: string) => {
   try {
@@ -349,42 +325,47 @@ export const sendPasswordResetEmail = async (email: string) => {
       console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo. Usando respaldo.");
     }
 
-    const mailOptions = {
-      from: '"Viviendo en USA" <noreply@viviendoenusa.app>',
-      to: user.email as string, 
-      subject: 'Recuperación de Contraseña - Viviendo en USA',
-      html: `
-        <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
-          <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-            <div style="margin-bottom: 20px;">
-              <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
-            </div>
-            <h2 style="color: #1A1A1A; margin-bottom: 10px;">Recuperación de Contraseña</h2>
-            <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 15px;">Hola <strong>${user.name}</strong>,</p>
-            <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
-              Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.
-            </p>
-            <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(255, 95, 109, 0.3);">
-              Restablecer Contraseña
-            </a>
-            <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 20px;">
-              Este enlace expirará en 1 hora o después de ser utilizado.
-            </p>
-            <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 30px;">
-              Si no solicitaste este cambio, por favor ignora este correo. Tu cuenta seguirá segura.
-            </p>
-            <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-              &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
-            </div>
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
+        <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+          <div style="margin-bottom: 20px;">
+            <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
+          </div>
+          <h2 style="color: #1A1A1A; margin-bottom: 10px;">Recuperación de Contraseña</h2>
+          <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 15px;">Hola <strong>${user.name}</strong>,</p>
+          <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
+            Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.
+          </p>
+          <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(255, 95, 109, 0.3);">
+            Restablecer Contraseña
+          </a>
+          <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 20px;">
+            Este enlace expirará en 1 hora o después de ser utilizado.
+          </p>
+          <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 30px;">
+            Si no solicitaste este cambio, por favor ignora este correo. Tu cuenta seguirá segura.
+          </p>
+          <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
+            &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
           </div>
         </div>
-      `
-    };
+      </div>
+    `;
 
-    console.log("📨 Enviando correo a través de Outlook...");
-    await transporter.sendMail(mailOptions);
-    console.log("✅ Correo de recuperación enviado con éxito.");
+    console.log("📨 Enviando correo a través de Resend API...");
+    const { data, error } = await resend.emails.send({
+      from: 'Viviendo en USA <noreply@viviendoenusa.app>',
+      to: [user.email as string],
+      subject: 'Recuperación de Contraseña - Viviendo en USA',
+      html: htmlContent
+    });
 
+    if (error) {
+      console.error("❌ Error de Resend:", error);
+      throw new Error(error.message);
+    }
+
+    console.log("✅ Correo de recuperación enviado con éxito a través de Resend.");
     return { message: "Correo enviado con éxito. Revisa tu bandeja de entrada." };
   } catch (error: any) {
     console.error("❌ Error enviando correo:", error.message);
@@ -574,34 +555,36 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo de baja.", storageErr);
         }
 
-        const mailOptions = {
-          from: '"Viviendo en USA" <noreply@viviendoenusa.app>',
-          to: userRecord.email,
-          subject: 'Lamentamos que te vayas - Viviendo en USA',
-          html: `
-            <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
-              <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-                
-                <div style="margin-bottom: 20px;">
-                  <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
-                </div>
-                <h2 style="color: #1A1A1A; margin-bottom: 10px;">¡Te extrañaremos, ${userRecord.name}!</h2>
-                <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
-                  Hemos procesado la baja de tu cuenta exitosamente. Tus datos personales y accesos han sido eliminados de nuestros sistemas de acuerdo con tus preferencias.
-                </p>
-                <p style="font-size: 14px; color: #888888; line-height: 20px; margin-bottom: 30px;">
-                  Si en el futuro deseas regresar y ser parte nuevamente de nuestra comunidad hispana, las puertas de <strong>Viviendo en USA</strong> estarán abiertas para ti.
-                </p>
-                <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-                  &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
-                </div>
+        const htmlContent = `
+          <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
+            <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+              
+              <div style="margin-bottom: 20px;">
+                <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
+              </div>
+              <h2 style="color: #1A1A1A; margin-bottom: 10px;">¡Te extrañaremos, ${userRecord.name}!</h2>
+              <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
+                Hemos procesado la baja de tu cuenta exitosamente. Tus datos personales y accesos han sido eliminados de nuestros sistemas de acuerdo con tus preferencias.
+              </p>
+              <p style="font-size: 14px; color: #888888; line-height: 20px; margin-bottom: 30px;">
+                Si en el futuro deseas regresar y ser parte nuevamente de nuestra comunidad hispana, las puertas de <strong>Viviendo en USA</strong> estarán abiertas para ti.
+              </p>
+              <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
+                &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
               </div>
             </div>
-          `
-        };
+          </div>
+        `;
 
-        await transporter.sendMail(mailOptions);
-        console.log("✅ [DELETE ACCOUNT] Correo de despedida enviado con éxito.");
+        // 🚀 TAMBIÉN SE ENVÍA CON RESEND
+        await resend.emails.send({
+          from: 'Viviendo en USA <noreply@viviendoenusa.app>',
+          to: [userRecord.email],
+          subject: 'Lamentamos que te vayas - Viviendo en USA',
+          html: htmlContent
+        });
+        
+        console.log("✅ [DELETE ACCOUNT] Correo de despedida enviado con éxito a través de Resend.");
       } catch (mailError) {
         console.warn("⚠️ [DELETE ACCOUNT] No se pudo enviar el correo de despedida, pero la cuenta fue dada de baja:", mailError);
       }
