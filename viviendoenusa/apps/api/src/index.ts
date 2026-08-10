@@ -40,8 +40,12 @@ import './cron/cron.jobs';
 import termsRoutes from './routes/terms.routes';
 import adminRoutes from './admin/admin.routes';
 
-
 const app = express();
+
+// ============================================================================
+// 🚀 LA LÍNEA MÁGICA QUE SOLUCIONA EL CRASHEO (502) Y EL FALSO CORS EN RAILWAY 🚀
+// ============================================================================
+app.set('trust proxy', 1);
 
 console.log("Puerto desde .env:", process.env.PORT);
 const port = process.env.PORT || 3000;
@@ -61,24 +65,13 @@ const allowedOrigins = [
   'https://www.viviendoenusa.app',
   'https://viviendoenusa.app',
 ];
-/*
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Bloqueado por CORS: Origen no autorizado'));
-    }
-  },
-  credentials: true, 
-}));*/
+
+// Configuración CORS abierta para asegurar compatibilidad en desarrollo local y producción
 app.use(cors({
   origin: '*', // Acepta TODO sin restricciones
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
-
-//app.options('/(.*)', cors());
 
 app.use(express.json({ limit: '10mb' })); 
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -116,7 +109,6 @@ async function loadModel() {
   }
 }
 //loadModel();
-
 
 // ============================================================================
 // 🛤️ 3. RUTAS PROTEGIDAS Y ENDPOINTS

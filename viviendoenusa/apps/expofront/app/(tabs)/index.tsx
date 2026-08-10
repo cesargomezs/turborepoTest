@@ -115,8 +115,12 @@ export default function HomeScreen() {
   
   const { isDark, toggleTheme } = useAppTheme();
   
-  // 🚀 ESTADO PARA EL BOTÓN TOGGLE DE IDIOMA (ES/EN) 🚀
-  const [currentLang, setCurrentLang] = useState<'es' | 'en'>('es');
+  // 🚀 EXTRAEMOS SOLO 't' PARA EVITAR ERRORES DE TYPESCRIPT 🚀
+  const { t } = useTranslation();
+
+  // 🚀 ESTADO LOCAL PARA QUE EL BOTÓN SE ANIME AL INSTANTE 🚀
+  const [currentLang, setCurrentLang] = useState<'es' | 'en'>(t?.home === 'Home' ? 'en' : 'es');
+  const isEnglish = currentLang === 'en';
 
   const colorScheme = isDark ? 'dark' : 'light';
 
@@ -152,6 +156,7 @@ export default function HomeScreen() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
   const [termsData, setTermsData] = useState({ version: '', content_html: '' });
@@ -167,7 +172,6 @@ export default function HomeScreen() {
   const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
 
   const dispatch = useMockDispatch();
-  const { t } = useTranslation();
 
   const orangeGradient: readonly [string, string, ...string[]] = ['#FF5F6D', '#FFC371'];
 
@@ -407,9 +411,9 @@ export default function HomeScreen() {
     setShowWebLanding(false);
 
     setTimeout(() => {
-      const successMsg = `¡Hola${user?.firstName ? ', ' + user.firstName : ''}! Has ingresado exitosamente.`;
+      const successMsg = `${t?.welcome || '¡Hola, '}${user?.firstName ? user.firstName : ''}!`;
       if (isWebPlatform) window.alert(successMsg);
-      else Alert.alert("¡Éxito!", successMsg);
+      else Alert.alert(isEnglish ? "Success!" : "¡Éxito!", successMsg);
     }, 300);
   };
 
@@ -444,7 +448,7 @@ export default function HomeScreen() {
   const submitProfileCompletion = async () => {
     Keyboard.dismiss();
     if (!form.phone || !form.zipCode) {
-      isWebPlatform ? window.alert("Por favor completa tu teléfono y Zip Code") : Alert.alert("Atención", "Por favor completa tu teléfono y Zip Code");
+      isWebPlatform ? window.alert(isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code") : Alert.alert("Atención", isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code");
       return;
     }
 
@@ -455,7 +459,7 @@ export default function HomeScreen() {
     if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) { age--; }
 
     if (age < 18) {
-      isWebPlatform ? window.alert("Debes tener al menos 18 años.") : Alert.alert("Acceso denegado", "Debes tener al menos 18 años.");
+      isWebPlatform ? window.alert(isEnglish ? "You must be at least 18 years old." : "Debes tener al menos 18 años.") : Alert.alert("Acceso denegado", isEnglish ? "You must be at least 18 years old." : "Debes tener al menos 18 años.");
       return; 
     }
 
@@ -482,9 +486,9 @@ export default function HomeScreen() {
       await handlePostLoginSuccess(dataRes.user, dataRes.token);
       
       setTimeout(() => {
-        const successMsg = "¡Tu cuenta ha sido creada y configurada exitosamente!";
+        const successMsg = isEnglish ? "Your account has been created and configured successfully!" : "¡Tu cuenta ha sido creada y configurada exitosamente!";
         if (isWebPlatform) window.alert(successMsg);
-        else Alert.alert("¡Bienvenido!", successMsg);
+        else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
       }, 300);
 
     } catch (error: any) {
@@ -516,7 +520,7 @@ export default function HomeScreen() {
   const handleAuthAction = async () => {
     Keyboard.dismiss();
     if (isRegistering && !acceptedTerms) {
-      isWebPlatform ? window.alert("Debes aceptar los términos y condiciones.") : Alert.alert("Atención", "Debes aceptar los términos y condiciones.");
+      isWebPlatform ? window.alert(isEnglish ? "You must accept the terms and conditions." : "Debes aceptar los términos y condiciones.") : Alert.alert("Atención", isEnglish ? "You must accept the terms and conditions." : "Debes aceptar los términos y condiciones.");
       return;
     }
 
@@ -540,9 +544,9 @@ export default function HomeScreen() {
         if (acceptedTerms && newUserId) { await recordTermsAcceptance(newUserId); }
         
         setTimeout(() => {
-          const successMsg = "Cuenta creada con éxito. Por favor, inicia sesión.";
+          const successMsg = isEnglish ? "Account created successfully. Please log in." : "Cuenta creada con éxito. Por favor, inicia sesión.";
           if (isWebPlatform) window.alert(successMsg);
-          else Alert.alert("¡Bienvenido!", successMsg);
+          else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
         }, 200);
         
         setIsRegistering(false); 
@@ -556,24 +560,24 @@ export default function HomeScreen() {
       const msg = error.message || "Ocurrió un error al intentar acceder.";
       
       if (msg.toLowerCase().includes("google") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("credenciales")) {
-        const customMsg = "Esta cuenta utiliza Google para iniciar sesión. Por favor, usa el botón 'Continuar con Google' abajo.";
+        const customMsg = isEnglish ? "This account uses Google to log in. Please use the 'Continue with Google' button below." : "Esta cuenta utiliza Google para iniciar sesión. Por favor, usa el botón 'Continuar con Google' abajo.";
         if (isWebPlatform) {
           window.alert(customMsg);
         } else {
-          Alert.alert("Inicio con Google", customMsg);
+          Alert.alert(isEnglish ? "Google Login" : "Inicio con Google", customMsg);
         }
         return;
       }
 
       if (msg.includes("bloqueada por múltiples intentos")) {
         if (isWebPlatform) {
-          if (window.confirm(`${msg}\n\n¿Deseas recuperar tu contraseña ahora?`)) {
+          if (window.confirm(`${msg}\n\n${isEnglish ? "Would you like to reset your password now?" : "¿Deseas recuperar tu contraseña ahora?"}`)) {
             setResetEmail(form.email); setShowResetModal(true);
           }
         } else {
-          Alert.alert("Cuenta Bloqueada", msg, [
-              { text: "Cancelar", style: "cancel" },
-              { text: "Recuperar", onPress: () => { setResetEmail(form.email); setShowResetModal(true); } }
+          Alert.alert(isEnglish ? "Account Locked" : "Cuenta Bloqueada", msg, [
+              { text: isEnglish ? "Cancel" : "Cancelar", style: "cancel" },
+              { text: isEnglish ? "Recover" : "Recuperar", onPress: () => { setResetEmail(form.email); setShowResetModal(true); } }
           ]);
         }
         return; 
@@ -584,9 +588,13 @@ export default function HomeScreen() {
 
   const handlePasswordReset = async () => {
     if (!resetEmail || !resetEmail.includes('@')) {
-      isWebPlatform ? window.alert("Correo inválido.") : Alert.alert("Atención", "Correo inválido.");
+      isWebPlatform ? window.alert(isEnglish ? "Invalid email." : "Correo inválido.") : Alert.alert("Atención", isEnglish ? "Invalid email." : "Correo inválido.");
       return;
     }
+    
+    if (isSendingReset) return; 
+    
+    setIsSendingReset(true); 
     try {
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
       const response = await fetch(`${API_URL}/auth/reset-password`, {
@@ -597,10 +605,12 @@ export default function HomeScreen() {
 
       setShowResetModal(false);
       setResetEmail('');
-      const successMsg = "Si el correo está registrado, recibirás un enlace para cambiar tu contraseña.";
-      isWebPlatform ? window.alert(successMsg) : Alert.alert("Correo enviado", successMsg);
+      const successMsg = isEnglish ? "If the email is registered, you will receive a link to reset your password." : "Si el correo está registrado, recibirás un enlace para cambiar tu contraseña.";
+      isWebPlatform ? window.alert(successMsg) : Alert.alert(isEnglish ? "Email sent" : "Correo enviado", successMsg);
     } catch (error: any) {
       isWebPlatform ? window.alert(`Error: ${error.message}`) : Alert.alert("Error", error.message);
+    } finally {
+      setIsSendingReset(false); 
     }
   };
 
@@ -617,6 +627,30 @@ export default function HomeScreen() {
       <><ThemedTextInput label={l1} value={v1} onChangeText={(v: string) => setForm({...form, [k1]: v})} placeholder={p1} keyboardType={t1} />
         <ThemedTextInput label={l2} value={v2} onChangeText={(v: string) => setForm({...form, [k2]: v})} placeholder={p2} keyboardType={t2} /></>
     );
+  };
+
+  const getServiceTitle = (originalTitle: string) => {
+    if (!isEnglish) return originalTitle;
+    switch(originalTitle) {
+      case "Emprendimientos": return "Entrepreneurs";
+      case "Bolsa de Empleos": return "Job Board";
+      case "Eventos Locales": return "Local Events";
+      case "Donaciones": return "Donations";
+      case "Comunidad Viva": return "Vibrant Community";
+      default: return originalTitle;
+    }
+  };
+
+  const getServiceDesc = (originalDesc: string) => {
+    if (!isEnglish) return originalDesc;
+    switch(originalDesc) {
+      case "Impulsa tu negocio o descubre lo mejor del talento local.": return "Boost your business or discover the best local talent.";
+      case "Encuentra el trabajo ideal o contrata personal de confianza.": return "Find the perfect job or hire trusted personnel.";
+      case "Asiste a encuentros culturales, talleres y eventos en tu ciudad.": return "Attend cultural gatherings, workshops, and events in your city.";
+      case "Participa en nuestra red de apoyo e intercambio solidario.": return "Participate in our support and solidarity exchange network.";
+      case "Crea lazos duraderos y siéntete como en casa, estés donde estés.": return "Create lasting bonds and feel at home, wherever you are.";
+      default: return originalDesc;
+    }
   };
 
   if (isWebPlatform && showWebLanding && !loggedIn) {
@@ -663,16 +697,22 @@ export default function HomeScreen() {
               />
               {isLargeWeb && (
                  <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
-                   {isDark ? 'MODO CLARO' : 'MODO OSCURO'}
+                   {isDark ? (isEnglish ? 'LIGHT MODE' : 'MODO CLARO') : (isEnglish ? 'DARK MODE' : 'MODO OSCURO')}
                  </Text>
               )}
             </TouchableOpacity>
 
             <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 }}>Viviendo en USA</Text>
 
-            {/* 🚀 TOGGLE CIRCULAR DE IDIOMA (DERECHA) 🚀 */}
+            {/* 🚀 TOGGLE CIRCULAR DE IDIOMA CONECTADO A REDUX (DERECHA) 🚀 */}
             <TouchableOpacity 
-              onPress={() => setCurrentLang(currentLang === 'es' ? 'en' : 'es')}
+              onPress={() => {
+                const nextLang = currentLang === 'es' ? 'en' : 'es';
+                setCurrentLang(nextLang); // Cambia el switch de lado al instante
+                
+                // Dispara el cambio de idioma a Redux para que 't' se actualice globalmente
+                dispatch({ type: 'language/setLanguage', payload: nextLang });
+              }}
               style={{ 
                 position: 'absolute', 
                 right: 20, 
@@ -728,17 +768,18 @@ export default function HomeScreen() {
 
             <View style={{ zIndex: 2, paddingHorizontal: 20, width: '100%', maxWidth: 1000, marginTop: 40 }}>
               <Text accessibilityRole="header" aria-level={1} style={{ color: '#FFF', fontSize: isLargeWeb ? 64 : 46, fontWeight: '900', marginBottom: 10, letterSpacing: -1 }}>
-                Unidos Somos <Text style={{ color: '#FF5F6D' }}>Más Fuertes</Text>
+                {isEnglish ? "United We Are " : "Unidos Somos "}
+                <Text style={{ color: '#FF5F6D' }}>{isEnglish ? "Stronger" : "Más Fuertes"}</Text>
               </Text>
               
               <Text style={{ color: '#FFF', fontSize: isLargeWeb ? 22 : 18, fontWeight: '400', lineHeight: 30, maxWidth: 800, marginBottom: 40 }}>
-                Conectando corazones, celebrando cultura y construyendo futuro juntos. Un espacio donde cada voz cuenta y cada historia importa.
+                 {isEnglish ? "Connecting hearts, celebrating culture, and building the future together. A space where every voice counts and every story matters." : "Conectando corazones, celebrando cultura y construyendo futuro juntos. Un espacio donde cada voz cuenta y cada historia importa."}
               </Text>
 
               <TouchableOpacity accessibilityRole="button" onPress={scrollToBottom} style={{ alignSelf: 'flex-start' }}>
                 <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primaryWrapper}>
                   <View style={styles.gradientContainer}>
-                    <Text style={styles.primaryText}>:: Únete ahora ::</Text>
+                    <Text style={styles.primaryText}>{isEnglish ? ":: Join Now ::" : ":: Únete ahora ::"}</Text>
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -747,23 +788,23 @@ export default function HomeScreen() {
 
           <View style={{ paddingVertical: 80, paddingHorizontal: 20, alignItems: 'center', backgroundColor: isDark ? '#111827' : '#FFFFFF' }}>
             <Text accessibilityRole="header" aria-level={2} style={{ fontSize: isLargeWeb ? 40 : 30, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 50, textAlign: 'center' }}>
-              Acerca de nosotros
+              {isEnglish ? "About Us" : "Acerca de nosotros"}
             </Text>
 
             <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: 30, maxWidth: 1100, width: '100%', justifyContent: 'center' }}>
               <View style={[styles.aboutCard, { backgroundColor: DynamicColors.cardBg, borderColor: DynamicColors.border }]}>
                  <MaterialCommunityIcons name="bullseye-arrow" size={50} color="#3B82F6" style={{ marginBottom: 20 }} />
-                 <Text accessibilityRole="header" aria-level={3} style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.hometab?.vision || 'Visión'}</Text>
+                 <Text accessibilityRole="header" aria-level={3} style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.hometab?.vision || (isEnglish ? 'Vision' : 'Visión')}</Text>
                  <Text style={[styles.aboutCardText, { color: DynamicColors.subtext }]}>
-                   {t?.hometab?.visiondesc || 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.'}
+                   {t?.hometab?.visiondesc || (isEnglish ? 'Strengthen local economies by connecting residents with businesses and services in their neighborhood, promoting local consumption.' : 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.')}
                  </Text>
               </View>
 
               <View style={[styles.aboutCard, { backgroundColor: DynamicColors.cardBg, borderColor: DynamicColors.border }]}>
                  <MaterialCommunityIcons name="rocket-launch" size={50} color="#F59E0B" style={{ marginBottom: 20 }} />
-                 <Text accessibilityRole="header" aria-level={3} style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.hometab?.mission || 'Misión'}</Text>
+                 <Text accessibilityRole="header" aria-level={3} style={[styles.aboutCardTitle, { color: isDark ? '#FFF' : '#1E3A8A' }]}>{t?.hometab?.mission || (isEnglish ? 'Mission' : 'Misión')}</Text>
                  <Text style={[styles.aboutCardText, { color: DynamicColors.subtext }]}>
-                   {t?.hometab?.missiondesc || 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.'}
+                   {t?.hometab?.missiondesc || (isEnglish ? 'Create more united, participative, and supportive communities, where every resident feels connected, safe, and proud of their neighborhood.' : 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.')}
                  </Text>
               </View>
             </View>
@@ -771,23 +812,23 @@ export default function HomeScreen() {
 
           <View style={{ paddingVertical: 60, backgroundColor: isDark ? '#1F2937' : '#F8FAFC', alignItems: 'center', borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
             <Text accessibilityRole="header" aria-level={2} style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 40, textAlign: 'center', paddingHorizontal: 20 }}>
-              El impacto de nuestra red en tiempo real
+              {isEnglish ? "Our network's real-time impact" : "El impacto de nuestra red en tiempo real"}
             </Text>
             
             <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: isLargeWeb ? 60 : 30, justifyContent: 'center', alignItems: 'center' }}>
-              <AnimatedStat endValue={platformStats.users} label="Miembros Activos" icon="account-group" isDark={isDark} />
-              <AnimatedStat endValue={platformStats.jobs} label="Oportunidades de Empleo" icon="briefcase-search" isDark={isDark} />
-              <AnimatedStat endValue={platformStats.companies} label="Negocios Conectados" icon="storefront" isDark={isDark} />
+              <AnimatedStat endValue={platformStats.users} label={isEnglish ? "Active Members" : "Miembros Activos"} icon="account-group" isDark={isDark} />
+              <AnimatedStat endValue={platformStats.jobs} label={isEnglish ? "Job Opportunities" : "Oportunidades de Empleo"} icon="briefcase-search" isDark={isDark} />
+              <AnimatedStat endValue={platformStats.companies} label={isEnglish ? "Connected Businesses" : "Negocios Conectados"} icon="storefront" isDark={isDark} />
             </View>
           </View>
 
           <View style={{ paddingVertical: 80, backgroundColor: isDark ? '#1F2937' : '#F1F5F9', alignItems: 'center', width: '100%' }}>
             <View style={{ maxWidth: 800, paddingHorizontal: 20, marginBottom: 40, alignItems: 'center' }}>
                <Text accessibilityRole="header" aria-level={2} style={{ fontSize: isLargeWeb ? 36 : 28, fontWeight: 'bold', color: isDark ? '#FFF' : '#1E3A8A', marginBottom: 15, textAlign: 'center' }}>
-                 Explora Nuestros Servicios
+                 {isEnglish ? "Explore Our Services" : "Explora Nuestros Servicios"}
                </Text>
                <Text style={{ fontSize: 16, color: DynamicColors.subtext, textAlign: 'center', lineHeight: 24 }}>
-                 Descubre todo lo que Viviendo en USA tiene para ofrecerte. Promueve tu negocio, encuentra el trabajo ideal o conecta con tu comunidad local.
+                 {isEnglish ? "Discover everything Living in USA has to offer. Promote your business, find the perfect job, or connect with your local community." : "Descubre todo lo que Viviendo en USA tiene para ofrecerte. Promueve tu negocio, encuentra el trabajo ideal o conecta con tu comunidad local."}
                </Text>
             </View>
 
@@ -833,15 +874,21 @@ export default function HomeScreen() {
                     renderItem={({ item }) => (
                       <View style={{ width: CAROUSEL_ITEM_WIDTH, marginRight: SPACING, borderRadius: 24, overflow: 'hidden', backgroundColor: DynamicColors.cardBg, elevation: 5, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, borderColor: DynamicColors.border, borderWidth: 1 }}>
                           {item.img ? (
-                             <Image source={{ uri: item.img }} style={{ width: '100%', height: 200 }} resizeMode="cover" accessibilityLabel={item.title} />
+                             <Image source={{ uri: item.img }} style={{ width: '100%', height: 200 }} resizeMode="cover" accessibilityLabel={getServiceTitle(item.title)} />
                           ) : (
                              <View style={{ width: '100%', height: 200, backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
                                 <ActivityIndicator size="small" color="#FF5F6D" />
                              </View>
                           )}
                           <View style={{ padding: 24 }}>
-                            <Text accessibilityRole="header" aria-level={3} style={{ fontSize: 20, fontWeight: '800', color: '#FF5F6D', marginBottom: 10 }}>{item.title}</Text>
-                            <Text style={{ fontSize: 14, color: DynamicColors.subtext, lineHeight: 22 }}>{item.desc}</Text>
+                            {/* 🚀 TRADUCCIÓN DEL TÍTULO DEL SERVICIO 🚀 */}
+                            <Text accessibilityRole="header" aria-level={3} style={{ fontSize: 20, fontWeight: '800', color: '#FF5F6D', marginBottom: 10 }}>
+                              {getServiceTitle(item.title)}
+                            </Text>
+                            {/* 🚀 TRADUCCIÓN DE LA DESCRIPCIÓN DEL SERVICIO 🚀 */}
+                            <Text style={{ fontSize: 14, color: DynamicColors.subtext, lineHeight: 22 }}>
+                              {getServiceDesc(item.desc)}
+                            </Text>
                           </View>
                       </View>
                     )}
@@ -869,13 +916,13 @@ export default function HomeScreen() {
 
           <View style={{ paddingVertical: 80, backgroundColor: DynamicColors.heroBg, paddingHorizontal: 20, alignItems: 'center' }}>
             <Text accessibilityRole="header" aria-level={2} style={{ fontSize: 32, fontWeight: '900', color: DynamicColors.text, marginBottom: 5, textAlign: 'center' }}>
-              Viviendo en <Text style={{ color: '#FF5F6D' }}>USA</Text>
+              {isEnglish ? "Living in " : "Viviendo en "}<Text style={{ color: '#FF5F6D' }}>USA</Text>
             </Text>
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#F5A623', marginBottom: 25, textAlign: 'center' }}>
-              La App de la Comunidad Hispana
+              {isEnglish ? "The Hispanic Community App" : "La App de la Comunidad Hispana"}
             </Text>
             <Text style={{ color: DynamicColors.subtext, textAlign: 'center', maxWidth: 650, marginBottom: 40, fontSize: 16, lineHeight: 24 }}>
-              Elige la plataforma de tu preferencia. Regístrate gratis y comienza a descubrir y conectar con la comunidad hoy mismo.
+              {isEnglish ? "Choose your preferred platform. Register for free and start discovering and connecting with the community today." : "Elige la plataforma de tu preferencia. Regístrate gratis y comienza a descubrir y conectar con la comunidad hoy mismo."}
             </Text>
 
             <View style={[styles.landingButtonsContainer, { flexDirection: width > 900 ? 'row' : 'column' }]}>
@@ -883,7 +930,7 @@ export default function HomeScreen() {
               <View style={[styles.storeButtonBlackBig, { opacity: 0.5 }]}>
                 <MaterialCommunityIcons name="apple" size={32} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.storeButtonSubBig}>PRÓXIMAMENTE EN</Text>
+                  <Text style={styles.storeButtonSubBig}>{isEnglish ? "COMING SOON ON" : "PRÓXIMAMENTE EN"}</Text>
                   <Text style={styles.storeButtonTitleBig}>App Store</Text>
                 </View>
               </View>
@@ -891,7 +938,7 @@ export default function HomeScreen() {
               <View style={[styles.storeButtonBlackBig, { opacity: 0.5 }]}>
                 <MaterialCommunityIcons name="google-play" size={28} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.storeButtonSubBig}>PRÓXIMAMENTE EN</Text>
+                  <Text style={styles.storeButtonSubBig}>{isEnglish ? "COMING SOON ON" : "PRÓXIMAMENTE EN"}</Text>
                   <Text style={styles.storeButtonTitleBig}>Google Play</Text>
                 </View>
               </View>
@@ -899,8 +946,8 @@ export default function HomeScreen() {
               <TouchableOpacity accessibilityRole="button" onPress={() => setShowWebLanding(false)} style={[styles.storeButtonLightBig, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF', borderColor: DynamicColors.accent }]}>
                 <MaterialCommunityIcons name="web" size={30} color={DynamicColors.accent} />
                 <View style={{ marginLeft: 12 }}>
-                  <Text style={[styles.storeButtonSubBig, { color: DynamicColors.subtext }]}>Navegar en</Text>
-                  <Text style={[styles.storeButtonTitleBig, { color: DynamicColors.accent }]}>Versión Web</Text>
+                  <Text style={[styles.storeButtonSubBig, { color: DynamicColors.subtext }]}>{isEnglish ? "Browse on" : "Navegar en"}</Text>
+                  <Text style={[styles.storeButtonTitleBig, { color: DynamicColors.accent }]}>{isEnglish ? "Web Version" : "Versión Web"}</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -908,7 +955,7 @@ export default function HomeScreen() {
 
           <View style={{ paddingVertical: 40, alignItems: 'center', backgroundColor: '#0B0A1D' }}>
              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 20 }}>
-                {t?.hometab.copyright || '© 2024 Viviendo en USA. Todos los derechos reservados.'}
+                {t?.hometab?.copyright || '© 2026 Viviendo en USA. Todos los derechos reservados.'}
              </Text>
              <View style={{ width: 60, height: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
           </View>
@@ -1004,9 +1051,9 @@ export default function HomeScreen() {
                         <ThemedText style={{ color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>Portal de recursos</ThemedText>
 
                         <View style={[styles.webSidebarBenefits, { marginTop: 30 }]}>
-                          <View style={styles.benefitItem}><MaterialCommunityIcons name="storefront-outline" size={24} color={DynamicColors.accent} /><ThemedText style={[styles.benefitText, { color: DynamicColors.text }]}>Impulsa y descubre negocios.</ThemedText></View>
-                          <View style={styles.benefitItem}><MaterialCommunityIcons name="briefcase-outline" size={24} color={DynamicColors.accent} /><ThemedText style={[styles.benefitText, { color: DynamicColors.text }]}>Encuentra oportunidades laborales.</ThemedText></View>
-                          <View style={styles.benefitItem}><MaterialCommunityIcons name="account-group-outline" size={24} color={DynamicColors.accent} /><ThemedText style={[styles.benefitText, { color: DynamicColors.text }]}>Crea una red de contactos.</ThemedText></View>
+                          <View style={styles.benefitItem}><MaterialCommunityIcons name="storefront-outline" size={24} color={DynamicColors.accent} /><ThemedText style={[styles.benefitText, { color: DynamicColors.text }]}>{isEnglish ? "Promote and discover businesses." : "Impulsa y descubre negocios."}</ThemedText></View>
+                          <View style={styles.benefitItem}><MaterialCommunityIcons name="briefcase-outline" size={24} color={DynamicColors.accent} /><ThemedText style={[styles.benefitText, { color: DynamicColors.text }]}>{isEnglish ? "Find job opportunities." : "Encuentra oportunidades laborales."}</ThemedText></View>
+                          <View style={styles.benefitItem}><MaterialCommunityIcons name="account-group-outline" size={24} color={DynamicColors.accent} /><ThemedText style={[styles.benefitText, { color: DynamicColors.text }]}>{isEnglish ? "Create a contact network." : "Crea una red de contactos."}</ThemedText></View>
                         </View>
                       </View>
                     </View>
@@ -1052,7 +1099,7 @@ export default function HomeScreen() {
                                ) : <ActivityIndicator size="small" color="#FF5F6D" />}
                             </View>
                             <ThemedText style={{ fontSize: 22, fontWeight: '800', color: DynamicColors.text, marginTop: 15 }}>
-                              ¡Bienvenido! 👋
+                              {t?.welcome || '¡Bienvenido! '}👋
                             </ThemedText>
                           </View>
 
@@ -1061,10 +1108,10 @@ export default function HomeScreen() {
                             <View style={{ flex: isLargeWeb ? 1 : undefined, backgroundColor: isLargeWeb ? DynamicColors.inputBg : 'transparent', padding: isLargeWeb ? 25 : 0, borderRadius: 24, borderWidth: isLargeWeb ? 1 : 0, borderColor: DynamicColors.border, marginBottom: isLargeWeb ? 0 : 20 }}>
                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                                  <MaterialCommunityIcons name="bullseye-arrow" size={28} color="#3B82F6" style={{ marginRight: 10 }} />
-                                 <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t.vision || 'Visión'}</ThemedText>
+                                 <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t?.hometab?.vision || (isEnglish ? 'Vision' : 'Visión')}</ThemedText>
                                </View>
                                <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>
-                                 {t.hometab?.visiondesc || 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.'}
+                                 {t?.hometab?.visiondesc || (isEnglish ? 'Strengthen local economies by connecting residents with businesses and services in their neighborhood, promoting local consumption.' : 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.')}
                                </ThemedText>
                             </View>
 
@@ -1073,10 +1120,10 @@ export default function HomeScreen() {
                             <View style={{ flex: isLargeWeb ? 1 : undefined, backgroundColor: isLargeWeb ? DynamicColors.inputBg : 'transparent', padding: isLargeWeb ? 25 : 0, borderRadius: 24, borderWidth: isLargeWeb ? 1 : 0, borderColor: DynamicColors.border }}>
                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                                  <MaterialCommunityIcons name="rocket-launch" size={28} color="#F59E0B" style={{ marginRight: 10 }} />
-                                 <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t.mision || 'Misión'}</ThemedText>
+                                 <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t?.hometab?.mission || (isEnglish ? 'Mission' : 'Misión')}</ThemedText>
                                </View>
                                <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>
-                                 {t.hometab?.missiondesc || 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.'}
+                                 {t?.hometab?.missiondesc || (isEnglish ? 'Create more united, participative, and supportive communities, where every resident feels connected, safe, and proud of their neighborhood.' : 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.')}
                                </ThemedText>
                             </View>
 
@@ -1091,7 +1138,7 @@ export default function HomeScreen() {
                           {isWebPlatform && (
                             <TouchableOpacity onPress={() => setShowWebLanding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 2 }}>
                               <MaterialCommunityIcons name="arrow-left" size={18} color={DynamicColors.text} />
-                              <Text style={{ color: DynamicColors.text, marginLeft: 5, fontWeight: '600', fontSize: 13 }}>Volver a la Portada</Text>
+                              <Text style={{ color: DynamicColors.text, marginLeft: 5, fontWeight: '600', fontSize: 13 }}>{isEnglish ? "Back to Home" : "Volver a la Portada"}</Text>
                             </TouchableOpacity>
                           )}
 
@@ -1131,7 +1178,7 @@ export default function HomeScreen() {
                               style={[styles.singleTab, !isRegistering && styles.activeTabStyle]}
                             >
                               <Text style={[styles.tabText, { color: !isRegistering ? '#FFFFFF' : DynamicColors.subtext }]}>
-                                Iniciar Sesión
+                                {t?.hometab?.login || (isEnglish ? "Login" : "Iniciar Sesión")}
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity 
@@ -1139,7 +1186,7 @@ export default function HomeScreen() {
                               style={[styles.singleTab, isRegistering && styles.activeTabStyle]}
                             >
                               <Text style={[styles.tabText, { color: isRegistering ? '#FFFFFF' : DynamicColors.subtext }]}>
-                                Registrarse
+                                {t?.hometab?.registerhome || (isEnglish ? "Register" : "Registrarse")}
                               </Text>
                             </TouchableOpacity>
                           </View>
@@ -1157,12 +1204,12 @@ export default function HomeScreen() {
                             <View style={styles.inputGap}>
                               {isRegistering ? (
                                 <>
-                                  {renderInputPair("Nombre", form.firstName, "firstName", "Tu nombre", "default", "Apellido", form.lastName, "lastName", "Tu apellido", "default")}
-                                  <ThemedTextInput label="Correo electrónico" value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" keyboardType="email-address" autoCapitalize="none" />
+                                  {renderInputPair(t?.headertab?.name || (isEnglish ? "Name" : "Nombre"), form.firstName, "firstName", isEnglish ? "Your name" : "Tu nombre", "default", t?.headertab?.lastName || (isEnglish ? "Last Name" : "Apellido"), form.lastName, "lastName", isEnglish ? "Your last name" : "Tu apellido", "default")}
+                                  <ThemedTextInput label={t?.headertab?.email || (isEnglish ? "Email" : "Correo electrónico")} value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" keyboardType="email-address" autoCapitalize="none" />
                                   
-                                  {renderInputPair("Teléfono", form.phone, "phone", "+1 234 567 8900", isWebPlatform ? "default" : "phone-pad", "Zip Code", form.zipCode, "zipCode", "90210", isWebPlatform ? "default" : "number-pad")}
+                                  {renderInputPair(t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono"), form.phone, "phone", "+1 234 567 8900", isWebPlatform ? "default" : "phone-pad", t?.headertab?.zipCode || "Zip Code", form.zipCode, "zipCode", "90210", isWebPlatform ? "default" : "number-pad")}
                                   
-                                  <ThemedText style={styles.labelDate}>{t.hometab?.dateBirthday || "Fecha de Nacimiento"}</ThemedText>
+                                  <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate" : "Fecha de Nacimiento")}</ThemedText>
                                   
                                   <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 10 }]}>
                                     {isWebPlatform ? (
@@ -1177,7 +1224,7 @@ export default function HomeScreen() {
                                   </View>
                                   {showDatePicker && !isAndroid && !isWebPlatform && (
                                       <View style={isIOS ? styles.iosPickerContainer : null}>
-                                          {isIOS && (<TouchableOpacity onPress={closeDatePickerIOS} style={styles.iosPickerDoneButton}><ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>Listo</ThemedText></TouchableOpacity>)}
+                                          {isIOS && (<TouchableOpacity onPress={closeDatePickerIOS} style={styles.iosPickerDoneButton}><ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>{t?.hometab?.ready || (isEnglish ? "Ready" : "Listo")}</ThemedText></TouchableOpacity>)}
                                           <DateTimePicker value={form.birthDate} mode="date" display={isIOS ? "spinner" : "default"} onChange={onDateChange} textColor={DynamicColors.text} maximumDate={new Date()} />
                                       </View>
                                   )}
@@ -1186,7 +1233,7 @@ export default function HomeScreen() {
                                   <View style={{ width: '100%', marginBottom: 10 }}>
                                     <View style={{ position: 'relative', justifyContent: 'center' }}>
                                       <ThemedTextInput 
-                                        label="Contraseña" 
+                                        label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} 
                                         value={form.password} 
                                         onChangeText={(v: string) => setForm({...form, password: v})} 
                                         placeholder="********" 
@@ -1223,17 +1270,17 @@ export default function HomeScreen() {
                                       
                                       if (pwd.length > 0) {
                                         if (score <= 2) { 
-                                          strengthText = "Débil"; 
+                                          strengthText = isEnglish ? "Weak" : "Débil"; 
                                           strengthColor = "#FF5F6D"; 
                                           barWidth = "33%"; 
                                         }
                                         else if (score <= 4) { 
-                                          strengthText = "Buena"; 
+                                          strengthText = isEnglish ? "Good" : "Buena"; 
                                           strengthColor = "#F5A623"; 
                                           barWidth = "66%"; 
                                         }
                                         else { 
-                                          strengthText = "Fuerte"; 
+                                          strengthText = isEnglish ? "Strong" : "Fuerte"; 
                                           strengthColor = "#4CAF50"; 
                                           barWidth = "100%"; 
                                         }
@@ -1260,7 +1307,7 @@ export default function HomeScreen() {
                                         <View style={{ marginTop: 10, paddingHorizontal: 4 }}>
                                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                                             <Text style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
-                                              Fuerza de la contraseña
+                                              {isEnglish ? "Password Strength" : "Fuerza de la contraseña"}
                                             </Text>
                                             {score > 0 && (
                                               <Text style={{ fontSize: 12, color: strengthColor, fontWeight: '800' }}>
@@ -1290,18 +1337,18 @@ export default function HomeScreen() {
                                       <MaterialCommunityIcons name={acceptedTerms ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={acceptedTerms ? DynamicColors.accent : DynamicColors.subtext} />
                                     </TouchableOpacity>
                                     <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>
-                                      He leído y acepto los <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => setShowTermsModal(true)}>Términos y Condiciones</ThemedText>
+                                      {isEnglish ? "I have read and accept the " : "He leído y acepto los "} <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => setShowTermsModal(true)}>{isEnglish ? "Terms and Conditions" : "Términos y Condiciones"}</ThemedText>
                                    </ThemedText>
                                   </View>
                                 </>
                               ) : (
                                 <>
-                                  <ThemedTextInput label="Correo electrónico" value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" autoCapitalize="none" keyboardType="email-address" />
+                                  <ThemedTextInput label={t?.headertab?.email || (isEnglish ? "Email" : "Correo electrónico")} value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" autoCapitalize="none" keyboardType="email-address" />
                                   
                                   {/* 🚀 BOTÓN DE VER CONTRASEÑA EN LOGIN TAMBIÉN 🚀 */}
                                   <View style={{ position: 'relative', justifyContent: 'center' }}>
                                     <ThemedTextInput 
-                                      label="Contraseña" 
+                                      label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} 
                                       value={form.password} 
                                       onChangeText={(v: string) => setForm({...form, password: v})} 
                                       placeholder="********" 
@@ -1321,7 +1368,7 @@ export default function HomeScreen() {
                                   </View>
                                   
                                   <TouchableOpacity onPress={() => setShowResetModal(true)} style={{ alignSelf: 'flex-end', marginBottom: 10, padding: 5 }}>
-                                    <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '700' }}>¿Olvidaste tu contraseña?</ThemedText>
+                                    <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '700' }}>{isEnglish ? "Forgot your password?" : "¿Olvidaste tu contraseña?"}</ThemedText>
                                   </TouchableOpacity>
                                 </>
                               )}
@@ -1331,13 +1378,13 @@ export default function HomeScreen() {
                               <TouchableOpacity activeOpacity={0.85} onPress={handleAuthAction} disabled={isSubmitDisabled} style={[styles.primaryWrapper, isSubmitDisabled && { opacity: 0.4 }]}>
                                 <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
                                   <MaterialCommunityIcons name={isRegistering ? "account-plus" : "login-variant"} size={20} color="white" style={{ marginRight: 8 }} />
-                                  <Text style={styles.primaryText}>{isRegistering ? (t.hometab?.registerhome || "Crear Cuenta") : (t.hometab?.acces || "Acceder")}</Text>
+                                  <Text style={styles.primaryText}>{isRegistering ? (t?.hometab?.registerhome || (isEnglish ? "Register" : "Crear Cuenta")) : (t?.hometab?.acces || (isEnglish ? "Access" : "Acceder"))}</Text>
                                 </LinearGradient>
                               </TouchableOpacity>
 
                               <TouchableOpacity disabled={!request || isSubmitDisabled} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff' }, isSubmitDisabled && { opacity: 0.4 }]} onPress={() => promptAsync()}>
                                 <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
-                                <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t.hometab?.googleacount || "Continuar con Google"}</Text>
+                                <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Continue with Google" : "Continuar con Google")}</Text>
                               </TouchableOpacity>
                             </View>
 
@@ -1356,17 +1403,26 @@ export default function HomeScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 400) }]}>
               <View style={[styles.modalHeader, { borderBottomColor: DynamicColors.border }]}>
-                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>Recuperar Contraseña</ThemedText>
+                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>{isEnglish ? "Recover Password" : "Recuperar Contraseña"}</ThemedText>
                 <TouchableOpacity onPress={() => setShowResetModal(false)} style={{ padding: 5 }}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
               </View>
               <View style={styles.modalContent}>
-                <ThemedText style={{ color: DynamicColors.subtext, marginBottom: 20, fontSize: 14 }}>Ingresa el correo asociado a tu cuenta. Te enviaremos instrucciones.</ThemedText>
+                <ThemedText style={{ color: DynamicColors.subtext, marginBottom: 20, fontSize: 14 }}>{isEnglish ? "Enter the email associated with your account. We will send you instructions." : "Ingresa el correo asociado a tu cuenta. Te enviaremos instrucciones."}</ThemedText>
                 <TextInput value={resetEmail} onChangeText={setResetEmail} placeholder="ejemplo@correo.com" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginBottom: 10 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType="email-address" autoCapitalize="none" />
               </View>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
-                <TouchableOpacity style={[styles.primaryWrapper, { width: '100%', height: 45 }]} onPress={handlePasswordReset}>
+                {/* 🚀 BOTÓN CON ESTADO DE CARGA 🚀 */}
+                <TouchableOpacity 
+                  style={[styles.primaryWrapper, { width: '100%', height: 45 }, isSendingReset && { opacity: 0.7 }]} 
+                  onPress={handlePasswordReset}
+                  disabled={isSendingReset}
+                >
                   <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                    <Text style={styles.primaryText}>Enviar Enlace</Text>
+                    {isSendingReset ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <Text style={styles.primaryText}>{isEnglish ? "Send Link" : "Enviar Enlace"}</Text>
+                    )}
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
@@ -1378,21 +1434,21 @@ export default function HomeScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: width > 768 ? 500 : width * 0.92 }]}>
               <View style={[styles.modalHeader, { borderBottomColor: DynamicColors.border }]}>
-                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>Completa tu perfil</ThemedText>
+                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>{isEnglish ? "Complete your profile" : "Completa tu perfil"}</ThemedText>
               </View>
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-                <ThemedText style={{ color: DynamicColors.subtext, marginBottom: 20, fontSize: 14 }}>Para brindarte la mejor experiencia, necesitamos unos datos adicionales.</ThemedText>
+                <ThemedText style={{ color: DynamicColors.subtext, marginBottom: 20, fontSize: 14 }}>{isEnglish ? "To give you the best experience, we need a few additional details." : "Para brindarte la mejor experiencia, necesitamos unos datos adicionales."}</ThemedText>
                 <View style={{ gap: 20, marginBottom: 10, width: '100%' }}>
                   <View style={{ width: '100%' }}>
-                    <ThemedText style={styles.labelDate}>Teléfono</ThemedText>
+                    <ThemedText style={styles.labelDate}>{t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono")}</ThemedText>
                     <TextInput value={form.phone} onChangeText={(v: string) => setForm({...form, phone: v})} placeholder="+1 234 567 8900" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text}, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType={isWebPlatform ? "default" : "phone-pad"} autoComplete="off" />
                   </View>
                   <View style={{ width: '100%' }}>
-                    <ThemedText style={styles.labelDate}>Zip Code</ThemedText>
+                    <ThemedText style={styles.labelDate}>{t?.headertab?.zipCode || "Zip Code"}</ThemedText>
                     <TextInput value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType={isWebPlatform ? "default" : "number-pad"} autoComplete="off" />
                   </View>
                   <View style={{ width: '100%' }}>
-                    <ThemedText style={styles.labelDate}>Fecha de Nacimiento</ThemedText>
+                    <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate" : "Fecha de Nacimiento")}</ThemedText>
                     <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 12 }]}>
                       {isWebPlatform ? (
                         <input type="date" onChange={handleWebDateChange} value={getSafeDateString()} style={{ width: '100%', padding: '12px', border: 'none', background: 'transparent', color: DynamicColors.text, outline: 'none', fontSize: '16px', cursor: 'pointer' }} />
@@ -1406,25 +1462,25 @@ export default function HomeScreen() {
                     </View>
                     {showDatePicker && !isAndroid && !isWebPlatform && (
                         <View style={isIOS ? styles.iosPickerContainer : null}>
-                            {isIOS && (<TouchableOpacity onPress={closeDatePickerIOS} style={styles.iosPickerDoneButton}><ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>Listo</ThemedText></TouchableOpacity>)}
+                            {isIOS && (<TouchableOpacity onPress={closeDatePickerIOS} style={styles.iosPickerDoneButton}><ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>{t?.hometab?.ready || (isEnglish ? "Ready" : "Listo")}</ThemedText></TouchableOpacity>)}
                             <DateTimePicker value={form.birthDate} mode="date" display={isIOS ? "spinner" : "default"} onChange={onDateChange} textColor={DynamicColors.text} maximumDate={new Date()} />
                         </View>
                     )}
                   </View>
                   <View style={styles.termsContainer}>
                     <TouchableOpacity onPress={() => setAcceptedTerms(!acceptedTerms)} style={{ padding: 4 }}><MaterialCommunityIcons name={acceptedTerms ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={acceptedTerms ? DynamicColors.accent : DynamicColors.subtext} /></TouchableOpacity>
-                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>He leído y acepto los <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
+                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>{isEnglish ? "I have read and accept the " : "He leído y acepto los "} <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
                         setReturnToCompletion(true);
                         setShowCompletionModal(false);
                         setTimeout(() => setShowTermsModal(true), 300);
-                    }}>Términos y Condiciones</ThemedText></ThemedText>
+                    }}>{isEnglish ? "Terms and Conditions" : "Términos y Condiciones"}</ThemedText></ThemedText>
                   </View>
                 </View>
               </ScrollView>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
                 <TouchableOpacity style={[styles.primaryWrapper, { width: '100%', height: 45 }, !acceptedTerms && { opacity: 0.4 }]} onPress={submitProfileCompletion} disabled={!acceptedTerms}>
                   <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                    <Text style={styles.primaryText}>Guardar y Continuar</Text>
+                    <Text style={styles.primaryText}>{isEnglish ? "Save and Continue" : "Guardar y Continuar"}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
@@ -1441,7 +1497,7 @@ export default function HomeScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: cardWidth, maxHeight: height * 0.8 }]}>
               <View style={[styles.modalHeader, { borderBottomColor: DynamicColors.border }]}>
-                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>Términos y Condiciones</ThemedText>
+                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>{isEnglish ? "Terms and Conditions" : "Términos y Condiciones"}</ThemedText>
                 <TouchableOpacity onPress={() => {
                     setShowTermsModal(false);
                     if (returnToCompletion) {
@@ -1450,7 +1506,7 @@ export default function HomeScreen() {
                 }} style={{ padding: 5 }}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
               </View>
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
-                {isLoadingTerms ? <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 20 }} /> : <><ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', marginBottom: 15 }}>Versión {termsData.version || 'Actual'}</ThemedText><ThemedText style={{ color: DynamicColors.text, marginBottom: 20, lineHeight: 24 }}>{stripHtmlTags(termsData.content_html)}</ThemedText></>}
+                {isLoadingTerms ? <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 20 }} /> : <><ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', marginBottom: 15 }}>{isEnglish ? "Version " : "Versión "}{termsData.version || 'Actual'}</ThemedText><ThemedText style={{ color: DynamicColors.text, marginBottom: 20, lineHeight: 24 }}>{stripHtmlTags(termsData.content_html)}</ThemedText></>}
               </ScrollView>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
                 <TouchableOpacity style={[styles.primaryWrapper, { width: '100%', height: 45 }]} onPress={() => { 
@@ -1461,7 +1517,7 @@ export default function HomeScreen() {
                     }
                 }}>
                   <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                    <Text style={styles.primaryText}>Aceptar y Cerrar</Text>
+                    <Text style={styles.primaryText}>{isEnglish ? "Accept and Close" : "Aceptar y Cerrar"}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
