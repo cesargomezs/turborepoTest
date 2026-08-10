@@ -292,7 +292,7 @@ export const authenticateUser = async (credentials: {
 // 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
 // --------------------------------------------------------
 const transporter = nodemailer.createTransport({
-  host: 'smtp-mail.outlook.com', 
+  host: 'smtp.office365.com', 
   port: 587,
   secure: false, 
   auth: {
@@ -301,13 +301,13 @@ const transporter = nodemailer.createTransport({
   },
   tls: {
     ciphers: 'SSLv3',
-    rejectUnauthorized: false // 🚀 CRUCIAL PARA SERVIDORES EN LA NUBE
+    rejectUnauthorized: false
   },
-  // 🚀 TIMEOUTS: Evita que el servidor se quede cargando infinitamente
+  family: 4, // Fuerza IPv4
   connectionTimeout: 10000, 
   greetingTimeout: 10000,
   socketTimeout: 10000
-});
+} as any); // 🚀 LA SOLUCIÓN: "as any" calma a TypeScript
 
 export const sendPasswordResetEmail = async (email: string) => {
   try {
