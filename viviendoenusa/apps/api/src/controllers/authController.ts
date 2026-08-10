@@ -8,7 +8,7 @@ import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express'; 
 import { AuthRequest } from '../middleware/authMiddleware'; 
-import { logAuditEvent } from '../services/audit.service.js'; // 🚀 IMPORTACIÓN CORREGIDA
+import { logAuditEvent } from '../services/audit.service.js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -168,13 +168,11 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 
     const updatedRows = await db.update(users).set(updateData).where(query).returning();
     
-    // Extracción segura de la IP verificando si headers o socket existen en 'data' (por si viene directo del cliente web)
     const forwarded = data.headers?.['x-forwarded-for'];
     const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     const rawIp = ipString ? ipString.split(',')[0].trim() : data.socket?.remoteAddress || data.ip || '0.0.0.0';
     const ipAddress = sanitizeText(rawIp);
 
-    // 🚀 MEJORA: Excluimos la contraseña del historial previo por seguridad
     const { password: _oldPassword, ...previousState } = existingUser;
 
     logAuditEvent({
@@ -185,7 +183,7 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
       ipAddress: ipAddress,
       metadata: { 
         reason: "El usuario actualizó su propia información", 
-        previousState: previousState  // ⬅️ Y aquí lo que se insertó nuevo
+        previousState: previousState  
       }
     });
     
@@ -223,7 +221,6 @@ export const authenticateUser = async (credentials: {
     const rows = await db.select().from(users).where(eq(users.email, email));
     let user = rows[0];
 
-    // 🛡️ SEGURIDAD: Mensaje genérico para no revelar si el correo existe o no
     const genericAuthError = "Credenciales incorrectas.";
 
     if (!user) {
@@ -237,10 +234,8 @@ export const authenticateUser = async (credentials: {
       throw new Error(genericAuthError);
     }
 
-    // 🚀 CORRECCIÓN TS: Usamos (user.failedLoginAttempts ?? 0) para asegurar un número
     const currentAttempts = user.failedLoginAttempts ?? 0;
 
-    // 🛡️ SEGURIDAD: Verificar si la cuenta está bloqueada ANTES de comparar contraseñas
     if (user.isLocked || currentAttempts >= 5) {
       throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos. Por favor, utiliza la opción '¿Olvidaste tu contraseña?' para restablecerla.");
     }
@@ -251,9 +246,8 @@ export const authenticateUser = async (credentials: {
       const isMatch = await bcrypt.compare(credentials.password || '', user.password);
       
       if (!isMatch) {
-        // 🛡️ SEGURIDAD: Incrementar contador de intentos fallidos
         const attempts = currentAttempts + 1;
-        const isLocked = attempts >= 5; // Bloquear al quinto intento
+        const isLocked = attempts >= 5; 
         
         await db.update(users)
           .set({ failedLoginAttempts: attempts, isLocked: isLocked })
@@ -267,7 +261,6 @@ export const authenticateUser = async (credentials: {
       }
     }
 
-    // 🛡️ SEGURIDAD: Si el login es exitoso, reiniciamos los intentos fallidos a 0
     if (currentAttempts > 0 || user.isLocked) {
       await db.update(users)
         .set({ failedLoginAttempts: 0, isLocked: false })
@@ -310,7 +303,6 @@ const transporter = nodemailer.createTransport({
 
 export const sendPasswordResetEmail = async (email: string) => {
   try {
-    // 1. Validar que el usuario exista
     const rows = await db.select().from(users).where(eq(users.email, email));
     const user = rows[0];
 
@@ -322,25 +314,22 @@ export const sendPasswordResetEmail = async (email: string) => {
       throw new Error("Esta cuenta usa autenticación de Google. Inicia sesión directamente con Google.");
     }
 
-    // 2. Combinar el secreto del .env con el password actual
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
 
-    // 3. Generar un token seguro
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
 
-    // 4. Crear el enlace
-    const resetLink = `http://viviendoenusa.app/ResetPassword?token=${resetToken}`;
+    const resetLink = `https://viviendoenusa.app/ResetPassword?token=${resetToken}`; // 🚀 Asegurado con HTTPS
 
-    // 🚀 OBTENCIÓN SEGURA DEL LOGO (Blindada contra el 502) 🚀
-    let logoUrl = 'https://viviendoenusa.app/icon.png'; // Imagen de respaldo por si falla Supabase
+    // 🚀 BLINDADO: Obtención segura del logo para que no crashee el servidor 🚀
+    let logoUrl = 'https://viviendoenusa.app/favicon.ico'; // Respaldo genérico
     try {
       const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
       if (!error && data?.signedUrl) {
         logoUrl = data.signedUrl;
       }
     } catch (storageErr) {
-      console.warn("⚠️ No se pudo obtener el logo firmado de Supabase, usando respaldo.", storageErr);
+      console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo. Usando respaldo.", storageErr);
     }
 
     const mailOptions = {
@@ -351,7 +340,6 @@ export const sendPasswordResetEmail = async (email: string) => {
         <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
           <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             
-            <!-- 🚀 LOGO SEGURO 🚀 -->
             <div style="margin-bottom: 20px;">
               <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
             </div>
@@ -374,14 +362,13 @@ export const sendPasswordResetEmail = async (email: string) => {
             </p>
             
             <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-              &copy; ${'2026 '} Viviendo en USA. Todos los derechos reservados.
+              &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
             </div>
           </div>
         </div>
       `
     };
 
-    // 5. Enviar el correo
     await transporter.sendMail(mailOptions);
 
     return { message: "Correo enviado con éxito. Revisa tu bandeja de entrada." };
@@ -414,7 +401,6 @@ export const updatePassword = async (req: Request, res: Response) => {
     
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // 🛡️ SEGURIDAD: Al restablecer la contraseña, desbloqueamos la cuenta y reseteamos los intentos
     await db.update(users)
       .set({ 
         password: hashedPassword,
@@ -436,7 +422,6 @@ export const updatePassword = async (req: Request, res: Response) => {
 
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {
-    // El middleware 'verifyToken' inyectó el 'user' en 'req'
     const userId = req.user.id; 
 
     const userProfile = await db.select().from(users).where(eq(users.id, userId));
@@ -467,14 +452,12 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
     }
 
-    // Verificamos si el token ya existe en la base de datos
     const existingDevice = await db.select()
       .from(userDevices)
       .where(eq(userDevices.expoPushToken, token))
       .limit(1);
 
     if (existingDevice.length > 0) {
-      // Si ya existe, actualizamos su fecha y lo asociamos al usuario actual por si cambió de cuenta
       await db.update(userDevices)
         .set({ 
           userId: userId,
@@ -482,7 +465,6 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
         })
         .where(eq(userDevices.expoPushToken, token));
     } else {
-      // Si es un dispositivo nuevo, lo insertamos
       await db.insert(userDevices).values({
         userId: userId,
         expoPushToken: token,
@@ -508,7 +490,6 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: "No autorizado. Se requiere una sesión válida." });
     }
 
-    // 1. Buscar al usuario antes de anonimizar para obtener su correo y foto
     const [userRecord] = await db
       .select({ email: users.email, name: users.name, imageUrl: users.imageUrl })
       .from(users)
@@ -519,17 +500,19 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "Usuario no encontrado en la base de datos." });
     }
 
-    // 2. Eliminar la foto física del Storage (Bucket) de Supabase si existe
     if (userRecord.imageUrl && !userRecord.imageUrl.startsWith('http')) {
       const filePath = userRecord.imageUrl.startsWith('users/') 
         ? userRecord.imageUrl 
         : `users/${userRecord.imageUrl.split('/').pop()}`;
 
-      await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]);
-      console.log("✅ Imagen de perfil eliminada de Supabase Storage.");
+      try {
+        await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]);
+        console.log("✅ Imagen de perfil eliminada de Supabase Storage.");
+      } catch (e) {
+        console.warn("⚠️ No se pudo eliminar la imagen del storage, continuando...", e);
+      }
     }
 
-    // 3. Registrar el evento en la Auditoría (Fecha, ID, Acción y Trama de respaldo)
     const forwarded = req.headers?.['x-forwarded-for'];
     const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     const rawIp = ipString ? ipString.split(',')[0].trim() : req.socket?.remoteAddress || req.ip || '0.0.0.0';
@@ -549,7 +532,6 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    // 4. Anonimizar el perfil en la Base de Datos (Salvando reseñas)
     await db
       .update(users)
       .set({
@@ -566,14 +548,19 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       })
       .where(eq(users.id, userId));
 
-    // 🚀 NOTA: Eliminado 'supabase.auth.admin.deleteUser' porque no usan Supabase Auth.
-
-    // 5. Enviar correo electrónico de despedida con formato HTML y Logo Firmado
     if (userRecord.email && !userRecord.email.includes('deleted_')) {
       try {
-        const { data, error } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
-        
+        // 🚀 BLINDADO: Obtención segura del logo 🚀
+        let logoUrl = 'https://viviendoenusa.app/favicon.ico';
+        try {
+          const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
+          if (!error && data?.signedUrl) {
+            logoUrl = data.signedUrl;
+          }
+        } catch (storageErr) {
+          console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo de baja.", storageErr);
+        }
+
         const mailOptions = {
           from: '"Viviendo en USA" <noreply@viviendoenusa.app>',
           to: userRecord.email,
@@ -581,9 +568,9 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           html: `
             <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
               <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-                <!-- 🚀 Logo dinámico desde Supabase -->
+                
                 <div style="margin-bottom: 20px;">
-                  <img src="${data?.signedUrl || ''}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
+                  <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
                 </div>
                 <h2 style="color: #1A1A1A; margin-bottom: 10px;">¡Te extrañaremos, ${userRecord.name}!</h2>
                 <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
@@ -593,7 +580,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
                   Si en el futuro deseas regresar y ser parte nuevamente de nuestra comunidad hispana, las puertas de <strong>Viviendo en USA</strong> estarán abiertas para ti.
                 </p>
                 <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-                  &copy; ${'2025 '} Viviendo en USA. Todos los derechos reservados.
+                  &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
                 </div>
               </div>
             </div>
