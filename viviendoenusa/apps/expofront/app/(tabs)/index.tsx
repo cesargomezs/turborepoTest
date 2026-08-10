@@ -113,9 +113,11 @@ export default function HomeScreen() {
   const { login } = useAuth();
   const { width, height } = useWindowDimensions();
   
-  // 🚀 IMPORTAMOS toggleTheme PARA EL MODO OSCURO/CLARO 🚀
   const { isDark, toggleTheme } = useAppTheme();
   
+  // 🚀 ESTADO PARA EL BOTÓN TOGGLE DE IDIOMA (ES/EN) 🚀
+  const [currentLang, setCurrentLang] = useState<'es' | 'en'>('es');
+
   const colorScheme = isDark ? 'dark' : 'light';
 
   const isWebPlatform = Platform.OS === 'web';
@@ -150,7 +152,6 @@ export default function HomeScreen() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   
-  // 🚀 ESTADO PARA MOSTRAR/OCULTAR LA CONTRASEÑA 🚀
   const [showPassword, setShowPassword] = useState(false);
   
   const [termsData, setTermsData] = useState({ version: '', content_html: '' });
@@ -269,7 +270,6 @@ export default function HomeScreen() {
     iconInactive: isDark ? '#B0BEC5' : '#364045',  
   };
 
-  // 🚀 LÓGICA DE VALIDACIÓN DE CONTRASEÑA 🚀
   const currentPwd = form.password || "";
   const isPasswordStrong = 
     currentPwd.length >= 8 && 
@@ -648,26 +648,70 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]} 
         >
-          {/* 🚀 BARRA DE NAVEGACIÓN DE LA PORTADA CON EL BOTÓN DE MODO CLARO/OSCURO A LA IZQUIERDA 🚀 */}
+          {/* 🚀 BARRA DE NAVEGACIÓN DE LA PORTADA 🚀 */}
           <View style={{ width: '100%', height: 65, backgroundColor: '#13112E', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', zIndex: 100 }}>
             
+            {/* 🚀 BOTÓN ESTILIZADO MODO OSCURO (IZQUIERDA) 🚀 */}
             <TouchableOpacity 
               onPress={() => toggleTheme(isDark ? 'light' : 'dark')} 
-              style={{ position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              style={{ position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', gap: 6 }}
             >
               <MaterialCommunityIcons 
                 name={isDark ? "weather-sunny" : "weather-night"} 
-                size={24} 
+                size={16} 
                 color="#FFF" 
               />
               {isLargeWeb && (
-                 <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>
-                   {isDark ? 'Modo Claro' : 'Modo Oscuro'}
+                 <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
+                   {isDark ? 'MODO CLARO' : 'MODO OSCURO'}
                  </Text>
               )}
             </TouchableOpacity>
 
             <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 }}>Viviendo en USA</Text>
+
+            {/* 🚀 TOGGLE CIRCULAR DE IDIOMA (DERECHA) 🚀 */}
+            <TouchableOpacity 
+              onPress={() => setCurrentLang(currentLang === 'es' ? 'en' : 'es')}
+              style={{ 
+                position: 'absolute', 
+                right: 20, 
+                flexDirection: 'row', 
+                alignItems: 'center', 
+                backgroundColor: 'rgba(255,255,255,0.1)', 
+                paddingHorizontal: 10, 
+                paddingVertical: 6, 
+                borderRadius: 20, 
+                borderWidth: 1, 
+                borderColor: 'rgba(255,255,255,0.2)',
+                gap: 6
+              }}
+            >
+              {/* Círculo indicador izquierdo (ES) */}
+              <View style={{ 
+                width: 26, 
+                height: 26, 
+                borderRadius: 13, 
+                backgroundColor: currentLang === 'es' ? '#FF5F6D' : 'transparent', 
+                justifyContent: 'center', 
+                alignItems: 'center' 
+              }}>
+                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>ES</Text>
+              </View>
+
+              {/* Círculo indicador derecho (EN) */}
+              <View style={{ 
+                width: 26, 
+                height: 26, 
+                borderRadius: 13, 
+                backgroundColor: currentLang === 'en' ? '#FF5F6D' : 'transparent', 
+                justifyContent: 'center', 
+                alignItems: 'center' 
+              }}>
+                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>EN</Text>
+              </View>
+            </TouchableOpacity>
+
           </View>
 
           <View style={{ width: '100%', minHeight: isLargeWeb ? height * 0.85 : height * 0.9, justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E', position: 'relative', overflow: 'hidden' }}>

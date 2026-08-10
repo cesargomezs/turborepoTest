@@ -332,7 +332,16 @@ export const sendPasswordResetEmail = async (email: string) => {
     // 4. Crear el enlace
     const resetLink = `http://viviendoenusa.app/ResetPassword?token=${resetToken}`;
 
-    const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
+    // 🚀 OBTENCIÓN SEGURA DEL LOGO (Blindada contra el 502) 🚀
+    let logoUrl = 'https://viviendoenusa.app/icon.png'; // Imagen de respaldo por si falla Supabase
+    try {
+      const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
+      if (!error && data?.signedUrl) {
+        logoUrl = data.signedUrl;
+      }
+    } catch (storageErr) {
+      console.warn("⚠️ No se pudo obtener el logo firmado de Supabase, usando respaldo.", storageErr);
+    }
 
     const mailOptions = {
       from: '"Viviendo en USA" <noreply@viviendoenusa.app>',
@@ -342,9 +351,9 @@ export const sendPasswordResetEmail = async (email: string) => {
         <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
           <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             
-            <!-- 🚀 LOGO CARGADO DESDE SERVIDOR SEGURO 🚀 -->
+            <!-- 🚀 LOGO SEGURO 🚀 -->
             <div style="margin-bottom: 20px;">
-              <img src="${data?.signedUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
+              <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
             </div>
             
             <h2 style="color: #1A1A1A; margin-bottom: 10px;">Recuperación de Contraseña</h2>
@@ -365,7 +374,7 @@ export const sendPasswordResetEmail = async (email: string) => {
             </p>
             
             <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-              &copy; ${'2025 '} Viviendo en USA. Todos los derechos reservados.
+              &copy; ${'2026 '} Viviendo en USA. Todos los derechos reservados.
             </div>
           </div>
         </div>
