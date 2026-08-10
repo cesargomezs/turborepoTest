@@ -299,20 +299,21 @@ export const authenticateUser = async (credentials: {
 // 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
 // --------------------------------------------------------
 
-// 🚀 TRANSPORTER REPARADO: Usando servidor de Office365 oficial
+// 🚀 TRANSPORTER DEFINITIVO: Sin configuraciones obsoletas que bloqueen la red
 const transporter = nodemailer.createTransport({
   host: 'smtp.office365.com', 
   port: 587,
-  secure: false, 
+  secure: false, // Usar STARTTLS en lugar de SSL directo
+  requireTLS: true, // Exigido por Microsoft 365 moderno
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  tls: {
-    ciphers: 'SSLv3',
-    rejectUnauthorized: false
-  }
-});
+  // Agregamos timeouts para evitar que se quede colgado (hanging) y genere un error 502
+  connectionTimeout: 10000, 
+  greetingTimeout: 10000,
+  socketTimeout: 10000
+} as any);
 
 export const sendPasswordResetEmail = async (email: string) => {
   try {
@@ -341,7 +342,7 @@ export const sendPasswordResetEmail = async (email: string) => {
         logoUrl = data.signedUrl;
       }
     } catch (storageErr) {
-      console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo. Usando respaldo.", storageErr);
+      console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo. Usando respaldo.");
     }
 
     const mailOptions = {
