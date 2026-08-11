@@ -21,6 +21,9 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
+// 🚀 ESTA ES LA LÍNEA CRÍTICA PARA QUE PNPM NO ROMPA LA APP EN BLANCO:
+config.resolver.disableHierarchicalLookup = true;
+
 // 3. Optimización
 config.transformer.getTransformOptions = async () => ({
   transform: {

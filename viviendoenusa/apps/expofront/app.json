@@ -17,7 +17,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.viviendoenusa.app"
+      "bundleIdentifier": "com.viviendoenusa.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -38,7 +41,7 @@
       [
         "expo-router",
         {
-          "origin": "https://viviendoenusa.app" 
+          "origin": "https://viviendoenusa.app"
         }
       ],
       "expo-asset",

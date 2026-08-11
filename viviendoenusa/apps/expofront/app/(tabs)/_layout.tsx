@@ -15,7 +15,7 @@ import {
 } from '../../redux/slices';
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
-import { useAppTheme } from '@/app/src/context/ThemeContext'; 
+import { useAppTheme } from '../src/context/ThemeContext'; 
 
 export default function TabLayout() {
   const { t } = useTranslation();
