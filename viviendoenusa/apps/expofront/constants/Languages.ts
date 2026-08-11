@@ -451,6 +451,11 @@ export const translations = {
       savevacancy: "Aún no has guardado ninguna vacante.",
       findvacancy: "No se encontraron empleos con estos filtros.",
       anycity: "Cualquier Puesto en",
+      statesCity : {
+        "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
+        "Texas": ["Austin", "Dallas", "El Paso", "Fort Worth", "Houston", "San Antonio"],
+        "Florida": ["Jacksonville", "Miami", "Orlando", "Tampa"]
+      }
 
     },supporttab:{
       label: "Red de Apoyo ",
@@ -464,6 +469,7 @@ export const translations = {
       labelphone:"Atención en español 24/7",
       categoryList:['Todos', 'Psicólogos Pro-Bono', 'Mentores Locales', 'Grupos de Apoyo', 'Asesoría Migratoria', 'Clases de Inglés (ESL)', 'Orientación Laboral', 'Apoyo Alimentario', 'Salud Mental', 'Otros'],
       categoryListIcon:['apps', 'brain', 'account-group', 'hand-heart', 'passport', 'book-education-outline', 'briefcase-search', 'food-apple-outline', 'emoticon-happy-outline', 'dots-horizontal'] 
+
     },
     
 
@@ -909,6 +915,11 @@ export const translations = {
           savevacancy: "You haven't saved any vacancies yet.",
           findvacancy: "No jobs found with these filters.",
           anycity: "Any Job in",
+          statesCity : {
+            "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
+            "Texas": ["Austin", "Dallas", "El Paso", "Fort Worth", "Houston", "San Antonio"],
+            "Florida": ["Jacksonville", "Miami", "Orlando", "Tampa"]
+          }
           
 
           

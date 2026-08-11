@@ -17,9 +17,8 @@ import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper';
 import { useAuth } from '@/context/AuthContext';
-
+import { handleUniversalShare } from '../../../utils/shareHelper';
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -28,7 +27,6 @@ const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/support';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
 
-
 const planStyles: any = {
   coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
   basic: { selected: '#FF5F6D', unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
@@ -36,7 +34,29 @@ const planStyles: any = {
   unlimited: { selected: '#10B981', unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' }
 };
 
-const validateComment = (text: string) => !BANNED_WORDS.some(word => text.toLowerCase().includes(word.toLowerCase()));
+// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
+  const lowerText = text.toLowerCase();
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
+};
+
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
   const R = 3958.8, dLat = (lat2 - lat1) * (Math.PI / 180), dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -65,7 +85,15 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
       <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
         <TextInput value={comment} onChangeText={setComment} placeholder="Escribe tu opinión..." placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
-      <TouchableOpacity onPress={() => { if(!validateComment(comment)) { Platform.OS === 'web' ? window.alert(t.genericlabel.labelinapro) : Alert.alert("Error", t.genericlabel.labelinapro); return; } onPublish(rating, comment); }} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+      <TouchableOpacity onPress={() => { 
+          // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN LA RESEÑA
+          if(containsBadWords(comment)) { 
+            const errorMsg = t.genericlabel.labelinapro || "Contenido inapropiado detectado.";
+            Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg); 
+            return; 
+          } 
+          onPublish(rating, comment); 
+        }} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}><ThemedText style={{ color: '#FFF', fontWeight: '800' }}>Publicar</ThemedText></LinearGradient>
       </TouchableOpacity>
     </View>
@@ -76,7 +104,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 const SupportFormModal = memo(({
   visible, onClose, onSuccess, currentUserId, userToken, userMetadata, companyTariffs,
   t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
-  CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height // 👈 Se inyecta la altura original para conservar tu diseño en la web
+  CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height 
 }: any) => {
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -116,6 +144,14 @@ const SupportFormModal = memo(({
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5) { 
       return Platform.OS === 'web' ? window.alert(t.genericlabel.labelfields) : Alert.alert("Atención", t.genericlabel.labelfields); 
     }
+
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN EL MODAL DE CREACIÓN
+    const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
+    if (containsBadWords(contentToValidate)) {
+      const errorMsg = t.genericlabel.labelinapro || "Contenido inapropiado detectado.";
+      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Atención", errorMsg);
+    }
+
     setIsPublishing(true);
     try {
       let finalImageName = '';
@@ -225,7 +261,6 @@ const SupportFormModal = memo(({
         <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && onClose()} />
         <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 550 : '100%' }}>
           
-          {/* 🚀 AQUI ESTÁ LA ALTURA RESTAURADA A LA VERSIÓN ORIGINAL */}
           <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: Colors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
             {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
@@ -260,7 +295,6 @@ const SupportFormModal = memo(({
                 })}
               </View>
 
-              {/* 🚀 FORMATEO EN TIEMPO REAL: Título para Nombre y Ciudad, Oración para Descripción */}
               <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelnameprof} placeholderTextColor={Colors.subtext} value={formName} onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" />
               <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelcityaddres} placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" />
               <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelzipcde} placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
@@ -915,7 +949,7 @@ export default function SupportScreen() {
                       )}
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                         {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length + ' ' + (t.genericbtn.results || "resultados")} </ThemedText>}
-                        {isFilteredByMap && ( <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} /><ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{t.genericbtn.viewall || "Ver todos"}</ThemedText></TouchableOpacity> )}
+                        {isFilteredByMap && ( <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} /><ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{t.genericbtn.viewall || "Ver todos"}</ThemedText></TouchableOpacity> )}
                         {results.map((store) => <SupportCard key={store.id} store={store} />)}
                       </ScrollView>
                     </View>

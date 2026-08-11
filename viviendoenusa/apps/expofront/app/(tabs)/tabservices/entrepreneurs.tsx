@@ -24,7 +24,7 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper';
+import { handleUniversalShare } from '../../../utils/shareHelper';
 
 // =====================================================================
 // 📡 1. CONFIGURACIONES GLOBALES, URLS Y CONSTANTES
@@ -38,9 +38,27 @@ try {
   console.error("Error cargando badwords.json:", e);
 }
 
-const validateComment = (text: string): boolean => {
+// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
   const lowerText = text.toLowerCase();
-  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
 };
 
 // 🚀 FUNCIÓN PARA FORMATEAR NÚMEROS (Ej: 1500 -> 1.5k)
@@ -99,7 +117,8 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [comment, setComment] = useState('');
 
   const handlePrePublish = () => {
-    if (!validateComment(comment)) {
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN LA RESEÑA
+    if (containsBadWords(comment)) {
       const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
       Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
       return;
@@ -550,6 +569,17 @@ export default function EntrepreneurshipScreen() {
     if (!formName.trim() || !formAddress.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5) {
       triggerAlert('Campos incompletos', 'Completa nombre, dirección, descripción, teléfono, código postal e imagen.'); return;
     }
+
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS (Valida todos los campos en un solo bloque)
+    const contentToValidate = `${formName} ${formDesc} ${formAddress} ${formPromo}`;
+    if (containsBadWords(contentToValidate)) {
+      triggerAlert(
+        t.communitytab?.textInappropriateTittle || "Atención", 
+        t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado."
+      );
+      return; 
+    }
+
     setIsSubmitting(true);
     
     try {

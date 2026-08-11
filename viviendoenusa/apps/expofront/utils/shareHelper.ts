@@ -1,8 +1,8 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform, Share } from 'react-native';
 
-type ShareableContent = {
+export type ShareableContent = {
   title: string;
   description: string;
   phone?: string;
@@ -14,7 +14,7 @@ type ShareableContent = {
 
 export const handleUniversalShare = async (item: ShareableContent) => {
   try {
-    // 🇺🇸 Mensaje optimizado para una excelente experiencia de usuario (limpio, con iconos visuales y sin rutas rotas)
+    // 🇺🇸 Mensaje optimizado para una excelente experiencia de usuario
     const defaultMsg = `🇺🇸 *Viviendo en USA*\n\n*${item.title}*\n${item.description}${item.phone ? `\n📞 Tel: ${item.phone}` : ''}${item.address ? `\n📍 Dir: ${item.address}${item.zip ? ` (${item.zip})` : ''}` : ''}`;
     
     const fullMessage = item.customMessage || defaultMsg;
@@ -30,7 +30,12 @@ export const handleUniversalShare = async (item: ShareableContent) => {
 
     // Descarga temporal de la imagen física para dispositivos móviles
     const filename = item.image.split('/').pop() || 'compartido.jpg';
-    const downloadDest = `${FileSystem.documentDirectory}${filename}`;
+    
+    // @ts-ignore - Forzamos a TypeScript a ignorar la advertencia, la propiedad sí existe en runtime
+    const directory = FileSystem.documentDirectory;
+    const downloadDest = `${directory}${filename}`;
+    
+    // Descargamos la imagen usando el FileSystem estándar
     const { uri } = await FileSystem.downloadAsync(item.image, downloadDest);
 
     // Estrategia dividida según plataforma

@@ -21,25 +21,36 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '@/utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper';
+import { handleUniversalShare } from '../../utils/shareHelper';
 
 const BANNED_WORDS = Array.isArray((badWordsData as any)?.badWordsList) ? (badWordsData as any).badWordsList : []; 
-const validateComment = (text: string): boolean => {
+
+// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
   const lowerText = text.toLowerCase();
-  return !BANNED_WORDS.some((word: string) => lowerText.includes(word.toLowerCase()));
+
+  return BANNED_WORDS.some((word: string) => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
 };
 
 const API_JOBS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/jobs';
 const API_COMPANIES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/companies';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
-
-const usCitiesData: Record<string, string[]> = {
-  "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
-  "Texas": ["Austin", "Dallas", "El Paso", "Fort Worth", "Houston", "San Antonio"],
-  "Florida": ["Jacksonville", "Miami", "Orlando", "Tampa"]
-};
-const STATES = Object.keys(usCitiesData);
-
 const COUNTRY_CODES = [{ code: '+1', flag: '🇺🇸' }];
 
 export default function JobsScreen() {
@@ -47,6 +58,13 @@ export default function JobsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  const usCitiesData: Record<string, string[]> = t.jobstab.statesCity; /*{
+    "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
+    "Texas": ["Austin", "Dallas", "El Paso", "Fort Worth", "Houston", "San Antonio"],
+    "Florida": ["Jacksonville", "Miami", "Orlando", "Tampa"]
+  };*/
+  const STATES = Object.keys(usCitiesData);
   
   const paramsGlobal = useLocalSearchParams();
   const rawNotifId = paramsGlobal.openJobId || paramsGlobal.id || paramsGlobal.jobId;
@@ -487,6 +505,15 @@ export default function JobsScreen() {
       return;
     }
     
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN EL NOMBRE DE LA EMPRESA
+    if (containsBadWords(newCompanyForm.name)) {
+      triggerAlert(
+        t.communitytab?.textInappropriateTittle || "Atención", 
+        t.communitytab?.textInappropriateDescription || "El nombre de la empresa contiene palabras no permitidas."
+      );
+      return;
+    }
+
     setIsCreatingCompany(true);
     
     try {
@@ -585,8 +612,14 @@ export default function JobsScreen() {
       triggerAlert("Campos Incompletos", "Selecciona una empresa registrada y completa todos los campos de la vacante.");
       return;
     }
-    if (!validateComment(newJob.description)) {
-      triggerAlert("Error", "La descripción contiene palabras no permitidas.");
+    
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN VACANTES
+    const contentToValidate = `${newJob.title} ${newJob.description} ${newJob.city}`;
+    if (containsBadWords(contentToValidate)) {
+      triggerAlert(
+        t.communitytab?.textInappropriateTittle || "Atención", 
+        t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado."
+      );
       return; 
     }
     
@@ -703,7 +736,12 @@ export default function JobsScreen() {
 
   const handleSubmitReview = async () => {
       if (!reviewForm.text.trim() || reviewForm.rating === 0) return triggerAlert("Incompleto", "Ingresa estrellas y un comentario.");
-      if (!validateComment(reviewForm.text)) return triggerAlert("Error", "Palabras no permitidas.");
+      
+      // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN RESEÑAS
+      if (containsBadWords(reviewForm.text)) {
+        triggerAlert(t.communitytab?.textInappropriateTittle || "Error", t.communitytab?.textInappropriateDescription || "Comentario inapropiado detectado.");
+        return;
+      }
 
       try {
         const payload = {

@@ -27,7 +27,8 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper';
+//import { handleUniversalShare } from '@/utils/shareHelper';
+import { handleUniversalShare } from '../../../utils/shareHelper';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/lawyers';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
@@ -54,10 +55,28 @@ const planStyles: any = {
   unlimited: { selected: '#10B981', unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' }
 };
 
-const validateComment = (text: string): boolean => {
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
   const lowerText = text.toLowerCase();
-  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're' (reputa, reputas)
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros (putassss, reputaaaa)
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
 };
+
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
@@ -205,6 +224,16 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5 || !formRefCode.trim()) {
       return Alert.alert((t.lawyerstab as any)?.alertmessage || 'Completa todos los campos');
     }
+
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS 🚀
+    const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
+    if (containsBadWords(contentToValidate)) {
+      return Alert.alert(
+        "Contenido Inapropiado", 
+        "Hemos detectado lenguaje inapropiado en tu publicación. Por favor, modifícalo para mantener un ambiente de respeto."
+      );
+    }
+
     setIsPublishing(true);
     try {
       let finalImageName = '';
@@ -565,7 +594,8 @@ export default function LawyersScreen() {
     const [rating, setRating] = useState(5);
     const [comment, setComment] = useState('');
     const handlePrePublish = () => {
-      if (!validateComment(comment)) {
+      // Usamos la nueva función containsBadWords
+      if (containsBadWords(comment)) {
         const errorMsg = (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado.";
         Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Aviso", errorMsg);
         return;

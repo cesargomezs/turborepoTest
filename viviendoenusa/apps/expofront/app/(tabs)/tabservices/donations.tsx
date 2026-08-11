@@ -18,20 +18,31 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper'; 
+import { handleUniversalShare } from '../../../utils/shareHelper';
 
 // --- 1. LÓGICA DE VALIDACIÓN GLOBAL ---
-let BANNED_WORDS: string[] = [];
-try {
-  BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : [];
-} catch (e) {
-  console.error("Error cargando badwords.json:", e);
-}
+const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
-const isTextInappropriate = (text: string): boolean => {
+const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   const lowerText = text.toLowerCase();
-  return BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
 };
 
 const toSentenceCase = (text: string) => {
@@ -208,7 +219,9 @@ export default function DonationsScreen() {
       return;
     }
 
-    if (isTextInappropriate(trimmedTitle) || isTextInappropriate(trimmedDesc)) {
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS
+    const contentToValidate = `${trimmedTitle} ${trimmedDesc}`;
+    if (containsBadWords(contentToValidate)) {
       triggerAlert((t.communitytab as any)?.textInappropriateTittle || "Atención", (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado detectado.");
       return; 
     }

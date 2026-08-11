@@ -23,14 +23,31 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper'; 
+import { handleUniversalShare } from '../../../utils/shareHelper';
 
 // --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
-const validateComment = (text: string): boolean => {
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
   const lowerText = text.toLowerCase();
-  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
 };
 
 // 🚀 PARSER DEFINITIVO Y A PRUEBA DE BALAS PARA REACT NATIVE
@@ -253,9 +270,13 @@ export default function CommunityScreen() {
     const trimmedText = postText.trim();
     if (!trimmedText || isPublishing) return;
 
-    if (!validateComment(trimmedText)) {
-      triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
-      return; 
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS PARA EL POST
+    if (containsBadWords(trimmedText)) {
+      triggerAlert(
+        "Contenido Inapropiado", 
+        "Hemos detectado lenguaje inapropiado en tu publicación. Por favor, modifícalo para mantener un ambiente de respeto."
+      );
+      return; // Detiene la ejecución aquí mismo
     }
 
     setIsPublishing(true);
@@ -371,7 +392,8 @@ export default function CommunityScreen() {
     const trimmed = commentText.trim();
     if (!trimmed || !activeCommentId) return;
 
-    if (!validateComment(trimmed)) {
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS PARA EL COMENTARIO
+    if (containsBadWords(trimmed)) {
       triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
       return;
     }

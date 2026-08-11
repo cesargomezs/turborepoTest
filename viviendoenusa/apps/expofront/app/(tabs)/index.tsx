@@ -24,8 +24,8 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications'; 
+import * as Device from 'expo-device'; 
 
 import Head from 'expo-router/head'; 
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -39,6 +39,37 @@ import { useAppTheme } from '../src/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { createClient } from '@supabase/supabase-js'; 
 
+// 🚀 IMPORTAMOS LA LISTA DE GROSERÍAS
+import badWordsData from '../../utils/babwords.json';
+
+// 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS
+let BANNED_WORDS: string[] = [];
+try {
+  BANNED_WORDS = Array.isArray((badWordsData as any).badWordsList) ? (badWordsData as any).badWordsList : [];
+} catch (e) {
+  console.error("Error cargando badwords.json:", e);
+}
+
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
+  const lowerText = text.toLowerCase();
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
+};
+
 // 🚀 CREDENCIALES DE SUPABASE DESDE .ENV 🚀
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -51,6 +82,7 @@ const NOMBRE_BUCKET = 'images';
 
 WebBrowser.maybeCompleteAuthSession();
 
+// 🚀 HANDLER GLOBAL DE NOTIFICACIONES PARA PRODUCCIÓN
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -114,11 +146,8 @@ export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   
   const { isDark, toggleTheme } = useAppTheme();
-  
-  // 🚀 EXTRAEMOS SOLO 't' PARA EVITAR ERRORES DE TYPESCRIPT 🚀
   const { t } = useTranslation();
 
-  // 🚀 ESTADO LOCAL PARA QUE EL BOTÓN SE ANIME AL INSTANTE 🚀
   const [currentLang, setCurrentLang] = useState<'es' | 'en'>(t?.home === 'Home' ? 'en' : 'es');
   const isEnglish = currentLang === 'en';
 
@@ -338,24 +367,38 @@ export default function HomeScreen() {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userJwtToken}` },
         body: JSON.stringify({ token: expoPushToken, deviceType: Platform.OS })
       });
-    } catch (error) {}
+    } catch (error) {
+      console.log("Error registrando token push", error);
+    }
   };
 
+  // 🚀 PERMISOS Y CONFIGURACIÓN DE NOTIFICACIONES PARA PRODUCCIÓN (TS FIX APLICADO) 🚀
   useEffect(() => {
     async function setupNotifications() {
       if (isWebPlatform) return;
       if (Device.isDevice) {
-        try {
-          const settings = await Notifications.getPermissionsAsync() as any;
-          let isGranted = settings.granted || settings.status === 'granted';
-          if (!isGranted) {
-            const request = await Notifications.requestPermissionsAsync() as any;
-            isGranted = request.granted || request.status === 'granted';
-          }
-          if (!isGranted) return;
-          const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
-          await Notifications.getExpoPushTokenAsync({ projectId });
-        } catch (error) {}
+        // Forzamos el tipo con 'as any' para saltar el error ts(2339)
+        const settings = await Notifications.getPermissionsAsync() as any;
+        let finalStatus = settings.status || (settings.granted ? 'granted' : 'denied');
+        
+        if (finalStatus !== 'granted') {
+          const reqSettings = await Notifications.requestPermissionsAsync() as any;
+          finalStatus = reqSettings.status || (reqSettings.granted ? 'granted' : 'denied');
+        }
+        
+        if (finalStatus !== 'granted') {
+          console.log('No se obtuvieron los permisos para notificaciones push');
+          return;
+        }
+        
+        if (Platform.OS === 'android') {
+          Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+          });
+        }
       }
     }
     setupNotifications();
@@ -398,6 +441,7 @@ export default function HomeScreen() {
     await login(user, token);
     dispatch(setUserMetadata({ ...user, token }));
 
+    // 🚀 OBTENEMOS EL TOKEN PUSH Y LO ENVIAMOS AL BACKEND 🚀
     if (Device.isDevice && !isWebPlatform) {
       try {
         const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
@@ -405,8 +449,11 @@ export default function HomeScreen() {
         if (tokenData?.data) {
           await registerPushTokenInBackend(tokenData.data, token);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log("Error obtaining push token", e);
+      }
     }
+    
     dispatch(toggleAuth());
     setShowWebLanding(false);
 
@@ -449,6 +496,14 @@ export default function HomeScreen() {
     Keyboard.dismiss();
     if (!form.phone || !form.zipCode) {
       isWebPlatform ? window.alert(isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code") : Alert.alert("Atención", isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code");
+      return;
+    }
+
+    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN REGISTRO DE GOOGLE
+    const contentToValidate = `${form.firstName} ${form.lastName}`;
+    if (containsBadWords(contentToValidate)) {
+      const errorMsg = isEnglish ? "Inappropriate content detected in your name." : "Se detectó lenguaje inapropiado en tu nombre.";
+      isWebPlatform ? window.alert(errorMsg) : Alert.alert(isEnglish ? "Attention" : "Atención", errorMsg);
       return;
     }
 
@@ -522,6 +577,16 @@ export default function HomeScreen() {
     if (isRegistering && !acceptedTerms) {
       isWebPlatform ? window.alert(isEnglish ? "You must accept the terms and conditions." : "Debes aceptar los términos y condiciones.") : Alert.alert("Atención", isEnglish ? "You must accept the terms and conditions." : "Debes aceptar los términos y condiciones.");
       return;
+    }
+
+    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN REGISTRO MANUAL
+    if (isRegistering) {
+      const contentToValidate = `${form.firstName} ${form.lastName}`;
+      if (containsBadWords(contentToValidate)) {
+        const errorMsg = isEnglish ? "Inappropriate content detected in your name." : "Se detectó lenguaje inapropiado en tu nombre.";
+        isWebPlatform ? window.alert(errorMsg) : Alert.alert(isEnglish ? "Attention" : "Atención", errorMsg);
+        return;
+      }
     }
 
     try {
@@ -708,9 +773,8 @@ export default function HomeScreen() {
             <TouchableOpacity 
               onPress={() => {
                 const nextLang = currentLang === 'es' ? 'en' : 'es';
-                setCurrentLang(nextLang); // Cambia el switch de lado al instante
+                setCurrentLang(nextLang); 
                 
-                // Dispara el cambio de idioma a Redux para que 't' se actualice globalmente
                 dispatch({ type: 'language/setLanguage', payload: nextLang });
               }}
               style={{ 
@@ -881,11 +945,9 @@ export default function HomeScreen() {
                              </View>
                           )}
                           <View style={{ padding: 24 }}>
-                            {/* 🚀 TRADUCCIÓN DEL TÍTULO DEL SERVICIO 🚀 */}
                             <Text accessibilityRole="header" aria-level={3} style={{ fontSize: 20, fontWeight: '800', color: '#FF5F6D', marginBottom: 10 }}>
                               {getServiceTitle(item.title)}
                             </Text>
-                            {/* 🚀 TRADUCCIÓN DE LA DESCRIPCIÓN DEL SERVICIO 🚀 */}
                             <Text style={{ fontSize: 14, color: DynamicColors.subtext, lineHeight: 22 }}>
                               {getServiceDesc(item.desc)}
                             </Text>
@@ -1063,7 +1125,7 @@ export default function HomeScreen() {
                     {loggedIn ? (
                       <View style={{ flex: 1, width: '100%', alignSelf: 'center', paddingHorizontal: isLargeWeb ? 40 : 10 }}>
                         
-                        <View style={[styles.topHeaderRow, { justifyContent: 'space-between', marginBottom: 20 }]}>
+                        <View style={[styles.topHeaderRow, { justifyContent: 'space-between', marginBottom: 5 }]}>
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <ThemedText style={[styles.sectionTitle, { color: DynamicColors.text, fontSize: 24, fontWeight: '900' }]}>
                               Viviendo en USA
@@ -1074,7 +1136,7 @@ export default function HomeScreen() {
                         
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWebPlatform ? 10 : 80 }}>
                           
-                          <View style={{ alignItems: 'center', marginBottom: 30, marginTop: 10 }}>
+                          <View style={{ alignItems: 'center', marginBottom: 20, marginTop: 10 }}>
                             <View style={{ 
                               width: isLargeWeb ? 160 : 140, 
                               height: isLargeWeb ? 160 : 140, 
@@ -1098,9 +1160,6 @@ export default function HomeScreen() {
                                  />
                                ) : <ActivityIndicator size="small" color="#FF5F6D" />}
                             </View>
-                            <ThemedText style={{ fontSize: 22, fontWeight: '800', color: DynamicColors.text, marginTop: 15 }}>
-                              {t?.welcome || '¡Bienvenido! '}👋
-                            </ThemedText>
                           </View>
 
                           <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: isLargeWeb ? 20 : 0, justifyContent: 'space-between' }}>
@@ -1231,7 +1290,7 @@ export default function HomeScreen() {
 
                                   {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA Y BOTÓN DE VER 🚀 */}
                                   <View style={{ width: '100%', marginBottom: 10 }}>
-                                    <View style={{ position: 'relative', justifyContent: 'center' }}>
+                                    <View style={{ position: 'relative' }}>
                                       <ThemedTextInput 
                                         label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} 
                                         value={form.password} 
@@ -1239,14 +1298,22 @@ export default function HomeScreen() {
                                         placeholder="********" 
                                         secureTextEntry={!showPassword} 
                                       />
+                                      
+                                      {/* Contenedor posicionado con top para alinearlo exactamente con la caja del input */}
                                       <TouchableOpacity 
                                         onPress={() => setShowPassword(!showPassword)}
-                                        style={{ position: 'absolute', right: 15, bottom: 12, zIndex: 10 }}
+                                        style={{ 
+                                          position: 'absolute', 
+                                          right: 15, 
+                                          top: '50%', 
+                                          marginTop: 0, // Mitad del tamaño del ícono (20px / 2) para centrado perfecto
+                                          zIndex: 10 
+                                        }}
                                         hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                                       >
                                         <MaterialCommunityIcons 
                                           name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                                          size={22} 
+                                          size={20} 
                                           color={DynamicColors.subtext} 
                                         />
                                       </TouchableOpacity>
@@ -1354,14 +1421,20 @@ export default function HomeScreen() {
                                       placeholder="********" 
                                       secureTextEntry={!showPassword} 
                                     />
-                                    <TouchableOpacity 
-                                      onPress={() => setShowPassword(!showPassword)}
-                                      style={{ position: 'absolute', right: 15, bottom: 12, zIndex: 10 }}
-                                      hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                                    >
+                                      <TouchableOpacity 
+                                        onPress={() => setShowPassword(!showPassword)}
+                                        style={{ 
+                                          position: 'absolute', 
+                                          right: 15, 
+                                          top: '50%', 
+                                          marginTop: 0, // Mitad del tamaño del ícono (20px / 2) para centrado perfecto
+                                          zIndex: 10 
+                                        }}
+                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                                      >
                                       <MaterialCommunityIcons 
                                         name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                                        size={22} 
+                                        size={20} 
                                         color={DynamicColors.subtext} 
                                       />
                                     </TouchableOpacity>

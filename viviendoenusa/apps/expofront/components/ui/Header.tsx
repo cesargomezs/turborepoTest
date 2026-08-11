@@ -19,12 +19,47 @@ import { useAppTheme } from '@/app/src/context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 
+// 🚀 IMPORTAMOS LA LISTA DE GROSERÍAS
+import badWordsData from '../../utils/babwords.json';
+
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND || process.env.EXPO_PUBLIC_URL_BACKEND;
 const API_NOTIFICATIONS_URL = `${API_BASE_URL}/notifications`;
 const API_USERS_URL = `${API_BASE_URL}/auth/profile`; 
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
 const API_UPLOAD_URL = `${API_BASE_URL}/api/subir-imagen-optimizada/users`; 
 const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`; 
+
+// ==========================================
+// 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS
+// ==========================================
+let BANNED_WORDS: string[] = [];
+try {
+  BANNED_WORDS = Array.isArray((badWordsData as any).badWordsList) ? (badWordsData as any).badWordsList : [];
+} catch (e) {
+  console.error("Error cargando badwords.json:", e);
+}
+
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
+  const lowerText = text.toLowerCase();
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
+};
 
 // ==========================================
 // 🚀 COMPONENTE: ITEM DESLIZABLE (SWIPE TO DELETE)
@@ -296,6 +331,12 @@ export default function Header({ title }: { title?: string }) {
       return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
     }
 
+    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN MENSAJES IT SUPPORT
+    if (containsBadWords(itMessage)) {
+      const errorMsg = "El mensaje contiene lenguaje inapropiado y no puede ser enviado.";
+      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
+    }
+
     setIsSendingIT(true);
     try {
       const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
@@ -426,6 +467,14 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const handleSaveProfile = async () => {
+    
+    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN EL NOMBRE DEL USUARIO
+    const contentToValidate = `${profileData.name} ${profileData.last_name}`;
+    if (containsBadWords(contentToValidate)) {
+      const errorMsg = "El nombre o apellido contiene palabras no permitidas.";
+      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
+    }
+
     setIsSavingProfile(true);
     try {
       let finalImageName = profileData.image_url;

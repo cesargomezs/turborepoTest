@@ -47,6 +47,14 @@
       "expo-asset",
       "expo-font",
       "expo-notifications",
+      "expo-sharing",
+      [
+        "expo-file-system",
+        {
+          "photosPermission": "Permitir a Viviendo en USA acceder a tus fotos.",
+          "savePhotosPermission": "Permitir a Viviendo en USA guardar fotos."
+        }
+      ],
       [
         "expo-splash-screen",
         {

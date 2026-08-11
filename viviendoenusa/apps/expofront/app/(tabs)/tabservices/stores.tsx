@@ -25,7 +25,7 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from '@/constants/Colors';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper';
+import { handleUniversalShare } from '../../../utils/shareHelper';
 
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
@@ -33,7 +33,28 @@ const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
+// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
+const containsBadWords = (text: string): boolean => {
+  if (!text) return false;
+  const lowerText = text.toLowerCase();
 
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
+};
 
 const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' },
@@ -61,11 +82,6 @@ const planStyles: any = {
     unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', 
     text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
   }
-};
-
-const validateComment = (text: string): boolean => {
-  const lowerText = text.toLowerCase();
-  return !BANNED_WORDS.some(word => lowerText.includes(word.toLowerCase()));
 };
 
 const openDirections = (store: any) => {
@@ -190,8 +206,6 @@ export default function StoresScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
 
-  //console.log(userMetadata?.estate);
-  
   // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
     if (!userToken) {
@@ -365,7 +379,6 @@ export default function StoresScreen() {
     }
   };
 
-  // 🚀 LÓGICA DE NOTIFICACIÓN CORREGIDA
   const lastProcessedNotifId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -616,6 +629,15 @@ export default function StoresScreen() {
       return Alert.alert("Atención", "Completar nombre, ubicación, foto y código de pago son obligatorios.");
     }
     
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS
+    const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
+    if (containsBadWords(contentToValidate)) {
+      return Alert.alert(
+        t.communitytab?.textInappropriateTittle || "Atención", 
+        t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado."
+      );
+    }
+
     setIsPublishing(true);
     try {
       let finalImageName = '';
@@ -819,7 +841,6 @@ export default function StoresScreen() {
       formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
     }
 
-    // 🚀 Fondo blanco solido cuando esta pendiente o oscuro si es Dark Mode
     const cardBgColor = isPending 
       ? (isDark ? '#1E1E1E' : '#FFFFFF')
       : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)');
@@ -911,7 +932,8 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [comment, setComment] = useState('');
 
   const handlePrePublish = () => {
-    if (!validateComment(comment)) {
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN LA RESEÑA
+    if (containsBadWords(comment)) {
       const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
       if (Platform.OS === 'web') { window.alert(errorMsg); } 
       else { Alert.alert("Error", errorMsg); }

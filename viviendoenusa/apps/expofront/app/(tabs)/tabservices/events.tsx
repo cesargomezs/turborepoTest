@@ -22,7 +22,7 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 import badWordsData from '../../../utils/babwords.json';
 import { useMockSelector } from '@/redux/slices';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '@/utils/shareHelper';
+import { handleUniversalShare } from '../../../utils/shareHelper';
 
 let BANNED_WORDS: string[] = [];
 try {
@@ -31,9 +31,27 @@ try {
   console.error("Error cargando badwords.json:", e);
 }
 
-const isTextInappropriate = (text: string): boolean => {
+// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
+const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  return BANNED_WORDS.some(word => text.toLowerCase().includes(word.toLowerCase()));
+  const lowerText = text.toLowerCase();
+
+  return BANNED_WORDS.some(word => {
+    if (!word) return false;
+    const lowerWord = word.toLowerCase();
+    
+    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
+    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
+    if (exactRegex.test(lowerText)) return true;
+
+    // 2. Atrapa letras repetidas al final para evadir filtros
+    const lastChar = lowerWord.slice(-1);
+    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
+    if (repeatedRegex.test(lowerText)) return true;
+    
+    return false;
+  });
 };
 
 const COUNTRIES = [ { code: '+1', flag: '🇺🇸', name: 'USA' }, { code: '+1', flag: '🇺🇸', name: 'USA' } ];
@@ -388,8 +406,10 @@ export default function EventsScreen() {
         return triggerAlert("Atención", "Título, ubicación, ZIP Code, teléfono, pago e imagen son obligatorios.");
     }
 
-    if (isTextInappropriate(trimmedTitle) || isTextInappropriate(trimmedDesc) || isTextInappropriate(trimmedLoc)) {
-      triggerAlert(t.communitytab?.textInappropriateTittle || "Error", t.communitytab?.textInappropriateDescription || "Contenido inapropiado.");
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS (Valida todos los campos a la vez)
+    const contentToValidate = `${trimmedTitle} ${trimmedDesc} ${trimmedLoc}`;
+    if (containsBadWords(contentToValidate)) {
+      triggerAlert(t.communitytab?.textInappropriateTittle || "Atención", t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado.");
       return; 
     }
 
