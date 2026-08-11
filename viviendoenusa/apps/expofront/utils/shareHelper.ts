@@ -1,6 +1,13 @@
 import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import { Platform, Share } from 'react-native';
+
+// 🚀 IMPORTACIÓN SEGURA PARA EXPO SHARING
+let Sharing: any = null;
+try {
+  Sharing = require('expo-sharing');
+} catch (e) {
+  console.log("Expo Sharing no disponible en este entorno, se usará fallback.");
+}
 
 export type ShareableContent = {
   title: string;
@@ -45,7 +52,7 @@ export const handleUniversalShare = async (item: ShareableContent) => {
         url: uri,
       });
     } else {
-      if (await Sharing.isAvailableAsync()) {
+      if (Sharing && (await Sharing.isAvailableAsync())) {
         await Sharing.shareAsync(uri, {
           dialogTitle: item.title,
           mimeType: 'image/jpeg',
