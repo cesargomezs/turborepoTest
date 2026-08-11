@@ -377,7 +377,6 @@ export default function HomeScreen() {
     async function setupNotifications() {
       if (isWebPlatform) return;
       if (Device.isDevice) {
-        // Forzamos el tipo con 'as any' para saltar el error ts(2339)
         const settings = await Notifications.getPermissionsAsync() as any;
         let finalStatus = settings.status || (settings.granted ? 'granted' : 'denied');
         
@@ -441,7 +440,6 @@ export default function HomeScreen() {
     await login(user, token);
     dispatch(setUserMetadata({ ...user, token }));
 
-    // 🚀 OBTENEMOS EL TOKEN PUSH Y LO ENVIAMOS AL BACKEND 🚀
     if (Device.isDevice && !isWebPlatform) {
       try {
         const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
@@ -1288,7 +1286,7 @@ export default function HomeScreen() {
                                       </View>
                                   )}
 
-                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA Y BOTÓN DE VER 🚀 */}
+                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA Y CENTRADO PERFECTO DEL ÍJONO DE VER 🚀 */}
                                   <View style={{ width: '100%', marginBottom: 10 }}>
                                     <View style={{ position: 'relative' }}>
                                       <ThemedTextInput 
@@ -1299,14 +1297,13 @@ export default function HomeScreen() {
                                         secureTextEntry={!showPassword} 
                                       />
                                       
-                                      {/* Contenedor posicionado con top para alinearlo exactamente con la caja del input */}
                                       <TouchableOpacity 
                                         onPress={() => setShowPassword(!showPassword)}
                                         style={{ 
                                           position: 'absolute', 
                                           right: 15, 
                                           top: '50%', 
-                                          marginTop: 0, // Mitad del tamaño del ícono (20px / 2) para centrado perfecto
+                                          marginTop: 4, // 🚀 Ajuste perfecto centrado verticalmente
                                           zIndex: 10 
                                         }}
                                         hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
@@ -1412,8 +1409,8 @@ export default function HomeScreen() {
                                 <>
                                   <ThemedTextInput label={t?.headertab?.email || (isEnglish ? "Email" : "Correo electrónico")} value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" autoCapitalize="none" keyboardType="email-address" />
                                   
-                                  {/* 🚀 BOTÓN DE VER CONTRASEÑA EN LOGIN TAMBIÉN 🚀 */}
-                                  <View style={{ position: 'relative', justifyContent: 'center' }}>
+                                  {/* 🚀 BOTÓN DE VER CONTRASEÑA EN LOGIN CON CENTRADO PERFECTO 🚀 */}
+                                  <View style={{ position: 'relative' }}>
                                     <ThemedTextInput 
                                       label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} 
                                       value={form.password} 
@@ -1421,17 +1418,17 @@ export default function HomeScreen() {
                                       placeholder="********" 
                                       secureTextEntry={!showPassword} 
                                     />
-                                      <TouchableOpacity 
-                                        onPress={() => setShowPassword(!showPassword)}
-                                        style={{ 
-                                          position: 'absolute', 
-                                          right: 15, 
-                                          top: '50%', 
-                                          marginTop: 0, // Mitad del tamaño del ícono (20px / 2) para centrado perfecto
-                                          zIndex: 10 
-                                        }}
-                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                                      >
+                                    <TouchableOpacity 
+                                      onPress={() => setShowPassword(!showPassword)}
+                                      style={{ 
+                                        position: 'absolute', 
+                                        right: 15, 
+                                        top: '50%', 
+                                        marginTop: 4, // 🚀 Ajuste perfecto centrado verticalmente
+                                        zIndex: 10 
+                                      }}
+                                      hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                                    >
                                       <MaterialCommunityIcons 
                                         name={showPassword ? "eye-off-outline" : "eye-outline"} 
                                         size={20} 
@@ -1484,7 +1481,6 @@ export default function HomeScreen() {
                 <TextInput value={resetEmail} onChangeText={setResetEmail} placeholder="ejemplo@correo.com" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginBottom: 10 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType="email-address" autoCapitalize="none" />
               </View>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
-                {/* 🚀 BOTÓN CON ESTADO DE CARGA 🚀 */}
                 <TouchableOpacity 
                   style={[styles.primaryWrapper, { width: '100%', height: 45 }, isSendingReset && { opacity: 0.7 }]} 
                   onPress={handlePasswordReset}
