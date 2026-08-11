@@ -263,7 +263,9 @@ export default function Header({ title }: { title?: string }) {
 
       setNotifications(fetchedNotifs);
     } catch (error: any) { 
-      console.error("Error al cargar notificaciones:", error?.message || "Error desconocido"); 
+      // 🚀 Manejo seguro para que un fallo de red no tire la app
+      console.log("Aviso: No se pudieron cargar las notificaciones:", error?.message || "Error desconocido");
+      setNotifications([]); // Evita que la app se rompa
     }
   };
 
