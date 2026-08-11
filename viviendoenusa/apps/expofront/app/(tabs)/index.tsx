@@ -24,8 +24,16 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
-import * as Notifications from 'expo-notifications'; 
-import * as Device from 'expo-device'; 
+
+// 🚀 IMPORTACIÓN SEGURA PARA EVITAR EL ERROR DE EXPO PUSH TOKEN MANAGER EN LOCAL
+let Notifications: any = null;
+let Device: any = null;
+try {
+  Notifications = require('expo-notifications');
+  Device = require('expo-device');
+} catch (e) {
+  console.log("Módulos nativos de notificaciones no disponibles en este entorno.");
+}
 
 import Head from 'expo-router/head'; 
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -82,17 +90,19 @@ const NOMBRE_BUCKET = 'images';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// 🚀 HANDLER GLOBAL DE NOTIFICACIONES PARA PRODUCCIÓN
-if (Platform.OS !== 'web') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+// 🚀 HANDLER GLOBAL DE NOTIFICACIONES SEGURO
+if (Platform.OS !== 'web' && Notifications) {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (e) {}
 }
 
 const INITIAL_SERVICES_DATA = [
@@ -372,33 +382,32 @@ export default function HomeScreen() {
     }
   };
 
-  // 🚀 PERMISOS Y CONFIGURACIÓN DE NOTIFICACIONES PARA PRODUCCIÓN (TS FIX APLICADO) 🚀
+  // 🚀 PERMISOS Y CONFIGURACIÓN DE NOTIFICACIONES SEGURO
   useEffect(() => {
     async function setupNotifications() {
-      if (isWebPlatform) return;
-      if (Device.isDevice) {
-        const settings = await Notifications.getPermissionsAsync() as any;
-        let finalStatus = settings.status || (settings.granted ? 'granted' : 'denied');
-        
-        if (finalStatus !== 'granted') {
-          const reqSettings = await Notifications.requestPermissionsAsync() as any;
-          finalStatus = reqSettings.status || (reqSettings.granted ? 'granted' : 'denied');
+      if (isWebPlatform || !Notifications || !Device) return;
+      try {
+        if (Device.isDevice) {
+          const settings = await Notifications.getPermissionsAsync() as any;
+          let finalStatus = settings.status || (settings.granted ? 'granted' : 'denied');
+          
+          if (finalStatus !== 'granted') {
+            const reqSettings = await Notifications.requestPermissionsAsync() as any;
+            finalStatus = reqSettings.status || (reqSettings.granted ? 'granted' : 'denied');
+          }
+          
+          if (finalStatus !== 'granted') return;
+          
+          if (Platform.OS === 'android') {
+            Notifications.setNotificationChannelAsync('default', {
+              name: 'default',
+              importance: Notifications.AndroidImportance.MAX,
+              vibrationPattern: [0, 250, 250, 250],
+              lightColor: '#FF231F7C',
+            });
+          }
         }
-        
-        if (finalStatus !== 'granted') {
-          console.log('No se obtuvieron los permisos para notificaciones push');
-          return;
-        }
-        
-        if (Platform.OS === 'android') {
-          Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#FF231F7C',
-          });
-        }
-      }
+      } catch (e) {}
     }
     setupNotifications();
   }, []);
@@ -440,7 +449,7 @@ export default function HomeScreen() {
     await login(user, token);
     dispatch(setUserMetadata({ ...user, token }));
 
-    if (Device.isDevice && !isWebPlatform) {
+    if (Device && Notifications && Device.isDevice && !isWebPlatform) {
       try {
         const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
         const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
@@ -1286,7 +1295,7 @@ export default function HomeScreen() {
                                       </View>
                                   )}
 
-                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA Y CENTRADO PERFECTO DEL ÍJONO DE VER 🚀 */}
+                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA Y CENTRADO PERFECTO 🚀 */}
                                   <View style={{ width: '100%', marginBottom: 10 }}>
                                     <View style={{ position: 'relative' }}>
                                       <ThemedTextInput 
@@ -1303,7 +1312,7 @@ export default function HomeScreen() {
                                           position: 'absolute', 
                                           right: 15, 
                                           top: '50%', 
-                                          marginTop: 4, // 🚀 Ajuste perfecto centrado verticalmente
+                                          marginTop: 4, 
                                           zIndex: 10 
                                         }}
                                         hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
@@ -1424,7 +1433,7 @@ export default function HomeScreen() {
                                         position: 'absolute', 
                                         right: 15, 
                                         top: '50%', 
-                                        marginTop: 4, // 🚀 Ajuste perfecto centrado verticalmente
+                                        marginTop: 4, 
                                         zIndex: 10 
                                       }}
                                       hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
