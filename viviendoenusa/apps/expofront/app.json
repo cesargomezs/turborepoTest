@@ -17,7 +17,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.viviendoenusa.app",
+      "bundleIdentifier": "com.viviendoenusa.expofront",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -46,6 +46,7 @@
       ],
       "expo-asset",
       "expo-font",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
