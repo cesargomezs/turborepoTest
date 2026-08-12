@@ -606,7 +606,7 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <MaterialCommunityIcons name="account-group" size={30} color={Colors.text} style={{ opacity: 0.4, paddingLeft: 15 }} />
+                <MaterialCommunityIcons name="account-group" size={40} color={Colors.text} style={{ opacity: 0.4, paddingLeft: 15 }} />
               </View>
 
               {/* LAYOUT PRINCIPAL DE COLUMNAS (WEB vs MÓVIL) */}

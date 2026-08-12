@@ -376,7 +376,7 @@ export default function DonationsScreen() {
                   </TouchableOpacity>
                   
                 </View>
-                <MaterialCommunityIcons name="account-group" size={40} color={DynamicColors.text} style={{opacity: 0.15, paddingLeft: 5}} />
+                <MaterialCommunityIcons name="hand-heart" size={40} color={DynamicColors.text} style={{opacity: 0.15, paddingLeft: 5}} />
 
               </View>
 

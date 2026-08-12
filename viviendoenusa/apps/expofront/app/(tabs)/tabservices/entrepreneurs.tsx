@@ -893,11 +893,11 @@ export default function EntrepreneurshipScreen() {
 
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)}>
-                    <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6, marginRight: 12 }} />
+                    <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6, marginRight: 8 }} />
                   </TouchableOpacity>
                   
                   <TouchableOpacity onLongPress={() => { const newAdminMode = isAdmin; setIsAdminMode(newAdminMode); if (newAdminMode) fetchAllPending(); else { setPendingItems([]); if(zipCode.length === 5) handleSearch(); } }}>
-                    <MaterialCommunityIcons name="lightbulb-multiple-outline" size={34} color={isAdminMode ? DC.accent : DC.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 2}} />
+                    <MaterialCommunityIcons name="lightbulb-multiple-outline" size={40} color={isAdminMode ? DC.accent : DC.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 2}} />
                   </TouchableOpacity>
                 </View>
               </View>
