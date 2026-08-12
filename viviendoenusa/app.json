@@ -12,7 +12,14 @@
     "ios": {
       "bundleIdentifier": "com.viviendoenusa.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.1099132751870-9b7fb1f2vfv5v0enr3rkdn5r9p8sregk"
+            ]
+          }
+        ]
       }
     }
   }
