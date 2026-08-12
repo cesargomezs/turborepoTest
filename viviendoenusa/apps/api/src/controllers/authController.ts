@@ -282,6 +282,7 @@ export const authenticateUser = async (credentials: {
         email: user.email,
         firstName: user.name,
         lastName: user.lastName,
+        role: user.typeDetail || 'User',
       }
     };
   } catch (error: any) {
