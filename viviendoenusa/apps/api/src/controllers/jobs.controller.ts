@@ -89,6 +89,35 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA EMPLEOS
+// =====================================================================
+const sendTelegramAlert = async (jobTitle: string, companyName: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) {
+    console.warn("⚠️ Credenciales de Telegram no configuradas.");
+    return;
+  }
+
+  const message = `💼 *NUEVA OFERTA DE EMPLEO REGISTRADA*\n\n*Empresa:* ${companyName}\n*Puesto:* ${jobTitle}\n\n⚠️ Ingresa al panel de administrador en la app para revisarlo.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
+};
+
+// =====================================================================
 // 🔍 1. CONSULTA GENERAL CON FILTRO DE RADIO Y CANDADO DE EMPRESA
 // =====================================================================
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
@@ -255,7 +284,7 @@ export const getJobById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR OFERTA DE EMPLEO
+// 📥 3. CREAR OFERTA DE EMPLEO (ACTUALIZADO CON TELEGRAM)
 // =====================================================================
 export const createJob = async (data: any) => {
   try {
@@ -293,10 +322,10 @@ export const createJob = async (data: any) => {
         salaryMin: sanitizeText(data.salaryMin),
         salaryMax: sanitizeText(data.salaryMax),
         descriptionJob: safeDesc,
-        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD DIRECTAMENTE
-        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD DIRECTAMENTE
+        lat: data.lat ? Number(data.lat) : lat, 
+        lng: data.lng ? Number(data.lng) : lng, 
         isOpen: data.isOpen !== undefined ? data.isOpen : true,
-        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
+        userId: validUserId, 
         userNameId: sanitizeText(data.userNameId || data.userName) || 'Anónimo',
         approved: true, 
       };
@@ -362,6 +391,14 @@ export const createJob = async (data: any) => {
       sendMassPushNotification(pushNotificationData).catch(err => {
          console.error("❌ [DEBUG PUSH] Falló el Push Notification de empleos:", err);
       });
+    }
+
+    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    if (newJobResult) {
+      sendTelegramAlert(
+        newJobResult.title || 'Sin título',
+        newJobResult.company || 'Empresa Anónima'
+      ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
     }
 
     return newJobResult;

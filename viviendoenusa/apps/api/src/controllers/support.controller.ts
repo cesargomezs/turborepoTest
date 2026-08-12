@@ -66,6 +66,35 @@ const getCurrentSupportPrice = async () => {
 };
 
 // =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA APOYO
+// =====================================================================
+const sendTelegramAlert = async (supportName: string, refCode: string, method: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) {
+    console.warn("⚠️ Credenciales de Telegram no configuradas.");
+    return;
+  }
+
+  const message = `🤝 *NUEVO CONTACTO DE APOYO REGISTRADO*\n\n*Nombre:* ${supportName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
+};
+
+// =====================================================================
 // 🔍 1. CONSULTA GENERAL (AQUÍ SE AGREGÓ EL FILTRO DE DISTANCIA)
 // =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string) => {
@@ -276,7 +305,7 @@ export const getSupportById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR CONTACTO DE APOYO (SIN MODIFICAR GEOLOCALIZACIÓN COMO SE PIDIÓ)
+// 📥 3. CREAR CONTACTO DE APOYO (ACTUALIZADO CON TELEGRAM)
 // =====================================================================
 export const createSupport = async (data: any) => {
   try {
@@ -285,7 +314,8 @@ export const createSupport = async (data: any) => {
       cleanImage = cleanImage.replace('support/', '');
     }
 
-    return await db.transaction(async (tx) => {
+    // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
+    const createdSupportResult = await db.transaction(async (tx) => {
       
       const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
@@ -332,6 +362,18 @@ export const createSupport = async (data: any) => {
          descriptionSupp: safeDesc
       };
     });
+
+    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    if (createdSupportResult) {
+      sendTelegramAlert(
+        createdSupportResult.nameSupp,
+        createdSupportResult.referenceCode || 'N/A',
+        createdSupportResult.paymentMethod || 'N/A'
+      ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
+    }
+
+    return createdSupportResult;
+
   } catch (error: any) { 
     console.error("❌ Error en createSupport:", error);
     

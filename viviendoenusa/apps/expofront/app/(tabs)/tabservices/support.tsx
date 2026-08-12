@@ -362,6 +362,11 @@ export default function SupportScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken;
   const { t } = useTranslation();
 
+  // 🚀 1. NUEVO: Extraemos el rol y creamos la validación
+  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  
   const ICONS_ARRAY = t.supporttab.categoryListIcon;
   const CATEGORIES_LIST = t.supporttab.categoryList;
   const stylesUnified = useUnifiedCardStyles();
@@ -855,7 +860,7 @@ export default function SupportScreen() {
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}><MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} /></TouchableOpacity>
-                  <TouchableOpacity onLongPress={() => { setIsAdminMode(!isAdminMode); }}><MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} /></TouchableOpacity>
+                  <TouchableOpacity onLongPress={() => { setIsAdminMode(isAdmin); }}><MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} /></TouchableOpacity>
                 </View>
               </View>
 

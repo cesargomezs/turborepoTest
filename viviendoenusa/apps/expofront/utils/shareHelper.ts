@@ -1,6 +1,6 @@
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy'; // 🚀 ¡EL ARREGLO ESTÁ AQUÍ! 
 import { Platform, Share } from 'react-native';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export type ShareableContent = {
   title: string;
@@ -13,56 +13,56 @@ export type ShareableContent = {
 };
 
 export const handleUniversalShare = async (item: ShareableContent) => {
-  try {
-    // 🇺🇸 Mensaje optimizado para una excelente experiencia de usuario
-    const defaultMsg = `🇺🇸 *Viviendo en USA*\n\n*${item.title}*\n${item.description}${item.phone ? `\n📞 Tel: ${item.phone}` : ''}${item.address ? `\n📍 Dir: ${item.address}${item.zip ? ` (${item.zip})` : ''}` : ''}`;
-    
-    const fullMessage = item.customMessage || defaultMsg;
+  const promoText = "\n\n🌐 ¿Quieres saber más de nosotros?\nIngresa a https://viviendoenusa.app";
+  const defaultMsg = `🇺🇸 *Viviendo en USA*\n\n*${item.title}*\n${item.description}${item.phone ? `\n📞 Tel: ${item.phone}` : ''}${item.address ? `\n📍 Dir: ${item.address}${item.zip ? ` (${item.zip})` : ''}` : ''}`;
+  
+  const fullMessage = (item.customMessage || defaultMsg) + promoText;
 
-    // Si es web o no hay imagen válida, usamos el Share nativo de texto
-    if (Platform.OS === 'web' || !item.image || item.image.length < 5) {
-      await Share.share({
-        message: `${fullMessage}\n\n${item.image || ''}`,
-        title: item.title
-      });
+  let finalImageUrl = item.image || '';
+  
+  if (finalImageUrl && !finalImageUrl.startsWith('http')) {
+      const SUPABASE_BASE = process.env.EXPO_PUBLIC_SUPABASE_URL 
+        ? `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/public`
+        : 'https://pwznamxpdzwppmpiyizp.supabase.co/storage/v1/object/public'; 
+      finalImageUrl = `${SUPABASE_BASE}/${finalImageUrl}`;
+  }
+
+  try {
+    if (Platform.OS === 'web' || !finalImageUrl || finalImageUrl.length < 5) {
+      await Share.share({ message: fullMessage, title: item.title });
       return;
     }
 
-    // Descarga temporal de la imagen física para dispositivos móviles
-    const filename = item.image.split('/').pop() || 'compartido.jpg';
+    // @ts-ignore
+    const directory = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+    const originalDest = `${directory}temp_original_${Date.now()}.webp`;
     
-    // @ts-ignore - Forzamos a TypeScript a ignorar la advertencia, la propiedad sí existe en runtime
-    const directory = FileSystem.documentDirectory;
-    const downloadDest = `${directory}${filename}`;
-    
-    // Descargamos la imagen usando el FileSystem estándar
-    const { uri } = await FileSystem.downloadAsync(item.image, downloadDest);
+    // 🚀 AHORA ESTA LÍNEA SÍ VA A FUNCIONAR SIN EXPLOTAR EN EXPO 54
+    const { uri: downloadedUri } = await FileSystem.downloadAsync(finalImageUrl, originalDest);
 
-    // Estrategia dividida según plataforma
-    if (Platform.OS === 'ios') {
-      await Share.share({
-        message: fullMessage,
-        url: uri,
-      });
-    } else {
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          dialogTitle: item.title,
-          mimeType: 'image/jpeg',
-          UTI: 'public.jpeg',
-          message: fullMessage,
-        } as any);
-      } else {
-        await Share.share({
-          message: `${fullMessage}\n\n${item.image}`,
-          title: item.title
-        });
-      }
+    let localUri = downloadedUri; 
+
+    try {
+        const manipResult = await ImageManipulator.manipulateAsync(
+            downloadedUri,
+            [], 
+            { compress: 1, format: ImageManipulator.SaveFormat.JPEG } 
+        );
+        localUri = manipResult.uri; 
+    } catch (manipError) {
+        console.log("Aviso: No se pudo convertir a JPG, usando archivo original.");
     }
+
+    await Share.share({
+      message: fullMessage,
+      url: localUri, 
+      title: item.title,
+    });
+
   } catch (error) {
-    console.log("Error al compartir:", error);
+    console.log("Error crítico al compartir:", error);
     Share.share({
-      message: `*${item.title}*\n${item.description}`,
+      message: fullMessage,
       title: item.title
     });
   }

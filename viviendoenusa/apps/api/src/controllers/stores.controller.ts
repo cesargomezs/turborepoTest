@@ -113,6 +113,35 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA NEGOCIOS
+// =====================================================================
+const sendTelegramAlert = async (storeName: string, refCode: string, method: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) {
+    console.warn("⚠️ Credenciales de Telegram no configuradas.");
+    return;
+  }
+
+  const message = `🏪 *NUEVO NEGOCIO REGISTRADO*\n\n*Negocio:* ${storeName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
+};
+
+// =====================================================================
 // 🔍 1. CONSULTA GENERAL CON FILTRO DE RADIO Y VISIBILIDAD
 // =====================================================================
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
@@ -301,7 +330,7 @@ export const getStoreById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR NEGOCIO
+// 📥 3. CREAR NEGOCIO (ACTUALIZADO CON TELEGRAM)
 // =====================================================================
 export const createStore = async (data: any) => {
   try {
@@ -319,7 +348,8 @@ export const createStore = async (data: any) => {
     // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
     const { lat, lng } = getCoordsFromZip(data.zip || '');
 
-    return await db.transaction(async (tx) => {
+    // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
+    const createdStoreResult = await db.transaction(async (tx) => {
       
       const safeDesc = sanitizeText(data.description || data.descriptionStores) || '';
 
@@ -333,9 +363,9 @@ export const createStore = async (data: any) => {
         descriptionStores: safeDesc,
         statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
         estate: sanitizeText(data.estate) || '',
-        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD DIRECTAMENTE
-        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD DIRECTAMENTE
-        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
+        lat: data.lat ? Number(data.lat) : lat, 
+        lng: data.lng ? Number(data.lng) : lng, 
+        userId: validUserId, 
         approved: false 
       };
       
@@ -364,6 +394,18 @@ export const createStore = async (data: any) => {
          descriptionStores: safeDesc
       };
     });
+
+    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    if (createdStoreResult) {
+      sendTelegramAlert(
+        createdStoreResult.nameStores,
+        createdStoreResult.referenceCode || 'N/A',
+        createdStoreResult.paymentMethod || 'N/A'
+      ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
+    }
+
+    return createdStoreResult;
+
   } catch (error: any) { 
     console.error("❌ Error en createStore:", error);
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {

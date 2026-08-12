@@ -308,6 +308,35 @@ export const getLawyerByIdWithReviews = async (id: string) => {
 };
 
 // =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM
+// =====================================================================
+const sendTelegramAlert = async (lawyerName: string, refCode: string, method: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) {
+    console.warn("⚠️ Credenciales de Telegram no configuradas.");
+    return;
+  }
+
+  const message = `⚖️ *NUEVO ABOGADO REGISTRADO*\n\n*Nombre:* ${lawyerName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
+};
+
+// =====================================================================
 // 📥 3. CREAR ABOGADO
 // =====================================================================
 export const createLawyer = async (req: Request, res: Response) => {
@@ -378,6 +407,15 @@ export const createLawyer = async (req: Request, res: Response) => {
          descriptionLawy: safeDesc
       };
     });
+
+    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    if (createdLawyerResult) {
+      sendTelegramAlert(
+        createdLawyerResult.nameLawy, 
+        createdLawyerResult.referenceCode || 'N/A', 
+        createdLawyerResult.paymentMethod || 'N/A'
+      ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
+    }
 
     return resAny.status(201).json(createdLawyerResult);
 

@@ -125,6 +125,35 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA EVENTOS
+// =====================================================================
+const sendTelegramAlert = async (eventName: string, refCode: string, method: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) {
+    console.warn("⚠️ Credenciales de Telegram no configuradas.");
+    return;
+  }
+
+  const message = `🎉 *NUEVO EVENTO REGISTRADO*\n\n*Evento:* ${eventName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
+};
+
+// =====================================================================
 // 🔍 1. CONSULTA GENERAL (Optimizada con Geofencing Local)
 // =====================================================================
 export const getEvents = async (zip?: string) => {
@@ -237,13 +266,13 @@ export const getEventById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR EVENTO
+// 📥 3. CREAR EVENTO (ACTUALIZADO CON TELEGRAM)
 // =====================================================================
 export const createEvent = async (data: any) => {
   try {
     const cleanData = sanitizePayload(data);
     
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID (Eliminada la falla del Fallback User)
+    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID 
     const validUserId = sanitizeText(cleanData.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para registrar un evento.");
@@ -257,7 +286,8 @@ export const createEvent = async (data: any) => {
         cleanImage = cleanImage.replace('events/', '');
     }
 
-    return await db.transaction(async (tx) => {
+    // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
+    const createdEventResult = await db.transaction(async (tx) => {
 
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
@@ -279,7 +309,7 @@ export const createEvent = async (data: any) => {
           contactMethod: cleanData.contactMethod || 'whatsapp',
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
           premiumPlan: planSeleccionado,
-          userId: validUserId, // 🚀 SE USA EL ID VALIDADO Y SEGURO
+          userId: validUserId, 
           approved: false, 
         };
 
@@ -311,6 +341,18 @@ export const createEvent = async (data: any) => {
            paymentMethod: cleanData.paymentMethod
         };
     });
+
+    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    if (createdEventResult) {
+      sendTelegramAlert(
+        createdEventResult.title || 'Sin título',
+        createdEventResult.referenceCode || 'N/A',
+        createdEventResult.paymentMethod || 'N/A'
+      ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
+    }
+
+    return createdEventResult;
+
   } catch (error: any) { 
     console.error("❌ Error en createEvent:", error);
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {

@@ -88,6 +88,7 @@ export default function EventsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
+  
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
@@ -104,6 +105,8 @@ export default function EventsScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
   
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
   // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
     if (!userToken) {
@@ -677,7 +680,7 @@ export default function EventsScreen() {
                 </View>
                 
                 <TouchableOpacity onLongPress={() => {
-                    const newAdminMode = !isAdminMode;
+                    const newAdminMode = isAdmin;
                     setIsAdminMode(newAdminMode);
                     if (newAdminMode) {
                         fetchEvents(zipCode, true);

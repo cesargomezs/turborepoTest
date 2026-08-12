@@ -205,6 +205,11 @@ export default function StoresScreen() {
   const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
+// 🚀 1. NUEVO: Extraemos el rol y creamos la validación
+  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+
 
   // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
@@ -1431,7 +1436,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => { setIsAdminMode(!isAdminMode); }}>
+                  <TouchableOpacity onPress={() => { setIsAdminMode(isAdmin); }}>
                     <MaterialCommunityIcons name="store-plus-outline" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>

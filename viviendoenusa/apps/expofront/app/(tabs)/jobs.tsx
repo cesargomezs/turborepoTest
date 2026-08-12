@@ -76,6 +76,11 @@ export default function JobsScreen() {
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
+// 🚀 1. NUEVO: Extraemos el rol y creamos la validación
+  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+
 
   useEffect(() => {
     if (!userToken) {
@@ -910,11 +915,11 @@ export default function JobsScreen() {
                 </View>
 
                 {/* 🚀 Botón de Admin y Guardados (Fijo a la derecha para mantener simetría) */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6, width: 70 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: -5, width: 70 }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)} style={{ padding: 0 }}>
                       <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DynamicColors.accent : DynamicColors.text} style={{opacity: showSavedOnly ? 1 : 0.6}}/>
                   </TouchableOpacity>
-                  <TouchableOpacity onLongPress={() => setIsAdminMode(!isAdminMode)} style={{ padding: 0 }}>
+                  <TouchableOpacity onLongPress={() => setIsAdminMode(isAdmin)} style={{ padding: 0 }}>
                       <MaterialCommunityIcons name="briefcase-search" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.3}}/>
                   </TouchableOpacity>
                 </View>

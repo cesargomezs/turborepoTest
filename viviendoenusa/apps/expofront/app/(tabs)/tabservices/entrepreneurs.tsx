@@ -192,6 +192,11 @@ export default function EntrepreneurshipScreen() {
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
 
+  // 🚀 1. NUEVO: Extraemos el rol y creamos la validación
+  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+
   // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
     if (!userToken) {
@@ -891,7 +896,7 @@ export default function EntrepreneurshipScreen() {
                     <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6, marginRight: 12 }} />
                   </TouchableOpacity>
                   
-                  <TouchableOpacity onLongPress={() => { const newAdminMode = !isAdminMode; setIsAdminMode(newAdminMode); if (newAdminMode) fetchAllPending(); else { setPendingItems([]); if(zipCode.length === 5) handleSearch(); } }}>
+                  <TouchableOpacity onLongPress={() => { const newAdminMode = isAdmin; setIsAdminMode(newAdminMode); if (newAdminMode) fetchAllPending(); else { setPendingItems([]); if(zipCode.length === 5) handleSearch(); } }}>
                     <MaterialCommunityIcons name="lightbulb-multiple-outline" size={34} color={isAdminMode ? DC.accent : DC.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 2}} />
                   </TouchableOpacity>
                 </View>

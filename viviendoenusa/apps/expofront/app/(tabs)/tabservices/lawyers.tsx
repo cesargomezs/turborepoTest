@@ -498,7 +498,13 @@ export default function LawyersScreen() {
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
-  // 🚀 AGREGA ESTA LÍNEA AQUÍ
+
+  // 🚀 1. NUEVO: Extraemos el rol y creamos la validación
+  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+
+  
   const selectedLanguage = useMockSelector((state: any) => state.language.code);
   
   const stylesUnified = useUnifiedCardStyles();
@@ -669,8 +675,6 @@ export default function LawyersScreen() {
           couponCode: item.couponCode
         }));
         const approved = mappedData.filter(s => s.status === 'approved');
-        //console.log(selectedLanguage);
-        //console.log(approved[0].description);
 
         setAllLawyers(approved);
         setLocalData(approved);
@@ -815,9 +819,10 @@ export default function LawyersScreen() {
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800);
   };
 
+  // 🚀 RESTAURADO AL CÓDIGO ORIGINAL QUE TIENES EN JOBS
   const handleShare = async (lawyer: any) => {
     await handleUniversalShare({
-      title: t.lawyerstab.labelawyer+lawyer.name,
+      title: ((t.lawyerstab as any)?.labelawyer || '') + lawyer.name,
       description: lawyer.description,
       phone: lawyer.phone,
       address: lawyer.address,
@@ -1430,7 +1435,7 @@ export default function LawyersScreen() {
                   <TouchableOpacity onPress={() => { setResults([]); setLocalData([]); setPendingLawyers([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => { setIsAdminMode(!isAdminMode); }}>
+                  <TouchableOpacity onPress={() => { setIsAdminMode(isAdmin); }}>
                     <MaterialCommunityIcons name="scale-balance" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>
