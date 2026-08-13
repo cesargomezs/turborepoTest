@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { users , userDevices} from "../../../../packages/db/src/schema";
+import { users , userDevices, accountDeletionSurveys} from "../../../../packages/db/src/schema";
 import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
@@ -507,11 +507,12 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (AUDITORÍA, ANONIMIZACIÓN Y CORREO)
+// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (AUDITORÍA, ENCUESTA Y CORREO)
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const { reason } = req.body; // 🚀 Capturamos la razón enviada desde el frontend
 
     if (!userId) {
       return res.status(401).json({ error: "No autorizado. Se requiere una sesión válida." });
@@ -527,6 +528,21 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "Usuario no encontrado en la base de datos." });
     }
 
+    // 🚀 1. GUARDAR LA ENCUESTA ANTES DE ANONIMIZAR LOS DATOS
+    if (reason) {
+      try {
+        await db.insert(accountDeletionSurveys).values({
+          userId: userId,
+          userEmail: userRecord.email,
+          reason: reason,
+        });
+        console.log("📊 Encuesta de salida guardada con éxito.");
+      } catch (surveyError) {
+        console.error("⚠️ Error al guardar la encuesta, pero el borrado continuará:", surveyError);
+      }
+    }
+
+    // 🚀 2. ELIMINAR IMAGEN DE STORAGE
     if (userRecord.imageUrl && !userRecord.imageUrl.startsWith('http')) {
       const filePath = userRecord.imageUrl.startsWith('users/') 
         ? userRecord.imageUrl 
@@ -540,6 +556,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // 🚀 3. LOG DE AUDITORÍA
     const forwarded = req.headers?.['x-forwarded-for'];
     const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     const rawIp = ipString ? ipString.split(',')[0].trim() : req.socket?.remoteAddress || req.ip || '0.0.0.0';
@@ -553,12 +570,14 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       ipAddress: ipAddress,
       metadata: {
         reason: "Solicitud voluntaria de baja de cuenta por parte del usuario",
+        surveyReason: reason || "No especificado",
         deletedAt: new Date().toISOString(),
         previousEmail: userRecord.email,
         tramaAccion: "Anonimización de PII, limpieza de Storage y baja de Auth"
       }
     });
 
+    // 🚀 4. ANONIMIZAR AL USUARIO
     await db
       .update(users)
       .set({
@@ -575,6 +594,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       })
       .where(eq(users.id, userId));
 
+    // 🚀 5. ENVIAR CORREO DE DESPEDIDA
     if (userRecord.email && !userRecord.email.includes('deleted_')) {
       try {
         let logoUrl = 'https://viviendoenusa.app/favicon.ico';

@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useState, useEffect, useRef } from 'react'; 
 import { 
-  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, TextInput, Alert, useWindowDimensions, Keyboard, Animated, PanResponder, Dimensions
+  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, TextInput, Alert, useWindowDimensions, Keyboard, Animated, PanResponder, Dimensions,ActivityIndicator
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
@@ -134,6 +134,12 @@ export default function Header({ title }: { title?: string }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false); 
 
+  // 🚀 ESTADOS PARA ENCUESTA DE ELIMINACIÓN
+  const [showDeleteSurveyModal, setShowDeleteSurveyModal] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [customDeleteReason, setCustomDeleteReason] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
   // 🚀 ESTADOS PARA IT SUPPORT (SOPORTE TÉCNICO)
   const [itMessage, setItMessage] = useState('');
   const [isSendingIT, setIsSendingIT] = useState(false);
@@ -170,6 +176,15 @@ export default function Header({ title }: { title?: string }) {
   const languages = [
     { code: 'es', label: 'Español' },
     { code: 'en', label: 'English' },
+  ];
+
+  const deleteReasonsList = [
+    "No entiendo cómo usar la app",
+    "No encontré lo que buscaba",
+    "Recibo demasiadas notificaciones",
+    "Errores técnicos / Bugs",
+    "Privacidad / Seguridad",
+    "Otro"
   ];
 
   const fetchUserData = async () => {
@@ -263,9 +278,8 @@ export default function Header({ title }: { title?: string }) {
 
       setNotifications(fetchedNotifs);
     } catch (error: any) { 
-      // 🚀 Manejo seguro para que un fallo de red no tire la app
       console.log("Aviso: No se pudieron cargar las notificaciones:", error?.message || "Error desconocido");
-      setNotifications([]); // Evita que la app se rompa
+      setNotifications([]); 
     }
   };
 
@@ -333,7 +347,6 @@ export default function Header({ title }: { title?: string }) {
       return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
     }
 
-    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN MENSAJES IT SUPPORT
     if (containsBadWords(itMessage)) {
       const errorMsg = "El mensaje contiene lenguaje inapropiado y no puede ser enviado.";
       return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
@@ -368,74 +381,73 @@ export default function Header({ title }: { title?: string }) {
   };
 
   // =====================================================================
-  // 🚀 FUNCIÓN PARA DAR DE BAJA LA CUENTA (INTEGRACIÓN REDUX + REDIRECT)
+  // 🚀 FLUJO PARA DAR DE BAJA LA CUENTA (ENCUESTA + ELIMINACIÓN)
   // =====================================================================
-  const handleDeleteAccount = () => {
-    const confirmTitle = "Eliminar Cuenta Definitivamente";
-    const confirmMessage = "⚠️ Esta acción es irreversible. Se borrarán tus datos personales y credenciales de acceso de nuestros servidores, aunque tus reseñas y publicaciones permanecerán de forma anónima en la comunidad.";
+  const handleDeleteAccountPress = () => {
+    closeSettingsModal();
+    setDeleteReason('');
+    setCustomDeleteReason('');
+    setTimeout(() => setShowDeleteSurveyModal(true), 300);
+  };
 
-    const executeDelete = async () => {
-      try {
-        const response = await fetch(API_DELETE_ACCOUNT_URL, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-          }
-        });
+  const executeDelete = async () => {
+    if (!deleteReason) {
+      const msg = "Por favor, selecciona un motivo para ayudarnos a mejorar.";
+      return isWeb ? window.alert(msg) : Alert.alert("Atención", msg);
+    }
+    
+    if (deleteReason === 'Otro' && !customDeleteReason.trim()) {
+      const msg = "Por favor, especifica el motivo.";
+      return isWeb ? window.alert(msg) : Alert.alert("Atención", msg);
+    }
 
-        if (!response.ok) {
-          throw new Error("No se pudo eliminar la cuenta. Intenta más tarde.");
-        }
+    setIsDeletingAccount(true);
+    try {
+      const finalReason = deleteReason === 'Otro' ? customDeleteReason : deleteReason;
+      
+      const response = await fetch(API_DELETE_ACCOUNT_URL, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ reason: finalReason }) // 🚀 Enviamos la razón a la BD
+      });
 
-        if (isWeb) {
-          window.alert("Tu cuenta y datos personales han sido eliminados con éxito.");
-        } else {
-          Alert.alert("Cuenta Eliminada", "Tus datos personales han sido borrados con éxito.");
-        }
-        
-        closeSettingsModal();
-        
-        // 🚀 LIMPIEZA DE SESIÓN
-        if (typeof logout === 'function') {
-          await logout();
-        }
-        dispatch(setUserMetadata({} as any)); 
-        dispatch(toggleAuth()); 
-
-        // 🚀 REDIRECCIÓN A LA PORTADA LARGA (Forzamos ?login=false o limpiamos la URL)
-        if (Platform.OS === 'web') {
-          window.location.replace('/'); // Esto recarga limpio y muestra la portada que me enviaste en la foto
-        } else {
-          router.replace('/');
-        }
-        
-      } catch (error: any) {
-        if (isWeb) {
-          window.alert(`Error: ${error.message}`);
-        } else {
-          Alert.alert("Error", error.message);
-        }
+      if (!response.ok) {
+        throw new Error("No se pudo eliminar la cuenta. Intenta más tarde.");
       }
-    };
 
-    if (isWeb) {
-      if (window.confirm(`${confirmTitle}\n\n${confirmMessage}`)) {
-        executeDelete();
+      if (isWeb) {
+        window.alert("Tu cuenta y datos personales han sido eliminados con éxito.");
+      } else {
+        Alert.alert("Cuenta Eliminada", "Tus datos personales han sido borrados con éxito.");
       }
-    } else {
-      Alert.alert(
-        confirmTitle,
-        confirmMessage,
-        [
-          { text: "Cancelar", style: "cancel" },
-          { 
-            text: "Sí, eliminar mi cuenta", 
-            style: "destructive", 
-            onPress: () => executeDelete() 
-          }
-        ]
-      );
+      
+      setShowDeleteSurveyModal(false);
+      
+      // 🚀 LIMPIEZA DE SESIÓN
+      if (typeof logout === 'function') {
+        await logout();
+      }
+      dispatch(setUserMetadata({} as any)); 
+      dispatch(toggleAuth()); 
+
+      // 🚀 REDIRECCIÓN A LA PORTADA
+      if (Platform.OS === 'web') {
+        window.location.replace('/'); 
+      } else {
+        router.replace('/');
+      }
+      
+    } catch (error: any) {
+      if (isWeb) {
+        window.alert(`Error: ${error.message}`);
+      } else {
+        Alert.alert("Error", error.message);
+      }
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -469,8 +481,6 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const handleSaveProfile = async () => {
-    
-    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN EL NOMBRE DEL USUARIO
     const contentToValidate = `${profileData.name} ${profileData.last_name}`;
     if (containsBadWords(contentToValidate)) {
       const errorMsg = "El nombre o apellido contiene palabras no permitidas.";
@@ -828,10 +838,10 @@ export default function Header({ title }: { title?: string }) {
                   </LinearGradient>
                 </TouchableOpacity>
 
-                {/* 🚀 BOTÓN PARA DAR DE BAJA / ELIMINAR CUENTA (CUMPLE CON REQUISITOS DE APPLE/GOOGLE) */}
+                {/* 🚀 BOTÓN PARA DAR DE BAJA / ELIMINAR CUENTA */}
                 {!isCreatingUser && (
                   <TouchableOpacity 
-                    onPress={handleDeleteAccount} 
+                    onPress={handleDeleteAccountPress} 
                     style={{ 
                       marginTop: 25, 
                       paddingVertical: 15, 
@@ -855,6 +865,81 @@ export default function Header({ title }: { title?: string }) {
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* 🚀 MODAL DE ENCUESTA PARA ELIMINAR CUENTA */}
+      <Modal visible={showDeleteSurveyModal} transparent animationType="fade" onRequestClose={() => setShowDeleteSurveyModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>Eliminar Cuenta</ThemedText>
+              <TouchableOpacity onPress={() => setShowDeleteSurveyModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={Colors[localTheme].text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 14, color: isDark ? '#B0BEC5' : '#666', marginBottom: 20 }}>
+              Lamentamos mucho que te vayas. Para ayudarnos a mejorar, ¿podrías decirnos por qué deseas eliminar tu cuenta?
+            </ThemedText>
+
+            <ScrollView style={{ maxHeight: 250, marginBottom: 20 }} showsVerticalScrollIndicator={false}>
+              {deleteReasonsList.map((reason, index) => (
+                <TouchableOpacity 
+                  key={index}
+                  onPress={() => setDeleteReason(reason)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    borderBottomWidth: index === deleteReasonsList.length - 1 ? 0 : 1,
+                    borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <MaterialCommunityIcons 
+                    name={deleteReason === reason ? "radiobox-marked" : "radiobox-blank"} 
+                    size={22} 
+                    color={deleteReason === reason ? '#FF5F6D' : (isDark ? '#666' : '#999')} 
+                  />
+                  <ThemedText style={{ fontSize: 15, marginLeft: 10, color: Colors[localTheme].text, flex: 1 }}>{reason}</ThemedText>
+                </TouchableOpacity>
+              ))}
+
+              {deleteReason === 'Otro' && (
+                <TextInput 
+                  value={customDeleteReason}
+                  onChangeText={setCustomDeleteReason}
+                  placeholder="Escribe tu motivo aquí..."
+                  placeholderTextColor={isDark ? '#666' : '#999'}
+                  multiline
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 12, borderRadius: 12, height: 80, textAlignVertical: 'top', marginTop: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+                />
+              )}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => setShowDeleteSurveyModal(false)}
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+              >
+                <ThemedText style={{ color: Colors[localTheme].text, fontWeight: 'bold' }}>Cancelar</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                disabled={isDeletingAccount} 
+                onPress={executeDelete} 
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#EF4444', opacity: isDeletingAccount ? 0.6 : 1 }}
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold' }}>Eliminar</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
+
+          </View>
         </View>
       </Modal>
 

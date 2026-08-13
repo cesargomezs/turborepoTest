@@ -394,6 +394,19 @@ export const userDevices = pgTable('user_devices', {
 });
 
 
+// 19. TABLA: account_deletion_surveys (Tener un registro de por qué los usuarios se borran de la app, para mejorar la retención)
+
+export const accountDeletionSurveys = pgTable("account_deletion_surveys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Almacenamos el ID y el correo de forma estática (sin foreign key strict) 
+  // para no perder el registro cuando el usuario se borre de la tabla 'users'
+  userId: uuid("user_id"), 
+  userEmail: text("user_email"), 
+  // El motivo de la salida ("No entiendo cómo usar la app", etc. o el texto manual)
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 
   // ==========================================
   // 2. CONFIGURACIÓN DE RELACIONES (Drizzle Relations)

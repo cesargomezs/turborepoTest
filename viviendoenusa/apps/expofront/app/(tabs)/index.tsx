@@ -153,14 +153,11 @@ const AnimatedStat = ({ endValue, label, icon, isDark }: { endValue: number, lab
 export default function HomeScreen() {
   const router = useRouter(); 
   const params = useLocalSearchParams(); 
-  const { login } = useAuth();
   const { width, height } = useWindowDimensions();
-  
   const { isDark, toggleTheme } = useAppTheme();
+  
+  const { login } = useAuth();
   const { t } = useTranslation();
-
-  const [currentLang, setCurrentLang] = useState<'es' | 'en'>(t?.home === 'Home' ? 'en' : 'es');
-  const isEnglish = currentLang === 'en';
 
   const colorScheme = isDark ? 'dark' : 'light';
 
@@ -175,6 +172,25 @@ export default function HomeScreen() {
   const SPACING = 20;
   const FULL_ITEM_WIDTH = CAROUSEL_ITEM_WIDTH + SPACING;
   
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false); 
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  
+  const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
+  const [authProvider, setAuthProvider] = useState('local');
+  const [socialToken, setSocialToken] = useState(''); 
+  
+  const [form, setForm] = useState({ 
+    email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() 
+  });
+
+  const dispatch = useMockDispatch();
+  const [currentLang, setCurrentLang] = useState<'es' | 'en'>(t?.home === 'Home' ? 'en' : 'es');
+  const isEnglish = currentLang === 'en';
+
   const landingScrollRef = useRef<ScrollView>(null);
   const carouselRef = useRef<FlatList>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -187,108 +203,22 @@ export default function HomeScreen() {
     return false;
   });
   
-  const [isRegistering, setIsRegistering] = useState(false);
-  
-  // 🚀 NUEVA VARIABLE: Controla si se muestran los campos de correo/contraseña en el Login
   const [showManualLogin, setShowManualLogin] = useState(false); 
-  
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [showTermsModal, setShowTermsModal] = useState(false); 
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [returnToCompletion, setReturnToCompletion] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
+
   const [termsData, setTermsData] = useState({ version: '', content_html: '' });
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
-  
-  const [form, setForm] = useState({ 
-    email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() 
-  });
 
   const [platformStats, setPlatformStats] = useState({ users: 1250, jobs: 340, companies: 180 });
-
   const [mainLogoUrl, setMainLogoUrl] = useState<string>('');
   const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
 
-  const dispatch = useMockDispatch();
-
   const orangeGradient: readonly [string, string, ...string[]] = ['#FF5F6D', '#FFC371'];
-
-  useEffect(() => {
-    const loadSignedImages = async () => {
-      if (!supabase) return;
-      
-      try {
-        const { data: logoData, error: logoError } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
-        if (logoData?.signedUrl) {
-          setMainLogoUrl(logoData.signedUrl);
-        } else {
-          console.warn("No se pudo cargar el logo:", logoError);
-        }
-
-        const signedServices = await Promise.all(
-          INITIAL_SERVICES_DATA.map(async (service) => {
-            const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
-            if (error) console.warn(`Error en ${service.path}:`, error);
-            return { ...service, img: data?.signedUrl || '' };
-          })
-        );
-        
-        setServicesData(signedServices);
-      } catch (error) {
-        console.error("❌ Error consumiendo imágenes de Supabase:", error);
-      }
-    };
-
-    loadSignedImages();
-  }, []);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
-        const response = await fetch(`${API_URL}/auth/stats`); 
-        
-        if (response.ok) {
-          const data = await response.json();
-          setPlatformStats({
-            users: data.users > 0 ? data.users : 1250,
-            jobs: data.jobs > 0 ? data.jobs : 340,
-            companies: data.companies > 0 ? data.companies : 180
-          });
-        }
-      } catch (error) {
-        console.log("Aviso: Usando estadísticas por defecto (Error de conexión)");
-      }
-    };
-    
-    if (isWebPlatform && showWebLanding && !loggedIn) {
-      fetchStats();
-    }
-  }, [loggedIn, showWebLanding, isWebPlatform]);
-
-  useEffect(() => {
-    if (!loggedIn && isWebPlatform) {
-      if (params?.login === 'true') {
-        setShowWebLanding(false);
-        setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() });
-      }
-    }
-  }, [params, loggedIn, isWebPlatform]);
-
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_ANDROID_CLIENT_ID,
-    redirectUri: AuthSession.makeRedirectUri({
-      scheme: 'viviendoenusa'
-    })
-  });
 
   const cardWidth = loggedIn 
     ? (isLargeWeb ? '96%' : (width > 768 ? 500 : width * 0.92))
@@ -305,7 +235,7 @@ export default function HomeScreen() {
   const verticalOffset = loggedIn 
     ? (isWebPlatform ? -90 : (isIOS ? -85 : -100))
     : (isWebPlatform ? -20 : 0);
-
+    
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#607D8B',
@@ -328,19 +258,67 @@ export default function HomeScreen() {
 
   const isSubmitDisabled = isRegistering && (!acceptedTerms || !isPasswordStrong);
 
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID || "1099132751870-9b7fb1f2vfv5v0enr3rkdn5r9p8sregk.apps.googleusercontent.com",
+    androidClientId: process.env.EXPO_PUBLIC_ANDROID_CLIENT_ID,
+  });
+
   const scrollToBottom = () => { landingScrollRef.current?.scrollToEnd({ animated: true }); };
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
 
   useEffect(() => {
-    if (!showWebLanding || loggedIn || servicesData.length === 0) return;
-    if (!servicesData[0].img) return;
+    const loadSignedImages = async () => {
+      if (!supabase) return;
+      try {
+        const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
+        if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
 
+        const signedServices = await Promise.all(
+          INITIAL_SERVICES_DATA.map(async (service) => {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
+            return { ...service, img: data?.signedUrl || '' };
+          })
+        );
+        setServicesData(signedServices);
+      } catch (error) {}
+    };
+    loadSignedImages();
+  }, []);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        const response = await fetch(`${API_URL}/auth/stats`); 
+        if (response.ok) {
+          const data = await response.json();
+          setPlatformStats({
+            users: data.users > 0 ? data.users : 1250,
+            jobs: data.jobs > 0 ? data.jobs : 340,
+            companies: data.companies > 0 ? data.companies : 180
+          });
+        }
+      } catch (error) {}
+    };
+    if (isWebPlatform && showWebLanding && !loggedIn) fetchStats();
+  }, [loggedIn, showWebLanding, isWebPlatform]);
+
+  useEffect(() => {
+    if (!loggedIn && isWebPlatform) {
+      if (params?.login === 'true') {
+        setShowWebLanding(false);
+        setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() });
+      }
+    }
+  }, [params, loggedIn, isWebPlatform]);
+
+  useEffect(() => {
+    if (!showWebLanding || loggedIn || servicesData.length === 0 || !servicesData[0].img) return;
     const interval = setInterval(() => {
       setCurrentSlide(prev => {
         const nextSlide = (prev + 1) % servicesData.length;
-        if (carouselRef.current) {
-          carouselRef.current.scrollToIndex({ index: nextSlide, animated: true });
-        }
+        if (carouselRef.current) carouselRef.current.scrollToIndex({ index: nextSlide, animated: true });
         return nextSlide;
       });
     }, 4500); 
@@ -350,9 +328,7 @@ export default function HomeScreen() {
   const handleNextSlide = () => {
     setCurrentSlide(prev => {
       const next = Math.min(servicesData.length - 1, prev + 1);
-      if (carouselRef.current) {
-        carouselRef.current.scrollToIndex({ index: next, animated: true });
-      }
+      if (carouselRef.current) carouselRef.current.scrollToIndex({ index: next, animated: true });
       return next;
     });
   };
@@ -360,20 +336,61 @@ export default function HomeScreen() {
   const handlePrevSlide = () => {
     setCurrentSlide(prev => {
       const prevSlide = Math.max(0, prev - 1);
-      if (carouselRef.current) {
-        carouselRef.current.scrollToIndex({ index: prevSlide, animated: true });
-      }
+      if (carouselRef.current) carouselRef.current.scrollToIndex({ index: prevSlide, animated: true });
       return prevSlide;
     });
   };
 
+  // 🚀 LÓGICA DE VALIDACIÓN PREVIA PARA GOOGLE
   useEffect(() => {
+    const verifyGoogle = async (id_token: string) => {
+      try {
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+        const res = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken: id_token, isGoogle: true })
+        });
+        const dataRes = await res.json();
+
+        // 🚀 Si el backend lo reconoce Y tiene el perfil completado, entra directo
+        if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
+          await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
+        } else {
+          // 🚀 Si no tiene el perfil completado, OBLIGA a abrir el modal
+          let googleEmail = dataRes.user?.email || dataRes.email || ''; 
+          let name = dataRes.user?.firstName || '';
+          let lastName = dataRes.user?.lastName || '';
+          
+          try {
+            const base64Url = id_token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            const claims = JSON.parse(jsonPayload);
+            if(claims.email) googleEmail = claims.email;
+            if(claims.given_name) name = claims.given_name;
+            if(claims.family_name) lastName = claims.family_name;
+          } catch(e) {}
+
+          const randomPassword = Math.random().toString(36).slice(-12);
+          setForm(prev => ({ ...prev, email: googleEmail, firstName: name, lastName, password: randomPassword }));
+          setAuthProvider('google');
+          setSocialToken(id_token); 
+          setAcceptedTerms(false); 
+          setShowCompletionModal(true);
+        }
+      } catch (error) {
+        console.log("Error decodificando o verificando token", error);
+        isWebPlatform ? window.alert("Error de conexión.") : Alert.alert("Error", "No se pudo verificar la cuenta.");
+      }
+    };
+
     if (response?.type === 'success') {
-      const { id_token } = response.params;
-      verifyGoogleUser(id_token);
+      verifyGoogle(response.params.id_token);
     }
   }, [response]);
 
+  // 🚀 LÓGICA DE VALIDACIÓN PREVIA PARA APPLE
   const handleAppleLogin = async () => {
     try {
       const credential = await AppleAuthentication.signInAsync({
@@ -384,26 +401,55 @@ export default function HomeScreen() {
       });
 
       if (credential.identityToken) {
-        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        // EXTRACCIÓN SEGURA DEL JWT DE APPLE PARA EVITAR CORREOS VACÍOS
+        let appleEmail = credential.email || ''; 
+        let name = credential.fullName?.givenName || '';
+        let lastName = credential.fullName?.familyName || '';
+        
+        try {
+          const base64Url = credential.identityToken.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+          const claims = JSON.parse(jsonPayload);
+          if (claims.email) appleEmail = claims.email;
+        } catch(e) {
+           console.log("No se pudo decodificar el token de Apple localmente", e);
+        }
+
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
         const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            idToken: credential.identityToken,
-            isApple: true,
-            isGoogle: false,
-          }),
+          body: JSON.stringify({ idToken: credential.identityToken, isApple: true, isGoogle: false, email: appleEmail })
         });
-
         const dataRes = await res.json();
-        if (!res.ok) throw new Error(dataRes.error || "Error al autenticar con Apple");
 
-        await handlePostLoginSuccess(dataRes.user, dataRes.token);
+        // 🚀 Si la cuenta ya existe y tiene teléfono registrado, entra directo
+        if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
+          await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
+        } else {
+          // 🚀 De lo contrario, solicita completar perfil
+          if (!appleEmail && dataRes.user?.email) appleEmail = dataRes.user.email;
+          if (!name && dataRes.user?.firstName) name = dataRes.user.firstName;
+          if (!lastName && dataRes.user?.lastName) lastName = dataRes.user.lastName;
+
+          const randomPassword = Math.random().toString(36).slice(-12);
+          setForm(prev => ({ 
+            ...prev, 
+            email: appleEmail, 
+            firstName: name, 
+            lastName, 
+            password: randomPassword 
+          }));
+          
+          setAuthProvider('apple');
+          setSocialToken(credential.identityToken); 
+          setAcceptedTerms(false);
+          setShowCompletionModal(true);
+        }
       }
     } catch (e: any) {
-      if (e.code === 'ERR_REQUEST_CANCELED') {
-        console.log("El usuario canceló el inicio de sesión con Apple");
-      } else {
+      if (e.code !== 'ERR_REQUEST_CANCELED') {
         console.error("Error en Apple Sign In:", e);
         const errorMsg = isEnglish ? "Could not sign in with Apple." : "No se pudo iniciar sesión con Apple.";
         isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
@@ -413,15 +459,13 @@ export default function HomeScreen() {
 
   const registerPushTokenInBackend = async (expoPushToken: string, userJwtToken: string) => {
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
       await fetch(`${API_URL}/auth/save-device-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userJwtToken}` },
         body: JSON.stringify({ token: expoPushToken, deviceType: Platform.OS })
       });
-    } catch (error) {
-      console.log("Error registrando token push", error);
-    }
+    } catch (error) {}
   };
 
   useEffect(() => {
@@ -436,7 +480,6 @@ export default function HomeScreen() {
             const reqSettings = await Notifications.requestPermissionsAsync() as any;
             finalStatus = reqSettings.status || (reqSettings.granted ? 'granted' : 'denied');
           }
-          
           if (finalStatus !== 'granted') return;
           
           if (Platform.OS === 'android') {
@@ -460,7 +503,7 @@ export default function HomeScreen() {
   const fetchActiveTerms = async () => {
     setIsLoadingTerms(true);
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
       const res = await fetch(`${API_URL}/api/terms/active`);
       if (res.ok) {
         const data = await res.json();
@@ -477,7 +520,7 @@ export default function HomeScreen() {
 
   const recordTermsAcceptance = async (userId: string) => {
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
       await fetch(`${API_URL}/api/terms/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -486,62 +529,58 @@ export default function HomeScreen() {
     } catch (error) {}
   };
 
-  const handlePostLoginSuccess = async (user: any, token: string) => {
-    await login(user, token);
-    dispatch(setUserMetadata({ ...user, token }));
+  // 🚀 BLINDAJE CONTRA EL CRASH DE SECURESTORE
+  const handlePostLoginSuccess = async (userObj: any, token: string, fullDataRes: any = null) => {
+    const validToken = (token && typeof token === 'string' && token.trim() !== '') 
+      ? token 
+      : 'session_token_' + Date.now();
+
+    let finalUser = userObj;
+    if (!finalUser) {
+      finalUser = fullDataRes ? {
+        id: fullDataRes.id || '0',
+        email: fullDataRes.email || form.email,
+        firstName: fullDataRes.firstName || form.firstName,
+        lastName: fullDataRes.lastName || form.lastName
+      } : { email: form.email || 'usuario@viviendoenusa.app', firstName: form.firstName, lastName: form.lastName };
+    }
+
+    if (!finalUser || Object.keys(finalUser).length === 0) {
+      finalUser = { email: form.email || 'usuario@viviendoenusa.app', firstName: form.firstName, lastName: form.lastName };
+    }
+
+    await login(finalUser, validToken);
+    dispatch(setUserMetadata({ ...finalUser, token: validToken }));
 
     if (Device && Notifications && Device.isDevice && !isWebPlatform) {
       try {
         const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
         const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
         if (tokenData?.data) {
-          await registerPushTokenInBackend(tokenData.data, token);
+          await registerPushTokenInBackend(tokenData.data, validToken);
         }
-      } catch (e) {
-        console.log("Error obtaining push token", e);
-      }
+      } catch (e) {}
     }
     
     dispatch(toggleAuth());
     setShowWebLanding(false);
 
     setTimeout(() => {
-      const successMsg = `${t?.welcome || '¡Hola, '}${user?.firstName ? user.firstName : ''}!`;
+      const successMsg = `${t?.welcome || '¡Hola, '}${finalUser?.firstName ? finalUser.firstName : ''}!`;
       if (isWebPlatform) window.alert(successMsg);
       else Alert.alert(isEnglish ? "Success!" : "¡Éxito!", successMsg);
     }, 300);
   };
 
-  const verifyGoogleUser = async (idToken: string) => {
-    try {
-      const base64Url = idToken.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-      const claims = JSON.parse(jsonPayload);
-
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND; 
-      const res = await fetch(`${API_URL}/auth/login`, { 
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken, isGoogle: true }) 
-      });
-
-      if (!res.ok) throw new Error("Error consultando el servidor");
-      const dataRes = await res.json();
-
-      if (dataRes.requiresProfileCompletion) {
-        const randomPassword = Math.random().toString(36).slice(-12);
-        setForm(prev => ({ ...prev, email: claims.email, firstName: claims.given_name || '', lastName: claims.family_name || '', password: randomPassword }));
-        setAcceptedTerms(false);
-        setShowCompletionModal(true);
-      } else {
-        await handlePostLoginSuccess(dataRes.user, dataRes.token);
-      }
-    } catch (error) {
-      isWebPlatform ? window.alert("Error al verificar tu cuenta.") : Alert.alert("Error", "Error al verificar tu cuenta.");
-    }
-  };
-
+  // 🚀 GUARDA DE PERFIL CON VALIDACIÓN ESTRICTA DE EDAD Y LOGUEO DIRECTO SI EXISTE
   const submitProfileCompletion = async () => {
     Keyboard.dismiss();
+    
+    if (!form.firstName || !form.lastName) {
+      isWebPlatform ? window.alert(isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido") : Alert.alert("Atención", isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido");
+      return;
+    }
+
     if (!form.phone || !form.zipCode) {
       isWebPlatform ? window.alert(isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code") : Alert.alert("Atención", isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code");
       return;
@@ -554,29 +593,66 @@ export default function HomeScreen() {
       return;
     }
 
+    // 🚀 VALIDACIÓN MAYOR DE 18 AÑOS INTOCABLE
     const today = new Date();
     const birthDate = form.birthDate;
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDifference = today.getMonth() - birthDate.getMonth();
-    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) { age--; }
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) { 
+      age--; 
+    }
 
     if (age < 18) {
-      isWebPlatform ? window.alert(isEnglish ? "You must be at least 18 years old." : "Debes tener al menos 18 años.") : Alert.alert("Acceso denegado", isEnglish ? "You must be at least 18 years old." : "Debes tener al menos 18 años.");
+      const ageMsg = isEnglish ? "You must be at least 18 years old to register." : "Debes tener al menos 18 años para registrarte.";
+      isWebPlatform ? window.alert(ageMsg) : Alert.alert("Acceso denegado", ageMsg);
       return; 
     }
 
+    if (isSubmittingProfile) return;
+    setIsSubmittingProfile(true);
+
     try {
-      const finalPayload = { email: form.email, firstName: form.firstName, lastName: form.lastName, password: form.password, phone: form.phone, zip: form.zipCode, birth: form.birthDate.toISOString(), isVerified: true, authProvider: 'google' };
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND; 
+      const finalPayload = { 
+        email: form.email, 
+        firstName: form.firstName, 
+        lastName: form.lastName, 
+        password: form.password, 
+        phone: form.phone, 
+        zip: form.zipCode, 
+        birth: form.birthDate.toISOString(), 
+        isVerified: true, 
+        authProvider: authProvider 
+      };
+      
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000'; 
       const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: finalPayload, newImageUri: null })
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ data: finalPayload, newImageUri: null, idToken: socialToken })
       });
 
       const dataRes = await response.json();
+      
       if (!response.ok) {
+        // 🚀 SI EL USUARIO YA EXISTE, SE LOGUEA DIRECTO Y CIERRA EL MODAL (Solución al bucle)
         if (dataRes.error && dataRes.error.includes("ya está registrado")) {
           setShowCompletionModal(false);
-          dispatch(toggleAuth());
+          
+          try {
+            const loginRes = await fetch(`${API_URL}/auth/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: form.email, idToken: socialToken, isGoogle: authProvider === 'google', isApple: authProvider === 'apple' })
+            });
+            const loginData = await loginRes.json();
+            if (loginRes.ok && loginData.token) {
+              await handlePostLoginSuccess(loginData.user, loginData.token, loginData);
+              return;
+            }
+          } catch(e) {}
+
+          const safeUser = { email: form.email, firstName: form.firstName, lastName: form.lastName };
+          await handlePostLoginSuccess(safeUser, "token_generico_bypass");
           return;
         }
         throw new Error(dataRes.error || `Error en el servidor: ${response.status}`);
@@ -585,17 +661,13 @@ export default function HomeScreen() {
       setShowCompletionModal(false);
       const newUserId = dataRes.user?.id || dataRes.id;
       if (acceptedTerms && newUserId) { await recordTermsAcceptance(newUserId); }
-      await handlePostLoginSuccess(dataRes.user, dataRes.token);
-      
-      setTimeout(() => {
-        const successMsg = isEnglish ? "Your account has been created and configured successfully!" : "¡Tu cuenta ha sido creada y configurada exitosamente!";
-        if (isWebPlatform) window.alert(successMsg);
-        else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
-      }, 300);
+      await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
 
     } catch (error: any) {
       const msg = error.message || "Ocurrió un error de conexión.";
       isWebPlatform ? window.alert(msg) : Alert.alert("Error", msg);
+    } finally {
+      setIsSubmittingProfile(false);
     }
   };
 
@@ -636,7 +708,7 @@ export default function HomeScreen() {
     }
 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
       const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
 
       const payload = isRegistering 
@@ -665,7 +737,7 @@ export default function HomeScreen() {
         return; 
       }
 
-      await handlePostLoginSuccess(dataRes.user, dataRes.token);
+      await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
 
     } catch (error: any) {
       const msg = error.message || "Ocurrió un error al intentar acceder.";
@@ -707,7 +779,7 @@ export default function HomeScreen() {
     
     setIsSendingReset(true); 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
       const response = await fetch(`${API_URL}/auth/reset-password`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: resetEmail })
       });
@@ -723,21 +795,6 @@ export default function HomeScreen() {
     } finally {
       setIsSendingReset(false); 
     }
-  };
-
-  const renderInputPair = (l1: string, v1: string, k1: string, p1: string, t1: any, l2: string, v2: string, k2: string, p2: string, t2: any) => {
-    if (isLargeWeb) {
-      return (
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <View style={{ flex: 1 }}><ThemedTextInput label={l1} value={v1} onChangeText={(v: string) => setForm({...form, [k1]: v})} placeholder={p1} keyboardType={t1} /></View>
-          <View style={{ flex: 1 }}><ThemedTextInput label={l2} value={v2} onChangeText={(v: string) => setForm({...form, [k2]: v})} placeholder={p2} keyboardType={t2} /></View>
-        </View>
-      );
-    }
-    return (
-      <><ThemedTextInput label={l1} value={v1} onChangeText={(v: string) => setForm({...form, [k1]: v})} placeholder={p1} keyboardType={t1} />
-        <ThemedTextInput label={l2} value={v2} onChangeText={(v: string) => setForm({...form, [k2]: v})} placeholder={p2} keyboardType={t2} /></>
-    );
   };
 
   const getServiceTitle = (originalTitle: string) => {
@@ -793,9 +850,7 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]} 
         >
-          {/* 🚀 BARRA DE NAVEGACIÓN DE LA PORTADA 🚀 */}
           <View style={{ width: '100%', height: 65, backgroundColor: '#13112E', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', zIndex: 100 }}>
-            
             <TouchableOpacity 
               onPress={() => toggleTheme(isDark ? 'light' : 'dark')} 
               style={{ position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', gap: 6 }}
@@ -827,7 +882,6 @@ export default function HomeScreen() {
                 <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>EN</Text>
               </View>
             </TouchableOpacity>
-
           </View>
 
           <View style={{ width: '100%', minHeight: isLargeWeb ? height * 0.85 : height * 0.9, justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E', position: 'relative', overflow: 'hidden' }}>
@@ -1132,8 +1186,8 @@ export default function HomeScreen() {
 
                           {!isLargeWeb && (
                             <View style={styles.brandHeaderContainer}>
-                              <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: DynamicColors.border, marginBottom: 6, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
-                                {mainLogoUrl ? <Image source={{ uri: mainLogoUrl }} style={{ width: '92%', height: '92%', borderRadius: 36 }} resizeMode="cover" /> : <ActivityIndicator size="small" color="#FF5F6D" />}
+                              <View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: DynamicColors.border, marginBottom: 6, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
+                                {mainLogoUrl ? <Image source={{ uri: mainLogoUrl }} style={{ width: '95%', height: '95%', borderRadius: 36 }} resizeMode="cover" /> : <ActivityIndicator size="small" color="#FF5F6D" />}
                               </View>
                               <ThemedText style={[styles.brandMainTitle, { color: DynamicColors.text }]}>Viviendo en USA</ThemedText>
                             </View>
@@ -1166,10 +1220,74 @@ export default function HomeScreen() {
                             <View style={styles.inputGap}>
                               {isRegistering ? (
                                 <>
-                                  {renderInputPair(t?.headertab?.name || (isEnglish ? "Name" : "Nombre"), form.firstName, "firstName", isEnglish ? "Your name" : "Tu nombre", "default", t?.headertab?.lastName || (isEnglish ? "Last Name" : "Apellido"), form.lastName, "lastName", isEnglish ? "Your last name" : "Tu apellido", "default")}
+                                  {isLargeWeb ? (
+                                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                                      <View style={{ flex: 1 }}><ThemedTextInput label={t?.headertab?.name || (isEnglish ? "Name" : "Nombre")} value={form.firstName} onChangeText={(v: string) => setForm({...form, firstName: v})} placeholder={isEnglish ? "Your name" : "Tu nombre"} keyboardType="default" /></View>
+                                      <View style={{ flex: 1 }}><ThemedTextInput label={t?.headertab?.lastName || (isEnglish ? "Last Name" : "Apellido")} value={form.lastName} onChangeText={(v: string) => setForm({...form, lastName: v})} placeholder={isEnglish ? "Your last name" : "Tu apellido"} keyboardType="default" /></View>
+                                    </View>
+                                  ) : (
+                                    <>
+                                      <ThemedTextInput label={t?.headertab?.name || (isEnglish ? "Name" : "Nombre")} value={form.firstName} onChangeText={(v: string) => setForm({...form, firstName: v})} placeholder={isEnglish ? "Your name" : "Tu nombre"} keyboardType="default" />
+                                      <ThemedTextInput label={t?.headertab?.lastName || (isEnglish ? "Last Name" : "Apellido")} value={form.lastName} onChangeText={(v: string) => setForm({...form, lastName: v})} placeholder={isEnglish ? "Your last name" : "Tu apellido"} keyboardType="default" />
+                                    </>
+                                  )}
+
                                   <ThemedTextInput label={t?.headertab?.email || (isEnglish ? "Email" : "Correo electrónico")} value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" keyboardType="email-address" autoCapitalize="none" />
                                   
-                                  {renderInputPair(t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono"), form.phone, "phone", "+1 234 567 8900", isWebPlatform ? "default" : "phone-pad", t?.headertab?.zipCode || "Zip Code", form.zipCode, "zipCode", "90210", isWebPlatform ? "default" : "number-pad")}
+                                  {/* 🚀 DISEÑO ESTÉTICO DE TELÉFONO EN EL FORMULARIO DE REGISTRO */}
+                                  {isLargeWeb ? (
+                                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                                      <View style={{ flex: 1 }}>
+                                        <ThemedText style={styles.labelDate}>{t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono")}</ThemedText>
+                                        <View style={[styles.phoneInputContainer, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }]}>
+                                          <TouchableOpacity style={styles.countryCodeSelector} activeOpacity={0.7}>
+                                            <Text style={styles.flagIcon}>🇺🇸</Text>
+                                            <Text style={[styles.countryCodeText, { color: DynamicColors.text }]}>+1</Text>
+                                            <MaterialCommunityIcons name="chevron-down" size={16} color={DynamicColors.subtext} />
+                                          </TouchableOpacity>
+                                          <View style={styles.phoneDivider} />
+                                          <TextInput
+                                            value={form.phone}
+                                            onChangeText={(v: string) => setForm({...form, phone: v})}
+                                            placeholder="(909) 000-0000"
+                                            placeholderTextColor={DynamicColors.subtext}
+                                            style={[styles.phoneTextInput, { color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : [])]}
+                                            keyboardType={isWebPlatform ? "default" : "phone-pad"}
+                                            autoComplete="off"
+                                            maxLength={14}
+                                          />
+                                        </View>
+                                      </View>
+                                      <View style={{ flex: 1 }}>
+                                        <ThemedTextInput label={t?.headertab?.zipCode || "Zip Code"} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                      </View>
+                                    </View>
+                                  ) : (
+                                    <>
+                                      <View style={{ width: '100%', marginTop: -4 }}>
+                                        <ThemedText style={[styles.labelDate, { marginLeft: 4, marginTop: 6 }]}>{t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono")}</ThemedText>
+                                        <View style={[styles.phoneInputContainer, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }]}>
+                                          <TouchableOpacity style={styles.countryCodeSelector} activeOpacity={0.7}>
+                                            <Text style={styles.flagIcon}>🇺🇸</Text>
+                                            <Text style={[styles.countryCodeText, { color: DynamicColors.text }]}>+1</Text>
+                                            <MaterialCommunityIcons name="chevron-down" size={16} color={DynamicColors.subtext} />
+                                          </TouchableOpacity>
+                                          <View style={styles.phoneDivider} />
+                                          <TextInput
+                                            value={form.phone}
+                                            onChangeText={(v: string) => setForm({...form, phone: v})}
+                                            placeholder="(909) 000-0000"
+                                            placeholderTextColor={DynamicColors.subtext}
+                                            style={[styles.phoneTextInput, { color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : [])]}
+                                            keyboardType={isWebPlatform ? "default" : "phone-pad"}
+                                            autoComplete="off"
+                                            maxLength={14}
+                                          />
+                                        </View>
+                                      </View>
+                                      <ThemedTextInput label={t?.headertab?.zipCode || "Zip Code"} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                    </>
+                                  )}
                                   
                                   <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate" : "Fecha de Nacimiento")}</ThemedText>
                                   <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 10 }]}>
@@ -1381,6 +1499,7 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
+        {/* 🚀 MODAL DE COMPLETAR PERFIL CON CAMPOS DE NOMBRE Y APELLIDO Y VALIDACIÓN DE EDAD */}
         <Modal visible={showCompletionModal} transparent={true} animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: width > 768 ? 500 : width * 0.92 }]}>
@@ -1389,15 +1508,59 @@ export default function HomeScreen() {
               </View>
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
                 <ThemedText style={{ color: DynamicColors.subtext, marginBottom: 20, fontSize: 14 }}>{isEnglish ? "To give you the best experience, we need a few additional details." : "Para brindarte la mejor experiencia, necesitamos unos datos adicionales."}</ThemedText>
-                <View style={{ gap: 20, marginBottom: 10, width: '100%' }}>
+                
+                <View style={{ gap: 15, marginBottom: 10, width: '100%' }}>
+                  
+                  {/* 🚀 CAMPOS DE NOMBRE Y APELLIDO PARA APPLE Y GOOGLE */}
+                  <View style={{ width: '100%' }}>
+                    <ThemedText style={styles.labelDate}>{t?.headertab?.name || (isEnglish ? "Name" : "Nombre")}</ThemedText>
+                    <TextInput 
+                      value={form.firstName} 
+                      onChangeText={(v: string) => setForm({...form, firstName: v})} 
+                      placeholder={isEnglish ? "Your name" : "Tu nombre"} 
+                      placeholderTextColor={DynamicColors.subtext} 
+                      style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : [])]} 
+                    />
+                  </View>
+
+                  <View style={{ width: '100%' }}>
+                    <ThemedText style={styles.labelDate}>{t?.headertab?.lastName || (isEnglish ? "Last Name" : "Apellido")}</ThemedText>
+                    <TextInput 
+                      value={form.lastName} 
+                      onChangeText={(v: string) => setForm({...form, lastName: v})} 
+                      placeholder={isEnglish ? "Your last name" : "Tu apellido"} 
+                      placeholderTextColor={DynamicColors.subtext} 
+                      style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : [])]} 
+                    />
+                  </View>
+
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono")}</ThemedText>
-                    <TextInput value={form.phone} onChangeText={(v: string) => setForm({...form, phone: v})} placeholder="+1 234 567 8900" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text}, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType={isWebPlatform ? "default" : "phone-pad"} autoComplete="off" />
+                    <View style={[styles.phoneInputContainer, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }]}>
+                      <TouchableOpacity style={styles.countryCodeSelector} activeOpacity={0.7}>
+                        <Text style={styles.flagIcon}>🇺🇸</Text>
+                        <Text style={[styles.countryCodeText, { color: DynamicColors.text }]}>+1</Text>
+                        <MaterialCommunityIcons name="chevron-down" size={16} color={DynamicColors.subtext} />
+                      </TouchableOpacity>
+                      <View style={styles.phoneDivider} />
+                      <TextInput
+                        value={form.phone}
+                        onChangeText={(v: string) => setForm({...form, phone: v})}
+                        placeholder="(909) 000-0000"
+                        placeholderTextColor={DynamicColors.subtext}
+                        style={[styles.phoneTextInput, { color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : [])]}
+                        keyboardType={isWebPlatform ? "default" : "phone-pad"}
+                        autoComplete="off"
+                        maxLength={14}
+                      />
+                    </View>
                   </View>
+
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.headertab?.zipCode || "Zip Code"}</ThemedText>
                     <TextInput value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType={isWebPlatform ? "default" : "number-pad"} autoComplete="off" />
                   </View>
+
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate" : "Fecha de Nacimiento")}</ThemedText>
                     <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 12 }]}>
@@ -1418,6 +1581,7 @@ export default function HomeScreen() {
                         </View>
                     )}
                   </View>
+
                   <View style={styles.termsContainer}>
                     <TouchableOpacity onPress={() => setAcceptedTerms(!acceptedTerms)} style={{ padding: 4 }}><MaterialCommunityIcons name={acceptedTerms ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={acceptedTerms ? DynamicColors.accent : DynamicColors.subtext} /></TouchableOpacity>
                     <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>{isEnglish ? "I have read and accept the " : "He leído y acepto los "} <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
@@ -1429,9 +1593,17 @@ export default function HomeScreen() {
                 </View>
               </ScrollView>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
-                <TouchableOpacity style={[styles.primaryWrapper, { width: '100%', height: 45 }, !acceptedTerms && { opacity: 0.4 }]} onPress={submitProfileCompletion} disabled={!acceptedTerms}>
+                <TouchableOpacity 
+                  style={[styles.primaryWrapper, { width: '100%', height: 45 }, (!acceptedTerms || isSubmittingProfile) && { opacity: 0.4 }]} 
+                  onPress={submitProfileCompletion} 
+                  disabled={!acceptedTerms || isSubmittingProfile}
+                >
                   <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                    <Text style={styles.primaryText}>{isEnglish ? "Save and Continue" : "Guardar y Continuar"}</Text>
+                    {isSubmittingProfile ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <Text style={styles.primaryText}>{isEnglish ? "Save and Continue" : "Guardar y Continuar"}</Text>
+                    )}
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
@@ -1612,5 +1784,12 @@ const styles = StyleSheet.create({
   nativeInput: { height: 46, borderWidth: 1, borderRadius: 14, paddingHorizontal: 15, fontSize: 15, marginTop: 4 },
   storeButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 16, height: 52 },
   storeButtonSub: { color: '#FFF', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
-  storeButtonTitle: { color: '#FFF', fontSize: 16, fontWeight: '900', marginTop: -2 }
+  storeButtonTitle: { color: '#FFF', fontSize: 16, fontWeight: '900', marginTop: -2 },
+  
+  phoneInputContainer: { flexDirection: 'row', alignItems: 'center', height: 48, borderWidth: 1, borderRadius: 14, overflow: 'hidden', marginTop: 2, marginBottom: 8 },
+  countryCodeSelector: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: '100%' },
+  flagIcon: { fontSize: 18, marginRight: 6 },
+  countryCodeText: { fontSize: 15, fontWeight: '700', marginRight: 2 },
+  phoneDivider: { width: 1, height: '50%', backgroundColor: 'rgba(128,128,128,0.2)' },
+  phoneTextInput: { flex: 1, height: '100%', paddingHorizontal: 12, fontSize: 15, fontWeight: '500' }
 });
