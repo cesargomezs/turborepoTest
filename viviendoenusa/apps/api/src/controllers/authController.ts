@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { users , userDevices, accountDeletionSurveys} from "../../../../packages/db/src/schema";
+import { users , userDevices} from "../../../../packages/db/src/schema";
 import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
@@ -33,6 +33,12 @@ const getApplePublicKey = (header: any, callback: any) => {
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// 🚀 FUNCIÓN PARA CAPITALIZAR NOMBRES (Ej: "juan" -> "Juan")
+const capitalizeName = (str: any) => {
+  if (!str || typeof str !== 'string') return '';
+  return str.trim().split(/\s+/).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 };
 
 // --------------------------------------------------------
@@ -69,8 +75,9 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
     }
 
     const [newUser] = await db.insert(users).values({
-      name: data.firstName,   
-      lastName: data.lastName,     
+      // 🚀 APLICAMOS MAYÚSCULAS AQUÍ
+      name: capitalizeName(data.firstName),   
+      lastName: capitalizeName(data.lastName),     
       email: data.email,
       phone: data.phone || undefined,           
       zip: data.zip || undefined,
@@ -80,7 +87,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       imageUrl: imageUrl || undefined, 
       typeDetail: data.typeDetail || 'User',
       isVerified: data.isVerified
-      // 🚀 SOLUCIÓN: authProvider eliminado porque no existe en la DB
     }).returning();
 
     return newUser;
@@ -145,6 +151,10 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
     }
 
     const updateData: any = { ...data };
+
+    // 🚀 APLICAMOS MAYÚSCULAS SI EL USUARIO ACTUALIZA SU NOMBRE
+    if (updateData.name) updateData.name = capitalizeName(updateData.name);
+    if (updateData.lastName) updateData.lastName = capitalizeName(updateData.lastName);
 
     if (data.zip && data.zip.length === 5) {
       try {
@@ -231,7 +241,6 @@ export const authenticateUser = async (credentials: {
       lastName = payload.family_name || "";
     }
 
-    // 🚀 LÓGICA DE APPLE BLINDADA CONTRA FALTA DE EMAIL 🚀
     if (credentials.isApple && credentials.idToken) {
       const decoded: any = await new Promise((resolve, reject) => {
         jwt.verify(credentials.idToken!, getApplePublicKey, { algorithms: ['RS256'] }, (err, decoded) => {
@@ -244,7 +253,6 @@ export const authenticateUser = async (credentials: {
         throw new Error("Token de Apple inválido");
       }
       
-      // Si Apple no manda correo, usamos el ID (sub) para crear un correo temporal válido
       email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
     }
 
@@ -258,12 +266,12 @@ export const authenticateUser = async (credentials: {
     if (!user) {
       if (credentials.isGoogle || credentials.isApple) {
         const [newUser] = await db.insert(users).values({
-          name: firstName || "Usuario",
-          lastName: lastName || (credentials.isApple ? "Apple" : "Google"),
+          // 🚀 CAPITALIZAMOS SI APPLE O GOOGLE CREAN LA CUENTA DIRECTO
+          name: capitalizeName(firstName) || "Usuario",
+          lastName: capitalizeName(lastName) || (credentials.isApple ? "Apple" : "Google"),
           email: email,
           isVerified: true,
           typeDetail: 'User'
-          // 🚀 SOLUCIÓN: authProvider eliminado porque no existe en la DB
         }).returning();
         user = newUser;
       } else {
@@ -307,15 +315,21 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
+    // 🚀 ESTA ES LA CLAVE QUE SOLUCIONA TU BUCLE MÁGICAMENTE
+    // Si el usuario no tiene teléfono O código postal guardado en la base de datos, pide completar perfil
+    const needsProfile = !user.phone || !user.zip;
+
     return {
       message: "Autenticación exitosa",
-      requiresProfileCompletion: false,
+      requiresProfileCompletion: needsProfile,
       token, 
       user: {
         id: user.id,
         email: user.email,
         firstName: user.name,
         lastName: user.lastName,
+        phone: user.phone, // 🚀 AHORA EL FRONTEND SABRÁ SI TIENE TELÉFONO Y ROMPERÁ EL BUCLE
+        zip: user.zip,
         role: user.typeDetail || 'User',
       }
     };
@@ -507,12 +521,12 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (AUDITORÍA, ENCUESTA Y CORREO)
+// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (AUDITORÍA, ANONIMIZACIÓN Y CORREO)
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { reason } = req.body; // 🚀 Capturamos la razón enviada desde el frontend
+    const { reason } = req.body; 
 
     if (!userId) {
       return res.status(401).json({ error: "No autorizado. Se requiere una sesión válida." });
@@ -528,21 +542,6 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "Usuario no encontrado en la base de datos." });
     }
 
-    // 🚀 1. GUARDAR LA ENCUESTA ANTES DE ANONIMIZAR LOS DATOS
-    if (reason) {
-      try {
-        await db.insert(accountDeletionSurveys).values({
-          userId: userId,
-          userEmail: userRecord.email,
-          reason: reason,
-        });
-        console.log("📊 Encuesta de salida guardada con éxito.");
-      } catch (surveyError) {
-        console.error("⚠️ Error al guardar la encuesta, pero el borrado continuará:", surveyError);
-      }
-    }
-
-    // 🚀 2. ELIMINAR IMAGEN DE STORAGE
     if (userRecord.imageUrl && !userRecord.imageUrl.startsWith('http')) {
       const filePath = userRecord.imageUrl.startsWith('users/') 
         ? userRecord.imageUrl 
@@ -550,13 +549,9 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
 
       try {
         await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]);
-        console.log("✅ Imagen de perfil eliminada de Supabase Storage.");
-      } catch (e) {
-        console.warn("⚠️ No se pudo eliminar la imagen del storage, continuando...", e);
-      }
+      } catch (e) {}
     }
 
-    // 🚀 3. LOG DE AUDITORÍA
     const forwarded = req.headers?.['x-forwarded-for'];
     const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     const rawIp = ipString ? ipString.split(',')[0].trim() : req.socket?.remoteAddress || req.ip || '0.0.0.0';
@@ -577,7 +572,6 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    // 🚀 4. ANONIMIZAR AL USUARIO
     await db
       .update(users)
       .set({
@@ -594,7 +588,6 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       })
       .where(eq(users.id, userId));
 
-    // 🚀 5. ENVIAR CORREO DE DESPEDIDA
     if (userRecord.email && !userRecord.email.includes('deleted_')) {
       try {
         let logoUrl = 'https://viviendoenusa.app/favicon.ico';
@@ -603,9 +596,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           if (!error && data?.signedUrl) {
             logoUrl = data.signedUrl;
           }
-        } catch (storageErr) {
-          console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo de baja.", storageErr);
-        }
+        } catch (storageErr) {}
 
         const htmlContent = `
           <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
@@ -635,10 +626,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           html: htmlContent
         });
         
-        console.log("✅ [DELETE ACCOUNT] Correo de despedida enviado con éxito a través de Resend.");
-      } catch (mailError) {
-        console.warn("⚠️ [DELETE ACCOUNT] No se pudo enviar el correo de despedida, pero la cuenta fue dada de baja:", mailError);
-      }
+      } catch (mailError) {}
     }
 
     return res.status(200).json({ 
