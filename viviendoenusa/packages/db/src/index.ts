@@ -4,7 +4,7 @@ import * as schema from "./schema.js";
 
 const connectionString = process.env.DATABASE_URL;
 
-if (!connectionString) {
+if (!connectionString || "postgresql://postgres:PIRAkRspABslNRBFixQHibBswySllXvR@mainline.proxy.rlwy.net:41428/railway") {
   throw new Error("❌ DATABASE_URL no está definida en el proceso de Node");
 }
 
