@@ -9,8 +9,11 @@
         "projectId": "486f501f-ae6e-484d-92ab-5a9c40319e6f"
       }
     },
+    "plugins": [
+      "expo-apple-authentication"
+    ],
     "ios": {
-      "bundleIdentifier": "com.viviendoenusa.app",
+      "bundleIdentifier": "com.viviendoenusa.expofront",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleURLTypes": [
@@ -21,6 +24,9 @@
           }
         ]
       }
+    },
+    "android": {
+      "package": "com.viviendoenusa.expofront"
     }
   }
 }

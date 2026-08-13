@@ -24,6 +24,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication'; 
 
 // 🚀 IMPORTACIÓN SEGURA PARA EVITAR EL ERROR DE EXPO PUSH TOKEN MANAGER EN LOCAL
 let Notifications: any = null;
@@ -187,6 +188,10 @@ export default function HomeScreen() {
   });
   
   const [isRegistering, setIsRegistering] = useState(false);
+  
+  // 🚀 NUEVA VARIABLE: Controla si se muestran los campos de correo/contraseña en el Login
+  const [showManualLogin, setShowManualLogin] = useState(false); 
+  
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false); 
@@ -369,6 +374,43 @@ export default function HomeScreen() {
     }
   }, [response]);
 
+  const handleAppleLogin = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (credential.identityToken) {
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        const res = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idToken: credential.identityToken,
+            isApple: true,
+            isGoogle: false,
+          }),
+        });
+
+        const dataRes = await res.json();
+        if (!res.ok) throw new Error(dataRes.error || "Error al autenticar con Apple");
+
+        await handlePostLoginSuccess(dataRes.user, dataRes.token);
+      }
+    } catch (e: any) {
+      if (e.code === 'ERR_REQUEST_CANCELED') {
+        console.log("El usuario canceló el inicio de sesión con Apple");
+      } else {
+        console.error("Error en Apple Sign In:", e);
+        const errorMsg = isEnglish ? "Could not sign in with Apple." : "No se pudo iniciar sesión con Apple.";
+        isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
+      }
+    }
+  };
+
   const registerPushTokenInBackend = async (expoPushToken: string, userJwtToken: string) => {
     try {
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
@@ -382,7 +424,6 @@ export default function HomeScreen() {
     }
   };
 
-  // 🚀 PERMISOS Y CONFIGURACIÓN DE NOTIFICACIONES SEGURO
   useEffect(() => {
     async function setupNotifications() {
       if (isWebPlatform || !Notifications || !Device) return;
@@ -506,7 +547,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN REGISTRO DE GOOGLE
     const contentToValidate = `${form.firstName} ${form.lastName}`;
     if (containsBadWords(contentToValidate)) {
       const errorMsg = isEnglish ? "Inappropriate content detected in your name." : "Se detectó lenguaje inapropiado en tu nombre.";
@@ -586,7 +626,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // 🚀 VALIDACIÓN ANTI-GROSERÍAS EN REGISTRO MANUAL
     if (isRegistering) {
       const contentToValidate = `${form.firstName} ${form.lastName}`;
       if (containsBadWords(contentToValidate)) {
@@ -632,11 +671,11 @@ export default function HomeScreen() {
       const msg = error.message || "Ocurrió un error al intentar acceder.";
       
       if (msg.toLowerCase().includes("google") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("credenciales")) {
-        const customMsg = isEnglish ? "This account uses Google to log in. Please use the 'Continue with Google' button below." : "Esta cuenta utiliza Google para iniciar sesión. Por favor, usa el botón 'Continuar con Google' abajo.";
+        const customMsg = isEnglish ? "This account uses Google or Apple to log in. Please use the social buttons below." : "Esta cuenta utiliza Google o Apple para iniciar sesión. Por favor, usa los botones sociales abajo.";
         if (isWebPlatform) {
           window.alert(customMsg);
         } else {
-          Alert.alert(isEnglish ? "Google Login" : "Inicio con Google", customMsg);
+          Alert.alert(isEnglish ? "Social Login" : "Inicio Social", customMsg);
         }
         return;
       }
@@ -757,16 +796,11 @@ export default function HomeScreen() {
           {/* 🚀 BARRA DE NAVEGACIÓN DE LA PORTADA 🚀 */}
           <View style={{ width: '100%', height: 65, backgroundColor: '#13112E', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', zIndex: 100 }}>
             
-            {/* 🚀 BOTÓN ESTILIZADO MODO OSCURO (IZQUIERDA) 🚀 */}
             <TouchableOpacity 
               onPress={() => toggleTheme(isDark ? 'light' : 'dark')} 
               style={{ position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', gap: 6 }}
             >
-              <MaterialCommunityIcons 
-                name={isDark ? "weather-sunny" : "weather-night"} 
-                size={16} 
-                color="#FFF" 
-              />
+              <MaterialCommunityIcons name={isDark ? "weather-sunny" : "weather-night"} size={16} color="#FFF" />
               {isLargeWeb && (
                  <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
                    {isDark ? (isEnglish ? 'LIGHT MODE' : 'MODO CLARO') : (isEnglish ? 'DARK MODE' : 'MODO OSCURO')}
@@ -776,49 +810,20 @@ export default function HomeScreen() {
 
             <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 }}>Viviendo en USA</Text>
 
-            {/* 🚀 TOGGLE CIRCULAR DE IDIOMA CONECTADO A REDUX (DERECHA) 🚀 */}
             <TouchableOpacity 
               onPress={() => {
                 const nextLang = currentLang === 'es' ? 'en' : 'es';
                 setCurrentLang(nextLang); 
-                
                 dispatch({ type: 'language/setLanguage', payload: nextLang });
               }}
               style={{ 
-                position: 'absolute', 
-                right: 20, 
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                backgroundColor: 'rgba(255,255,255,0.1)', 
-                paddingHorizontal: 10, 
-                paddingVertical: 6, 
-                borderRadius: 20, 
-                borderWidth: 1, 
-                borderColor: 'rgba(255,255,255,0.2)',
-                gap: 6
+                position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', gap: 6
               }}
             >
-              {/* Círculo indicador izquierdo (ES) */}
-              <View style={{ 
-                width: 26, 
-                height: 26, 
-                borderRadius: 13, 
-                backgroundColor: currentLang === 'es' ? '#FF5F6D' : 'transparent', 
-                justifyContent: 'center', 
-                alignItems: 'center' 
-              }}>
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: currentLang === 'es' ? '#FF5F6D' : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
                 <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>ES</Text>
               </View>
-
-              {/* Círculo indicador derecho (EN) */}
-              <View style={{ 
-                width: 26, 
-                height: 26, 
-                borderRadius: 13, 
-                backgroundColor: currentLang === 'en' ? '#FF5F6D' : 'transparent', 
-                justifyContent: 'center', 
-                alignItems: 'center' 
-              }}>
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: currentLang === 'en' ? '#FF5F6D' : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
                 <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>EN</Text>
               </View>
             </TouchableOpacity>
@@ -827,12 +832,7 @@ export default function HomeScreen() {
 
           <View style={{ width: '100%', minHeight: isLargeWeb ? height * 0.85 : height * 0.9, justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E' }}>
-              <iframe 
-                 src="https://player.vimeo.com/video/950018738?h=6d8edaba23&autoplay=1&loop=1&muted=1&controls=0&title=0&byline=0&portrait=0&transparent=1" 
-                 style={{ width: '110vw', height: '100vh', pointerEvents: 'none', backgroundColor: 'transparent' }} 
-                 frameBorder="0" 
-                 allow="autoplay; fullscreen"
-              ></iframe>
+              <iframe src="https://player.vimeo.com/video/950018738?h=6d8edaba23&autoplay=1&loop=1&muted=1&controls=0&title=0&byline=0&portrait=0&transparent=1" style={{ width: '110vw', height: '100vh', pointerEvents: 'none', backgroundColor: 'transparent' }} frameBorder="0" allow="autoplay; fullscreen"></iframe>
             </div>
             
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(19, 17, 46, 0.55)', zIndex: 1 }]} />
@@ -922,17 +922,11 @@ export default function HomeScreen() {
                     decelerationRate="fast"
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={{ paddingHorizontal: width > 768 ? 10 : 20, paddingBottom: 20 }}
-                    getItemLayout={(data, index) => ({
-                      length: FULL_ITEM_WIDTH,
-                      offset: FULL_ITEM_WIDTH * index,
-                      index,
-                    })}
+                    getItemLayout={(data, index) => ({ length: FULL_ITEM_WIDTH, offset: FULL_ITEM_WIDTH * index, index })}
                     onScrollToIndexFailed={(info) => {
                       const wait = new Promise(resolve => setTimeout(resolve, 100));
                       wait.then(() => {
-                        if (carouselRef.current) {
-                          carouselRef.current.scrollToIndex({ index: info.index, animated: true });
-                        }
+                        if (carouselRef.current) carouselRef.current.scrollToIndex({ index: info.index, animated: true });
                       });
                     }}
                     onScroll={(event) => {
@@ -995,7 +989,6 @@ export default function HomeScreen() {
             </Text>
 
             <View style={[styles.landingButtonsContainer, { flexDirection: width > 900 ? 'row' : 'column' }]}>
-              {/* Botones de tiendas bloqueados temporalmente */}
               <View style={[styles.storeButtonBlackBig, { opacity: 0.5 }]}>
                 <MaterialCommunityIcons name="apple" size={32} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
@@ -1046,34 +1039,22 @@ export default function HomeScreen() {
         {isWebPlatform && (
           <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
             {mainLogoUrl ? (
-              <Image 
-                source={{ uri: mainLogoUrl }} 
-                style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} 
-                resizeMode="cover" 
-              />
+              <Image source={{ uri: mainLogoUrl }} style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} resizeMode="cover" />
             ) : null}
             <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.2)' }]} />
           </View>
         )}
 
         <ScrollView 
-          contentContainerStyle={{ 
-            flexGrow: 1, 
-            justifyContent: loggedIn ? 'flex-start' : 'center', 
-            alignItems: isWebPlatform ? undefined : 'center', 
-            paddingVertical: loggedIn ? 0 : (isWebPlatform ? 30 : 50) 
-          }} 
-          keyboardShouldPersistTaps="handled" 
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: loggedIn ? 'flex-start' : 'center', alignItems: isWebPlatform ? undefined : 'center', paddingVertical: loggedIn ? 0 : (isWebPlatform ? 30 : 50) }} 
+          keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
         >
           <View style={[styles.centerContainer, { paddingVertical: loggedIn ? 0 : 10, marginTop: verticalOffset }]}>
             
             <View style={[
               styles.mainCard, 
               { 
-                flexShrink: 1, 
-                width: cardWidth, 
-                height: finalCardHeight, 
+                flexShrink: 1, width: cardWidth, height: finalCardHeight, 
                 minHeight: !loggedIn && isWebPlatform ? (isRegistering ? 760 : 520) : (!loggedIn ? 480 : undefined), 
                 borderColor: DynamicColors.border, 
                 backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent',
@@ -1082,25 +1063,9 @@ export default function HomeScreen() {
             ]}>
               
               {Platform.OS === 'web' ? (
-                <View 
-                  style={[
-                    StyleSheet.absoluteFill, 
-                    { 
-                      backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.45)',
-                      // @ts-ignore
-                      backdropFilter: 'blur(20px)',
-                      WebkitBackdropFilter: 'blur(20px)'
-                    }
-                  ]} 
-                />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.45)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } as any]} />
               ) : (
-                !isAndroid && (
-                  <BlurView 
-                    intensity={isDark ? 100 : 75} 
-                    tint={isDark ? 'dark' : 'light'} 
-                    style={StyleSheet.absoluteFill} 
-                  />
-                )
+                !isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
               )}
 
               <View style={[styles.cardContent, { zIndex: 1 }]}>
@@ -1131,70 +1096,27 @@ export default function HomeScreen() {
                   <View style={{ flex: 1, paddingLeft: (isLargeWeb && !loggedIn) ? 40 : 0 }}>
                     {loggedIn ? (
                       <View style={{ flex: 1, width: '100%', alignSelf: 'center', paddingHorizontal: isLargeWeb ? 40 : 10 }}>
-                        
                         <View style={[styles.topHeaderRow, { justifyContent: 'space-between', marginBottom: 5 }]}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <ThemedText style={[styles.sectionTitle, { color: DynamicColors.text, fontSize: 24, fontWeight: '900' }]}>
-                              Viviendo en USA
-                            </ThemedText>
-                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}><ThemedText style={[styles.sectionTitle, { color: DynamicColors.text, fontSize: 24, fontWeight: '900' }]}>Viviendo en USA</ThemedText></View>
                           <MaterialCommunityIcons name="home-variant" size={40} color={DynamicColors.text} style={{ opacity: 0.2 }} />
                         </View>
-                        
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWebPlatform ? 10 : 80 }}>
-                          
                           <View style={{ alignItems: 'center', marginBottom: 20, marginTop: 10 }}>
-                            <View style={{ 
-                              width: isLargeWeb ? 160 : 140, 
-                              height: isLargeWeb ? 160 : 140, 
-                              borderRadius: 100, 
-                              backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
-                              justifyContent: 'center', 
-                              alignItems: 'center',
-                              borderWidth: 1,
-                              borderColor: DynamicColors.border,
-                              elevation: 4,
-                              shadowColor: '#000',
-                              shadowOffset: { width: 0, height: 4 },
-                              shadowOpacity: 0.1,
-                              shadowRadius: 10,
-                            }}>
-                               {mainLogoUrl ? (
-                                 <Image 
-                                    source={{ uri: mainLogoUrl }} 
-                                    style={{ width: '92%', height: '92%', borderRadius: 100 }} 
-                                    resizeMode="cover" 
-                                 />
-                               ) : <ActivityIndicator size="small" color="#FF5F6D" />}
+                            <View style={{ width: isLargeWeb ? 160 : 140, height: isLargeWeb ? 160 : 140, borderRadius: 100, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.border, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 }}>
+                               {mainLogoUrl ? <Image source={{ uri: mainLogoUrl }} style={{ width: '92%', height: '92%', borderRadius: 100 }} resizeMode="cover" /> : <ActivityIndicator size="small" color="#FF5F6D" />}
                             </View>
                           </View>
-
                           <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: isLargeWeb ? 20 : 0, justifyContent: 'space-between' }}>
-                            
                             <View style={{ flex: isLargeWeb ? 1 : undefined, backgroundColor: isLargeWeb ? DynamicColors.inputBg : 'transparent', padding: isLargeWeb ? 25 : 0, borderRadius: 24, borderWidth: isLargeWeb ? 1 : 0, borderColor: DynamicColors.border, marginBottom: isLargeWeb ? 0 : 20 }}>
-                               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                 <MaterialCommunityIcons name="bullseye-arrow" size={28} color="#3B82F6" style={{ marginRight: 10 }} />
-                                 <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t?.hometab?.vision || (isEnglish ? 'Vision' : 'Visión')}</ThemedText>
-                               </View>
-                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>
-                                 {t?.hometab?.visiondesc || (isEnglish ? 'Strengthen local economies by connecting residents with businesses and services in their neighborhood, promoting local consumption.' : 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.')}
-                               </ThemedText>
+                               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}><MaterialCommunityIcons name="bullseye-arrow" size={28} color="#3B82F6" style={{ marginRight: 10 }} /><ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t?.hometab?.vision || (isEnglish ? 'Vision' : 'Visión')}</ThemedText></View>
+                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>{t?.hometab?.visiondesc || (isEnglish ? 'Strengthen local economies by connecting residents with businesses and services in their neighborhood, promoting local consumption.' : 'Fortalecer las economías locales conectando a los residentes con los comercios y servicios de su barrio, promoviendo el consumo local.')}</ThemedText>
                             </View>
-
                             {!isLargeWeb && <View style={[styles.separator, { backgroundColor: DynamicColors.border, marginVertical: 0, marginBottom: 30 }]} />}
-
                             <View style={{ flex: isLargeWeb ? 1 : undefined, backgroundColor: isLargeWeb ? DynamicColors.inputBg : 'transparent', padding: isLargeWeb ? 25 : 0, borderRadius: 24, borderWidth: isLargeWeb ? 1 : 0, borderColor: DynamicColors.border }}>
-                               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                 <MaterialCommunityIcons name="rocket-launch" size={28} color="#F59E0B" style={{ marginRight: 10 }} />
-                                 <ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t?.hometab?.mission || (isEnglish ? 'Mission' : 'Misión')}</ThemedText>
-                               </View>
-                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>
-                                 {t?.hometab?.missiondesc || (isEnglish ? 'Create more united, participative, and supportive communities, where every resident feels connected, safe, and proud of their neighborhood.' : 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.')}
-                               </ThemedText>
+                               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}><MaterialCommunityIcons name="rocket-launch" size={28} color="#F59E0B" style={{ marginRight: 10 }} /><ThemedText style={{ fontSize: 20, fontWeight: '800', color: DynamicColors.text }}>{t?.hometab?.mission || (isEnglish ? 'Mission' : 'Misión')}</ThemedText></View>
+                               <ThemedText style={{ fontSize: 16, lineHeight: 24, color: DynamicColors.iconInactive }}>{t?.hometab?.missiondesc || (isEnglish ? 'Create more united, participative, and supportive communities, where every resident feels connected, safe, and proud of their neighborhood.' : 'Crear comunidades más unidas, participativas y solidarias, donde cada residente se sienta conectado, seguro y orgulloso de su barrio.')}</ThemedText>
                             </View>
-
                           </View>
-
                         </ScrollView>
                       </View>
                     ) : (
@@ -1210,29 +1132,8 @@ export default function HomeScreen() {
 
                           {!isLargeWeb && (
                             <View style={styles.brandHeaderContainer}>
-                              <View style={{ 
-                                width: 72, 
-                                height: 72, 
-                                borderRadius: 36, 
-                                backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
-                                justifyContent: 'center', 
-                                alignItems: 'center',
-                                borderWidth: 1.5,
-                                borderColor: DynamicColors.border,
-                                marginBottom: 6,
-                                elevation: 3,
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.1,
-                                shadowRadius: 4,
-                              }}>
-                                {mainLogoUrl ? (
-                                  <Image 
-                                    source={{ uri: mainLogoUrl }} 
-                                    style={{ width: '92%', height: '92%', borderRadius: 36 }} 
-                                    resizeMode="cover" 
-                                  />
-                                ) : <ActivityIndicator size="small" color="#FF5F6D" />}
+                              <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: DynamicColors.border, marginBottom: 6, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
+                                {mainLogoUrl ? <Image source={{ uri: mainLogoUrl }} style={{ width: '92%', height: '92%', borderRadius: 36 }} resizeMode="cover" /> : <ActivityIndicator size="small" color="#FF5F6D" />}
                               </View>
                               <ThemedText style={[styles.brandMainTitle, { color: DynamicColors.text }]}>Viviendo en USA</ThemedText>
                             </View>
@@ -1240,7 +1141,7 @@ export default function HomeScreen() {
 
                           <View style={styles.customTabsWrapper}>
                             <TouchableOpacity 
-                              onPress={() => { setIsRegistering(false); setAcceptedTerms(false); setShowPassword(false); }} 
+                              onPress={() => { setIsRegistering(false); setAcceptedTerms(false); setShowPassword(false); setShowManualLogin(false); }} 
                               style={[styles.singleTab, !isRegistering && styles.activeTabStyle]}
                             >
                               <Text style={[styles.tabText, { color: !isRegistering ? '#FFFFFF' : DynamicColors.subtext }]}>
@@ -1248,7 +1149,7 @@ export default function HomeScreen() {
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity 
-                              onPress={() => { setIsRegistering(true); setAcceptedTerms(false); setShowPassword(false); }} 
+                              onPress={() => { setIsRegistering(true); setAcceptedTerms(false); setShowPassword(false); setShowManualLogin(false); }} 
                               style={[styles.singleTab, isRegistering && styles.activeTabStyle]}
                             >
                               <Text style={[styles.tabText, { color: isRegistering ? '#FFFFFF' : DynamicColors.subtext }]}>
@@ -1260,12 +1161,7 @@ export default function HomeScreen() {
                           <ScrollView 
                             showsVerticalScrollIndicator={false} 
                             style={{ flex: 1 }} 
-                            contentContainerStyle={{ 
-                              flexGrow: 1, 
-                              paddingBottom: 40, 
-                              paddingTop: 2,
-                              justifyContent: !isRegistering ? 'center' : 'flex-start'
-                            }}
+                            contentContainerStyle={{ flexGrow: 1, paddingBottom: 40, paddingTop: 2, justifyContent: !isRegistering ? 'center' : 'flex-start' }}
                           >
                             <View style={styles.inputGap}>
                               {isRegistering ? (
@@ -1276,7 +1172,6 @@ export default function HomeScreen() {
                                   {renderInputPair(t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono"), form.phone, "phone", "+1 234 567 8900", isWebPlatform ? "default" : "phone-pad", t?.headertab?.zipCode || "Zip Code", form.zipCode, "zipCode", "90210", isWebPlatform ? "default" : "number-pad")}
                                   
                                   <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate" : "Fecha de Nacimiento")}</ThemedText>
-                                  
                                   <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 10 }]}>
                                     {isWebPlatform ? (
                                       <input type="date" onChange={handleWebDateChange} value={getSafeDateString()} style={{ width: '100%', padding: '10px', border: 'none', background: 'transparent', color: DynamicColors.text, outline: 'none', fontSize: '15px', cursor: 'pointer' }} />
@@ -1295,104 +1190,42 @@ export default function HomeScreen() {
                                       </View>
                                   )}
 
-                                  {/* 🚀 CONTRASEÑA CON MEDIDOR DE FUERZA Y CENTRADO PERFECTO 🚀 */}
                                   <View style={{ width: '100%', marginBottom: 10 }}>
                                     <View style={{ position: 'relative' }}>
-                                      <ThemedTextInput 
-                                        label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} 
-                                        value={form.password} 
-                                        onChangeText={(v: string) => setForm({...form, password: v})} 
-                                        placeholder="********" 
-                                        secureTextEntry={!showPassword} 
-                                      />
-                                      
-                                      <TouchableOpacity 
-                                        onPress={() => setShowPassword(!showPassword)}
-                                        style={{ 
-                                          position: 'absolute', 
-                                          right: 15, 
-                                          top: '50%', 
-                                          marginTop: 4, 
-                                          zIndex: 10 
-                                        }}
-                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                                      >
-                                        <MaterialCommunityIcons 
-                                          name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                                          size={20} 
-                                          color={DynamicColors.subtext} 
-                                        />
+                                      <ThemedTextInput label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} value={form.password} onChangeText={(v: string) => setForm({...form, password: v})} placeholder="********" secureTextEntry={!showPassword} />
+                                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: 15, top: '50%', marginTop: 4, zIndex: 10 }} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                                        <MaterialCommunityIcons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={DynamicColors.subtext} />
                                       </TouchableOpacity>
                                     </View>
                                     
                                     {(() => {
                                       const pwd = form.password || "";
-                                      const reqs = {
-                                        length: pwd.length >= 8,
-                                        upper: /[A-Z]/.test(pwd),
-                                        lower: /[a-z]/.test(pwd),
-                                        num: /[0-9]/.test(pwd),
-                                        spec: /[^A-Za-z0-9]/.test(pwd),
-                                      };
-                                      
+                                      const reqs = { length: pwd.length >= 8, upper: /[A-Z]/.test(pwd), lower: /[a-z]/.test(pwd), num: /[0-9]/.test(pwd), spec: /[^A-Za-z0-9]/.test(pwd) };
                                       const score = Object.values(reqs).filter(Boolean).length;
                                       
-                                      let strengthText = "";
-                                      let strengthColor = DynamicColors.border; 
-                                      let barWidth = "0%";
-                                      
+                                      let strengthText = ""; let strengthColor = DynamicColors.border; let barWidth = "0%";
                                       if (pwd.length > 0) {
-                                        if (score <= 2) { 
-                                          strengthText = isEnglish ? "Weak" : "Débil"; 
-                                          strengthColor = "#FF5F6D"; 
-                                          barWidth = "33%"; 
-                                        }
-                                        else if (score <= 4) { 
-                                          strengthText = isEnglish ? "Good" : "Buena"; 
-                                          strengthColor = "#F5A623"; 
-                                          barWidth = "66%"; 
-                                        }
-                                        else { 
-                                          strengthText = isEnglish ? "Strong" : "Fuerte"; 
-                                          strengthColor = "#4CAF50"; 
-                                          barWidth = "100%"; 
-                                        }
+                                        if (score <= 2) { strengthText = isEnglish ? "Weak" : "Débil"; strengthColor = "#FF5F6D"; barWidth = "33%"; }
+                                        else if (score <= 4) { strengthText = isEnglish ? "Good" : "Buena"; strengthColor = "#F5A623"; barWidth = "66%"; }
+                                        else { strengthText = isEnglish ? "Strong" : "Fuerte"; strengthColor = "#4CAF50"; barWidth = "100%"; }
                                       }
 
                                       const ValidationItem = ({ label, isValid }: { label: string, isValid: boolean }) => (
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                          <MaterialCommunityIcons 
-                                            name={isValid ? "check-circle" : "close-circle-outline"} 
-                                            size={14} 
-                                            color={isValid ? "#4CAF50" : (isDark ? '#555' : '#AAA')} 
-                                          />
-                                          <Text style={{ 
-                                            fontSize: 11, 
-                                            color: isValid ? (isDark ? '#FFF' : '#333') : (isDark ? '#777' : '#999'), 
-                                            fontWeight: isValid ? '700' : '500' 
-                                          }}>
-                                            {label}
-                                          </Text>
+                                          <MaterialCommunityIcons name={isValid ? "check-circle" : "close-circle-outline"} size={14} color={isValid ? "#4CAF50" : (isDark ? '#555' : '#AAA')} />
+                                          <Text style={{ fontSize: 11, color: isValid ? (isDark ? '#FFF' : '#333') : (isDark ? '#777' : '#999'), fontWeight: isValid ? '700' : '500' }}>{label}</Text>
                                         </View>
                                       );
 
                                       return (
                                         <View style={{ marginTop: 10, paddingHorizontal: 4 }}>
                                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                                            <Text style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
-                                              {isEnglish ? "Password Strength" : "Fuerza de la contraseña"}
-                                            </Text>
-                                            {score > 0 && (
-                                              <Text style={{ fontSize: 12, color: strengthColor, fontWeight: '800' }}>
-                                                {strengthText}
-                                              </Text>
-                                            )}
+                                            <Text style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>{isEnglish ? "Password Strength" : "Fuerza de la contraseña"}</Text>
+                                            {score > 0 && <Text style={{ fontSize: 12, color: strengthColor, fontWeight: '800' }}>{strengthText}</Text>}
                                           </View>
-
                                           <View style={{ height: 4, width: '100%', backgroundColor: DynamicColors.border, borderRadius: 2, marginBottom: 12, overflow: 'hidden' }}>
                                             <View style={{ height: '100%', width: barWidth as any, backgroundColor: strengthColor, borderRadius: 2 }} />
                                           </View>
-
                                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                                             <ValidationItem label="8 Chars" isValid={reqs.length} />
                                             <ValidationItem label="A-Z" isValid={reqs.upper} />
@@ -1415,56 +1248,96 @@ export default function HomeScreen() {
                                   </View>
                                 </>
                               ) : (
-                                <>
-                                  <ThemedTextInput label={t?.headertab?.email || (isEnglish ? "Email" : "Correo electrónico")} value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" autoCapitalize="none" keyboardType="email-address" />
-                                  
-                                  {/* 🚀 BOTÓN DE VER CONTRASEÑA EN LOGIN CON CENTRADO PERFECTO 🚀 */}
-                                  <View style={{ position: 'relative' }}>
-                                    <ThemedTextInput 
-                                      label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} 
-                                      value={form.password} 
-                                      onChangeText={(v: string) => setForm({...form, password: v})} 
-                                      placeholder="********" 
-                                      secureTextEntry={!showPassword} 
-                                    />
-                                    <TouchableOpacity 
-                                      onPress={() => setShowPassword(!showPassword)}
-                                      style={{ 
-                                        position: 'absolute', 
-                                        right: 15, 
-                                        top: '50%', 
-                                        marginTop: 4, 
-                                        zIndex: 10 
-                                      }}
-                                      hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                                    >
-                                      <MaterialCommunityIcons 
-                                        name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                                        size={20} 
-                                        color={DynamicColors.subtext} 
-                                      />
+                                showManualLogin && (
+                                  <>
+                                    <ThemedTextInput label={t?.headertab?.email || (isEnglish ? "Email" : "Correo electrónico")} value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" autoCapitalize="none" keyboardType="email-address" />
+                                    
+                                    <View style={{ position: 'relative' }}>
+                                      <ThemedTextInput label={t?.headertab?.labelPassword || (isEnglish ? "Password" : "Contraseña")} value={form.password} onChangeText={(v: string) => setForm({...form, password: v})} placeholder="********" secureTextEntry={!showPassword} />
+                                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: 15, top: '50%', marginTop: 4, zIndex: 10 }} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                                        <MaterialCommunityIcons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={DynamicColors.subtext} />
+                                      </TouchableOpacity>
+                                    </View>
+                                    
+                                    <TouchableOpacity onPress={() => setShowResetModal(true)} style={{ alignSelf: 'flex-end', marginBottom: 10, padding: 5 }}>
+                                      <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '700' }}>{isEnglish ? "Forgot your password?" : "¿Olvidaste tu contraseña?"}</ThemedText>
                                     </TouchableOpacity>
-                                  </View>
-                                  
-                                  <TouchableOpacity onPress={() => setShowResetModal(true)} style={{ alignSelf: 'flex-end', marginBottom: 10, padding: 5 }}>
-                                    <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '700' }}>{isEnglish ? "Forgot your password?" : "¿Olvidaste tu contraseña?"}</ThemedText>
-                                  </TouchableOpacity>
-                                </>
+                                  </>
+                                )
                               )}
                             </View>
 
                             <View style={styles.actionsContainer}>
-                              <TouchableOpacity activeOpacity={0.85} onPress={handleAuthAction} disabled={isSubmitDisabled} style={[styles.primaryWrapper, isSubmitDisabled && { opacity: 0.4 }]}>
-                                <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                                  <MaterialCommunityIcons name={isRegistering ? "account-plus" : "login-variant"} size={20} color="white" style={{ marginRight: 8 }} />
-                                  <Text style={styles.primaryText}>{isRegistering ? (t?.hometab?.registerhome || (isEnglish ? "Register" : "Crear Cuenta")) : (t?.hometab?.acces || (isEnglish ? "Access" : "Acceder"))}</Text>
-                                </LinearGradient>
-                              </TouchableOpacity>
+                              {isRegistering ? (
+                                <>
+                                  <TouchableOpacity activeOpacity={0.85} onPress={handleAuthAction} disabled={isSubmitDisabled} style={[styles.primaryWrapper, isSubmitDisabled && { opacity: 0.4 }]}>
+                                    <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
+                                      <MaterialCommunityIcons name={"account-plus"} size={20} color="white" style={{ marginRight: 8 }} />
+                                      <Text style={styles.primaryText}>{t?.hometab?.registerhome || (isEnglish ? "Register" : "Crear Cuenta")}</Text>
+                                    </LinearGradient>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity disabled={!request || isSubmitDisabled} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 15 }, isSubmitDisabled && { opacity: 0.4 }]} onPress={() => promptAsync()}>
+                                    <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
+                                    <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Continue with Google" : "Continuar con Google")}</Text>
+                                  </TouchableOpacity>
+                                  {!isWebPlatform && isIOS && (
+                                    <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
+                                  )}
+                                </>
+                              ) : (
+                                !showManualLogin ? (
+                                  <View style={{ width: '100%' }}>
+                                    <TouchableOpacity disabled={!request} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 0 }]} onPress={() => promptAsync()}>
+                                      <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
+                                      <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Continue with Google" : "Continuar con Google")}</Text>
+                                    </TouchableOpacity>
 
-                              <TouchableOpacity disabled={!request || isSubmitDisabled} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff' }, isSubmitDisabled && { opacity: 0.4 }]} onPress={() => promptAsync()}>
-                                <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
-                                <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Continue with Google" : "Continuar con Google")}</Text>
-                              </TouchableOpacity>
+                                    {!isWebPlatform && isIOS && (
+                                      <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
+                                    )}
+
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 25, width: '100%' }}>
+                                      <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
+                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or" : "o"}</Text>
+                                      <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
+                                    </View>
+
+                                    <TouchableOpacity 
+                                      activeOpacity={0.8}
+                                      onPress={() => setShowManualLogin(true)}
+                                      style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}
+                                    >
+                                      <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
+                                        <MaterialCommunityIcons name="email-outline" size={16} color={DynamicColors.text} style={{ marginRight: 5 }} /> {isEnglish ? "Sign in with Email" : "Iniciar sesión con Correo"}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                ) : (
+                                  <View style={{ width: '100%' }}>
+                                    <TouchableOpacity activeOpacity={0.85} onPress={handleAuthAction} style={styles.primaryWrapper}>
+                                      <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
+                                        <MaterialCommunityIcons name="login-variant" size={20} color="white" style={{ marginRight: 8 }} />
+                                        <Text style={styles.primaryText}>{t?.hometab?.acces || (isEnglish ? "Access" : "Acceder")}</Text>
+                                      </LinearGradient>
+                                    </TouchableOpacity>
+
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20, width: '100%' }}>
+                                      <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
+                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or continue with" : "o continuar con"}</Text>
+                                      <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
+                                    </View>
+
+                                    <TouchableOpacity disabled={!request} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 0 }]} onPress={() => promptAsync()}>
+                                      <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
+                                      <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Google" : "Google")}</Text>
+                                    </TouchableOpacity>
+
+                                    {!isWebPlatform && isIOS && (
+                                      <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
+                                    )}
+                                  </View>
+                                )
+                              )}
                             </View>
 
                           </ScrollView>

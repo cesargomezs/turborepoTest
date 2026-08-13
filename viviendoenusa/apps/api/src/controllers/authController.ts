@@ -4,13 +4,13 @@ import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library'; 
-import { Resend } from 'resend'; // 🚀 IMPORTAMOS RESEND
+import { Resend } from 'resend'; 
 import jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa'; 
 import { Request, Response } from 'express'; 
 import { AuthRequest } from '../middleware/authMiddleware'; 
 import { logAuditEvent } from '../services/audit.service.js';
 
-// 🚀 INICIALIZAMOS LA API DE CORREOS
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -20,13 +20,23 @@ const NOMBRE_BUCKET = 'images';
 
 const googleClient = new OAuth2Client(); 
 
+// 🚀 CONFIGURACIÓN PARA APPLE
+const appleClient = jwksClient({ jwksUri: 'https://appleid.apple.com/auth/keys' });
+const getApplePublicKey = (header: any, callback: any) => {
+  appleClient.getSigningKey(header.kid, (err, key) => {
+    if (err) return callback(err);
+    const signingKey = (key as any).getPublicKey();
+    callback(null, signingKey);
+  });
+};
+
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
 // --------------------------------------------------------
-// 1. REGISTRO DE USUARIO CLÁSICO Y GOOGLE
+// 1. REGISTRO DE USUARIO CLÁSICO Y GOOGLE/APPLE
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null) => {
   try {
@@ -69,7 +79,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       password: data.isVerified ? (null as string | null) : hashedPassword, 
       imageUrl: imageUrl || undefined, 
       typeDetail: data.typeDetail || 'User',
-      isVerified: data.isVerified      
+      isVerified: data.isVerified
+      // 🚀 SOLUCIÓN: authProvider eliminado porque no existe en la DB
     }).returning();
 
     return newUser;
@@ -197,13 +208,14 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 };
 
 // --------------------------------------------------------
-// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Google + Email)
+// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Google + Apple + Email)
 // --------------------------------------------------------
 export const authenticateUser = async (credentials: { 
   idToken?: string; 
   email?: string; 
   password?: string; 
   isGoogle: boolean; 
+  isApple?: boolean; 
 }) => {
   try {
     let email = credentials.email;
@@ -219,6 +231,23 @@ export const authenticateUser = async (credentials: {
       lastName = payload.family_name || "";
     }
 
+    // 🚀 LÓGICA DE APPLE BLINDADA CONTRA FALTA DE EMAIL 🚀
+    if (credentials.isApple && credentials.idToken) {
+      const decoded: any = await new Promise((resolve, reject) => {
+        jwt.verify(credentials.idToken!, getApplePublicKey, { algorithms: ['RS256'] }, (err, decoded) => {
+          if (err) reject(err);
+          resolve(decoded);
+        });
+      });
+      
+      if (!decoded || (!decoded.email && !decoded.sub)) {
+        throw new Error("Token de Apple inválido");
+      }
+      
+      // Si Apple no manda correo, usamos el ID (sub) para crear un correo temporal válido
+      email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
+    }
+
     if (!email) throw new Error("Email requerido");
 
     const rows = await db.select().from(users).where(eq(users.email, email));
@@ -227,14 +256,19 @@ export const authenticateUser = async (credentials: {
     const genericAuthError = "Credenciales incorrectas.";
 
     if (!user) {
-      if (credentials.isGoogle) {
-        return {
-          message: "Usuario no registrado, requiere completar perfil",
-          requiresProfileCompletion: true,
-          user: { email, firstName, lastName, id: "temp" }
-        };
+      if (credentials.isGoogle || credentials.isApple) {
+        const [newUser] = await db.insert(users).values({
+          name: firstName || "Usuario",
+          lastName: lastName || (credentials.isApple ? "Apple" : "Google"),
+          email: email,
+          isVerified: true,
+          typeDetail: 'User'
+          // 🚀 SOLUCIÓN: authProvider eliminado porque no existe en la DB
+        }).returning();
+        user = newUser;
+      } else {
+        throw new Error(genericAuthError);
       }
-      throw new Error(genericAuthError);
     }
 
     const currentAttempts = user.failedLoginAttempts ?? 0;
@@ -243,7 +277,7 @@ export const authenticateUser = async (credentials: {
       throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos. Por favor, utiliza la opción '¿Olvidaste tu contraseña?' para restablecerla.");
     }
 
-    if (!credentials.isGoogle) {
+    if (!credentials.isGoogle && !credentials.isApple) {
       if (!user.password) throw new Error(genericAuthError);
       
       const isMatch = await bcrypt.compare(credentials.password || '', user.password);
@@ -291,11 +325,9 @@ export const authenticateUser = async (credentials: {
   }
 };
 
-
 // --------------------------------------------------------
 // 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA (CON RESEND)
 // --------------------------------------------------------
-
 export const sendPasswordResetEmail = async (email: string) => {
   try {
     console.log(`🔍 Buscando usuario con correo: ${email}`);
@@ -307,7 +339,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     }
 
     if (!user.password) {
-      throw new Error("Esta cuenta usa autenticación de Google. Inicia sesión directamente con Google.");
+      throw new Error("Esta cuenta usa autenticación externa. Inicia sesión directamente con Google o Apple.");
     }
 
     console.log("🔑 Generando token de recuperación...");
@@ -412,10 +444,9 @@ export const updatePassword = async (req: Request, res: Response) => {
   }
 };
 
-//// --------------------------------------------------------
+// --------------------------------------------------------
 // 7. 🔍 OBTENER PERFIL DEL USUARIO AUTENTICADO
-//// --------------------------------------------------------
-
+// --------------------------------------------------------
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user.id; 
@@ -577,7 +608,6 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           </div>
         `;
 
-        // 🚀 TAMBIÉN SE ENVÍA CON RESEND
         await resend.emails.send({
           from: 'Viviendo en USA <noreply@viviendoenusa.app>',
           to: [userRecord.email],
