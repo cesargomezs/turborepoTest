@@ -812,35 +812,43 @@ export default function SupportScreen() {
                 </View>
               ) : (
                 <ReviewForm isDark={isDark} t={t} onCancel={() => setShowReviewInput(false)} onPublish={async (ratingNum: number, commentStr: string) => { 
-                        try {
-                          const res = await fetch(`${API_STORES_URL}/reviews`, { 
-                            method: 'POST', 
-                            headers: { 
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${userToken}` 
-                            }, 
-                            body: JSON.stringify({ reference_id: selectedStore.id, stars: ratingNum, comment: commentStr, userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9" }) 
-                          });
-                          if (res.status === 401) { router.replace('/'); return; }
-                          
-                          if (!res.ok) throw new Error();
-                          const fromDB = await res.json();
-                          // 🚀 SE AGREGO LA IMAGEN Y NOMBRE DEL USUARIO LOGUEADO AL PUBLICAR
-                          const newReviewFormatted = { 
-                            id: fromDB.id || Date.now().toString(), 
-                            stars: Number(ratingNum), 
-                            comment: commentStr,
-                            name: fromDB.name || userMetadata?.name || 'Anónimo',
-                            image: fromDB.image || userMetadata?.avatarUrl || null 
-                          };
-                          const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
-                          const newAverage = updatedReviews.length > 0 ? (updatedReviews.reduce((sum, r) => sum + r.stars, 0) / updatedReviews.length) : 0;
-                          const updatedStoreObj = { ...selectedStore, reviews: updatedReviews, rating: newAverage, totalReviews: updatedReviews.length };
-                          setSelectedStore(updatedStoreObj); setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s)); setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
-                          Alert.alert(t.genericlabel.labelreviewthanks, t.genericlabel.labelreviewexp);
-                        } catch (e) { Alert.alert("Error", t.genericlabel.labelerrorconection); } finally { setShowReviewInput(false); }
-                    }} 
-                />
+                  try {
+                    const res = await fetch(`${API_STORES_URL}/reviews`, { 
+                      method: 'POST', 
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${userToken}` 
+                      }, 
+                      body: JSON.stringify({ reference_id: selectedStore.id, stars: ratingNum, comment: commentStr, userId: currentUserId }) 
+                    });
+                    if (res.status === 401) { router.replace('/'); return; }
+                    
+                    if (!res.ok) throw new Error();
+                    const fromDB = await res.json();
+                    
+                    // 🚀 AQUÍ ESTÁ EL AJUSTE: Atrapamos image, name y displayTime devueltos por el backend
+                    const newReviewFormatted = { 
+                      id: fromDB.id || Date.now().toString(), 
+                      stars: Number(ratingNum), 
+                      comment: commentStr,
+                      name: fromDB.name || userMetadata?.name || 'Yo',
+                      image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
+                      displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                    };
+                    
+                    const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
+                    const newAverage = updatedReviews.length > 0 ? (updatedReviews.reduce((sum: number, r: any) => sum + r.stars, 0) / updatedReviews.length) : 0;
+                    
+                    const updatedStoreObj = { ...selectedStore, reviews: updatedReviews, rating: newAverage, totalReviews: updatedReviews.length };
+                    
+                    setSelectedStore(updatedStoreObj); 
+                    setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s)); 
+                    setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
+                    
+                    Alert.alert(t.genericlabel.labelreviewthanks, t.genericlabel.labelreviewexp);
+                  } catch (e) { Alert.alert("Error", t.genericlabel.labelerrorconection); } finally { setShowReviewInput(false); }
+              }} 
+              />
               )}
             </View>
           </View>

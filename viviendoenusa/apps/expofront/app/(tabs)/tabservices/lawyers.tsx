@@ -1370,8 +1370,10 @@ export default function LawyersScreen() {
                             id: fromDB.id || Date.now().toString(), 
                             stars: Number(ratingNum), 
                             comment: commentStr,
-                            name: fromDB.name ,
-                            userId: currentUserId 
+                            name: fromDB.name || 'Yo', 
+                            image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', // 🚀 Faltaba atrapar la foto
+                            displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), // 🚀 Faltaba atrapar la hora
+                            userId: currentUserId
                           };
 
                           const updatedReviews = [newReviewFormatted, ...(selectedReviews.reviews || [])];

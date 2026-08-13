@@ -1184,7 +1184,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                             reference_id: selectedStore.id,
                             stars: ratingNum,
                             comment: commentStr,
-                            userId: userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9"
+                            userId: currentUserId
                           };
 
                           const res = await fetch(`${API_STORES_URL}/reviews`, {
@@ -1200,13 +1200,16 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                           if (!res.ok) throw new Error();
                           const fromDB = await res.json();
 
+                          // 🚀 AQUÍ ESTÁ EL AJUSTE: Atrapamos image y displayTime devueltos por el backend
                           const newReviewFormatted = { 
                             id: fromDB.id || Date.now().toString(), 
                             stars: Number(ratingNum), 
                             comment: commentStr,
-                            name: fromDB.name || userMetadata?.name || 'Anónimo',
-                            image: fromDB.image || userMetadata?.avatarUrl || null 
+                            name: fromDB.name || userMetadata?.name || 'Yo',
+                            image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', // 🚀 Foto
+                            displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) // 🚀 Hora
                           };
+                          
                           const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
                           const totalStars = updatedReviews.reduce((sum, r) => sum + r.stars, 0);
                           const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;

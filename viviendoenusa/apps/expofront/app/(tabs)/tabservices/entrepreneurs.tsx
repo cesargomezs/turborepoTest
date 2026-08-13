@@ -536,14 +536,16 @@ export default function EntrepreneurshipScreen() {
       }
 
       const savedReview = await response.json();
+      
+      // 🚀 AQUÍ ESTÁ EL AJUSTE: Atrapamos image y displayTime devueltos por el backend
       const newReview: Review = {
         id: savedReview.id || Date.now().toString(),
         stars: savedReview.stars || stars,
         comment: savedReview.comment || comment,
-        image: savedReview.image || null,
+        image: savedReview.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', // 🚀 Foto
         name: savedReview.name || userMetadata?.name || 'Anónimo',
         userId: currentUserId, 
-        displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        displayTime: savedReview.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), // 🚀 Hora
       };
 
       const updateState = (prevReviews: Review[]) => {

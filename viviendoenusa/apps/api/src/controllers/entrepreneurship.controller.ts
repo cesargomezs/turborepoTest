@@ -459,7 +459,7 @@ export const deleteEntrepreneurship = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 6. CREAR RESEÑA 
+// 📥 6. CREAR RESEÑA (CORREGIDO PARA DEVOLVER NOMBRE Y FOTO)
 // =====================================================================
 export const createEntrepreneurshipReview = async (data: any) => {
   try {
@@ -506,10 +506,34 @@ export const createEntrepreneurshipReview = async (data: any) => {
       savedComment = newReview[0].comment || '';
     }
 
+    // 🚀 NUEVO: Consultamos el nombre y la foto del usuario en la BD para devolverlos
+    const [userRecord] = await db.select({
+      name: users.name,
+      lastName: users.lastName,
+      imageUrl: users.imageUrl
+    }).from(users).where(eq(users.id, validUserId));
+
+    let signedImageUrl = null;
+    if (userRecord && userRecord.imageUrl) {
+      const rutaArchivo = userRecord.imageUrl.startsWith('users/') 
+        ? userRecord.imageUrl 
+        : `users/${userRecord.imageUrl}`;
+      const { data: storageData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+      if (storageData) signedImageUrl = storageData.signedUrl;
+    }
+
+    const formattedName = userRecord 
+      ? `${userRecord.name} ${userRecord.lastName ? userRecord.lastName.substring(0, 1) : ''}`
+      : 'Usuario';
+
     return {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
+      // 🚀 Enviamos la información visual al frontend
+      name: formattedName,
+      image: signedImageUrl,
+      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
   } catch (error: any) { 

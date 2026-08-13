@@ -421,12 +421,14 @@ export default function CommunityScreen() {
 
       const rawCreatedAt = savedReview.createdAt || new Date().toISOString();
 
+      // 🚀 AQUÍ ESTÁ EL AJUSTE: Mapeamos la foto y el nombre real desde el backend
       const newLocalComment = {
         id: savedReview.id || Date.now(),
         text: trimmed,
         createdAt: rawCreatedAt,
         displayTime: getRelativeTime(rawCreatedAt),
-        userName: userMetadata?.name || 'Tú'
+        userName: savedReview.userName || userMetadata?.name || 'Usuario',
+        image: savedReview.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg'
       };
 
       setComments(prev => ({
@@ -440,7 +442,7 @@ export default function CommunityScreen() {
        triggerAlert("Error", "No se pudo guardar el comentario.");
     }
   };
-
+  
   const handleVote = async (postId: string, type: 'like' | 'dislike') => {
     setPosts(prev => prev.map(p => {
       if (String(p.id) !== String(postId)) return p;

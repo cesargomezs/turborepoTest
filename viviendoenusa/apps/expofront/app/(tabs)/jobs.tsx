@@ -740,63 +740,72 @@ export default function JobsScreen() {
   };
 
   const handleSubmitReview = async () => {
-      if (!reviewForm.text.trim() || reviewForm.rating === 0) return triggerAlert("Incompleto", "Ingresa estrellas y un comentario.");
-      
-      // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN RESEÑAS
-      if (containsBadWords(reviewForm.text)) {
-        triggerAlert(t.communitytab?.textInappropriateTittle || "Error", t.communitytab?.textInappropriateDescription || "Comentario inapropiado detectado.");
-        return;
+    if (!reviewForm.text.trim() || reviewForm.rating === 0) return triggerAlert("Incompleto", "Ingresa estrellas y un comentario.");
+    
+    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN RESEÑAS
+    if (containsBadWords(reviewForm.text)) {
+      triggerAlert(t.communitytab?.textInappropriateTittle || "Error", t.communitytab?.textInappropriateDescription || "Comentario inapropiado detectado.");
+      return;
+    }
+
+    try {
+      const payload = {
+        reference_id: selectedCompany.id,
+        stars: reviewForm.rating,
+        comment: reviewForm.text,
+        userId: currentUserId, 
+        userName: currentUser,
+        isAnonymous: reviewForm.isAnonymous 
+      };
+
+      const res = await fetch(`${API_JOBS_URL}/reviews`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.status === 401) { router.replace('/'); return; }
+
+      if (!res.ok) {
+         const errorData = await res.json();
+         throw new Error(errorData.error || "No se pudo publicar la reseña.");
       }
 
-      try {
-        const payload = {
-          reference_id: selectedCompany.id,
-          stars: reviewForm.rating,
-          comment: reviewForm.text,
-          userId: currentUserId, 
-          userName: currentUser,
-          isAnonymous: reviewForm.isAnonymous 
-        };
-
-        const res = await fetch(`${API_JOBS_URL}/reviews`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${userToken}`
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (res.status === 401) { router.replace('/'); return; }
-
-        if (!res.ok) {
-           const errorData = await res.json();
-           throw new Error(errorData.error || "No se pudo publicar la reseña.");
-        }
-
-        const savedReview = await res.json();
-        const newReviewFormatted = { id: savedReview.id || Date.now(), text: savedReview.comment || reviewForm.text, stars: Number(savedReview.stars || reviewForm.rating), userName: savedReview.userName };
-        
-        let newAverage = 0;
-        setJobs(prevJobs => prevJobs.map(job => {
-            if (job.companyId === selectedCompany.companyId) {
-                const updatedReviews = [newReviewFormatted, ...job.reviews];
-                newAverage = updatedReviews.reduce((acc: number, r: any) => acc + r.stars, 0) / updatedReviews.length;
-                return { ...job, reviews: updatedReviews, rating: newAverage };
-            }
-            return job;
-        }));
-        
-        setSelectedCompany((prev: any) => {
-            if(!prev) return prev;
-            const updatedReviews = [newReviewFormatted, ...prev.reviews];
-            return { ...prev, reviews: updatedReviews, rating: newAverage };
-        });
-        
-        setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false });
-        triggerAlert("¡Gracias!", "Tu reseña ha sido publicada.");
-      } catch (e: any) { triggerAlert("Aviso", e.message); }
-  };
+      const savedReview = await res.json();
+      
+      // 🚀 AQUÍ ESTÁ EL AJUSTE: Atrapamos image, userName y displayTime devueltos por el backend
+      const newReviewFormatted = { 
+          id: savedReview.id || Date.now(), 
+          text: savedReview.comment || reviewForm.text, 
+          stars: Number(savedReview.stars || reviewForm.rating), 
+          userName: savedReview.userName || (reviewForm.isAnonymous ? 'Anónimo' : (userMetadata?.name || 'Usuario')),
+          image: savedReview.image || (reviewForm.isAnonymous ? null : (userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg')),
+          displayTime: savedReview.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      
+      let newAverage = 0;
+      setJobs(prevJobs => prevJobs.map(job => {
+          if (job.companyId === selectedCompany.companyId) {
+              const updatedReviews = [newReviewFormatted, ...job.reviews];
+              newAverage = updatedReviews.reduce((acc: number, r: any) => acc + r.stars, 0) / updatedReviews.length;
+              return { ...job, reviews: updatedReviews, rating: newAverage };
+          }
+          return job;
+      }));
+      
+      setSelectedCompany((prev: any) => {
+          if(!prev) return prev;
+          const updatedReviews = [newReviewFormatted, ...prev.reviews];
+          return { ...prev, reviews: updatedReviews, rating: newAverage };
+      });
+      
+      setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false });
+      triggerAlert("¡Gracias!", "Tu reseña ha sido publicada.");
+    } catch (e: any) { triggerAlert("Aviso", e.message); }
+};
 
   const filteredJobs = useMemo(() => {
     const filtered = jobs.filter(job => {

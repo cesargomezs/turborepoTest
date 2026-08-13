@@ -379,7 +379,7 @@ export const createCommunityPost = async (data: any) => {
 };
 
 // =====================================================================
-// 📥 4. CREAR COMENTARIO
+// 📥 4. CREAR COMENTARIO (CORREGIDO)
 // =====================================================================
 export const createCommunityReview = async (data: any) => {
   try {
@@ -392,7 +392,34 @@ export const createCommunityReview = async (data: any) => {
     }
 
     const newReview = await db.insert(reviews).values(cleanPayload).returning();
-    return newReview[0];
+    const savedComment = newReview[0];
+
+    // 🚀 NUEVO: Consultamos los datos del usuario para devolver la estructura completa al frontend
+    const [userRecord] = await db.select({
+      name: users.name,
+      lastName: users.lastName,
+      imageUrl: users.imageUrl
+    }).from(users).where(eq(users.id, validUserId));
+
+    let signedImageUrl = null;
+    if (userRecord && userRecord.imageUrl) {
+      const rutaArchivo = userRecord.imageUrl.startsWith('users/') 
+        ? userRecord.imageUrl 
+        : `users/${userRecord.imageUrl}`;
+      const { data: storageData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+      if (storageData) signedImageUrl = storageData.signedUrl;
+    }
+
+    const formattedName = userRecord 
+      ? `${userRecord.name} ${userRecord.lastName ? userRecord.lastName.substring(0, 1) : ''}`
+      : 'Usuario Anónimo';
+
+    return {
+      ...savedComment,
+      userName: formattedName,
+      image: signedImageUrl
+    };
+
   } catch (error: any) { 
     throw new Error(`Error al crear el comentario: ${error.message}`);
   }

@@ -447,7 +447,7 @@ export const updateJob = async (id: string, data: any) => {
 };
 
 // =====================================================================
-// 🚀 5. INGRESO DE RATING Y RESEÑA
+// 🚀 5. INGRESO DE RATING Y RESEÑA (CORREGIDO PARA FOTO Y NOMBRE)
 // =====================================================================
 export const createJobReview = async (data: any) => {
   try {
@@ -457,7 +457,6 @@ export const createJobReview = async (data: any) => {
         throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
     }
     
-    // Si la sesión es válida pero elige ser anónimo en la UI, el sistema usará el UUID Anónimo internamente para la visualización, pero debe rastrear la reseña.
     const trackingUserId = realUserId || ANON_UUID;
     const targetJobId = sanitizeText(data.reference_id || data.referenceId);
 
@@ -505,8 +504,7 @@ export const createJobReview = async (data: any) => {
     const incomingText = sanitizeText(data.comment || data.text || data.review);
     
     const reviewUserId = data.isAnonymous === true ? ANON_UUID : trackingUserId;
-    let assignedUserName = 'Anónimo'; 
-
+    
     if (incomingText && incomingText !== '') {
       const reviewPayload: any = { userId: reviewUserId };
 
@@ -529,23 +527,45 @@ export const createJobReview = async (data: any) => {
       savedComment = (reviewRows[0] as any).comment || (reviewRows[0] as any).text || (reviewRows[0] as any).review || '';
     }
 
+    // 🚀 NUEVO: Consultamos los datos reales del usuario si no es anónimo
+    let assignedUserName = 'Anónimo';
+    let signedImageUrl = null;
+
     if (data.isAnonymous !== true && trackingUserId !== ANON_UUID) {
-      const userObj = await db.select({ name: users.name }).from(users).where(eq(users.id, trackingUserId)).limit(1);
-      if (userObj.length > 0 && userObj[0].name) assignedUserName = userObj[0].name;
-      else assignedUserName = sanitizeText(data.userName) || 'Cesar Gomez';
+      const [userRecord] = await db.select({
+        name: users.name,
+        lastName: users.lastName,
+        imageUrl: users.imageUrl
+      }).from(users).where(eq(users.id, trackingUserId));
+
+      if (userRecord) {
+        assignedUserName = `${userRecord.name} ${userRecord.lastName ? userRecord.lastName.substring(0, 1) : ''}`.trim() || 'Usuario';
+        
+        if (userRecord.imageUrl) {
+          const rutaArchivo = userRecord.imageUrl.startsWith('users/') 
+            ? userRecord.imageUrl 
+            : `users/${userRecord.imageUrl}`;
+          const { data: storageData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+          if (storageData) signedImageUrl = storageData.signedUrl;
+        }
+      }
     }
 
     return {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
-      userName: assignedUserName 
+      // 🚀 Se envían los datos listos para el Frontend
+      userName: assignedUserName,
+      image: signedImageUrl,
+      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
   } catch (error: any) {
     throw new Error(error.message || "Error al crear la calificación");
   }
 };
+
 
 // =====================================================================
 // 🗑️ 6. ELIMINAR OFERTA DE EMPLEO
