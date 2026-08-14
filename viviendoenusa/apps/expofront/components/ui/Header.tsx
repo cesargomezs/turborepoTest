@@ -722,7 +722,7 @@ export default function Header({ title }: { title?: string }) {
               </TouchableOpacity>
             </View>
 
-            <ThemedText style={{ fontSize: 14, marginBottom: 15, lineHeight: 20 }}>
+            <ThemedText style={{ fontSize: 14, marginBottom: 15, lineHeight: 20 ,color: Colors[localTheme].text}}>
               Lamentamos mucho que te vayas. Para ayudarnos a mejorar, ¿podrías decirnos por qué deseas eliminar tu cuenta?
             </ThemedText>
 
