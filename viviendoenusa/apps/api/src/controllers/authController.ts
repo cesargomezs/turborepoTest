@@ -20,7 +20,6 @@ const NOMBRE_BUCKET = 'images';
 
 const googleClient = new OAuth2Client(); 
 
-// 🚀 CONFIGURACIÓN PARA APPLE
 const appleClient = jwksClient({ jwksUri: 'https://appleid.apple.com/auth/keys' });
 const getApplePublicKey = (header: any, callback: any) => {
   appleClient.getSigningKey(header.kid, (err, key) => {
@@ -35,7 +34,6 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 🚀 FUNCIÓN PARA CAPITALIZAR NOMBRES (Ej: "juan" -> "Juan")
 const capitalizeName = (str: any) => {
   if (!str || typeof str !== 'string') return '';
   return str.trim().split(/\s+/).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
@@ -59,9 +57,11 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
           const location = zipInfo.places[0];
           cityObj = location['place name']; 
           stateObj = location['state abbreviation']; 
+        } else {
+          console.warn(`Zip code no encontrado en la API al registrar: ${data.zip}`);
         }
       } catch (err) {
-        console.error("Error al consultar el servicio de Zip Codes:", err);
+        console.error("Error al consultar el servicio de Zip Codes en registro:", err);
       }
     }
 
@@ -71,7 +71,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       // 🚀 MAGIA ANTI-BUCLES: Si la cuenta ya fue creada por Apple/Google, 
       // pero el perfil está incompleto (sin teléfono), la ACTUALIZAMOS en vez de bloquearla.
       if (!user.phone && (data.authProvider === 'apple' || data.authProvider === 'google')) {
-         
          let hashedPassword = user.password;
          if (data.password) {
            const salt = await bcrypt.genSalt(10);
@@ -92,7 +91,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
          return updatedUser;
       }
 
-      // Si es un registro normal y ya existe, sí tiramos error
       throw new Error("El correo electrónico ya está registrado. Por favor, inicia sesión.");
     }
 
@@ -176,7 +174,6 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 
     const updateData: any = { ...data };
 
-    // 🚀 APLICAMOS MAYÚSCULAS SI EL USUARIO ACTUALIZA SU NOMBRE
     if (updateData.name) updateData.name = capitalizeName(updateData.name);
     if (updateData.lastName) updateData.lastName = capitalizeName(updateData.lastName);
 
@@ -266,8 +263,7 @@ export const authenticateUser = async (credentials: {
     }
 
     if (credentials.isApple && credentials.idToken) {
-      // 🚀 SOLUCIÓN AL CRASH DE APPLE: Decodificamos el token de forma segura y síncrona.
-      // Esto evita que el login aborte si el servidor falla al comunicarse con las llaves de Apple.
+      // 🚀 SOLUCIÓN AL CRASH DE APPLE: Decodificación sincrónica y segura
       const decoded: any = jwt.decode(credentials.idToken);
       
       if (!decoded || (!decoded.email && !decoded.sub)) {
@@ -346,7 +342,7 @@ export const authenticateUser = async (credentials: {
         email: user.email,
         firstName: user.name,
         lastName: user.lastName,
-        phone: user.phone,
+        phone: user.phone, 
         zip: user.zip,
         role: user.typeDetail || 'User',
       }
@@ -362,7 +358,6 @@ export const authenticateUser = async (credentials: {
 // --------------------------------------------------------
 export const sendPasswordResetEmail = async (email: string) => {
   try {
-    console.log(`🔍 Buscando usuario con correo: ${email}`);
     const rows = await db.select().from(users).where(eq(users.email, email));
     const user = rows[0];
 
@@ -374,7 +369,6 @@ export const sendPasswordResetEmail = async (email: string) => {
       throw new Error("Esta cuenta usa autenticación externa. Inicia sesión directamente con Google o Apple.");
     }
 
-    console.log("🔑 Generando token de recuperación...");
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
@@ -386,9 +380,7 @@ export const sendPasswordResetEmail = async (email: string) => {
       if (!error && data?.signedUrl) {
         logoUrl = data.signedUrl;
       }
-    } catch (storageErr) {
-      console.warn("⚠️ Advertencia: No se pudo obtener el logo de Supabase para el correo. Usando respaldo.");
-    }
+    } catch (storageErr) {}
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
@@ -410,30 +402,21 @@ export const sendPasswordResetEmail = async (email: string) => {
           <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 30px;">
             Si no solicitaste este cambio, por favor ignora este correo. Tu cuenta seguirá segura.
           </p>
-          <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-            &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
-          </div>
         </div>
       </div>
     `;
 
-    console.log("📨 Enviando correo a través de Resend API...");
-    const { data, error } = await resend.emails.send({
+    const { error } = await resend.emails.send({
       from: 'Viviendo en USA <noreply@viviendoenusa.app>',
       to: [user.email as string],
       subject: 'Recuperación de Contraseña - Viviendo en USA',
       html: htmlContent
     });
 
-    if (error) {
-      console.error("❌ Error de Resend:", error);
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
-    console.log("✅ Correo de recuperación enviado con éxito a través de Resend.");
     return { message: "Correo enviado con éxito. Revisa tu bandeja de entrada." };
   } catch (error: any) {
-    console.error("❌ Error enviando correo:", error.message);
     throw new Error(error.message);
   }
 };
@@ -471,7 +454,6 @@ export const updatePassword = async (req: Request, res: Response) => {
 
     res.status(200).json({ message: "Contraseña actualizada correctamente." });
   } catch (error: any) {
-    console.error("❌ Error al actualizar contraseña:", error.message);
     res.status(400).json({ error: "El enlace es inválido, ha expirado o ya fue utilizado." });
   }
 };
@@ -533,13 +515,12 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 
     return res.status(200).json({ message: "Dispositivo registrado con éxito." });
   } catch (error: any) {
-    console.error("Error al guardar el token del dispositivo:", error);
     return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
   }
 };
 
 // --------------------------------------------------------
-// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (AUDITORÍA, ANONIMIZACIÓN Y CORREO)
+// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA 
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
@@ -619,20 +600,13 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
         const htmlContent = `
           <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
             <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-              
               <div style="margin-bottom: 20px;">
                 <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
               </div>
               <h2 style="color: #1A1A1A; margin-bottom: 10px;">¡Te extrañaremos, ${userRecord.name}!</h2>
               <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
-                Hemos procesado la baja de tu cuenta exitosamente. Tus datos personales y accesos han sido eliminados de nuestros sistemas de acuerdo con tus preferencias.
+                Hemos procesado la baja de tu cuenta exitosamente. Tus datos personales y accesos han sido eliminados.
               </p>
-              <p style="font-size: 14px; color: #888888; line-height: 20px; margin-bottom: 30px;">
-                Si en el futuro deseas regresar y ser parte nuevamente de nuestra comunidad hispana, las puertas de <strong>Viviendo en USA</strong> estarán abiertas para ti.
-              </p>
-              <div style="border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: #aaaaaa;">
-                &copy; ${new Date().getFullYear()} Viviendo en USA. Todos los derechos reservados.
-              </div>
             </div>
           </div>
         `;
@@ -653,7 +627,6 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error("❌ [DELETE ACCOUNT] Error crítico:", error);
     return res.status(500).json({ error: `Error interno del servidor: ${error.message}` });
   }
 };

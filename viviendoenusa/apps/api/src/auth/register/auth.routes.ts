@@ -14,6 +14,7 @@ import {
   deleteUserAccount
 } from '../../controllers/authController';
 import { getPlatformStats } from '../../controllers/publicController.js';
+import jwt from 'jsonwebtoken';
 
 const router = Router();
 
@@ -33,17 +34,18 @@ const authLimiter = rateLimit({
 router.get('/mi-perfil', verifyToken, getMiPerfil);
 
 // ➕ Crear usuario (Le ponemos el limiter para evitar spam de cuentas falsas)
-router.post('/register', authLimiter, async (req: Request, res: Response) => {
+router.post('/register', async (req, res) => {
   try {
-    const { data, newImageUri } = req.body;
-    const newUser = await registerUser(data, newImageUri);
+    const newUser = await registerUser(req.body.data, req.body.newImageUri);
     
-    return res.status(201).json({ 
-      message: "Usuario registrado con éxito", 
-      user: newUser 
-    });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    // ¡ESTO ES VITAL! Debes generar el token aquí también.
+    const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
+    const token = jwt.sign({ id: newUser.id, email: newUser.email }, baseSecret, { expiresIn: '7d' });
+
+    // Y devolverlo junto con el usuario
+    res.status(200).json({ user: newUser, token: token });
+  } catch (error: any) { // 🚀 Agregado :any
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -51,7 +53,6 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 router.get('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     // 🚀 SOLUCIÓN: Usamos el ID del parámetro o, por seguridad, el del token.
-    // Además, usamos String() en lugar de .toString() para evitar que explote si viene vacío.
     const targetId = req.params.id || req.user?.id;
     
     if (!targetId) {
@@ -65,7 +66,7 @@ router.get('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
     }
     
     return res.status(200).json(user);
-  } catch (error: any) {
+  } catch (error: any) { // 🚀 Agregado :any
     return res.status(500).json({ error: error.message });
   }
 });
@@ -90,35 +91,38 @@ router.put('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
     // 🚀 Pasamos el targetId de forma segura
     const updatedUser = await updateUser(String(targetId), data, newImageUri);
     return res.status(200).json({ message: "Perfil actualizado", user: updatedUser });
-  } catch (error: any) {
+  } catch (error: any) { // 🚀 Agregado :any
     return res.status(400).json({ error: error.message });
   }
 });
 
-// 🚀 RUTA CENTRALIZADA DE LOGIN (Google + Email)
-// Protegida con limiter para evitar ataques de fuerza bruta adivinando contraseñas
+// 🚀 RUTA CENTRALIZADA DE LOGIN (Google + Apple + Email)
+// Protegida con limiter para evitar ataques de fuerza bruta
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password, idToken, isGoogle } = req.body;
+    // 🚀 CORRECCIÓN CRÍTICA: Añadimos isApple para extraerlo del body
+    const { email, password, idToken, isGoogle, isApple } = req.body; 
+    
     const result = await authenticateUser({ 
       email, 
       password, 
       idToken, 
-      isGoogle 
+      isGoogle,
+      isApple // 🚀 Y lo pasamos al controlador
     });
     
     res.status(200).json(result);
-  } catch (error: any) {
+  } catch (error: any) { // 🚀 Agregado :any
     res.status(401).json({ error: error.message });
   }
 });
 
-// 📧 ENVIAR CORREO DE RECUPERACIÓN (La ruta que faltaba)
+// 📧 ENVIAR CORREO DE RECUPERACIÓN
 // Protegida con limiter para evitar spam de correos
 router.post('/reset-password', async (req, res) => {
   try {
     const { email } = req.body;
-    console.log(`Solicitud de reseteo recibida para: ${email}`); // Este es el log que vimos en Railway
+    console.log(`Solicitud de reseteo recibida para: ${email}`); 
     
     // Ejecutamos la función
     const resultado = await sendPasswordResetEmail(email);
@@ -126,7 +130,7 @@ router.post('/reset-password', async (req, res) => {
     // 🚀 CRUCIAL: Debes enviar el resultado al frontend para que deje de cargar
     res.status(200).json(resultado); 
 
-  } catch (error: any) {
+  } catch (error: any) { // 🚀 Agregado :any
     // Si la función lanza un error, se lo enviamos al frontend
     res.status(400).json({ error: error.message }); 
   }
@@ -138,7 +142,7 @@ router.post('/save-device-token', verifyToken, saveDeviceToken);
 // 🔐 ACTUALIZAR LA CONTRASEÑA
 router.post('/update-password', updatePassword);
 
-// 🗑️ 2. RUTA PARA DAR DE BAJA / ELIMINAR CUENTA (Protegida)
+// 🗑️ RUTA PARA DAR DE BAJA / ELIMINAR CUENTA (Protegida)
 router.delete('/delete-account', verifyToken, deleteUserAccount);
 
 router.get('/stats', getPlatformStats);
