@@ -800,7 +800,7 @@ export default function Header({ title }: { title?: string }) {
               </TouchableOpacity>
             </View>
 
-            <ThemedText style={{ fontSize: 13, marginBottom: 15, lineHeight: 18 }}>
+            <ThemedText style={{ fontSize: 13, marginBottom: 15, color: Colors[localTheme].text, lineHeight: 18 }}>
               Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
             </ThemedText>
 
