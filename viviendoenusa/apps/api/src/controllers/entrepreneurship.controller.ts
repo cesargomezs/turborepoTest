@@ -1,9 +1,10 @@
 import { db } from "../../../../packages/db/src"; 
-import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable, notifications, userDevices } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
+import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable, notifications, userDevices, typeDetail } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
 import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
 import { alias } from "drizzle-orm/pg-core"; 
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import e from "express";
 
 // =====================================================================
 // ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
@@ -244,7 +245,7 @@ export const getEntrepreneurshipById = async (id: string, userId?: string) => {
       .from(entrepreneurship)
       .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id)) 
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .where(eq(entrepreneurship.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
@@ -357,6 +358,7 @@ export const createEntrepreneurship = async (data: any) => {
       lat: lat,
       lng: lng,
       estate: data.estate,
+      approved: true,
       userId: validUserId 
     };
 

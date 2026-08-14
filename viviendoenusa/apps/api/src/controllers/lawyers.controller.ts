@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices } from "../../../../packages/db/src/schema"; 
+import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
@@ -366,6 +366,15 @@ export const createLawyer = async (req: Request, res: Response) => {
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
       const finalEstate = sanitizeText(headerEstate) || 'CA';
 
+      // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
+      if (planSeleccionado === 'cupon') {
+        if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
+        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+        
+        if (!promo) throw new Error("El cupón ingresado no existe.");
+        if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
+      }
+
       const lawyerPayload: any = {
         nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
         area: sanitizeText(data.area) || 'General',
@@ -382,7 +391,7 @@ export const createLawyer = async (req: Request, res: Response) => {
         approved: false,
         estate: finalEstate 
       };
-      
+
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
       if (data.referenceCode && data.paymentMethod) {
@@ -397,7 +406,21 @@ export const createLawyer = async (req: Request, res: Response) => {
           durationDays: 30, 
           status: "pending"
         });
+
       }
+
+      if (planSeleccionado === 'cupon') {
+          await tx.update(promoCodes)
+          .set({
+            isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
+            usedByUserId: data.userId, // Guardamos quién lo usó
+            usedForEntityId: lawyers.id, // Guardamos en qué empresa se usó
+            entityType: 'lawyer',
+            usedAt: new Date() // Guardamos la fecha y hora exacta
+          })
+          .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
+      }
+
 
       return {
          ...newLawyer,

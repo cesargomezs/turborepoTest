@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useState, useEffect, useRef } from 'react'; 
 import { 
-  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, TextInput, Alert, useWindowDimensions, Keyboard, Animated, PanResponder, Dimensions,ActivityIndicator
+  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, TextInput, Alert, useWindowDimensions, Keyboard, Animated, PanResponder, Dimensions, ActivityIndicator
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
@@ -18,6 +18,7 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
 import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
+import { handleUniversalShare } from '../../utils/shareHelper';
 
 // 🚀 IMPORTAMOS LA LISTA DE GROSERÍAS
 import badWordsData from '../../utils/babwords.json';
@@ -47,11 +48,9 @@ const containsBadWords = (text: string): boolean => {
     if (!word) return false;
     const lowerWord = word.toLowerCase();
     
-    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
     const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
     if (exactRegex.test(lowerText)) return true;
 
-    // 2. Atrapa letras repetidas al final para evadir filtros
     const lastChar = lowerWord.slice(-1);
     const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
@@ -113,9 +112,7 @@ const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, 
 };
 
 export default function Header({ title }: { title?: string }) {
-  // 🔐 ESTADO GLOBAL DE AUTENTICACIÓN
   const { user, token, logout } = useAuth(); 
-
   const REAL_USER_ID = user?.id;
 
   const { width } = useWindowDimensions();
@@ -133,6 +130,11 @@ export default function Header({ title }: { title?: string }) {
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false); 
+
+  // 🚀 ESTADOS PARA GENERACIÓN DE CUPONES SADMIN
+  const [showCouponModal, setShowCouponModal] = useState(false);
+  const [generatedCoupon, setGeneratedCoupon] = useState('');
+  const [isGeneratingCoupon, setIsGeneratingCoupon] = useState(false);
 
   // 🚀 ESTADOS PARA ENCUESTA DE ELIMINACIÓN
   const [showDeleteSurveyModal, setShowDeleteSurveyModal] = useState(false);
@@ -342,6 +344,47 @@ export default function Header({ title }: { title?: string }) {
     } catch (error) {}
   };
 
+  // =====================================================================
+  // 🚀 GENERAR Y COMPARTIR CUPÓN VIP (SOLO ADMIN)
+  // =====================================================================
+  const handleGenerateCoupon = async () => {
+    setIsGeneratingCoupon(true);
+    setGeneratedCoupon('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/promo-codes/generate`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        }
+      });
+
+      if (!response.ok) throw new Error("No se pudo generar el cupón");
+
+      const data = await response.json();
+      if(data.success && data.promoCode) {
+        setGeneratedCoupon(data.promoCode.code);
+      }
+    } catch (error) {
+      console.error("Error generando cupón:", error);
+      Alert.alert("Error", "No se pudo generar el cupón. Revisa tu conexión o el backend.");
+    } finally {
+      setIsGeneratingCoupon(false);
+    }
+  };
+
+  const handleShareCoupon = async () => {
+    if (!generatedCoupon) return;
+    await handleUniversalShare({
+      title: '🎟️ Cupón VIP - Viviendo en USA',
+      description: `¡Felicidades! Has recibido un cupón de acceso exclusivo para registrar y publicar tu perfil o negocio gratis en Viviendo en USA.\n\n🔑 Código VIP: ${generatedCoupon}\n\n📝 Instrucciones:\n1. Ingresa a la app y dirígete al registro correspondiente.\n2. Selecciona el 'Plan Coupon'.\n3. Ingresa tu código en la referencia para validación automática.`,
+      phone: '',
+      address: 'Todo USA',
+      zip: '',
+      image: '',
+    });
+  };
+
   const handleSendITSupport = async () => {
     if (!itMessage.trim()) {
       return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
@@ -380,9 +423,6 @@ export default function Header({ title }: { title?: string }) {
     }
   };
 
-  // =====================================================================
-  // 🚀 FLUJO PARA DAR DE BAJA LA CUENTA (ENCUESTA + ELIMINACIÓN)
-  // =====================================================================
   const handleDeleteAccountPress = () => {
     closeSettingsModal();
     setDeleteReason('');
@@ -411,7 +451,7 @@ export default function Header({ title }: { title?: string }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}` 
         },
-        body: JSON.stringify({ reason: finalReason }) // 🚀 Enviamos la razón a la BD
+        body: JSON.stringify({ reason: finalReason }) 
       });
 
       if (!response.ok) {
@@ -426,14 +466,12 @@ export default function Header({ title }: { title?: string }) {
       
       setShowDeleteSurveyModal(false);
       
-      // 🚀 LIMPIEZA DE SESIÓN
       if (typeof logout === 'function') {
         await logout();
       }
       dispatch(setUserMetadata({} as any)); 
       dispatch(toggleAuth()); 
 
-      // 🚀 REDIRECCIÓN A LA PORTADA
       if (Platform.OS === 'web') {
         window.location.replace('/'); 
       } else {
@@ -597,16 +635,16 @@ export default function Header({ title }: { title?: string }) {
                 style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
               >
                 <MaterialCommunityIcons size={22} style={{ color: isDark ? '#4FC3F7' : '#007AFF' , fontWeight: 'bold' }} name="headset" />
-              </TouchableOpacity>
+            </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
-                <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
-                {hasUnread && <View style={styles.unreadBadge} />}
-              </TouchableOpacity>
+            <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
+              <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
+              {hasUnread && <View style={styles.unreadBadge} />}
+            </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => setSettingsModalVisible(true)} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-                <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name="cog" />
-              </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSettingsModalVisible(true)} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+              <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name="cog" />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -615,6 +653,178 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </BlurView>
       
+      {/* 🚀 MODAL PARA GENERAR CUPONES (CENTRADO Y FLOTANTE CON TRANSPARENCIA) */}
+      <Modal visible={showCouponModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowCouponModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isGeneratingCoupon && setShowCouponModal(false)} />
+          
+          <View style={{ width: '90%', maxWidth: 420, borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', padding: 24, zIndex: 10 }}>
+            {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors[localTheme].text }}>Generador de Cupones</ThemedText>
+              <TouchableOpacity onPress={() => setShowCouponModal(false)}>
+                <MaterialCommunityIcons name="close" size={26} color={Colors[localTheme].text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 14, color: isDark ? '#B0BEC5' : '#555', marginBottom: 20, lineHeight: 20 }}>
+              Genera un cupón VIP de un solo uso para que una empresa, abogado o servicio pueda publicarse gratis.
+            </ThemedText>
+
+            {generatedCoupon ? (
+              <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '900', color: '#4CAF50', marginBottom: 8, letterSpacing: 1 }}>¡CUPÓN GENERADO CON ÉXITO!</ThemedText>
+                <TextInput 
+                  value={generatedCoupon} 
+                  editable={false} 
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: '#FF5F6D', padding: 16, borderRadius: 16, fontSize: 24, fontWeight: '900', textAlign: 'center', letterSpacing: 2, borderWidth: 1, borderColor: '#FF5F6D', width: '100%', marginBottom: 15 }}
+                />
+                
+                <TouchableOpacity 
+                  onPress={handleShareCoupon} 
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD', paddingVertical: 14, borderRadius: 16, width: '100%', borderWidth: 1, borderColor: isDark ? 'rgba(79, 195, 247, 0.3)' : '#90CAF9' }}
+                >
+                  <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
+                  <ThemedText style={{ color: isDark ? '#4FC3F7' : '#1976D2', fontWeight: 'bold', marginLeft: 8, fontSize: 14 }}>Compartir Cupón VIP</ThemedText>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ alignItems: 'center', marginBottom: 20, paddingVertical: 10 }}>
+                <MaterialCommunityIcons name="ticket-percent" size={60} color={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'} />
+              </View>
+            )}
+
+            <TouchableOpacity disabled={isGeneratingCoupon} onPress={handleGenerateCoupon} style={{ borderRadius: 16, overflow: 'hidden' }}>
+              <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
+                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>
+                  {isGeneratingCoupon ? "Generando..." : (generatedCoupon ? "Generar Otro Cupón" : "Generar Cupón VIP")}
+                </ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🚀 MODAL DE ENCUESTA PARA ELIMINAR CUENTA (DISEÑO FLOTANTE CENTRADO Y TRANSLÚCIDO) */}
+      <Modal visible={showDeleteSurveyModal} transparent animationType="fade" onRequestClose={() => setShowDeleteSurveyModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isDeletingAccount && setShowDeleteSurveyModal(false)} />
+
+          <View style={{ width: '90%', maxWidth: 425, borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', padding: 24, zIndex: 10 }}>
+            {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors[localTheme].text }}>Eliminar Cuenta</ThemedText>
+              <TouchableOpacity onPress={() => setShowDeleteSurveyModal(false)}>
+                <MaterialCommunityIcons name="close" size={26} color={Colors[localTheme].text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 14, marginBottom: 15, lineHeight: 20 }}>
+              Lamentamos mucho que te vayas. Para ayudarnos a mejorar, ¿podrías decirnos por qué deseas eliminar tu cuenta?
+            </ThemedText>
+
+            <ScrollView style={{ maxHeight: 240, marginBottom: 20 }} showsVerticalScrollIndicator={false}>
+              {deleteReasonsList.map((reason, index) => (
+                <TouchableOpacity 
+                  key={index}
+                  onPress={() => setDeleteReason(reason)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    borderBottomWidth: index === deleteReasonsList.length - 1 ? 0 : 1,
+                    borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <MaterialCommunityIcons 
+                    name={deleteReason === reason ? "radiobox-marked" : "radiobox-blank"} 
+                    size={22} 
+                    color={deleteReason === reason ? '#FF5F6D' : (isDark ? '#666' : '#999')} 
+                  />
+                  <ThemedText style={{ fontSize: 15, marginLeft: 10, color: Colors[localTheme].text, flex: 1 }}>{reason}</ThemedText>
+                </TouchableOpacity>
+              ))}
+
+              {deleteReason === 'Otro' && (
+                <TextInput 
+                  value={customDeleteReason}
+                  onChangeText={setCustomDeleteReason}
+                  placeholder="Escribe tu motivo aquí..."
+                  placeholderTextColor={isDark ? '#666' : '#999'}
+                  multiline
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 12, borderRadius: 16, height: 80, textAlignVertical: 'top', marginTop: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+                />
+              )}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => setShowDeleteSurveyModal(false)}
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+              >
+                <ThemedText style={{ color: Colors[localTheme].text, fontWeight: 'bold' }}>Cancelar</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                disabled={isDeletingAccount} 
+                onPress={executeDelete} 
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center', backgroundColor: '#EF4444', opacity: isDeletingAccount ? 0.6 : 1 }}
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold' }}>Eliminar</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🚀 MODAL PARA SOPORTE TÉCNICO / IT SUPPORT (DISEÑO FLOTANTE CENTRADO Y TRANSLÚCIDO) */}
+      <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSendingIT && setShowITSupportModal(false)} />
+
+          <View style={{ width: '90%', maxWidth: 420, borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', padding: 24, zIndex: 10 }}>
+            {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors[localTheme].text }}>Soporte Técnico / IT</ThemedText>
+              <TouchableOpacity onPress={() => setShowITSupportModal(false)}>
+                <MaterialCommunityIcons name="close" size={26} color={Colors[localTheme].text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, marginBottom: 15, lineHeight: 18 }}>
+              Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
+            </ThemedText>
+
+            <TextInput 
+              value={itMessage}
+              onChangeText={setItMessage}
+              placeholder="¿Qué inconveniente presentas?"
+              placeholderTextColor={isDark ? '#666' : '#999'}
+              multiline
+              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 14, borderRadius: 16, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+            />
+
+            <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
+              <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
+                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>
+                  {isSendingIT ? "Enviando..." : "Enviar a Soporte IT"}
+                </ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+
       {/* 🚀 MODAL DE CONFIGURACIÓN */}
       <Modal visible={settingsModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeSettingsModal}>
         <View style={styles.notifModalOverlay}>
@@ -693,17 +903,19 @@ export default function Header({ title }: { title?: string }) {
                   </View>
                 </View>
 
-                {/* 🚀 BOTÓN DE SOPORTE TÉCNICO / IT SUPPORT */}
-                <TouchableOpacity 
-                  onPress={() => setShowITSupportModal(true)} 
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <MaterialCommunityIcons name="headset" size={22} color="#4FC3F7" style={{ marginRight: 10 }} />
-                    <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Soporte Técnico / IT</ThemedText>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={isDark ? '#B0BEC5' : '#666'} />
-                </TouchableOpacity>
+                {/* 🚀 BOTÓN PARA GENERAR CUPONES (SOLO SADMIN) */}
+                {isSuperAdmin && (
+                  <TouchableOpacity 
+                    onPress={() => { closeSettingsModal(); setShowCouponModal(true); }} 
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="ticket-percent-outline" size={22} color="#FFB300" style={{ marginRight: 10 }} />
+                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Generar Cupón VIP</ThemedText>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={isDark ? '#B0BEC5' : '#666'} />
+                  </TouchableOpacity>
+                )}
 
                 {isSuperAdmin && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16 }}>
@@ -865,118 +1077,6 @@ export default function Header({ title }: { title?: string }) {
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* 🚀 MODAL DE ENCUESTA PARA ELIMINAR CUENTA */}
-      <Modal visible={showDeleteSurveyModal} transparent animationType="fade" onRequestClose={() => setShowDeleteSurveyModal(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
-              <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>Eliminar Cuenta</ThemedText>
-              <TouchableOpacity onPress={() => setShowDeleteSurveyModal(false)}>
-                <MaterialCommunityIcons name="close" size={24} color={Colors[localTheme].text} />
-              </TouchableOpacity>
-            </View>
-
-            <ThemedText style={{ fontSize: 14, color: isDark ? '#B0BEC5' : '#666', marginBottom: 20 }}>
-              Lamentamos mucho que te vayas. Para ayudarnos a mejorar, ¿podrías decirnos por qué deseas eliminar tu cuenta?
-            </ThemedText>
-
-            <ScrollView style={{ maxHeight: 250, marginBottom: 20 }} showsVerticalScrollIndicator={false}>
-              {deleteReasonsList.map((reason, index) => (
-                <TouchableOpacity 
-                  key={index}
-                  onPress={() => setDeleteReason(reason)}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingVertical: 12,
-                    borderBottomWidth: index === deleteReasonsList.length - 1 ? 0 : 1,
-                    borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
-                  }}
-                >
-                  <MaterialCommunityIcons 
-                    name={deleteReason === reason ? "radiobox-marked" : "radiobox-blank"} 
-                    size={22} 
-                    color={deleteReason === reason ? '#FF5F6D' : (isDark ? '#666' : '#999')} 
-                  />
-                  <ThemedText style={{ fontSize: 15, marginLeft: 10, color: Colors[localTheme].text, flex: 1 }}>{reason}</ThemedText>
-                </TouchableOpacity>
-              ))}
-
-              {deleteReason === 'Otro' && (
-                <TextInput 
-                  value={customDeleteReason}
-                  onChangeText={setCustomDeleteReason}
-                  placeholder="Escribe tu motivo aquí..."
-                  placeholderTextColor={isDark ? '#666' : '#999'}
-                  multiline
-                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 12, borderRadius: 12, height: 80, textAlignVertical: 'top', marginTop: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
-                />
-              )}
-            </ScrollView>
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity 
-                onPress={() => setShowDeleteSurveyModal(false)}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
-              >
-                <ThemedText style={{ color: Colors[localTheme].text, fontWeight: 'bold' }}>Cancelar</ThemedText>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                disabled={isDeletingAccount} 
-                onPress={executeDelete} 
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#EF4444', opacity: isDeletingAccount ? 0.6 : 1 }}
-              >
-                {isDeletingAccount ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold' }}>Eliminar</ThemedText>
-                )}
-              </TouchableOpacity>
-            </View>
-
-          </View>
-        </View>
-      </Modal>
-
-      {/* 🚀 MODAL PARA ESCRIBIR EL MENSAJE DE IT SUPPORT */}
-      <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
-              <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>Soporte Técnico / IT</ThemedText>
-              <TouchableOpacity onPress={() => setShowITSupportModal(false)}>
-                <MaterialCommunityIcons name="close" size={24} color={Colors[localTheme].text} />
-              </TouchableOpacity>
-            </View>
-
-            <ThemedText style={{ fontSize: 13, color: isDark ? '#B0BEC5' : '#666', marginBottom: 15 }}>
-              Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
-            </ThemedText>
-
-            <TextInput 
-              value={itMessage}
-              onChangeText={setItMessage}
-              placeholder="¿Qué inconveniente presentas?"
-              placeholderTextColor={isDark ? '#666' : '#999'}
-              multiline
-              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 12, borderRadius: 12, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
-            />
-
-            <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 14, overflow: 'hidden' }}>
-              <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
-                <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>
-                  {isSendingIT ? "Enviando..." : "Enviar a Soporte IT"}
-                </ThemedText>
-              </LinearGradient>
-            </TouchableOpacity>
-
-          </View>
         </View>
       </Modal>
 

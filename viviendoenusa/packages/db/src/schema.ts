@@ -200,6 +200,7 @@ import {
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
     estate: text("estate"),
+    approved: boolean("approved").default(true),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
     
@@ -405,6 +406,20 @@ export const accountDeletionSurveys = pgTable("account_deletion_surveys", {
   // El motivo de la salida ("No entiendo cómo usar la app", etc. o el texto manual)
   reason: text("reason").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// 20. TABLA: promo_codes (Tener un registro de los cupones asignado a los usuarios, para promociones y descuentos)
+
+export const promoCodes = pgTable("promo_codes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(), // Ej: VIP-CES-9X4A
+  isUsed: boolean("is_used").default(false).notNull(), // Para saber si ya lo gastaron
+  // 🕵️ Campos de RASTREO (Trazabilidad)
+  usedByUserId: uuid("used_by_user_id").references(() => users.id), // Quién lo canjeó
+  usedForEntityId: uuid("used_for_entity_id"), // ID de la empresa, abogado, etc.
+  entityType: text("entity_type"), // Guarda 'company', 'lawyer', etc.
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  usedAt: timestamp("used_at"), // Cuándo lo canjearon
 });
 
 

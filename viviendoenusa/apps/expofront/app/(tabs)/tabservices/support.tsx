@@ -479,12 +479,24 @@ export default function SupportScreen() {
     });
   };
 
-  useEffect(() => { if (isAdminMode) { fetchAllPendingSupports(); } else { if (zipCode.length !== 5) { setPendingStores([]); } else { fetchSupportData(zipCode); } } }, [isAdminMode]);
+  // 🚀 ACTUALIZADO: Si el admin activa el modo, trae los pendientes globales
+  useEffect(() => { 
+    if (isAdminMode) { 
+      fetchAllPendingSupports(); 
+    } else { 
+      if (zipCode.length !== 5) { 
+        setPendingStores([]); 
+      } else { 
+        fetchSupportData(zipCode); 
+      } 
+    } 
+  }, [isAdminMode]);
 
+  // 🚀 ACTUALIZADO: Fetch global para el administrador
   const fetchAllPendingSupports = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`, {
+      const res = await fetch(`${API_STORES_URL}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
       });
@@ -651,6 +663,12 @@ export default function SupportScreen() {
 
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden' as 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : DynamicColors.border }}>
+        
+        {/* 🚀 AÑADIDO: EFECTO OFUSCAR PARA PENDIENTES */}
+        {isPending && !isAdminMode && (
+          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
+        )}
+        
         {isPending && isOwner && ( <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" /><ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>{t.genericlabel.labelaprovaladmin}</ThemedText></View> )}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
           <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}><ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText></View>
@@ -787,7 +805,6 @@ export default function SupportScreen() {
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} /><ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.genericlabel.labelshareexper}</ThemedText></LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
-                    {/* 🚀 AQUI SE ACTUALIZO EL RENDERIZADO DE LAS REVIEWS PARA MOSTRAR FOTO Y NOMBRE */}
                     {selectedStore?.reviews?.map((r: any) => (
                        <View key={r.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -826,7 +843,6 @@ export default function SupportScreen() {
                     if (!res.ok) throw new Error();
                     const fromDB = await res.json();
                     
-                    // 🚀 AQUÍ ESTÁ EL AJUSTE: Atrapamos image, name y displayTime devueltos por el backend
                     const newReviewFormatted = { 
                       id: fromDB.id || Date.now().toString(), 
                       stars: Number(ratingNum), 
@@ -868,7 +884,12 @@ export default function SupportScreen() {
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}><MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} /></TouchableOpacity>
-                  <TouchableOpacity onLongPress={() => { setIsAdminMode(isAdmin); }}><MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} /></TouchableOpacity>
+                  
+                  {/* 🚀 BOTÓN ADMIN PRENDER/APAGAR AÑADIDO (COMO EN LAS OTRAS SECCIONES) */}
+                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
+                    <MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
+                  </TouchableOpacity>
+
                 </View>
               </View>
 
@@ -890,11 +911,10 @@ export default function SupportScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                   
-                  {/* 🚀 CATEGORÍAS ADAPTATIVAS: FlexWrap para Web, Scroll para Móvil */}
                   <View style={{ marginBottom: 15 }}>
                     {isWeb ? (
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                        {CATEGORIES_LIST.map((area, index) => {
+                        {CATEGORIES_LIST.map((area: string, index: number) => {
                            const iconName = ICONS_ARRAY[index] || 'heart'; const isActive = selectedCategoryIdx === index;
                            return (
                             <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -905,7 +925,7 @@ export default function SupportScreen() {
                       </View>
                     ) : (
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 2, paddingHorizontal: 2, flexDirection: 'row', gap: 8 }}>
-                        {CATEGORIES_LIST.map((area, index) => {
+                        {CATEGORIES_LIST.map((area: string, index: number) => {
                            const iconName = ICONS_ARRAY[index] || 'heart'; const isActive = selectedCategoryIdx === index;
                            return (
                             <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -941,7 +961,7 @@ export default function SupportScreen() {
                     </TouchableOpacity>
                     <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{t.genericlabel.labelcategorys}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
-                      {CATEGORIES_LIST.map((area, index) => {
+                      {CATEGORIES_LIST.map((area: string, index: number) => {
                         const iconName = ICONS_ARRAY[index] || 'heart'; const isActive = selectedCategoryIdx === index;
                         return (
                           <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>

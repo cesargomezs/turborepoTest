@@ -395,31 +395,6 @@ export default function EntrepreneurshipScreen() {
     }
   }, [showSavedOnly]);
 
-  const fetchAllPending = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}?userId=${userMetadata?.id || ''}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}` }
-      });
-      if (res.status === 401) { router.replace('/'); return; }
-
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        const mappedData: Emprendimiento[] = data.map((item: any) => ({
-          ...item,
-          name: item.nameEntrepren || 'Sin nombre',
-          address: item.addressentr || item.address || '', 
-          categoryId: Number(item.categoryId) || 0,
-          description: item.descriptionEntrepren || '',
-          reviews: Array.isArray(item.reviews) ? item.reviews : [],
-          status: item.approved === false ? 'pending' : 'approved'
-        }));
-        setPendingItems(mappedData);
-      }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
-
   const handleSearch = async (forcedCategoryIdx?: number) => {
     if (!isZipValid) return;
     if (showSavedOnly) return; 
@@ -652,7 +627,7 @@ export default function EntrepreneurshipScreen() {
       const savedFromDB = await response.json();
       if (!response.ok) throw new Error(savedFromDB.error || "Error al guardar");
 
-      setPendingItems(prev => [{
+      const newEntryLocal = {
         id: savedFromDB.id, 
         name: savedFromDB.nameEntrepren, 
         address: savedFromDB.addressEntrepren || formAddress.trim(), 
@@ -670,16 +645,17 @@ export default function EntrepreneurshipScreen() {
         reviews: [],
         contactMethod: savedFromDB.contactMethod, 
         zip: savedFromDB.zip, 
-        status: 'pending',
+        status: 'approved',
         estate:savedFromDB.estate
-      } as Emprendimiento, ...prev]);
+      } as Emprendimiento;
       
+      setLocalData(prev => [newEntryLocal, ...prev]);
       setFormName(''); setFormAddress(''); setFormDesc(''); setFormPhone(''); setFormZip(''); setFormPromo(''); setFormImage(null); 
       setFormCategoryIdx(1); setCountryIdx(0); setFormContactMethod('whatsapp');
       setIsSubmitting(false); setFormVisible(false);
       
       if (!zipCode || zipCode.length < 5) { setZipCode(payload.zip); handleSearch(); }
-      triggerAlert('¡Éxito!', 'Tu emprendimiento fue enviado y está pendiente de aprobación.');
+      triggerAlert('¡Éxito!', 'Tu emprendimiento ha sido publicado y ya es visible en los resultados.');
     } catch (err: any) {
       triggerAlert("Error", err.message || "Error conectando con el servidor. Revisa tu conexión.");
       setIsSubmitting(false);
@@ -698,8 +674,10 @@ export default function EntrepreneurshipScreen() {
       });
       if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
+
       setPendingItems(pendingItems.filter(s => s.id !== item.id));
       Alert.alert("Aprobado", "Emprendimiento activado.");
+      
       if (zipCode.length === 5) handleSearch();
     } catch (error) { Alert.alert("Error", "No se pudo aprobar."); }
   };
@@ -898,7 +876,7 @@ export default function EntrepreneurshipScreen() {
                     <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6, marginRight: 8 }} />
                   </TouchableOpacity>
                   
-                  <TouchableOpacity onLongPress={() => { const newAdminMode = isAdmin; setIsAdminMode(newAdminMode); if (newAdminMode) fetchAllPending(); else { setPendingItems([]); if(zipCode.length === 5) handleSearch(); } }}>
+                  <TouchableOpacity >
                     <MaterialCommunityIcons name="lightbulb-multiple-outline" size={40} color={isAdminMode ? DC.accent : DC.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 2}} />
                   </TouchableOpacity>
                 </View>

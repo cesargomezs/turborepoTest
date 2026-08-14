@@ -27,7 +27,6 @@ import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from 'app/src/context/ThemeContext';
-//import { handleUniversalShare } from '@/utils/shareHelper';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/lawyers';
@@ -63,11 +62,9 @@ const containsBadWords = (text: string): boolean => {
     if (!word) return false;
     const lowerWord = word.toLowerCase();
     
-    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're' (reputa, reputas)
     const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
     if (exactRegex.test(lowerText)) return true;
 
-    // 2. Atrapa letras repetidas al final para evadir filtros (putassss, reputaaaa)
     const lastChar = lowerWord.slice(-1);
     const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
@@ -225,7 +222,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
       return Alert.alert((t.lawyerstab as any)?.alertmessage || 'Completa todos los campos');
     }
 
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS 🚀
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
     if (containsBadWords(contentToValidate)) {
       return Alert.alert(
@@ -499,8 +495,6 @@ export default function LawyersScreen() {
   const { t } = useTranslation();
 
 
-  // 🚀 1. NUEVO: Extraemos el rol y creamos la validación
-  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
 
@@ -600,7 +594,6 @@ export default function LawyersScreen() {
     const [rating, setRating] = useState(5);
     const [comment, setComment] = useState('');
     const handlePrePublish = () => {
-      // Usamos la nueva función containsBadWords
       if (containsBadWords(comment)) {
         const errorMsg = (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado.";
         Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Aviso", errorMsg);
@@ -624,7 +617,11 @@ export default function LawyersScreen() {
         </View>
         <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
           <TextInput 
-            value={comment} onChangeText={setComment} 
+            value={comment} 
+            onChangeText={(text) => {
+              const formattedText = text.length > 0 ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+              setComment(formattedText);
+            }} 
             placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder || 'Escribe tu opinión...'} 
             placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
             multiline autoCapitalize="sentences"
@@ -674,6 +671,7 @@ export default function LawyersScreen() {
           premiumPlan: item.premiumPlan, 
           couponCode: item.couponCode
         }));
+        
         const approved = mappedData.filter(s => s.status === 'approved');
 
         setAllLawyers(approved);
@@ -716,15 +714,14 @@ export default function LawyersScreen() {
     
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
-    const lawyers = await fetchLawyersData(targetZip);
-    setResults(applyLocalFilters(lawyers, forcedArea || selectedArea, lat, lng));
+    await fetchLawyersData(targetZip);
     setMapKey(k => k + 1);
   };
 
   const fetchAllPendingLawyers = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`, {
+      const res = await fetch(`${API_BASE_URL}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
       }); 
@@ -819,7 +816,6 @@ export default function LawyersScreen() {
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800);
   };
 
-  // 🚀 RESTAURADO AL CÓDIGO ORIGINAL QUE TIENES EN JOBS
   const handleShare = async (lawyer: any) => {
     await handleUniversalShare({
       title: ((t.lawyerstab as any)?.labelawyer || '') + lawyer.name,
@@ -918,7 +914,7 @@ export default function LawyersScreen() {
   }, []);
 
   useEffect(() => {
-    if (!isFilteredByMap && allLawyers.length > 0) {
+    if (!isFilteredByMap) {
       const lat = userLocation ? userLocation.latitude : 34.0934;
       const lng = userLocation ? userLocation.longitude : -117.5847;
       const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng);
@@ -1039,6 +1035,10 @@ export default function LawyersScreen() {
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden' as 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : Colors.border }}>
         
+        {isPending && !isAdminMode && (
+          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
+        )}
+
         {isPending && isOwner && (
           <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
@@ -1371,8 +1371,8 @@ export default function LawyersScreen() {
                             stars: Number(ratingNum), 
                             comment: commentStr,
                             name: fromDB.name || 'Yo', 
-                            image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', // 🚀 Faltaba atrapar la foto
-                            displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), // 🚀 Faltaba atrapar la hora
+                            image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', 
+                            displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
                             userId: currentUserId
                           };
 
@@ -1437,7 +1437,7 @@ export default function LawyersScreen() {
                   <TouchableOpacity onPress={() => { setResults([]); setLocalData([]); setPendingLawyers([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => { setIsAdminMode(isAdmin); }}>
+                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
                     <MaterialCommunityIcons name="scale-balance" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>

@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices } from "../../../../packages/db/src/schema"; 
+import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
@@ -347,6 +347,15 @@ export const createStore = async (data: any) => {
 
     // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
     const { lat, lng } = getCoordsFromZip(data.zip || '');
+    const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+    // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
+    if (planSeleccionado === 'cupon') {
+      if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
+      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+      
+      if (!promo) throw new Error("El cupón ingresado no existe.");
+      if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
+    }
 
     // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdStoreResult = await db.transaction(async (tx) => {
@@ -366,7 +375,10 @@ export const createStore = async (data: any) => {
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
         userId: validUserId, 
-        approved: false 
+        approved: false,
+        createdAt: new Date(),
+        premiumPlan: planSeleccionado
+        
       };
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
@@ -384,6 +396,20 @@ export const createStore = async (data: any) => {
           durationDays: 30, 
           status: "pending"
         });
+      }
+
+      if (planSeleccionado === 'cupon') {
+
+        await tx.update(promoCodes)
+        .set({
+          isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
+          usedByUserId: data.userId, // Guardamos quién lo usó
+          usedForEntityId: stores.id, // Guardamos en qué empresa se usó
+          entityType: 'store',
+          usedAt: new Date() // Guardamos la fecha y hora exacta
+        })
+        .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
+        
       }
 
       return {

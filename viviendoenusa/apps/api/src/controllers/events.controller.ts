@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { events, users, notifications, payments, tariffs, typeDetail, userDevices } from "../../../../packages/db/src/schema"; 
+import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
@@ -278,6 +278,16 @@ export const createEvent = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un evento.");
     }
 
+    const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+    // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
+    if (planSeleccionado === 'cupon') {
+      if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
+      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+      
+      if (!promo) throw new Error("El cupón ingresado no existe.");
+      if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
+    }
+
     // 🚀 Coordenadas sincrónicas locales
     const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
 
@@ -290,7 +300,7 @@ export const createEvent = async (data: any) => {
     const createdEventResult = await db.transaction(async (tx) => {
 
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
-      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+      
 
         const payload: any = {
           title: cleanData.title || 'Sin título',
@@ -333,6 +343,18 @@ export const createEvent = async (data: any) => {
               timepost_end: eventDate,
               status: "pending"
             });
+        }
+
+        if (planSeleccionado === 'cupon') {
+          await tx.update(promoCodes)
+          .set({
+            isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
+            usedByUserId: data.userId, // Guardamos quién lo usó
+            usedForEntityId: newEvent.id, // Guardamos en qué empresa se usó
+            entityType: 'events',
+            usedAt: new Date() // Guardamos la fecha y hora exacta
+          })
+          .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
         }
 
         return {

@@ -59,11 +59,7 @@ export default function JobsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const usCitiesData: Record<string, string[]> = t.jobstab.statesCity; /*{
-    "California": ["Anaheim", "Bakersfield", "Chino", "Chino Hills", "Corona", "Eastvale", "El Monte", "Fontana", "Fullerton", "Hesperia", "Irvine", "Jurupa Valley", "Long Beach", "Los Angeles", "Moreno Valley", "Ontario", "Pomona", "Rancho Cucamonga", "Rialto", "Riverside", "San Bernardino", "San Diego", "Santa Ana", "Upland", "Victorville"],
-    "Texas": ["Austin", "Dallas", "El Paso", "Fort Worth", "Houston", "San Antonio"],
-    "Florida": ["Jacksonville", "Miami", "Orlando", "Tampa"]
-  };*/
+  const usCitiesData: Record<string, string[]> = t.jobstab.statesCity; 
   const STATES = Object.keys(usCitiesData);
   
   const paramsGlobal = useLocalSearchParams();
@@ -76,8 +72,8 @@ export default function JobsScreen() {
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
-// 🚀 1. NUEVO: Extraemos el rol y creamos la validación
-  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
+
+  // 🚀 Extraemos el rol y creamos la validación
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
 
@@ -254,8 +250,13 @@ export default function JobsScreen() {
     } catch (e) { console.error("Error al obtener pendientes de admin", e); }
   };
 
+  // 🚀 EFFECT PARA CONTROLAR EL ADMIN MODE (LIMPIA LA LISTA SI SE APAGA)
   useEffect(() => {
-    if (isAdminMode) fetchPendingCompaniesForAdmin();
+    if (isAdminMode) {
+      fetchPendingCompaniesForAdmin();
+    } else {
+      setPendingCompanies([]); 
+    }
   }, [isAdminMode]);
 
   useEffect(() => {
@@ -510,7 +511,6 @@ export default function JobsScreen() {
       return;
     }
     
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN EL NOMBRE DE LA EMPRESA
     if (containsBadWords(newCompanyForm.name)) {
       triggerAlert(
         t.communitytab?.textInappropriateTittle || "Atención", 
@@ -618,7 +618,6 @@ export default function JobsScreen() {
       return;
     }
     
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN VACANTES
     const contentToValidate = `${newJob.title} ${newJob.description} ${newJob.city}`;
     if (containsBadWords(contentToValidate)) {
       triggerAlert(
@@ -692,9 +691,10 @@ export default function JobsScreen() {
       if (res.status === 401) { router.replace('/'); return; }
       if (!res.ok) throw new Error();
       
+      setPendingCompanies(prev => prev.filter(c => c.id !== id));
+      setJobs(prev => prev.map(j => j.companyId === id ? { ...j, isCompanyVerified: true } : j));
+      
       triggerAlert("Aprobado", "Empresa verificada y suscripción Premium activada.");
-      fetchPendingCompaniesForAdmin();
-      fetchJobsData();
     } catch (e) { triggerAlert("Error", "No se pudo aprobar la empresa."); }
   };
 
@@ -707,8 +707,8 @@ export default function JobsScreen() {
       if (res.status === 401) { router.replace('/'); return; }
       if (!res.ok) throw new Error();
 
+      setPendingCompanies(prev => prev.filter(c => c.id !== id));
       triggerAlert("Rechazado", "El registro de la empresa ha sido eliminado.");
-      fetchPendingCompaniesForAdmin();
     } catch (e) { triggerAlert("Error", "No se pudo eliminar la empresa."); }
   };
 
@@ -742,7 +742,6 @@ export default function JobsScreen() {
   const handleSubmitReview = async () => {
     if (!reviewForm.text.trim() || reviewForm.rating === 0) return triggerAlert("Incompleto", "Ingresa estrellas y un comentario.");
     
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN RESEÑAS
     if (containsBadWords(reviewForm.text)) {
       triggerAlert(t.communitytab?.textInappropriateTittle || "Error", t.communitytab?.textInappropriateDescription || "Comentario inapropiado detectado.");
       return;
@@ -776,7 +775,6 @@ export default function JobsScreen() {
 
       const savedReview = await res.json();
       
-      // 🚀 AQUÍ ESTÁ EL AJUSTE: Atrapamos image, userName y displayTime devueltos por el backend
       const newReviewFormatted = { 
           id: savedReview.id || Date.now(), 
           text: savedReview.comment || reviewForm.text, 
@@ -805,7 +803,7 @@ export default function JobsScreen() {
       setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false });
       triggerAlert("¡Gracias!", "Tu reseña ha sido publicada.");
     } catch (e: any) { triggerAlert("Aviso", e.message); }
-};
+  };
 
   const filteredJobs = useMemo(() => {
     const filtered = jobs.filter(job => {
@@ -856,45 +854,89 @@ export default function JobsScreen() {
       : [];
   const activeCount = companyJobs.filter(j => j.isOpen).length;
 
+  // 🚀 DISEÑO DE TARJETA ACTUALIZADO IGUAL A ABOGADOS
   const PendingCompanyItem = ({ comp }: { comp: any }) => {
     const [selectedMonths, setSelectedMonths] = useState(1);
+    
+    // Fondo sólido como en la tarjeta principal de abogados
+    const cardBgColor = isDark ? '#1E1E1E' : '#FFFFFF';
+
     return (
-        <View style={{ marginBottom: 15, borderRadius: 24, overflow: 'hidden', borderWidth: 1, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: '#FFB74D', padding: 15 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                {comp.logoUrl ? (
-                    <Image source={{ uri: comp.logoUrl }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: 8 }} />
-                ) : (
-                    <MaterialCommunityIcons name="domain" size={26} color="#FFB74D" style={{ marginRight: 8 }}/>
-                )}
-                <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{comp.name}</ThemedText>
+      <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: '#FFB74D' }}>
+        
+        {/* Banner amarillo superior */}
+        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
+          <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>En revisión. Será publicado pronto.</ThemedText>
+        </View>
+
+        {/* Fila del Plan y Nuevo */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <View style={{ backgroundColor: planStyles[comp.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || DynamicColors.inputBg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+            <ThemedText style={{ color: planStyles[comp.premiumPlan as keyof typeof planStyles]?.selected || '#FF5F6D', fontSize: 11, fontWeight: '900' }}>
+              {`PLAN ${comp.premiumPlan?.toUpperCase() || 'BASIC'}`}
+            </ThemedText>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
+            <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
+            <ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>Nuevo</ThemedText>
+          </View>
+        </View>
+
+        {/* Imagen Cabecera (Logo) */}
+        <View style={{ width: '100%', height: isLargeWeb ? 200 : 140, position: 'relative' }}>
+          {comp.logoUrl ? (
+            <Image source={{ uri: comp.logoUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }]}>
+              <MaterialCommunityIcons name="domain" size={50} color={DynamicColors.subtext} />
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                    <ThemedText style={{ fontSize: 11, color: '#FFB74D', fontWeight: 'bold' }}>PLAN: {comp.premiumPlan?.toUpperCase()}</ThemedText>
-                </View>
-            </View>
-            {comp.ein && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext }}>EIN/Tax ID: {comp.ein}</ThemedText>}
-            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginTop: 2 }}>{t.jobstab.contact} {comp.phoneCode} {comp.phone}</ThemedText>
-            
-            <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.12)', padding: 10, borderRadius: 12, marginVertical: 12, borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.4)' }}>
-                <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', textAlign: 'center' }}>
-                    Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{comp.referenceCode || 'N/A'}</ThemedText> ({comp.paymentMethod || 'Zelle'})
-                </ThemedText>
+          )}
+        </View>
+
+        {/* Contenido principal */}
+        <View style={{ padding: 15, paddingBottom: 15 }}>
+          <ThemedText style={{ fontWeight: '900', fontSize: 20, color: DynamicColors.text }}>{comp.name}</ThemedText>
+          
+          {comp.ein && (
+            <ThemedText style={{ fontSize: 13, color: '#FF5F6D', fontWeight: 'bold', marginTop: 4 }}>
+              EIN/Tax ID: {comp.ein}
+            </ThemedText>
+          )}
+          
+          <ThemedText style={{ fontSize: 14, opacity: 0.9, marginTop: 6, color: DynamicColors.text }}>
+            {t.jobstab.contact} {comp.phoneCode} {comp.phone}
+          </ThemedText>
+
+          {/* Controles de Administrador */}
+          <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
+            <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
+               <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
+               <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
+                  Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{comp.referenceCode || 'N/A'}</ThemedText> ({comp.paymentMethod || 'Pago'})
+               </ThemedText>
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-                {[1, 3, 6, 12].map(m => (
-                    <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
-                        <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m} M</ThemedText>
-                    </TouchableOpacity>
-                ))}
+              {[1, 3, 6, 12].map(m => (
+                <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
+                   <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
+                </TouchableOpacity>
+              ))}
             </View>
             
             <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity onPress={() => handleRejectCompany(comp.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText></TouchableOpacity>
-                <TouchableOpacity onPress={() => handleApproveCompany(comp.id, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}><ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Activar Plan</ThemedText></TouchableOpacity>
+              <TouchableOpacity onPress={() => handleRejectCompany(comp.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                <ThemedText style={{color:'#FFF', fontWeight:'bold', fontSize: 14}}>{(t.genericbtn as any)?.rejectbtn || "Rechazar"}</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleApproveCompany(comp.id, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                <ThemedText style={{color:'#FFF', fontWeight:'bold', fontSize: 14}}>{(t.genericbtn as any)?.aprovedbtn || "Aprobar"}</ThemedText>
+              </TouchableOpacity>
             </View>
+          </View>
         </View>
+
+      </View>
     );
   };
 
@@ -908,11 +950,9 @@ export default function JobsScreen() {
             <View style={styles.cardContent}>
               <View style={[styles.headerRow, { marginBottom: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
                 
-                {/* 🚀 Espacio invisible a la izquierda para balancear visualmente y centrar perfecto */}
-                <View style={{ width: 70 }} />
+                <View style={{ width: 45 }} />
 
-                {/* 🚀 Contenedor centrado para los botones de Disponible / No Disp */}
-                <View style={{ flex: 1, alignItems: 'center' }}>
+                <View style={{ flex: 1, alignItems: 'center'}}>
                     <View style={{ flexDirection: 'row', backgroundColor: DynamicColors.inputBg, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: DynamicColors.border }}>
                         <TouchableOpacity onPress={() => setAvailabilityFilter('open')} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: availabilityFilter === 'open' ? DynamicColors.accent : 'transparent' }}>
                             <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: availabilityFilter === 'open' ? '#FFF' : DynamicColors.subtext }}>{jobstabData.statusBottonModalDis || 'Disponible'}</ThemedText>
@@ -923,13 +963,13 @@ export default function JobsScreen() {
                     </View>
                 </View>
 
-                {/* 🚀 Botón de Admin y Guardados (Fijo a la derecha para mantener simetría) */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: -5, width: 70 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: -10, width: 88 }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)} style={{ padding: 0 }}>
-                      <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DynamicColors.accent : DynamicColors.text} style={{opacity: showSavedOnly ? 1 : 0.6}}/>
+                      <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={25} color={showSavedOnly ? DynamicColors.accent : DynamicColors.text} style={{opacity: showSavedOnly ? 1 : 0.6}}/>
                   </TouchableOpacity>
-                  <TouchableOpacity onLongPress={() => setIsAdminMode(isAdmin)} style={{ padding: 0 }}>
-                      <MaterialCommunityIcons name="briefcase-search" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.3}}/>
+                  {/* 🚀 BOTÓN ADMIN ACTUALIZADO */}
+                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }} style={{ padding: 0 }}>
+                      <MaterialCommunityIcons name="briefcase-search" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -969,11 +1009,11 @@ export default function JobsScreen() {
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
                     {isAdminMode && pendingCompanies.length > 0 && (
-                        <View style={{ backgroundColor: 'rgba(255,255,0,0.06)', padding: 15, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#FFD700' }}>
-                        <ThemedText style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: 12 }}>Empresas por Verificar ({pendingCompanies.length})</ThemedText>
-                        {pendingCompanies.map(comp => (
-                            <PendingCompanyItem key={comp.id} comp={comp} />
-                        ))}
+                        <View style={{ marginBottom: 20 }}>
+                            <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 12 }}>Empresas por Verificar ({pendingCompanies.length})</ThemedText>
+                            {pendingCompanies.map(comp => (
+                                <PendingCompanyItem key={comp.id} comp={comp} />
+                            ))}
                         </View>
                     )}
 

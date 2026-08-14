@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { companies, users, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
+import { companies, users, payments, notifications, tariffs, typeDetail, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 
@@ -13,6 +13,33 @@ const TEMP_USER_ID = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA EMPRESAS
+const sendTelegramAlert = async (companyName: string, refCode: string, method: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) {
+    console.warn("⚠️ Credenciales de Telegram no configuradas.");
+    return;
+  }
+
+  const message = `🏢 *NUEVA EMPRESA REGISTRADA*\n\n*Nombre:* ${companyName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
 };
 
 // 💰 EXTRAE LOS 3 PRECIOS DE LA BASE DE DATOS
@@ -114,7 +141,7 @@ export const getCompanyById = async (id: string) => {
 
 export const createCompany = async (data: any) => {
   try {
-    return await db.transaction(async (tx) => {
+    const createdCompanyResult = await db.transaction(async (tx) => {
       let finalLogoUrl = sanitizeText(data.logoUrl) || '';
 
       if (data.logoBase64) {
@@ -140,6 +167,19 @@ export const createCompany = async (data: any) => {
       // 🚀 Asignamos el plan seleccionado por el usuario
       const selectedPlan = sanitizeText(data.premiumPlan) || 'basic';
 
+      // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
+      if (selectedPlan === 'cupon') {
+        if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
+        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+        
+        if (!promo) throw new Error("El cupón ingresado no existe.");
+        if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
+
+      }
+      
+
+      
+      
       const companyPayload: any = {
         userId: sanitizeText(data.userId) || TEMP_USER_ID,
         name: sanitizeText(data.name) || 'Empresa Sin Nombre',
@@ -175,12 +215,36 @@ export const createCompany = async (data: any) => {
         });
       }
 
+      if (selectedPlan === 'cupon') {
+        await tx.update(promoCodes)
+        .set({
+          isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
+          usedByUserId: data.userId, // Guardamos quién lo usó
+          usedForEntityId: newCompany.id, // Guardamos en qué empresa se usó
+          entityType: 'company',
+          usedAt: new Date() // Guardamos la fecha y hora exacta
+        })
+        .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
+      }
+
       return {
          ...newCompany,
          referenceCode: data.referenceCode,
          paymentMethod: data.paymentMethod
       };
     });
+
+      // 🚀 NUEVO: DISPARA LA ALERTA A TELEGRAM
+      if (createdCompanyResult) {
+        sendTelegramAlert(
+          createdCompanyResult.name,
+          createdCompanyResult.referenceCode || 'N/A',
+          createdCompanyResult.paymentMethod || 'N/A'
+        ).catch(e => console.log("Notificación de Telegram falló", e));
+      }
+
+      return createdCompanyResult;
+
   } catch (error: any) { 
     if (error.code === '23505' || error.message.includes('unique constraint')) {
        throw new Error("Ya existe una empresa registrada con este EIN o referencia de pago duplicada.");

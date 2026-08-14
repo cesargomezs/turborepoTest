@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src"; 
-import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail } from "../../../../packages/db/src/schema"; 
+import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, ConsoleLogWriter } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 import NodeGeocoder from 'node-geocoder';
@@ -314,11 +314,20 @@ export const createSupport = async (data: any) => {
       cleanImage = cleanImage.replace('support/', '');
     }
 
+    const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+    // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
+    if (planSeleccionado === 'cupon') {
+      if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
+      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+      
+      if (!promo) throw new Error("El cupón ingresado no existe.");
+      if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
+    }
+
     // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdSupportResult = await db.transaction(async (tx) => {
       
       const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
-      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
 
       const supportPayload: any = {
         nameSupp: sanitizeText(data.nameSupp || data.name) || 'Sin nombre',
@@ -352,6 +361,18 @@ export const createSupport = async (data: any) => {
           durationDays: 30, 
           status: "pending"
         });
+      }
+
+      if (planSeleccionado === 'cupon') {
+        await tx.update(promoCodes)
+        .set({
+          isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
+          usedByUserId: data.userId, // Guardamos quién lo usó
+          usedForEntityId: support.id, // Guardamos en qué empresa se usó
+          entityType: 'support', // Guardamos el tipo de entidad
+          usedAt: new Date() // Guardamos la fecha y hora exacta
+        })
+        .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
       }
 
       return {

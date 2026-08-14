@@ -203,15 +203,12 @@ export default function StoresScreen() {
 
   const mapRef = useRef<MapView>(null); 
   const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
-  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+  const userToken = userMetadata?.token || userMetadata?.accessToken;
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
-// 🚀 1. NUEVO: Extraemos el rol y creamos la validación
-  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
+
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
 
-
-  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
     if (!userToken) {
       router.replace('/');
@@ -497,7 +494,8 @@ export default function StoresScreen() {
   const fetchAllPendingStores = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`, {
+      // 🚀 CAMBIO: Quitamos el userId para traer TODOS los negocios
+      const res = await fetch(`${API_STORES_URL}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}` }
       }); 
@@ -825,7 +823,7 @@ export default function StoresScreen() {
     }
   };
 
-  const StoreCard = ({ store, renderAdminControls }: { store: any, renderAdminControls?: any }) => {
+  const StoreCard = ({ store, renderAdminControls, isAdminMode }: { store: any, renderAdminControls?: any, isAdminMode?: boolean }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
     const isPending = store.status === 'pending';
@@ -853,6 +851,11 @@ export default function StoresScreen() {
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : DynamicColors.border }}>
         
+        {/* 🚀 AQUÍ ESTÁ EL EFECTO DE OFUSCAR PARA NEGOCIOS PENDIENTES */}
+        {isPending && !isAdminMode && (
+          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
+        )}
+
         {isPending && isOwner && (
           <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
@@ -931,13 +934,11 @@ export default function StoresScreen() {
     );
   };
 
-  // --- COMPONENTE: FORMULARIO DE RESEÑA ---
-const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
+  const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 
   const handlePrePublish = () => {
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN LA RESEÑA
     if (containsBadWords(comment)) {
       const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
       if (Platform.OS === 'web') { window.alert(errorMsg); } 
@@ -1038,7 +1039,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
       </View>
     );
 
-    return <StoreCard store={store} renderAdminControls={adminControls} />;
+    return <StoreCard store={store} renderAdminControls={adminControls} isAdminMode={isAdminMode} />;
   };
 
   return (
@@ -1435,11 +1436,12 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                   </TouchableOpacity>
                 </View>
 
+                {/* 🚀 BOTÓN ADMINISTRADOR */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => { setIsAdminMode(isAdmin); }}>
+                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
                     <MaterialCommunityIcons name="store-plus-outline" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>
@@ -1535,7 +1537,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                             <ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
                           </TouchableOpacity>
                         )}
-                        {results.map((store) => <StoreCard key={store.id} store={store} />)}
+                        {results.map((store) => <StoreCard key={store.id} store={store} isAdminMode={isAdminMode} />)}
                       </>
                     ) : (
                       (!loading && zipCode.length === 5) ? (
@@ -1598,7 +1600,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
                                 <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
                               </TouchableOpacity>
                             )}
-                            {results.map((store) => <StoreCard key={store.id} store={store} />)}
+                            {results.map((store) => <StoreCard key={store.id} store={store} isAdminMode={isAdminMode} />)}
                           </>
                         ) : (
                           (!loading && zipCode.length === 5) ? (

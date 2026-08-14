@@ -31,7 +31,6 @@ try {
   console.error("Error cargando badwords.json:", e);
 }
 
-// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   const lowerText = text.toLowerCase();
@@ -40,11 +39,9 @@ const containsBadWords = (text: string): boolean => {
     if (!word) return false;
     const lowerWord = word.toLowerCase();
     
-    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
     const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
     if (exactRegex.test(lowerText)) return true;
 
-    // 2. Atrapa letras repetidas al final para evadir filtros
     const lastChar = lowerWord.slice(-1);
     const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
@@ -60,26 +57,10 @@ const API_EVENTS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/events';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 
 const planStyles: any = {
-  coupon: { 
-    selected: '#EA8D2D', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  },
-  basic: { 
-    selected: '#FF5F6D', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  },
-  premium: { 
-    selected: '#F5A623', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  },
-  unlimited: { 
-    selected: '#10B981', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  }
+  coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  basic: { selected: '#FF5F6D', unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  premium: { selected: '#F5A623', unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  unlimited: { selected: '#10B981', unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' }
 };
 
 export default function EventsScreen() {
@@ -87,7 +68,6 @@ export default function EventsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  
   
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
@@ -102,12 +82,13 @@ export default function EventsScreen() {
   const eventIdFromNotif = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
 
   const userMetadata = useMockSelector((state : any) => state.mockAuth.userMetadata) as any;
-  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+  const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
+  const currentUserId = userMetadata?.id || userMetadata?.userId;
   
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
-  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
+
   useEffect(() => {
     if (!userToken) {
       router.replace('/');
@@ -125,7 +106,6 @@ export default function EventsScreen() {
   const Colors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#364045',
-    
     border: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
     inputBg: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
     accent: '#FF5F6D',
@@ -181,10 +161,7 @@ export default function EventsScreen() {
 
   const [currentTariff, setCurrentTariff] = useState<string>("50.00");
   const [companyTariffs, setCompanyTariffs] = useState({
-    coupon: '0.00', 
-    basic: '50.00', 
-    premium: '99.00', 
-    unlimited: '149.00' 
+    coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' 
   });
 
   const lastProcessedNotifId = useRef<string | null>(null);
@@ -218,6 +195,20 @@ export default function EventsScreen() {
     };
     fetchTariff();
   }, []);
+
+  // 🚀 NUEVO: Efecto que escucha los cambios del modo Administrador
+  useEffect(() => {
+    if (isAdminMode) {
+      fetchEvents('', true);
+    } else {
+      if (!zipCode || zipCode.length !== 5) {
+        setEvents([]);
+        setPendingEvents([]);
+      } else {
+        fetchEvents(zipCode, false);
+      }
+    }
+  }, [isAdminMode]);
 
   useEffect(() => {
     if (eventIdFromNotif) {
@@ -409,7 +400,6 @@ export default function EventsScreen() {
         return triggerAlert("Atención", "Título, ubicación, ZIP Code, teléfono, pago e imagen son obligatorios.");
     }
 
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS (Valida todos los campos a la vez)
     const contentToValidate = `${trimmedTitle} ${trimmedDesc} ${trimmedLoc}`;
     if (containsBadWords(contentToValidate)) {
       triggerAlert(t.communitytab?.textInappropriateTittle || "Atención", t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado.");
@@ -632,6 +622,8 @@ export default function EventsScreen() {
             renderAdminControls={adminControls} 
             isWeb={isWeb}
             handleShare={handleShare}
+            isAdminMode={isAdminMode}
+            currentUserId={currentUserId}
         />
     );
   };
@@ -679,18 +671,15 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                <TouchableOpacity onLongPress={() => {
-                    const newAdminMode = isAdmin;
-                    setIsAdminMode(newAdminMode);
-                    if (newAdminMode) {
-                        fetchEvents(zipCode, true);
-                    } else if (!zipCode || zipCode.length < 5) {
-                        setEvents([]);
-                        setPendingEvents([]);
-                    }
-                }}>
-                  <MaterialCommunityIcons name="calendar-star" size={40} color={isAdminMode ? Colors.accent : Colors.accenticon} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
-                </TouchableOpacity>
+                {/* 🚀 NUEVO BOTÓN ADMINISTRADOR PARA EVENTOS */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <TouchableOpacity onPress={() => { setEvents([]); setPendingEvents([]); setZipCode(''); }}>
+                      <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
+                    <MaterialCommunityIcons name="calendar-star" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -764,7 +753,7 @@ export default function EventsScreen() {
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* 🚀 AQUI LA MAGIA FLEXWRAP PARA EVENTOS PENDIENTES */}
+                    {/* EVENTOS PENDIENTES */}
                     {isAdminMode && pendingEvents.length > 0 && (
                       <View style={{ marginBottom: 20 }}>
                         <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>
@@ -810,6 +799,8 @@ export default function EventsScreen() {
                             internalCategories={INTERNAL_CATEGORIES} 
                             isWeb={isWeb}
                             handleShare={handleShare}
+                            isAdminMode={isAdminMode}
+                            currentUserId={currentUserId}
                           />
                         ))
                       )}
@@ -1115,10 +1106,11 @@ export default function EventsScreen() {
   );
 }
 
-const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls, isWeb, handleShare }: any) => {
+const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls, isWeb, handleShare, isAdminMode, currentUserId }: any) => {
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
   const isPending = !item.approved;
+  const isOwner = item.userId === currentUserId;
   
   const cardBgColor = isPending 
       ? (isDark ? '#1E1E1E' : '#FFFFFF') 
@@ -1130,7 +1122,12 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
         onPress={() => onOpen(item)} 
         style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
     >
-      {isPending && (
+      {/* 🚀 AQUÍ ESTÁ EL EFECTO DE OFUSCAR PARA EVENTOS PENDIENTES */}
+      {isPending && !isAdminMode && (
+        <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
+      )}
+
+      {isPending && isOwner && (
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
           <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
           <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>
