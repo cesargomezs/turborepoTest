@@ -377,7 +377,7 @@ export default function Header({ title }: { title?: string }) {
     if (!generatedCoupon) return;
     await handleUniversalShare({
       title: '🎟️ Cupón VIP - Viviendo en USA',
-      description: `¡Felicidades! Has recibido un cupón de acceso exclusivo para registrar y publicar tu perfil o negocio gratis en Viviendo en USA.\n\n🔑 Código VIP: ${generatedCoupon}\n\n📝 Instrucciones:\n1. Ingresa a la app y dirígete al registro correspondiente.\n2. Selecciona el 'Plan Coupon'.\n3. Ingresa tu código en la referencia para validación automática.`,
+      description: `¡Felicidades! Has recibido un cupón de acceso exclusivo para registrar y publicar tu perfil o negocio gratis en Viviendo en USA.\n\n🔑 Código VIP: ${generatedCoupon}\n\n⚠️ *Nota importante:* Este código es de **un solo uso**.\n\n📝 Instrucciones:\n1. Ingresa a la app y dirígete al registro correspondiente.\n2. Selecciona el 'Plan Coupon'.\n3. Ingresa tu código en la referencia para validación automática.`,
       phone: '',
       address: 'Todo USA',
       zip: '',

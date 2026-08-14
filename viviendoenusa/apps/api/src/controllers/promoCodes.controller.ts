@@ -5,21 +5,27 @@ import { Request, Response } from "express";
 
 // 🚀 GENERAR CUPÓN (Para que tú lo uses desde tu panel SAdmin o Postman)
 export const generatePromoCode = async (req: Request, res: Response) => {
-  try {
-    const codeReq = req.body?.code; 
-    // Si no le mandas un código específico, te genera uno aleatorio (ej: VIP-X7B9K)
-    const newCode = codeReq || `VIP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-
-    const [newPromo] = await db.insert(promoCodes).values({
-      code: newCode,
-      isUsed: false
-    }).returning();
-
-    return res.status(201).json({ success: true, promoCode: newPromo });
-  } catch (error: any) {
-    return res.status(500).json({ error: `Error al generar cupón: ${error.message}` });
-  }
-};
+    try {
+      let newCode = "";
+      let exists = true;
+      
+      // Bucle de seguridad: Si por coincidencia existe, vuelve a generar otro al instante
+      while (exists) {
+        newCode = `VIP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+        const [found] = await db.select().from(promoCodes).where(eq(promoCodes.code, newCode));
+        if (!found) exists = false; // Si no existe, rompemos el ciclo y lo usamos
+      }
+  
+      const [newPromo] = await db.insert(promoCodes).values({
+        code: newCode,
+        isUsed: false
+      }).returning();
+  
+      return res.status(201).json({ success: true, promoCode: newPromo });
+    } catch (error: any) {
+      return res.status(500).json({ error: `Error al generar cupón: ${error.message}` });
+    }
+  };
 
 // 🚀 VALIDAR CUPÓN (Para verificar si existe y no se ha usado)
 export const validatePromoCode = async (req: Request, res: Response) => {
