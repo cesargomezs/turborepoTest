@@ -39,6 +39,7 @@ import authRoutes from './auth/register/auth.routes';
 import './cron/cron.jobs';
 import termsRoutes from './routes/terms.routes';
 import adminRoutes from './admin/admin.routes';
+import promoCodesRoutes from './routes/promoCodes.routes';
 
 const app = express();
 
@@ -129,6 +130,7 @@ app.use('/companies', companiesRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/terms', termsRoutes);
 app.use('/admin', adminRoutes);
+app.use('/promo-codes', promoCodesRoutes);
 
 // --- 📱 BUZÓN DE ERRORES DEL FRONTEND (TELEGRAM) ---
 app.post('/api/crash-report', express.json(), async (req, res) => {
