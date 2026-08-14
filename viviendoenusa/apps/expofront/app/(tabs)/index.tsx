@@ -407,13 +407,16 @@ export default function HomeScreen() {
         let lastName = credential.fullName?.familyName || '';
         
         try {
-          const base64Url = credential.identityToken.split('.')[1];
-          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-          const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-          const claims = JSON.parse(jsonPayload);
-          if (claims.email) appleEmail = claims.email;
+          // Validamos que atob exista en el entorno antes de intentar decodificar
+          if (!appleEmail && typeof atob !== 'undefined') {
+            const base64Url = credential.identityToken.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            const claims = JSON.parse(jsonPayload);
+            if (claims.email) appleEmail = claims.email;
+          }
         } catch(e) {
-           console.log("No se pudo decodificar el token de Apple localmente", e);
+           console.log("Decodificación local omitida", e);
         }
 
         const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';

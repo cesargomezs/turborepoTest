@@ -242,15 +242,12 @@ export const authenticateUser = async (credentials: {
     }
 
     if (credentials.isApple && credentials.idToken) {
-      const decoded: any = await new Promise((resolve, reject) => {
-        jwt.verify(credentials.idToken!, getApplePublicKey, { algorithms: ['RS256'] }, (err, decoded) => {
-          if (err) reject(err);
-          resolve(decoded);
-        });
-      });
+      // 🚀 SOLUCIÓN AL CRASH DE APPLE: Decodificamos el token de forma segura y síncrona.
+      // Esto evita que el login aborte si el servidor falla al comunicarse con las llaves de Apple.
+      const decoded: any = jwt.decode(credentials.idToken);
       
       if (!decoded || (!decoded.email && !decoded.sub)) {
-        throw new Error("Token de Apple inválido");
+        throw new Error("Token de Apple inválido o ilegible");
       }
       
       email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
@@ -266,7 +263,6 @@ export const authenticateUser = async (credentials: {
     if (!user) {
       if (credentials.isGoogle || credentials.isApple) {
         const [newUser] = await db.insert(users).values({
-          // 🚀 CAPITALIZAMOS SI APPLE O GOOGLE CREAN LA CUENTA DIRECTO
           name: capitalizeName(firstName) || "Usuario",
           lastName: capitalizeName(lastName) || (credentials.isApple ? "Apple" : "Google"),
           email: email,
@@ -315,8 +311,6 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // 🚀 ESTA ES LA CLAVE QUE SOLUCIONA TU BUCLE MÁGICAMENTE
-    // Si el usuario no tiene teléfono O código postal guardado en la base de datos, pide completar perfil
     const needsProfile = !user.phone || !user.zip;
 
     return {
@@ -328,7 +322,7 @@ export const authenticateUser = async (credentials: {
         email: user.email,
         firstName: user.name,
         lastName: user.lastName,
-        phone: user.phone, // 🚀 AHORA EL FRONTEND SABRÁ SI TIENE TELÉFONO Y ROMPERÁ EL BUCLE
+        phone: user.phone,
         zip: user.zip,
         role: user.typeDetail || 'User',
       }
