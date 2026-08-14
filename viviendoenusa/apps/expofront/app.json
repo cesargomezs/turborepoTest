@@ -8,10 +8,10 @@
       "com.googleusercontent.apps.1099132751870-9b7fb1f2vfv5v0enr3rkdn5r9p8sregk"
     ],
     "orientation": "portrait",
-    "icon": "./assets/images/backgroundusajpg.jpg",
+    "icon": "./assets/images/backgroundusa.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/images/backgroundusajpg.jpg",
+      "image": "./assets/images/backgroundusa.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -21,6 +21,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.viviendoenusa.expofront",
+      "buildNumber": "1",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -28,13 +29,14 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/backgroundusajpg.jpg",
+        "foregroundImage": "./assets/images/backgroundusa.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.viviendoenusa.expofront"
+      "package": "com.viviendoenusa.expofront",
+      "versionCode": 1
     },
     "web": {
-      "favicon": "./assets/images/backgroundusajpg.jpg",
+      "favicon": "./assets/images/backgroundusa.png",
       "bundler": "metro",
       "output": "static"
     },
@@ -63,7 +65,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/backgroundusajpg.jpg",
+          "image": "./assets/images/backgroundusa.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
