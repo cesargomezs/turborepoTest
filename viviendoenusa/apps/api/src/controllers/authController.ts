@@ -48,13 +48,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
   try {
     const existingUsers = await db.select().from(users).where(eq(users.email, data.email));
     
-    if (existingUsers.length > 0) {
-      throw new Error("El correo electrónico ya está registrado. Por favor, inicia sesión.");
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    let hashedPassword = await bcrypt.hash(data.password, salt);
-
     let cityObj = undefined;
     let stateObj = undefined;
 
@@ -66,16 +59,47 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
           const location = zipInfo.places[0];
           cityObj = location['place name']; 
           stateObj = location['state abbreviation']; 
-        } else {
-          console.warn(`Zip code no encontrado en la API al registrar: ${data.zip}`);
         }
       } catch (err) {
-        console.error("Error al consultar el servicio de Zip Codes en registro:", err);
+        console.error("Error al consultar el servicio de Zip Codes:", err);
       }
     }
 
+    if (existingUsers.length > 0) {
+      const user = existingUsers[0];
+      
+      // 🚀 MAGIA ANTI-BUCLES: Si la cuenta ya fue creada por Apple/Google, 
+      // pero el perfil está incompleto (sin teléfono), la ACTUALIZAMOS en vez de bloquearla.
+      if (!user.phone && (data.authProvider === 'apple' || data.authProvider === 'google')) {
+         
+         let hashedPassword = user.password;
+         if (data.password) {
+           const salt = await bcrypt.genSalt(10);
+           hashedPassword = await bcrypt.hash(data.password, salt);
+         }
+
+         const [updatedUser] = await db.update(users).set({
+           name: capitalizeName(data.firstName) || user.name,
+           lastName: capitalizeName(data.lastName) || user.lastName,
+           phone: data.phone,
+           zip: data.zip,
+           estate: stateObj || user.estate,
+           birth: data.birth || user.birth,
+           password: hashedPassword,
+           isVerified: true
+         }).where(eq(users.id, user.id)).returning();
+
+         return updatedUser;
+      }
+
+      // Si es un registro normal y ya existe, sí tiramos error
+      throw new Error("El correo electrónico ya está registrado. Por favor, inicia sesión.");
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    let hashedPassword = await bcrypt.hash(data.password, salt);
+
     const [newUser] = await db.insert(users).values({
-      // 🚀 APLICAMOS MAYÚSCULAS AQUÍ
       name: capitalizeName(data.firstName),   
       lastName: capitalizeName(data.lastName),     
       email: data.email,
