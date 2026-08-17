@@ -40,46 +40,6 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ FUNCIÓN INTERNA PARA GUARDAR EL DISPOSITIVO
-// --------------------------------------------------------
-const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
-  if (!pushToken || pushToken.trim() === '') return;
-  try {
-    const existingDevice = await db.select()
-      .from(userDevices)
-      .where(eq(userDevices.expoPushToken, pushToken))
-      .limit(1);
-
-    if (existingDevice.length > 0) {
-      await db.update(userDevices)
-        .set({ userId: userId, deviceType: deviceType || existingDevice[0].deviceType, updatedAt: new Date() })
-        .where(eq(userDevices.expoPushToken, pushToken));
-    } else {
-      await db.insert(userDevices).values({
-        userId: userId,
-        expoPushToken: pushToken,
-        deviceType: deviceType || 'unknown',
-      });
-    }
-  } catch (error) {
-    console.error("❌ Error guardando device token:", error);
-  }
-};
-
-// --------------------------------------------------------
-// 🛠️ FUNCIÓN INTERNA PARA TÉRMINOS Y CONDICIONES
-// --------------------------------------------------------
-const ensureTermsAccepted = async (userId: string) => {
-  try {
-    if (userTermsAcceptance) {
-      await db.insert(userTermsAcceptance).values({ userId });
-    }
-  } catch (error) {
-    // Si ya los aceptó previamente se puede ignorar el error de llave duplicada
-  }
-};
-
-// --------------------------------------------------------
 // 1. REGISTRO DE USUARIO CLÁSICO Y GOOGLE/APPLE
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null) => {
@@ -119,8 +79,14 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         await ensureTermsAccepted(updatedUser.id);
-         await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
+         // 🛡️ INSERT DIRECTO DE TÉRMINOS Y DISPOSITIVO (USUARIO SOCIAL)
+         try { await db.insert(userTermsAcceptance).values({ userId: updatedUser.id }); } catch (e) {}
+         if (data.pushToken) {
+           try {
+             await db.delete(userDevices).where(eq(userDevices.expoPushToken, data.pushToken));
+             await db.insert(userDevices).values({ userId: updatedUser.id, expoPushToken: data.pushToken, deviceType: data.deviceType || 'unknown' });
+           } catch (e) {}
+         }
 
          return updatedUser;
       }
@@ -145,9 +111,14 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       isVerified: data.isVerified
     }).returning();
 
-    // 🛡️ Guardado directo de Términos y Dispositivo en el Registro
-    await ensureTermsAccepted(newUser.id);
-    await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
+    // 🛡️ INSERT DIRECTO DE TÉRMINOS Y DISPOSITIVO (NUEVO USUARIO)
+    try { await db.insert(userTermsAcceptance).values({ userId: newUser.id }); } catch (e) {}
+    if (data.pushToken) {
+      try {
+        await db.delete(userDevices).where(eq(userDevices.expoPushToken, data.pushToken));
+        await db.insert(userDevices).values({ userId: newUser.id, expoPushToken: data.pushToken, deviceType: data.deviceType || 'unknown' });
+      } catch (e) {}
+    }
 
     return newUser;
   } catch (error: any) {
@@ -183,7 +154,6 @@ export const getUser = async (idOrEmail: string) => {
 
     return { ...user, imageUrl: signedImageUrl };
   } catch (error: any) {
-    console.error("Error en getUser:", error);
     throw new Error(`Error al consultar el usuario: ${error.message}`);
   }
 };
@@ -317,11 +287,9 @@ export const authenticateUser = async (credentials: {
 
     if (credentials.isApple && credentials.idToken) {
       const decoded: any = jwt.decode(credentials.idToken);
-      
       if (!decoded || (!decoded.email && !decoded.sub)) {
         throw new Error("Token de Apple inválido o ilegible");
       }
-      
       email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
     }
 
@@ -329,7 +297,6 @@ export const authenticateUser = async (credentials: {
 
     const rows = await db.select().from(users).where(eq(users.email, email));
     let user = rows[0];
-
     const genericAuthError = "Credenciales incorrectas.";
 
     if (!user) {
@@ -342,7 +309,6 @@ export const authenticateUser = async (credentials: {
           typeDetail: 'User'
         }).returning();
         user = newUser;
-        await ensureTermsAccepted(user.id);
       } else {
         throw new Error(genericAuthError);
       }
@@ -368,25 +334,27 @@ export const authenticateUser = async (credentials: {
           .where(eq(users.id, user.id));
 
         if (isLocked) {
-          throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos. Por favor, utiliza la opción '¿Olvidaste tu contraseña?' para restablecerla.");
+          throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos.");
         }
-        
         throw new Error(genericAuthError);
       }
     }
 
     if (currentAttempts > 0 || user.isLocked) {
-      await db.update(users)
-        .set({ failedLoginAttempts: 0, isLocked: false })
-        .where(eq(users.id, user.id));
+      await db.update(users).set({ failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, user.id));
     }
 
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // 🛡️ Asegurar términos y guardar dispositivo de forma limpia en el Login
-    await ensureTermsAccepted(user.id);
-    await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
+    // 🛡️ INSERT DIRECTO DE TÉRMINOS Y DISPOSITIVO (AL HACER LOGIN)
+    try { await db.insert(userTermsAcceptance).values({ userId: user.id }); } catch (e) {}
+    if (credentials.pushToken) {
+      try {
+        await db.delete(userDevices).where(eq(userDevices.expoPushToken, credentials.pushToken));
+        await db.insert(userDevices).values({ userId: user.id, expoPushToken: credentials.pushToken, deviceType: credentials.deviceType || 'unknown' });
+      } catch (e) {}
+    }
 
     const needsProfile = !user.phone || !user.zip;
 
@@ -405,7 +373,6 @@ export const authenticateUser = async (credentials: {
       }
     };
   } catch (error: any) {
-    console.error("❌ Error en autenticación:", error.message);
     throw new Error(error.message);
   }
 };
@@ -418,13 +385,8 @@ export const sendPasswordResetEmail = async (email: string) => {
     const rows = await db.select().from(users).where(eq(users.email, email));
     const user = rows[0];
 
-    if (!user) {
-      throw new Error("No existe una cuenta registrada con este correo electrónico.");
-    }
-
-    if (!user.password) {
-      throw new Error("Esta cuenta usa autenticación externa. Inicia sesión directamente con Google o Apple.");
-    }
+    if (!user) throw new Error("No existe una cuenta registrada con este correo electrónico.");
+    if (!user.password) throw new Error("Esta cuenta usa autenticación externa. Inicia sesión directamente con Google o Apple.");
 
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
@@ -434,31 +396,17 @@ export const sendPasswordResetEmail = async (email: string) => {
     let logoUrl = 'https://viviendoenusa.app/favicon.ico'; 
     try {
       const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
-      if (!error && data?.signedUrl) {
-        logoUrl = data.signedUrl;
-      }
+      if (!error && data?.signedUrl) { logoUrl = data.signedUrl; }
     } catch (storageErr) {}
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
-        <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-          <div style="margin-bottom: 20px;">
-            <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
-          </div>
-          <h2 style="color: #1A1A1A; margin-bottom: 10px;">Recuperación de Contraseña</h2>
-          <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 15px;">Hola <strong>${user.name}</strong>,</p>
-          <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
-            Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.
-          </p>
-          <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(255, 95, 109, 0.3);">
-            Restablecer Contraseña
-          </a>
-          <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 20px;">
-            Este enlace expirará en 1 hora o después de ser utilizado.
-          </p>
-          <p style="font-size: 13px; color: #888888; line-height: 20px; margin-bottom: 30px;">
-            Si no solicitaste este cambio, por favor ignora este correo. Tu cuenta seguirá segura.
-          </p>
+        <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px;">
+          <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; display: block; margin: 0 auto;" />
+          <h2>Recuperación de Contraseña</h2>
+          <p>Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
+          <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; margin-bottom: 25px;">Restablecer Contraseña</a>
+          <p style="font-size: 13px; color: #888888;">Este enlace expirará en 1 hora. Si no lo solicitaste, ignora este correo.</p>
         </div>
       </div>
     `;
@@ -471,7 +419,6 @@ export const sendPasswordResetEmail = async (email: string) => {
     });
 
     if (error) throw new Error(error.message);
-
     return { message: "Correo enviado con éxito. Revisa tu bandeja de entrada." };
   } catch (error: any) {
     throw new Error(error.message);
@@ -483,12 +430,9 @@ export const sendPasswordResetEmail = async (email: string) => {
 // --------------------------------------------------------
 export const updatePassword = async (req: Request, res: Response) => {
   const { token, password } = req.body;
-  
   try {
     const decodedPayload: any = jwt.decode(token);
-    if (!decodedPayload || !decodedPayload.id) {
-      throw new Error("Token con formato incorrecto.");
-    }
+    if (!decodedPayload || !decodedPayload.id) throw new Error("Token con formato incorrecto.");
 
     const rows = await db.select().from(users).where(eq(users.id, decodedPayload.id));
     const user = rows[0];
@@ -496,18 +440,11 @@ export const updatePassword = async (req: Request, res: Response) => {
 
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
-
     const decoded: any = jwt.verify(token, secret);
     
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    await db.update(users)
-      .set({ 
-        password: hashedPassword,
-        failedLoginAttempts: 0,
-        isLocked: false
-      })
-      .where(eq(users.id, decoded.id));
+    await db.update(users).set({ password: hashedPassword, failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, decoded.id));
 
     res.status(200).json({ message: "Contraseña actualizada correctamente." });
   } catch (error: any) {
@@ -521,13 +458,8 @@ export const updatePassword = async (req: Request, res: Response) => {
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user.id; 
-
     const userProfile = await db.select().from(users).where(eq(users.id, userId));
-
-    if (userProfile.length === 0) {
-      return res.status(404).json({ error: 'Usuario no encontrado.' });
-    }
-
+    if (userProfile.length === 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
     return res.status(200).json(userProfile[0]);
   } catch (error) {
     return res.status(500).json({ error: 'Error al obtener el perfil.' });
@@ -542,15 +474,14 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { token, deviceType } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ error: "No autorizado." });
-    }
+    if (!userId) return res.status(401).json({ error: "No autorizado." });
+    if (!token) return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
 
-    if (!token) {
-      return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
-    }
-
-    await upsertDeviceToken(userId, token, deviceType);
+    // Insert limpio
+    try {
+      await db.delete(userDevices).where(eq(userDevices.expoPushToken, token));
+      await db.insert(userDevices).values({ userId: userId, expoPushToken: token, deviceType: deviceType || 'unknown' });
+    } catch (e) {}
 
     return res.status(200).json({ message: "Dispositivo registrado con éxito." });
   } catch (error: any) {
@@ -566,28 +497,15 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { reason } = req.body; 
 
-    if (!userId) {
-      return res.status(401).json({ error: "No autorizado. Se requiere una sesión válida." });
-    }
+    if (!userId) return res.status(401).json({ error: "No autorizado. Se requiere una sesión válida." });
 
-    const [userRecord] = await db
-      .select({ email: users.email, name: users.name, imageUrl: users.imageUrl })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const [userRecord] = await db.select({ email: users.email, name: users.name, imageUrl: users.imageUrl }).from(users).where(eq(users.id, userId)).limit(1);
 
-    if (!userRecord) {
-      return res.status(404).json({ error: "Usuario no encontrado en la base de datos." });
-    }
+    if (!userRecord) return res.status(404).json({ error: "Usuario no encontrado." });
 
     if (userRecord.imageUrl && !userRecord.imageUrl.startsWith('http')) {
-      const filePath = userRecord.imageUrl.startsWith('users/') 
-        ? userRecord.imageUrl 
-        : `users/${userRecord.imageUrl.split('/').pop()}`;
-
-      try {
-        await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]);
-      } catch (e) {}
+      const filePath = userRecord.imageUrl.startsWith('users/') ? userRecord.imageUrl : `users/${userRecord.imageUrl.split('/').pop()}`;
+      try { await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]); } catch (e) {}
     }
 
     const forwarded = req.headers?.['x-forwarded-for'];
@@ -601,72 +519,25 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       entityType: 'auth',
       entityId: userId,
       ipAddress: ipAddress,
-      metadata: {
-        reason: "Solicitud voluntaria de baja de cuenta por parte del usuario",
-        surveyReason: reason || "No especificado",
-        deletedAt: new Date().toISOString(),
-        previousEmail: userRecord.email,
-        tramaAccion: "Anonimización de PII, limpieza de Storage, borrado de dispositivos y baja de Auth"
-      }
+      metadata: { reason: "Baja de cuenta", surveyReason: reason || "No especificado" }
     });
 
     await db.delete(userDevices).where(eq(userDevices.userId, userId));
 
-    await db
-      .update(users)
-      .set({
-        name: "Usuario",
-        lastName: "Anónimo",
-        email: `deleted_${userId}@viviendoenusa.app`,
-        phone: null,
-        zip: null,
-        imageUrl: null,
-        estate: null,
-        password: null,
-        isLocked: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId));
+    await db.update(users).set({
+      name: "Usuario",
+      lastName: "Anónimo",
+      email: `deleted_${userId}@viviendoenusa.app`,
+      phone: null,
+      zip: null,
+      imageUrl: null,
+      estate: null,
+      password: null,
+      isLocked: true,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId));
 
-    if (userRecord.email && !userRecord.email.includes('deleted_')) {
-      try {
-        let logoUrl = 'https://viviendoenusa.app/favicon.ico';
-        try {
-          const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
-          if (!error && data?.signedUrl) {
-            logoUrl = data.signedUrl;
-          }
-        } catch (storageErr) {}
-
-        const htmlContent = `
-          <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
-            <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-              <div style="margin-bottom: 20px;">
-                <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #FF5F6D;" />
-              </div>
-              <h2 style="color: #1A1A1A; margin-bottom: 10px;">¡Te extrañaremos, ${userRecord.name}!</h2>
-              <p style="font-size: 15px; color: #546E7A; line-height: 24px; margin-bottom: 25px;">
-                Hemos procesado la baja de tu cuenta exitosamente. Tus datos personales y accesos han sido eliminados.
-              </p>
-            </div>
-          </div>
-        `;
-
-        await resend.emails.send({
-          from: 'Viviendo en USA <noreply@viviendoenusa.app>',
-          to: [userRecord.email],
-          subject: 'Lamentamos que te vayas - Viviendo en USA',
-          html: htmlContent
-        });
-        
-      } catch (mailError) {}
-    }
-
-    return res.status(200).json({ 
-      success: true, 
-      message: "Cuenta dada de baja correctamente." 
-    });
-
+    return res.status(200).json({ success: true, message: "Cuenta dada de baja correctamente." });
   } catch (error: any) {
     return res.status(500).json({ error: `Error interno del servidor: ${error.message}` });
   }
