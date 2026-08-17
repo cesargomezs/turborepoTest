@@ -8,10 +8,8 @@ import { Resend } from 'resend';
 import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa'; 
 import { Request, Response } from 'express'; 
-
-// 🚀 CORREGIDAS LAS RUTAS RELATIVAS (Solo un nivel atrás hacia src/)
+import { AuthRequest } from '../middleware/authMiddleware'; 
 import { logAuditEvent } from '../services/audit.service';
-import { AuthRequest } from '../middleware/authMiddleware';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -42,6 +40,46 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
+// 🛠️ FUNCIÓN AUXILIAR PARA GUARDAR O ACTUALIZAR DISPOSITIVO
+// --------------------------------------------------------
+const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
+  if (!pushToken || pushToken.trim() === '') return;
+  try {
+    const existingDevice = await db.select()
+      .from(userDevices)
+      .where(eq(userDevices.expoPushToken, pushToken))
+      .limit(1);
+
+    if (existingDevice.length > 0) {
+      await db.update(userDevices)
+        .set({ userId: userId, updatedAt: new Date() })
+        .where(eq(userDevices.expoPushToken, pushToken));
+    } else {
+      await db.insert(userDevices).values({
+        userId: userId,
+        expoPushToken: pushToken,
+        deviceType: deviceType || 'unknown',
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error guardando device token:", error);
+  }
+};
+
+// --------------------------------------------------------
+// 🛠️ FUNCIÓN AUXILIAR PARA GUARDAR TÉRMINOS
+// --------------------------------------------------------
+const ensureTermsAccepted = async (userId: string) => {
+  try {
+    if (userTermsAcceptance) {
+      await db.insert(userTermsAcceptance).values({ userId });
+    }
+  } catch (error) {
+    console.error("❌ Error guardando términos y condiciones:", error);
+  }
+};
+
+// --------------------------------------------------------
 // 1. REGISTRO DE USUARIO CLÁSICO Y GOOGLE/APPLE
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null) => {
@@ -59,12 +97,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
           const location = zipInfo.places[0];
           cityObj = location['place name']; 
           stateObj = location['state abbreviation']; 
-        } else {
-          console.warn(`Zip code no encontrado en la API al registrar: ${data.zip}`);
         }
-      } catch (err) {
-        console.error("Error al consultar el servicio de Zip Codes en registro:", err);
-      }
+      } catch (err) {}
     }
 
     if (existingUsers.length > 0) {
@@ -88,17 +122,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         // 🚀 GUARDAR DISPOSITIVO SI VIENE EN EL PAYLOAD (Registro Social)
-         if (data.pushToken) {
-           try {
-             const existingDevice = await db.select().from(userDevices).where(eq(userDevices.expoPushToken, data.pushToken)).limit(1);
-             if (existingDevice.length > 0) {
-               await db.update(userDevices).set({ userId: updatedUser.id, updatedAt: new Date() }).where(eq(userDevices.expoPushToken, data.pushToken));
-             } else {
-               await db.insert(userDevices).values({ userId: updatedUser.id, expoPushToken: data.pushToken, deviceType: data.deviceType || 'unknown' });
-             }
-           } catch (e) { console.error("Error guardando device (Social):", e); }
-         }
+         await ensureTermsAccepted(updatedUser.id);
+         await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
 
          return updatedUser;
       }
@@ -123,28 +148,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       isVerified: data.isVerified
     }).returning();
 
-    // 🚀 1. GUARDAR TÉRMINOS Y CONDICIONES DIRECTAMENTE
-    try {
-      if (userTermsAcceptance) {
-        await db.insert(userTermsAcceptance).values({ userId: newUser.id });
-      }
-    } catch (termsError) {
-      console.error("Error al guardar en user_terms_acceptance:", termsError);
-    }
-
-    // 🚀 2. GUARDAR DISPOSITIVO SI VIENE EN EL PAYLOAD (Registro Tradicional)
-    if (data.pushToken) {
-      try {
-        const existingDevice = await db.select().from(userDevices).where(eq(userDevices.expoPushToken, data.pushToken)).limit(1);
-        if (existingDevice.length > 0) {
-          await db.update(userDevices).set({ userId: newUser.id, updatedAt: new Date() }).where(eq(userDevices.expoPushToken, data.pushToken));
-        } else {
-          await db.insert(userDevices).values({ userId: newUser.id, expoPushToken: data.pushToken, deviceType: data.deviceType || 'unknown' });
-        }
-      } catch (deviceError) {
-        console.error("Error al guardar en user_devices:", deviceError);
-      }
-    }
+    await ensureTermsAccepted(newUser.id);
+    await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
 
     return newUser;
   } catch (error: any) {
@@ -339,6 +344,7 @@ export const authenticateUser = async (credentials: {
           typeDetail: 'User'
         }).returning();
         user = newUser;
+        await ensureTermsAccepted(user.id);
       } else {
         throw new Error(genericAuthError);
       }
@@ -380,29 +386,8 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // 🚀 GUARDAR O ACTUALIZAR DISPOSITIVO DIRECTAMENTE EN EL LOGIN
-    if (credentials.pushToken && credentials.pushToken.trim() !== '') {
-      try {
-        const existingDevice = await db.select()
-          .from(userDevices)
-          .where(eq(userDevices.expoPushToken, credentials.pushToken))
-          .limit(1);
-
-        if (existingDevice.length > 0) {
-          await db.update(userDevices)
-            .set({ userId: user.id, updatedAt: new Date() })
-            .where(eq(userDevices.expoPushToken, credentials.pushToken));
-        } else {
-          await db.insert(userDevices).values({
-            userId: user.id,
-            expoPushToken: credentials.pushToken,
-            deviceType: credentials.deviceType || 'unknown',
-          });
-        }
-      } catch (deviceError) {
-        console.error("Error al guardar dispositivo en login:", deviceError);
-      }
-    }
+    // Guardar dispositivo directamente si viene en el login
+    await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
 
     const needsProfile = !user.phone || !user.zip;
 
@@ -566,25 +551,7 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
     }
 
-    const existingDevice = await db.select()
-      .from(userDevices)
-      .where(eq(userDevices.expoPushToken, token))
-      .limit(1);
-
-    if (existingDevice.length > 0) {
-      await db.update(userDevices)
-        .set({ 
-          userId: userId,
-          updatedAt: new Date() 
-        })
-        .where(eq(userDevices.expoPushToken, token));
-    } else {
-      await db.insert(userDevices).values({
-        userId: userId,
-        expoPushToken: token,
-        deviceType: deviceType || 'unknown',
-      });
-    }
+    await upsertDeviceToken(userId, token, deviceType);
 
     return res.status(200).json({ message: "Dispositivo registrado con éxito." });
   } catch (error: any) {
