@@ -232,7 +232,21 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
       }
     });
     
-    return updatedRows[0];
+    // 🚀 SOLUCIÓN APLICADA AQUÍ: Generamos la URL firmada antes de devolver el usuario al frontend
+    const finalUser = updatedRows[0];
+    let signedImageUrl = finalUser.imageUrl;
+
+    if (finalUser.imageUrl && !finalUser.imageUrl.startsWith('http')) {
+      const rutaArchivo = finalUser.imageUrl.startsWith('users/') 
+          ? finalUser.imageUrl 
+          : `users/${finalUser.imageUrl}`;
+          
+      const { data: signedData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+      if (signedData) { signedImageUrl = signedData.signedUrl; }
+    }
+
+    return { ...finalUser, imageUrl: signedImageUrl };
+    
   } catch (error: any) {
     throw new Error(`Error al actualizar el usuario: ${error.message}`);
   }
@@ -520,7 +534,7 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA 
+// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (CON LIMPIEZA DE DISPOSITIVOS)
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
@@ -567,10 +581,14 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
         surveyReason: reason || "No especificado",
         deletedAt: new Date().toISOString(),
         previousEmail: userRecord.email,
-        tramaAccion: "Anonimización de PII, limpieza de Storage y baja de Auth"
+        tramaAccion: "Anonimización de PII, limpieza de Storage, borrado de dispositivos y baja de Auth"
       }
     });
 
+    // 🚀 1. ELIMINAMOS LOS TOKENS DE NOTIFICACIONES DE ESTE USUARIO
+    await db.delete(userDevices).where(eq(userDevices.userId, userId));
+
+    // 🚀 2. ANONIMIZAMOS AL USUARIO EN LA BASE DE DATOS
     await db
       .update(users)
       .set({

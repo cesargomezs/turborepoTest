@@ -164,24 +164,24 @@ export const createCompany = async (data: any) => {
         finalLogoUrl = finalLogoUrl.replace('companies/', '');
       }
 
-      // 🚀 Asignamos el plan seleccionado por el usuario
+      const validUserId = sanitizeText(data.userId) || TEMP_USER_ID;
       const selectedPlan = sanitizeText(data.premiumPlan) || 'basic';
+      const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
+      const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-      // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
-      if (selectedPlan === 'cupon') {
-        if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
-        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+      // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
+      const isCoupon = selectedPlan === 'cupon' || metodoPago === 'cupon';
+
+      if (isCoupon) {
+        if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
+        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
         
         if (!promo) throw new Error("El cupón ingresado no existe.");
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
-
       }
       
-
-      
-      
       const companyPayload: any = {
-        userId: sanitizeText(data.userId) || TEMP_USER_ID,
+        userId: validUserId,
         name: sanitizeText(data.name) || 'Empresa Sin Nombre',
         ein: sanitizeText(data.ein) || null, 
         phoneCode: sanitizeText(data.phoneCode) || '+1',
@@ -190,14 +190,15 @@ export const createCompany = async (data: any) => {
         email: sanitizeText(data.email) || null,
         website: sanitizeText(data.website) || null,
         logoUrl: finalLogoUrl, 
-        isVerified: false,
-        premiumPlan: selectedPlan, // 👈 Se guarda el plan elegido
-        status: 'pending',
+        isVerified: isCoupon ? true : false, // 👈 Si es cupón, nace verificada
+        premiumPlan: isCoupon ? 'cupon' : selectedPlan, // 👈 Ajuste dinámico del plan
+        status: isCoupon ? 'approved' : 'pending', // 👈 Si es cupón, nace aprobada
       };
 
       const [newCompany] = await tx.insert(companies).values(companyPayload).returning();
 
-      if (data.referenceCode && data.paymentMethod) {
+      // 🚀 Si hay un código, registramos el pago
+      if (codigoReferencia && metodoPago) {
         const prices = await getCurrentCompanyPrices();
         let amountToPay = prices.basic;
         if (selectedPlan === 'premium') amountToPay = prices.premium;
@@ -206,31 +207,33 @@ export const createCompany = async (data: any) => {
         await tx.insert(payments).values({
           entityType: 'company',
           entityId: newCompany.id,
-          userId: companyPayload.userId,
-          referenceCode: sanitizeText(data.referenceCode) || '', 
-          paymentMethod: sanitizeText(data.paymentMethod) || '', 
-          amount: amountToPay, // 👈 Cobro según la tarifa
+          userId: validUserId,
+          referenceCode: codigoReferencia, 
+          paymentMethod: metodoPago, 
+          amount: isCoupon ? "0.00" : amountToPay, // 👈 Monto cero si es cupón
           durationDays: 30, 
-          status: "pending"
+          status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
+          approvedAt: isCoupon ? new Date() : null
         });
       }
 
-      if (selectedPlan === 'cupon') {
+      // 🚀 2. QUEMAR EL CUPÓN
+      if (isCoupon) {
         await tx.update(promoCodes)
         .set({
-          isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
-          usedByUserId: data.userId, // Guardamos quién lo usó
-          usedForEntityId: newCompany.id, // Guardamos en qué empresa se usó
+          isUsed: true, 
+          usedByUserId: validUserId, 
+          usedForEntityId: newCompany.id, 
           entityType: 'company',
-          usedAt: new Date() // Guardamos la fecha y hora exacta
+          usedAt: new Date() 
         })
-        .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
+        .where(eq(promoCodes.code, codigoReferencia)); 
       }
 
       return {
          ...newCompany,
-         referenceCode: data.referenceCode,
-         paymentMethod: data.paymentMethod
+         referenceCode: codigoReferencia,
+         paymentMethod: metodoPago
       };
     });
 

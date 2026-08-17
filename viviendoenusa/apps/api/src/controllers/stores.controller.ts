@@ -330,7 +330,7 @@ export const getStoreById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR NEGOCIO (ACTUALIZADO CON TELEGRAM)
+// 📥 3. CREAR NEGOCIO (ACTUALIZADO CON LÓGICA DE CUPONES)
 // =====================================================================
 export const createStore = async (data: any) => {
   try {
@@ -348,10 +348,16 @@ export const createStore = async (data: any) => {
     // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
     const { lat, lng } = getCoordsFromZip(data.zip || '');
     const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
-    // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
-    if (planSeleccionado === 'cupon') {
-      if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
-      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+    
+    const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
+    const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
+
+    // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
+    const isCoupon = planSeleccionado === 'cupon' || metodoPago === 'cupon';
+
+    if (isCoupon) {
+      if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
+      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
       
       if (!promo) throw new Error("El cupón ingresado no existe.");
       if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
@@ -375,47 +381,47 @@ export const createStore = async (data: any) => {
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
         userId: validUserId, 
-        approved: false,
+        approved: isCoupon ? true : false, // 👈 Si es cupón, nace aprobado
         createdAt: new Date(),
-        premiumPlan: planSeleccionado
-        
+        premiumPlan: isCoupon ? 'cupon' : planSeleccionado // 👈 Ajuste dinámico del plan
       };
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
 
-      if (data.referenceCode && data.paymentMethod) {
+      // 🚀 Si hay un código, registramos el pago
+      if (codigoReferencia && metodoPago) {
         const basePrice = await getCurrentStorePrice();
 
         await tx.insert(payments).values({
           entityType: 'store',
           entityId: newStore.id,
-          userId: storePayload.userId,
-          referenceCode: sanitizeText(data.referenceCode) || '', 
-          paymentMethod: sanitizeText(data.paymentMethod) || '', 
-          amount: basePrice, 
+          userId: validUserId,
+          referenceCode: codigoReferencia, 
+          paymentMethod: metodoPago, 
+          amount: isCoupon ? "0.00" : (data.tariffPlan || basePrice), // 👈 Monto cero si es cupón
           durationDays: 30, 
-          status: "pending"
+          status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
+          approvedAt: isCoupon ? new Date() : null
         });
       }
 
-      if (planSeleccionado === 'cupon') {
-
+      // 🚀 2. QUEMAR EL CUPÓN
+      if (isCoupon) {
         await tx.update(promoCodes)
         .set({
-          isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
-          usedByUserId: data.userId, // Guardamos quién lo usó
-          usedForEntityId: stores.id, // Guardamos en qué empresa se usó
+          isUsed: true, 
+          usedByUserId: validUserId, // 👈 Usamos el ID validado de arriba
+          usedForEntityId: newStore.id, // 👈 CORRECCIÓN CRÍTICA: newStore.id en lugar de stores.id
           entityType: 'store',
-          usedAt: new Date() // Guardamos la fecha y hora exacta
+          usedAt: new Date() 
         })
-        .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
-        
+        .where(eq(promoCodes.code, codigoReferencia)); 
       }
 
       return {
          ...newStore,
-         referenceCode: data.referenceCode,
-         paymentMethod: data.paymentMethod,
+         referenceCode: codigoReferencia,
+         paymentMethod: metodoPago,
          description: safeDesc,
          descriptionStores: safeDesc
       };

@@ -337,7 +337,7 @@ const sendTelegramAlert = async (lawyerName: string, refCode: string, method: st
 };
 
 // =====================================================================
-// 📥 3. CREAR ABOGADO
+// 📥 3. CREAR ABOGADO (ACTUALIZADO CON LÓGICA DE CUPONES)
 // =====================================================================
 export const createLawyer = async (req: Request, res: Response) => {
   const reqAny = req as any;
@@ -365,11 +365,16 @@ export const createLawyer = async (req: Request, res: Response) => {
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
       const finalEstate = sanitizeText(headerEstate) || 'CA';
+      
+      const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
+      const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-      // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
-      if (planSeleccionado === 'cupon') {
-        if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
-        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+      // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
+      const isCoupon = planSeleccionado === 'cupon' || metodoPago === 'cupon';
+
+      if (isCoupon) {
+        if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
+        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
         
         if (!promo) throw new Error("El cupón ingresado no existe.");
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
@@ -384,54 +389,55 @@ export const createLawyer = async (req: Request, res: Response) => {
         imageUrl: cleanImage,
         description: safeDesc,
         descriptionLawy: safeDesc,
-        lat: data.lat ? Number(data.lat) : lat, // 🚀 AHORA SE GUARDA LA LATITUD DIRECTAMENTE
-        lng: data.lng ? Number(data.lng) : lng, // 🚀 AHORA SE GUARDA LA LONGITUD DIRECTAMENTE
-        premiumPlan: planSeleccionado, 
-        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
-        approved: false,
+        lat: data.lat ? Number(data.lat) : lat, 
+        lng: data.lng ? Number(data.lng) : lng, 
+        premiumPlan: isCoupon ? 'cupon' : planSeleccionado, // 👈 Ajuste dinámico del plan
+        userId: validUserId, 
+        approved: isCoupon ? true : false, // 👈 Si es cupón, nace aprobado
         estate: finalEstate 
       };
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
-      if (data.referenceCode && data.paymentMethod) {
+      // 🚀 Si hay un código, registramos el pago
+      if (codigoReferencia && metodoPago) {
         const basePrice = await getCurrentLawyerPrice();
         await tx.insert(payments).values({
           entityType: 'lawyer',
           entityId: newLawyer.id,
-          userId: lawyerPayload.userId,
-          referenceCode: sanitizeText(data.referenceCode) || '', 
-          paymentMethod: sanitizeText(data.paymentMethod) || '', 
-          amount: data.tariffPlan || basePrice,
+          userId: validUserId,
+          referenceCode: codigoReferencia, 
+          paymentMethod: metodoPago, 
+          amount: isCoupon ? "0.00" : (data.tariffPlan || basePrice), // 👈 Monto cero si es cupón
           durationDays: 30, 
-          status: "pending"
+          status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
+          approvedAt: isCoupon ? new Date() : null
         });
-
       }
 
-      if (planSeleccionado === 'cupon') {
+      // 🚀 2. QUEMAR EL CUPÓN
+      if (isCoupon) {
           await tx.update(promoCodes)
           .set({
-            isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
-            usedByUserId: data.userId, // Guardamos quién lo usó
-            usedForEntityId: lawyers.id, // Guardamos en qué empresa se usó
+            isUsed: true, 
+            usedByUserId: validUserId, // 👈 Usamos el ID validado de arriba
+            usedForEntityId: newLawyer.id, // 👈 CORRECCIÓN CRÍTICA: newLawyer.id en lugar de lawyers.id
             entityType: 'lawyer',
-            usedAt: new Date() // Guardamos la fecha y hora exacta
+            usedAt: new Date() 
           })
-          .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
+          .where(eq(promoCodes.code, codigoReferencia)); 
       }
-
 
       return {
          ...newLawyer,
-         referenceCode: data.referenceCode,
-         paymentMethod: data.paymentMethod,
+         referenceCode: codigoReferencia,
+         paymentMethod: metodoPago,
          description: safeDesc,
          descriptionLawy: safeDesc
       };
     });
 
-    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    // 🚀 DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
     if (createdLawyerResult) {
       sendTelegramAlert(
         createdLawyerResult.nameLawy, 

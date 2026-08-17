@@ -266,7 +266,7 @@ export const getEventById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR EVENTO (ACTUALIZADO CON TELEGRAM)
+// 📥 3. CREAR EVENTO (ACTUALIZADO CON LÓGICA DE CUPONES)
 // =====================================================================
 export const createEvent = async (data: any) => {
   try {
@@ -278,11 +278,16 @@ export const createEvent = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un evento.");
     }
 
-    const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
-    // 🚀 1. LÓGICA DEL CUPÓN: Validar antes de insertar
-    if (planSeleccionado === 'cupon') {
-      if (!data.referenceCode) throw new Error("Por favor, ingresa el código del cupón.");
-      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, data.referenceCode));
+    const planSeleccionado = cleanData.premiumPlan || cleanData.premium_plan || 'basic'; 
+    const metodoPago = cleanData.paymentMethod ? String(cleanData.paymentMethod).toLowerCase().trim() : '';
+    const codigoReferencia = cleanData.referenceCode ? String(cleanData.referenceCode).trim() : '';
+
+    // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
+    const isCoupon = planSeleccionado === 'cupon' || metodoPago === 'cupon';
+
+    if (isCoupon) {
+      if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
+      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
       
       if (!promo) throw new Error("El cupón ingresado no existe.");
       if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
@@ -298,9 +303,6 @@ export const createEvent = async (data: any) => {
 
     // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdEventResult = await db.transaction(async (tx) => {
-
-      const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
-      
 
         const payload: any = {
           title: cleanData.title || 'Sin título',
@@ -318,15 +320,15 @@ export const createEvent = async (data: any) => {
           phone: cleanData.phone || '',
           contactMethod: cleanData.contactMethod || 'whatsapp',
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
-          premiumPlan: planSeleccionado,
+          premiumPlan: isCoupon ? 'cupon' : planSeleccionado, 
           userId: validUserId, 
-          approved: false, 
+          approved: isCoupon ? true : false, // 👈 Si es un cupón válido, el evento nace aprobado
         };
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
-        if (cleanData.referenceCode && cleanData.paymentMethod) {
-            
+        // 🚀 Si hay un código, registramos el pago
+        if (codigoReferencia && metodoPago) {
             const today = new Date();
             const eventDate = new Date(payload.dateEvent);
             const diffTime = eventDate.getTime() - today.getTime();
@@ -336,35 +338,37 @@ export const createEvent = async (data: any) => {
               entityType: 'event', 
               entityId: newEvent.id,
               userId: validUserId, 
-              referenceCode: String(cleanData.referenceCode).trim(), 
-              paymentMethod: String(cleanData.paymentMethod).trim(), 
-              amount: data.tariffPlan || await getCurrentEventPrice(),
+              referenceCode: codigoReferencia, 
+              paymentMethod: metodoPago, 
+              amount: isCoupon ? "0.00" : (data.tariffPlan || await getCurrentEventPrice()), // 👈 Monto cero si es cupón
               durationDays: daysLeft, 
               timepost_end: eventDate,
-              status: "pending"
+              status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
+              approvedAt: isCoupon ? new Date() : null
             });
         }
 
-        if (planSeleccionado === 'cupon') {
+        // 🚀 2. QUEMAR EL CUPÓN
+        if (isCoupon) {
           await tx.update(promoCodes)
           .set({
-            isUsed: true, // 👈 AQUÍ LE CAMBIAMOS EL ESTADO A USADO
-            usedByUserId: data.userId, // Guardamos quién lo usó
-            usedForEntityId: newEvent.id, // Guardamos en qué empresa se usó
-            entityType: 'events',
-            usedAt: new Date() // Guardamos la fecha y hora exacta
+            isUsed: true, 
+            usedByUserId: validUserId, // 👈 CORRECCIÓN: Usamos el ID que ya pasó por la limpieza
+            usedForEntityId: newEvent.id, 
+            entityType: 'event',
+            usedAt: new Date() 
           })
-          .where(eq(promoCodes.code, data.referenceCode)); // Buscamos el cupón específico
+          .where(eq(promoCodes.code, codigoReferencia)); 
         }
 
         return {
            ...newEvent,
-           referenceCode: cleanData.referenceCode,
-           paymentMethod: cleanData.paymentMethod
+           referenceCode: codigoReferencia,
+           paymentMethod: metodoPago
         };
     });
 
-    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    // 🚀 DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
     if (createdEventResult) {
       sendTelegramAlert(
         createdEventResult.title || 'Sin título',
