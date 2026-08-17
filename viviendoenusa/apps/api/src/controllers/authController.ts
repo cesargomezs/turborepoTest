@@ -65,19 +65,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       }
     }
 
-    // 🚀 Lógica reutilizable para guardar token al registrarse
-    const saveTokenIfPresent = async (userId: string) => {
-      const pToken = data.pushToken || data.expoPushToken;
-      if (pToken && pToken.trim() !== '') {
-        const existingDevice = await db.select().from(userDevices).where(eq(userDevices.expoPushToken, pToken)).limit(1);
-        if (existingDevice.length > 0) {
-          await db.update(userDevices).set({ userId: userId, updatedAt: new Date() }).where(eq(userDevices.expoPushToken, pToken));
-        } else {
-          await db.insert(userDevices).values({ userId: userId, expoPushToken: pToken, deviceType: data.deviceType || 'unknown' });
-        }
-      }
-    };
-
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       
@@ -99,7 +86,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         await saveTokenIfPresent(updatedUser.id);
          return updatedUser;
       }
 
@@ -123,7 +109,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       isVerified: data.isVerified
     }).returning();
 
-    await saveTokenIfPresent(newUser.id);
     return newUser;
   } catch (error: any) {
     throw new Error(error.message); 
@@ -273,8 +258,6 @@ export const authenticateUser = async (credentials: {
   password?: string; 
   isGoogle: boolean; 
   isApple?: boolean; 
-  pushToken?: string;  // 🚀 AHORA EL COMPILADOR TS LO ACEPTA
-  deviceType?: string; // 🚀 AHORA EL COMPILADOR TS LO ACEPTA
 }) => {
   try {
     let email = credentials.email;
@@ -292,9 +275,11 @@ export const authenticateUser = async (credentials: {
 
     if (credentials.isApple && credentials.idToken) {
       const decoded: any = jwt.decode(credentials.idToken);
+      
       if (!decoded || (!decoded.email && !decoded.sub)) {
         throw new Error("Token de Apple inválido o ilegible");
       }
+      
       email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
     }
 
@@ -356,29 +341,6 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // 🚀 LÓGICA DE MÚLTIPLES DISPOSITIVOS (Sin dar vueltas)
-    if (credentials.pushToken && credentials.pushToken.trim() !== '') {
-      const existingDevice = await db.select()
-        .from(userDevices)
-        .where(eq(userDevices.expoPushToken, credentials.pushToken))
-        .limit(1);
-
-      if (existingDevice.length > 0) {
-        await db.update(userDevices)
-          .set({ 
-            userId: user.id, 
-            updatedAt: new Date() 
-          })
-          .where(eq(userDevices.expoPushToken, credentials.pushToken));
-      } else {
-        await db.insert(userDevices).values({
-          userId: user.id,
-          expoPushToken: credentials.pushToken,
-          deviceType: credentials.deviceType || 'unknown',
-        });
-      }
-    }
-
     const needsProfile = !user.phone || !user.zip;
 
     return {
@@ -402,7 +364,7 @@ export const authenticateUser = async (credentials: {
 };
 
 // --------------------------------------------------------
-// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
+// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA (CON RESEND)
 // --------------------------------------------------------
 export const sendPasswordResetEmail = async (email: string) => {
   try {
@@ -526,7 +488,7 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH (Ruta independiente)
+// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
