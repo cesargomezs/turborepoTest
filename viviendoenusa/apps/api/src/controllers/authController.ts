@@ -40,29 +40,37 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ FUNCIÓN INTERNA PARA GUARDAR EL DISPOSITIVO (USADA DIRECTAMENTE)
+// 🛠️ UPSERT DIRECTO Y LIMPIO PARA LA TABLA USER_DEVICES
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   if (!pushToken || pushToken.trim() === '') return;
   try {
+    // 1. Buscamos si el token ya existe en la base de datos
     const existingDevice = await db.select()
       .from(userDevices)
       .where(eq(userDevices.expoPushToken, pushToken))
       .limit(1);
 
     if (existingDevice.length > 0) {
+      // 2. Si ya existe, actualizamos su asociación al usuario actual
       await db.update(userDevices)
-        .set({ userId: userId, updatedAt: new Date() })
+        .set({ 
+          userId: userId, 
+          deviceType: deviceType || existingDevice[0].deviceType,
+          updatedAt: new Date() 
+        })
         .where(eq(userDevices.expoPushToken, pushToken));
     } else {
+      // 3. Si no existe, hacemos el único INSERT limpio que se necesita
       await db.insert(userDevices).values({
         userId: userId,
         expoPushToken: pushToken,
         deviceType: deviceType || 'unknown',
       });
     }
+    console.log("✅ Dispositivo guardado/actualizado correctamente en user_devices para el usuario:", userId);
   } catch (error) {
-    console.error("❌ Error guardando device token:", error);
+    console.error("❌ Error crítico haciendo insert/update en user_devices:", error);
   }
 };
 
@@ -537,25 +545,33 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO (Ruta independiente)
+// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.id; 
+    const userId = req.user?.id;
     const { token, deviceType } = req.body;
 
+    console.log("📥 [DEBUG PUSH] Petición recibida en /save-device-token");
+    console.log("📥 [DEBUG PUSH] UserId decodificado:", userId);
+    console.log("📥 [DEBUG PUSH] Token recibido:", token);
+
     if (!userId) {
+      console.log("❌ [DEBUG PUSH] Falló: Usuario no autorizado");
       return res.status(401).json({ error: "No autorizado." });
     }
 
     if (!token) {
+      console.log("❌ [DEBUG PUSH] Falló: El token viene vacío");
       return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
     }
 
     await upsertDeviceToken(userId, token, deviceType);
+    console.log("✅ [DEBUG PUSH] ¡Dispositivo guardado exitosamente en DB!");
 
     return res.status(200).json({ message: "Dispositivo registrado con éxito." });
   } catch (error: any) {
+    console.error("❌ [DEBUG PUSH] Error en catch:", error.message);
     return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
   }
 };
