@@ -101,14 +101,18 @@ router.put('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     // 🚀 CORRECCIÓN CRÍTICA: Añadimos isApple para extraerlo del body
-    const { email, password, idToken, isGoogle, isApple } = req.body; 
+    const { email, password, idToken, isGoogle, isApple, expoPushToken, token, deviceType } = req.body; 
+    
+    const finalPushToken = expoPushToken || token;
     
     const result = await authenticateUser({ 
       email, 
       password, 
       idToken, 
       isGoogle,
-      isApple // 🚀 Y lo pasamos al controlador
+      isApple, // 🚀 Y lo pasamos al controlador
+      pushToken: finalPushToken, // 👈 Lo enviamos directo al controlador
+      deviceType
     });
     
     res.status(200).json(result);
