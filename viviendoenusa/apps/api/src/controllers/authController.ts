@@ -541,7 +541,7 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.id; 
     const { token, deviceType } = req.body;
 
     if (!userId) {
