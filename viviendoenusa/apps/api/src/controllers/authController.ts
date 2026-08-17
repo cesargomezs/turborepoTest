@@ -40,47 +40,42 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ UPSERT DIRECTO Y LIMPIO PARA LA TABLA USER_DEVICES
+// 🛠️ FUNCIÓN INTERNA PARA GUARDAR EL DISPOSITIVO
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   if (!pushToken || pushToken.trim() === '') return;
   try {
-    // 1. Buscamos si el token ya existe en la base de datos
     const existingDevice = await db.select()
       .from(userDevices)
       .where(eq(userDevices.expoPushToken, pushToken))
       .limit(1);
 
     if (existingDevice.length > 0) {
-      // 2. Si ya existe, actualizamos su asociación al usuario actual
       await db.update(userDevices)
-        .set({ 
-          userId: userId, 
-          deviceType: deviceType || existingDevice[0].deviceType,
-          updatedAt: new Date() 
-        })
+        .set({ userId: userId, deviceType: deviceType || existingDevice[0].deviceType, updatedAt: new Date() })
         .where(eq(userDevices.expoPushToken, pushToken));
     } else {
-      // 3. Si no existe, hacemos el único INSERT limpio que se necesita
       await db.insert(userDevices).values({
         userId: userId,
         expoPushToken: pushToken,
         deviceType: deviceType || 'unknown',
       });
     }
-    console.log("✅ Dispositivo guardado/actualizado correctamente en user_devices para el usuario:", userId);
   } catch (error) {
-    console.error("❌ Error crítico haciendo insert/update en user_devices:", error);
+    console.error("❌ Error guardando device token:", error);
   }
 };
 
+// --------------------------------------------------------
+// 🛠️ FUNCIÓN INTERNA PARA TÉRMINOS Y CONDICIONES
+// --------------------------------------------------------
 const ensureTermsAccepted = async (userId: string) => {
   try {
     if (userTermsAcceptance) {
       await db.insert(userTermsAcceptance).values({ userId });
     }
   } catch (error) {
-    console.error("❌ Error guardando términos:", error);
+    // Si ya los aceptó previamente se puede ignorar el error de llave duplicada
   }
 };
 
@@ -91,7 +86,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
   try {
     const existingUsers = await db.select().from(users).where(eq(users.email, data.email));
     
-    let cityObj = undefined;
     let stateObj = undefined;
 
     if (data.zip && data.zip.length === 5) {
@@ -99,9 +93,7 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
         const zipResponse = await fetch(`https://api.zippopotam.us/us/${data.zip}`);
         if (zipResponse.ok) {
           const zipInfo = await zipResponse.json();
-          const location = zipInfo.places[0];
-          cityObj = location['place name']; 
-          stateObj = location['state abbreviation']; 
+          stateObj = zipInfo.places[0]['state abbreviation']; 
         }
       } catch (err) {}
     }
@@ -128,8 +120,6 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
          }).where(eq(users.id, user.id)).returning();
 
          await ensureTermsAccepted(updatedUser.id);
-         
-         // 🚀 INVOCACIÓN DIRECTA DEL DISPOSITIVO DESDE EL REGISTRO SOCIAL
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
 
          return updatedUser;
@@ -155,9 +145,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       isVerified: data.isVerified
     }).returning();
 
+    // 🛡️ Guardado directo de Términos y Dispositivo en el Registro
     await ensureTermsAccepted(newUser.id);
-    
-    // 🚀 INVOCACIÓN DIRECTA DEL DISPOSITIVO DESDE EL REGISTRO CLÁSICO
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
 
     return newUser;
@@ -395,7 +384,8 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // 🚀 INVOCACIÓN DIRECTA DEL DISPOSITIVO DESDE EL LOGIN
+    // 🛡️ Asegurar términos y guardar dispositivo de forma limpia en el Login
+    await ensureTermsAccepted(user.id);
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
 
     const needsProfile = !user.phone || !user.zip;
@@ -552,32 +542,24 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { token, deviceType } = req.body;
 
-    console.log("📥 [DEBUG PUSH] Petición recibida en /save-device-token");
-    console.log("📥 [DEBUG PUSH] UserId decodificado:", userId);
-    console.log("📥 [DEBUG PUSH] Token recibido:", token);
-
     if (!userId) {
-      console.log("❌ [DEBUG PUSH] Falló: Usuario no autorizado");
       return res.status(401).json({ error: "No autorizado." });
     }
 
     if (!token) {
-      console.log("❌ [DEBUG PUSH] Falló: El token viene vacío");
       return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
     }
 
     await upsertDeviceToken(userId, token, deviceType);
-    console.log("✅ [DEBUG PUSH] ¡Dispositivo guardado exitosamente en DB!");
 
     return res.status(200).json({ message: "Dispositivo registrado con éxito." });
   } catch (error: any) {
-    console.error("❌ [DEBUG PUSH] Error en catch:", error.message);
     return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
   }
 };
 
 // --------------------------------------------------------
-// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA (CON LIMPIEZA DE DISPOSITIVOS)
+// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
