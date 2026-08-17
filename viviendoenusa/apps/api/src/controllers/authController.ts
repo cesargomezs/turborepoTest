@@ -40,21 +40,23 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ VALIDADOR: GUARDAR TÉRMINOS (SIN DUPLICAR)
+// 🛠️ VALIDADOR: GUARDAR TÉRMINOS (SOLO 1 VEZ)
 // --------------------------------------------------------
-const ensureTermsAccepted = async (userId: string) => {
+const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
   try {
     const existingTerms = await db.select()
       .from(userTermsAcceptance)
       .where(eq(userTermsAcceptance.userId, userId))
       .limit(1);
 
-    // Solo inserta si NO existe, evitando que se repitan en pgAdmin
     if (existingTerms.length === 0) {
-      await db.insert(userTermsAcceptance).values({ userId });
+      await db.insert(userTermsAcceptance).values({ 
+        userId, 
+        ipAddress: ipAddress || null 
+      });
     }
   } catch (error) {
-    console.error("Error validando términos:", error);
+    console.error("❌ Error validando términos:", error);
   }
 };
 
@@ -63,6 +65,7 @@ const ensureTermsAccepted = async (userId: string) => {
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   if (!pushToken || pushToken.trim() === '') return;
+  
   try {
     const existingDevice = await db.select()
       .from(userDevices)
@@ -81,19 +84,18 @@ const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?
       });
     }
   } catch (error) {
-    console.error("Error guardando dispositivo:", error);
+    console.error("❌ Error guardando dispositivo:", error);
   }
 };
 
 // --------------------------------------------------------
-// 1. REGISTRO DE USUARIO CLÁSICO Y GOOGLE/APPLE
+// 1. REGISTRO DE USUARIO CLÁSICO Y COMPLETAR PERFIL (Social)
 // --------------------------------------------------------
-export const registerUser = async (data: any, imageUrl: string | null) => {
+export const registerUser = async (data: any, imageUrl: string | null, reqIp?: string) => {
   try {
     const existingUsers = await db.select().from(users).where(eq(users.email, data.email));
     
     let stateObj = undefined;
-
     if (data.zip && data.zip.length === 5) {
       try {
         const zipResponse = await fetch(`https://api.zippopotam.us/us/${data.zip}`);
@@ -104,9 +106,12 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       } catch (err) {}
     }
 
+    const ipAddress = sanitizeText(reqIp) || null;
+
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       
+      // COMPLETAR PERFIL DESPUÉS DE SELECCIONAR APPLE/GOOGLE (Cuando le das a Guardar)
       if (!user.phone && (data.authProvider === 'apple' || data.authProvider === 'google')) {
          let hashedPassword = user.password;
          if (data.password) {
@@ -125,7 +130,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         await ensureTermsAccepted(updatedUser.id);
+         // AQUÍ SE GUARDAN LOS TÉRMINOS Y EL DISPOSITIVO (SOLO AL GUARDAR EL PERFIL)
+         await ensureTermsAccepted(updatedUser.id, ipAddress);
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
 
          return updatedUser;
@@ -151,7 +157,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       isVerified: data.isVerified
     }).returning();
 
-    await ensureTermsAccepted(newUser.id);
+    // AQUÍ SE GUARDAN LOS TÉRMINOS Y EL DISPOSITIVO (USUARIO NUEVO CLÁSICO)
+    await ensureTermsAccepted(newUser.id, ipAddress);
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
 
     return newUser;
@@ -161,17 +168,14 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
 };
 
 // --------------------------------------------------------
-// 2. 🔍 CONSULTA DE USUARIO
+// 2. 🔍 CONSULTA DE USUARIO (Con Signed URLs mantenidas)
 // --------------------------------------------------------
 export const getUser = async (idOrEmail: string) => {
   try {
     const isEmail = idOrEmail.includes('@');
-    const query = isEmail 
-      ? sql`${users.email}::text = ${idOrEmail}::text`
-      : sql`${users.id}::text = ${idOrEmail}::text`;
+    const query = isEmail ? sql`${users.email}::text = ${idOrEmail}::text` : sql`${users.id}::text = ${idOrEmail}::text`;
 
     const rows = await db.select().from(users).where(query);
-      
     if (!rows || rows.length === 0) return null;
 
     const user = rows[0];
@@ -190,7 +194,7 @@ export const getUser = async (idOrEmail: string) => {
 };
 
 // --------------------------------------------------------
-// 3. 🔄 ACTUALIZACIÓN DE USUARIO 
+// 3. 🔄 ACTUALIZACIÓN DE USUARIO (Con Signed URLs mantenidas)
 // --------------------------------------------------------
 export const updateUser = async (idOrEmail: string, data: any, newImageUri: string | null) => {
   try {
@@ -210,7 +214,6 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
     }
 
     const updateData: any = { ...data };
-
     if (updateData.name) updateData.name = capitalizeName(updateData.name);
     if (updateData.lastName) updateData.lastName = capitalizeName(updateData.lastName);
 
@@ -322,6 +325,8 @@ export const authenticateUser = async (credentials: {
 
     if (!user) {
       if (credentials.isGoogle || credentials.isApple) {
+        // SOLUCIÓN: Solo creamos el usuario base (stub), NO insertamos términos aquí, 
+        // para que se haga únicamente cuando el usuario presione "Guardar"
         const [newUser] = await db.insert(users).values({
           name: capitalizeName(firstName) || "Usuario",
           lastName: capitalizeName(lastName) || (credentials.isApple ? "Apple" : "Google"),
@@ -358,14 +363,15 @@ export const authenticateUser = async (credentials: {
       await db.update(users).set({ failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, user.id));
     }
 
+    const needsProfile = !user.phone || !user.zip;
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // Validamos Términos y Dispositivo sin duplicar
-    await ensureTermsAccepted(user.id);
-    await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
-
-    const needsProfile = !user.phone || !user.zip;
+    // Si la cuenta ya está completa (login normal), actualizamos su token de dispositivo.
+    if (!needsProfile) {
+      await ensureTermsAccepted(user.id);
+      await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
+    }
 
     return {
       message: "Autenticación exitosa",
@@ -451,21 +457,31 @@ export const updatePassword = async (req: Request, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 7. 🔍 OBTENER PERFIL DEL USUARIO
+// 7. 🔍 OBTENER PERFIL DEL USUARIO (Blindado con Signed URLs)
 // --------------------------------------------------------
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user.id; 
     const userProfile = await db.select().from(users).where(eq(users.id, userId));
     if (userProfile.length === 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
-    return res.status(200).json(userProfile[0]);
+    
+    const user = userProfile[0];
+    let signedImageUrl = user.imageUrl;
+
+    if (user.imageUrl && !user.imageUrl.startsWith('http')) {
+      const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
+      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+      if (data) { signedImageUrl = data.signedUrl; }
+    }
+
+    return res.status(200).json({ ...user, imageUrl: signedImageUrl });
   } catch (error) {
     return res.status(500).json({ error: 'Error al obtener el perfil.' });
   }
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP (Evita el vacio en devices)
+// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
@@ -475,7 +491,6 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
     if (!userId) return res.status(401).json({ error: "No autorizado." });
     if (!token) return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
 
-    // Utilizamos el validador principal para asegurarnos de que se inserte
     await upsertDeviceToken(userId, token, deviceType);
 
     return res.status(200).json({ message: "Dispositivo registrado." });
