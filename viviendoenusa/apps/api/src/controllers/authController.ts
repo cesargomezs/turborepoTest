@@ -40,6 +40,52 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
+// 🛠️ VALIDADOR: GUARDAR TÉRMINOS (SIN DUPLICAR)
+// --------------------------------------------------------
+const ensureTermsAccepted = async (userId: string) => {
+  try {
+    const existingTerms = await db.select()
+      .from(userTermsAcceptance)
+      .where(eq(userTermsAcceptance.userId, userId))
+      .limit(1);
+
+    // Solo inserta si NO existe, evitando que se repitan en pgAdmin
+    if (existingTerms.length === 0) {
+      await db.insert(userTermsAcceptance).values({ userId });
+    }
+  } catch (error) {
+    console.error("Error validando términos:", error);
+  }
+};
+
+// --------------------------------------------------------
+// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO
+// --------------------------------------------------------
+const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
+  if (!pushToken || pushToken.trim() === '') return;
+  try {
+    const existingDevice = await db.select()
+      .from(userDevices)
+      .where(eq(userDevices.expoPushToken, pushToken))
+      .limit(1);
+
+    if (existingDevice.length > 0) {
+      await db.update(userDevices)
+        .set({ userId: userId, deviceType: deviceType || existingDevice[0].deviceType, updatedAt: new Date() })
+        .where(eq(userDevices.expoPushToken, pushToken));
+    } else {
+      await db.insert(userDevices).values({
+        userId: userId,
+        expoPushToken: pushToken,
+        deviceType: deviceType || 'unknown',
+      });
+    }
+  } catch (error) {
+    console.error("Error guardando dispositivo:", error);
+  }
+};
+
+// --------------------------------------------------------
 // 1. REGISTRO DE USUARIO CLÁSICO Y GOOGLE/APPLE
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null) => {
@@ -79,14 +125,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         // 🛡️ INSERT DIRECTO DE TÉRMINOS Y DISPOSITIVO (USUARIO SOCIAL)
-         try { await db.insert(userTermsAcceptance).values({ userId: updatedUser.id }); } catch (e) {}
-         if (data.pushToken) {
-           try {
-             await db.delete(userDevices).where(eq(userDevices.expoPushToken, data.pushToken));
-             await db.insert(userDevices).values({ userId: updatedUser.id, expoPushToken: data.pushToken, deviceType: data.deviceType || 'unknown' });
-           } catch (e) {}
-         }
+         await ensureTermsAccepted(updatedUser.id);
+         await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
 
          return updatedUser;
       }
@@ -111,14 +151,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
       isVerified: data.isVerified
     }).returning();
 
-    // 🛡️ INSERT DIRECTO DE TÉRMINOS Y DISPOSITIVO (NUEVO USUARIO)
-    try { await db.insert(userTermsAcceptance).values({ userId: newUser.id }); } catch (e) {}
-    if (data.pushToken) {
-      try {
-        await db.delete(userDevices).where(eq(userDevices.expoPushToken, data.pushToken));
-        await db.insert(userDevices).values({ userId: newUser.id, expoPushToken: data.pushToken, deviceType: data.deviceType || 'unknown' });
-      } catch (e) {}
-    }
+    await ensureTermsAccepted(newUser.id);
+    await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
 
     return newUser;
   } catch (error: any) {
@@ -144,10 +178,7 @@ export const getUser = async (idOrEmail: string) => {
     let signedImageUrl = user.imageUrl;
 
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
-      const rutaArchivo = user.imageUrl.startsWith('users/') 
-          ? user.imageUrl 
-          : `users/${user.imageUrl}`;
-          
+      const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
       const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
       if (data) { signedImageUrl = data.signedUrl; }
     }
@@ -164,9 +195,7 @@ export const getUser = async (idOrEmail: string) => {
 export const updateUser = async (idOrEmail: string, data: any, newImageUri: string | null) => {
   try {
     const isEmail = idOrEmail.includes('@');
-    const query = isEmail 
-      ? eq(users.email, idOrEmail) 
-      : eq(users.id, idOrEmail);
+    const query = isEmail ? eq(users.email, idOrEmail) : eq(users.id, idOrEmail);
 
     const [existingUser] = await db.select().from(users).where(query);
     if (!existingUser) throw new Error("Usuario no encontrado");
@@ -190,9 +219,8 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
         const zipResponse = await fetch(`https://api.zippopotam.us/us/${data.zip}`);
         if (zipResponse.ok) {
           const zipInfo = await zipResponse.json();
-          const location = zipInfo.places[0];
-          updateData.city = location['place name']; 
-          updateData.state = location['state abbreviation']; 
+          updateData.city = zipInfo.places[0]['place name']; 
+          updateData.state = zipInfo.places[0]['state abbreviation']; 
         }
       } catch (err) {}
     }
@@ -234,26 +262,19 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
       entityType: 'auth',
       entityId: existingUser.id,
       ipAddress: ipAddress,
-      metadata: { 
-        reason: "El usuario actualizó su propia información", 
-        previousState: previousState  
-      }
+      metadata: { reason: "El usuario actualizó su información", previousState }
     });
     
     const finalUser = updatedRows[0];
     let signedImageUrl = finalUser.imageUrl;
 
     if (finalUser.imageUrl && !finalUser.imageUrl.startsWith('http')) {
-      const rutaArchivo = finalUser.imageUrl.startsWith('users/') 
-          ? finalUser.imageUrl 
-          : `users/${finalUser.imageUrl}`;
-          
+      const rutaArchivo = finalUser.imageUrl.startsWith('users/') ? finalUser.imageUrl : `users/${finalUser.imageUrl}`;
       const { data: signedData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
       if (signedData) { signedImageUrl = signedData.signedUrl; }
     }
 
     return { ...finalUser, imageUrl: signedImageUrl };
-    
   } catch (error: any) {
     throw new Error(`Error al actualizar el usuario: ${error.message}`);
   }
@@ -288,7 +309,7 @@ export const authenticateUser = async (credentials: {
     if (credentials.isApple && credentials.idToken) {
       const decoded: any = jwt.decode(credentials.idToken);
       if (!decoded || (!decoded.email && !decoded.sub)) {
-        throw new Error("Token de Apple inválido o ilegible");
+        throw new Error("Token de Apple inválido");
       }
       email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
     }
@@ -317,25 +338,18 @@ export const authenticateUser = async (credentials: {
     const currentAttempts = user.failedLoginAttempts ?? 0;
 
     if (user.isLocked || currentAttempts >= 5) {
-      throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos. Por favor, utiliza la opción '¿Olvidaste tu contraseña?' para restablecerla.");
+      throw new Error("Tu cuenta ha sido bloqueada. Restablécela.");
     }
 
     if (!credentials.isGoogle && !credentials.isApple) {
       if (!user.password) throw new Error(genericAuthError);
-      
       const isMatch = await bcrypt.compare(credentials.password || '', user.password);
       
       if (!isMatch) {
         const attempts = currentAttempts + 1;
         const isLocked = attempts >= 5; 
-        
-        await db.update(users)
-          .set({ failedLoginAttempts: attempts, isLocked: isLocked })
-          .where(eq(users.id, user.id));
-
-        if (isLocked) {
-          throw new Error("Tu cuenta ha sido bloqueada por múltiples intentos fallidos.");
-        }
+        await db.update(users).set({ failedLoginAttempts: attempts, isLocked }).where(eq(users.id, user.id));
+        if (isLocked) throw new Error("Tu cuenta ha sido bloqueada.");
         throw new Error(genericAuthError);
       }
     }
@@ -347,14 +361,9 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // 🛡️ INSERT DIRECTO DE TÉRMINOS Y DISPOSITIVO (AL HACER LOGIN)
-    try { await db.insert(userTermsAcceptance).values({ userId: user.id }); } catch (e) {}
-    if (credentials.pushToken) {
-      try {
-        await db.delete(userDevices).where(eq(userDevices.expoPushToken, credentials.pushToken));
-        await db.insert(userDevices).values({ userId: user.id, expoPushToken: credentials.pushToken, deviceType: credentials.deviceType || 'unknown' });
-      } catch (e) {}
-    }
+    // Validamos Términos y Dispositivo sin duplicar
+    await ensureTermsAccepted(user.id);
+    await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
 
     const needsProfile = !user.phone || !user.zip;
 
@@ -385,41 +394,31 @@ export const sendPasswordResetEmail = async (email: string) => {
     const rows = await db.select().from(users).where(eq(users.email, email));
     const user = rows[0];
 
-    if (!user) throw new Error("No existe una cuenta registrada con este correo electrónico.");
-    if (!user.password) throw new Error("Esta cuenta usa autenticación externa. Inicia sesión directamente con Google o Apple.");
+    if (!user) throw new Error("No existe una cuenta con este correo.");
+    if (!user.password) throw new Error("Cuenta externa. Inicia sesión con Google o Apple.");
 
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
     const resetLink = `https://viviendoenusa.app/ResetPassword?token=${resetToken}`;
 
-    let logoUrl = 'https://viviendoenusa.app/favicon.ico'; 
-    try {
-      const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 3600);
-      if (!error && data?.signedUrl) { logoUrl = data.signedUrl; }
-    } catch (storageErr) {}
-
     const htmlContent = `
-      <div style="font-family: Arial, sans-serif; background-color: #f4f4f7; padding: 30px; text-align: center; color: #333;">
-        <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 20px;">
-          <img src="${logoUrl}" alt="Viviendo en USA" style="width: 70px; height: 70px; border-radius: 50%; display: block; margin: 0 auto;" />
-          <h2>Recuperación de Contraseña</h2>
-          <p>Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
-          <a href="${resetLink}" style="display: inline-block; padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; margin-bottom: 25px;">Restablecer Contraseña</a>
-          <p style="font-size: 13px; color: #888888;">Este enlace expirará en 1 hora. Si no lo solicitaste, ignora este correo.</p>
-        </div>
+      <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+        <h2>Recuperación de Contraseña</h2>
+        <p>Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
+        <a href="${resetLink}" style="padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px;">Restablecer Contraseña</a>
       </div>
     `;
 
     const { error } = await resend.emails.send({
       from: 'Viviendo en USA <noreply@viviendoenusa.app>',
       to: [user.email as string],
-      subject: 'Recuperación de Contraseña - Viviendo en USA',
+      subject: 'Recuperación de Contraseña',
       html: htmlContent
     });
 
     if (error) throw new Error(error.message);
-    return { message: "Correo enviado con éxito. Revisa tu bandeja de entrada." };
+    return { message: "Correo enviado con éxito." };
   } catch (error: any) {
     throw new Error(error.message);
   }
@@ -432,7 +431,7 @@ export const updatePassword = async (req: Request, res: Response) => {
   const { token, password } = req.body;
   try {
     const decodedPayload: any = jwt.decode(token);
-    if (!decodedPayload || !decodedPayload.id) throw new Error("Token con formato incorrecto.");
+    if (!decodedPayload || !decodedPayload.id) throw new Error("Token incorrecto.");
 
     const rows = await db.select().from(users).where(eq(users.id, decodedPayload.id));
     const user = rows[0];
@@ -443,17 +442,16 @@ export const updatePassword = async (req: Request, res: Response) => {
     const decoded: any = jwt.verify(token, secret);
     
     const hashedPassword = await bcrypt.hash(password, 10);
-    
     await db.update(users).set({ password: hashedPassword, failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, decoded.id));
 
-    res.status(200).json({ message: "Contraseña actualizada correctamente." });
+    res.status(200).json({ message: "Contraseña actualizada." });
   } catch (error: any) {
-    res.status(400).json({ error: "El enlace es inválido, ha expirado o ya fue utilizado." });
+    res.status(400).json({ error: "Enlace inválido o expirado." });
   }
 };
 
 // --------------------------------------------------------
-// 7. 🔍 OBTENER PERFIL DEL USUARIO AUTENTICADO
+// 7. 🔍 OBTENER PERFIL DEL USUARIO
 // --------------------------------------------------------
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {
@@ -467,7 +465,7 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO
+// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP (Evita el vacio en devices)
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
@@ -477,68 +475,34 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
     if (!userId) return res.status(401).json({ error: "No autorizado." });
     if (!token) return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
 
-    // Insert limpio
-    try {
-      await db.delete(userDevices).where(eq(userDevices.expoPushToken, token));
-      await db.insert(userDevices).values({ userId: userId, expoPushToken: token, deviceType: deviceType || 'unknown' });
-    } catch (e) {}
+    // Utilizamos el validador principal para asegurarnos de que se inserte
+    await upsertDeviceToken(userId, token, deviceType);
 
-    return res.status(200).json({ message: "Dispositivo registrado con éxito." });
+    return res.status(200).json({ message: "Dispositivo registrado." });
   } catch (error: any) {
-    return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
+    return res.status(500).json({ error: `Error interno: ${error.message}` });
   }
 };
 
 // --------------------------------------------------------
-// 9. 🗑️ DAR DE BAJA / ELIMINAR CUENTA
+// 9. 🗑️ ELIMINAR CUENTA
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { reason } = req.body; 
-
-    if (!userId) return res.status(401).json({ error: "No autorizado. Se requiere una sesión válida." });
-
-    const [userRecord] = await db.select({ email: users.email, name: users.name, imageUrl: users.imageUrl }).from(users).where(eq(users.id, userId)).limit(1);
-
-    if (!userRecord) return res.status(404).json({ error: "Usuario no encontrado." });
-
-    if (userRecord.imageUrl && !userRecord.imageUrl.startsWith('http')) {
-      const filePath = userRecord.imageUrl.startsWith('users/') ? userRecord.imageUrl : `users/${userRecord.imageUrl.split('/').pop()}`;
-      try { await supabase.storage.from(NOMBRE_BUCKET).remove([filePath]); } catch (e) {}
-    }
-
-    const forwarded = req.headers?.['x-forwarded-for'];
-    const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const rawIp = ipString ? ipString.split(',')[0].trim() : req.socket?.remoteAddress || req.ip || '0.0.0.0';
-    const ipAddress = sanitizeText(rawIp);
-
-    logAuditEvent({
-      userId: userId,
-      action: 'DELETE_ACCOUNT_REQUEST',
-      entityType: 'auth',
-      entityId: userId,
-      ipAddress: ipAddress,
-      metadata: { reason: "Baja de cuenta", surveyReason: reason || "No especificado" }
-    });
+    if (!userId) return res.status(401).json({ error: "No autorizado." });
 
     await db.delete(userDevices).where(eq(userDevices.userId, userId));
-
     await db.update(users).set({
       name: "Usuario",
       lastName: "Anónimo",
       email: `deleted_${userId}@viviendoenusa.app`,
-      phone: null,
-      zip: null,
-      imageUrl: null,
-      estate: null,
-      password: null,
-      isLocked: true,
-      updatedAt: new Date(),
+      phone: null, zip: null, imageUrl: null, estate: null, password: null,
+      isLocked: true, updatedAt: new Date(),
     }).where(eq(users.id, userId));
 
-    return res.status(200).json({ success: true, message: "Cuenta dada de baja correctamente." });
+    return res.status(200).json({ success: true, message: "Cuenta dada de baja." });
   } catch (error: any) {
-    return res.status(500).json({ error: `Error interno del servidor: ${error.message}` });
+    return res.status(500).json({ error: `Error: ${error.message}` });
   }
 };
