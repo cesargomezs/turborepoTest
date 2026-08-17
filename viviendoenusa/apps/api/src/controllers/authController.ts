@@ -40,7 +40,7 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ FUNCIÓN AUXILIAR PARA GUARDAR O ACTUALIZAR DISPOSITIVO
+// 🛠️ FUNCIÓN INTERNA PARA GUARDAR EL DISPOSITIVO (USADA DIRECTAMENTE)
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   if (!pushToken || pushToken.trim() === '') return;
@@ -66,16 +66,13 @@ const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?
   }
 };
 
-// --------------------------------------------------------
-// 🛠️ FUNCIÓN AUXILIAR PARA GUARDAR TÉRMINOS
-// --------------------------------------------------------
 const ensureTermsAccepted = async (userId: string) => {
   try {
     if (userTermsAcceptance) {
       await db.insert(userTermsAcceptance).values({ userId });
     }
   } catch (error) {
-    console.error("❌ Error guardando términos y condiciones:", error);
+    console.error("❌ Error guardando términos:", error);
   }
 };
 
@@ -123,6 +120,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
          }).where(eq(users.id, user.id)).returning();
 
          await ensureTermsAccepted(updatedUser.id);
+         
+         // 🚀 INVOCACIÓN DIRECTA DEL DISPOSITIVO DESDE EL REGISTRO SOCIAL
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
 
          return updatedUser;
@@ -149,6 +148,8 @@ export const registerUser = async (data: any, imageUrl: string | null) => {
     }).returning();
 
     await ensureTermsAccepted(newUser.id);
+    
+    // 🚀 INVOCACIÓN DIRECTA DEL DISPOSITIVO DESDE EL REGISTRO CLÁSICO
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
 
     return newUser;
@@ -386,7 +387,7 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // Guardar dispositivo directamente si viene en el login
+    // 🚀 INVOCACIÓN DIRECTA DEL DISPOSITIVO DESDE EL LOGIN
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
 
     const needsProfile = !user.phone || !user.zip;
@@ -536,7 +537,7 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO
+// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO (Ruta independiente)
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
