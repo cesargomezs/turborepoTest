@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express'; 
 import rateLimit from 'express-rate-limit'; 
-import { AuthRequest, verifyToken } from '../../middleware/authMiddleware.js'; 
-import { db } from '../../../../../packages/db/src/index';
+import { AuthRequest, verifyToken } from '../../middleware/authMiddleware'; 
 import { 
   authenticateUser, 
   getUser, 
@@ -13,7 +12,6 @@ import {
   saveDeviceToken,
   deleteUserAccount
 } from '../../controllers/authController';
-import { getPlatformStats } from '../../controllers/publicController.js';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -82,14 +80,16 @@ router.put('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
 // Ruta centralizada de login
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password, idToken, isGoogle, isApple } = req.body; 
+    const { email, password, idToken, isGoogle, isApple, pushToken, deviceType } = req.body; 
     
     const result = await authenticateUser({ 
       email, 
       password, 
       idToken, 
       isGoogle,
-      isApple 
+      isApple,
+      pushToken,
+      deviceType
     });
     
     res.status(200).json(result);
@@ -109,7 +109,7 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// 📱 Ruta protegida para registrar o actualizar el token push del dispositivo
+// Ruta protegida para registrar o actualizar el token push del dispositivo
 router.post('/save-device-token', verifyToken, saveDeviceToken);
 
 // Actualizar contraseña
@@ -118,7 +118,5 @@ router.post('/update-password', updatePassword);
 // Dar de baja / eliminar cuenta
 router.delete('/delete-account', verifyToken, deleteUserAccount);
 
-// Estadísticas públicas
-router.get('/stats', getPlatformStats);
-
+// 🚀 ESTO ES LO QUE HACE QUE EL ERROR EN INDEX.TS DESAPAREZCA
 export default router;
