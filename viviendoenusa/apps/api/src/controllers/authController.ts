@@ -364,7 +364,7 @@ export const authenticateUser = async (credentials: {
 };
 
 // --------------------------------------------------------
-// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA (CON RESEND)
+// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
 // --------------------------------------------------------
 export const sendPasswordResetEmail = async (email: string) => {
   try {
@@ -503,6 +503,7 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
     }
 
+    // 🚀 RESTAURADO A CAMELCASE SEGÚN TU SCHEMA.TS
     const existingDevice = await db.select()
       .from(userDevices)
       .where(eq(userDevices.expoPushToken, token))
@@ -581,10 +582,10 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    // 🚀 1. ELIMINAMOS LOS TOKENS DE NOTIFICACIONES DE ESTE USUARIO
+    // 🚀 RESTAURADO A CAMELCASE (userId) PARA EVITAR ERROR ROJO
     await db.delete(userDevices).where(eq(userDevices.userId, userId));
 
-    // 🚀 2. ANONIMIZAMOS AL USUARIO EN LA BASE DE DATOS
+    // 🚀 ANONIMIZAMOS AL USUARIO EN LA BASE DE DATOS
     await db
       .update(users)
       .set({
