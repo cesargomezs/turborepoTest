@@ -2,6 +2,9 @@
   "build": {
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend-production.up.railway.app"
+      },
       "android": {
         "buildType": "app-bundle"
       }

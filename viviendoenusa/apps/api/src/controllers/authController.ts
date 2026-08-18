@@ -40,7 +40,7 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ CANDADO ANTI-DUPLICADOS PARA TÉRMINOS
+// 🛠️ CANDADO Y REGISTRO LIMPIO DE TÉRMINOS (TRANSACCIÓN SEGURA)
 // --------------------------------------------------------
 const termsLock = new Set<string>();
 
@@ -49,11 +49,14 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
   termsLock.add(userId);
 
   try {
-    // 🚀 Borramos cualquier registro previo para evitar duplicados exactos
-    await db.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
-    await db.insert(userTermsAcceptance).values({ 
-      userId, 
-      ipAddress: ipAddress || null 
+    await db.transaction(async (tx) => {
+      // Borramos cualquier rastro previo para evitar duplicados exactos
+      await tx.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
+      // Insertamos el único válido
+      await tx.insert(userTermsAcceptance).values({ 
+        userId, 
+        ipAddress: ipAddress || null 
+      });
     });
     console.log(`✅ [TÉRMINOS] Guardado único y exitoso para: ${userId}`);
   } catch (error) {
@@ -64,28 +67,34 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
 };
 
 // --------------------------------------------------------
-// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO SIN DUPLICADOS
+// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO SIN DUPLICADOS (TRANSACCIÓN SEGURA)
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
-  console.log("🔍 [DEBUG DEVICES] Entrando a upsertDeviceToken");
-
-  if (!pushToken || pushToken.trim() === '') {
-    console.log("⚠️ [DEBUG DEVICES] pushToken viene vacío o nulo.");
+  if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '') {
+    console.log("⚠️ [DEBUG DEVICES] pushToken viene vacío u omitido.");
     return;
   }
   
+  const cleanToken = pushToken.trim();
+  const cleanDevice = deviceType || 'unknown';
+
   try {
-    // 🚀 Limpiamos duplicados previos de este token o de este usuario exacto
-    await db.delete(userDevices).where(sql`${userDevices.expoPushToken} = ${pushToken} OR ${userDevices.userId} = ${userId}`);
-    
-    await db.insert(userDevices).values({
-      userId: userId,
-      expoPushToken: pushToken,
-      deviceType: deviceType || 'unknown',
+    await db.transaction(async (tx) => {
+      // 1. Limpiamos si el token ya estaba asociado a otro usuario
+      await tx.delete(userDevices).where(eq(userDevices.expoPushToken, cleanToken));
+      // 2. Limpiamos dispositivos viejos de este usuario para mantener solo el activo
+      await tx.delete(userDevices).where(eq(userDevices.userId, userId));
+      
+      // 3. Insertamos el dispositivo fresco de manera limpia
+      await tx.insert(userDevices).values({
+        userId: userId,
+        expoPushToken: cleanToken,
+        deviceType: cleanDevice,
+      });
     });
     console.log("✅ [DEBUG DEVICES] Dispositivo guardado correctamente en la BD");
   } catch (error) {
-    console.error("❌ [DEBUG DEVICES] Error crítico en DB:", error);
+    console.error("❌ [DEBUG DEVICES] Error crítico en DB al guardar dispositivo:", error);
   }
 };
 
@@ -166,7 +175,7 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
 };
 
 // --------------------------------------------------------
-// 2. 🔍 CONSULTA DE USUARIO (URL Pública para evitar parpadeo)
+// 2. 🔍 CONSULTA DE USUARIO (URL Pública)
 // --------------------------------------------------------
 export const getUser = async (idOrEmail: string) => {
   try {
@@ -286,14 +295,14 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 };
 
 // --------------------------------------------------------
-// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (CON CAPTURA ROBUSTA DE NOMBRE EN APPLE/GOOGLE)
+// 4. 🌐 AUTENTICACIÓN CENTRALIZADA
 // --------------------------------------------------------
 export const authenticateUser = async (credentials: { 
   idToken?: string; 
   email?: string; 
   password?: string; 
-  firstName?: string; // 👈 Recibimos por si el front lo manda explícito
-  lastName?: string;  // 👈 Recibimos por si el front lo manda explícito
+  firstName?: string; 
+  lastName?: string;  
   isGoogle: boolean; 
   isApple?: boolean; 
   pushToken?: string;  
@@ -320,7 +329,6 @@ export const authenticateUser = async (credentials: {
       }
       email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
       
-      // Si Apple trae nombre en el token o el frontend lo envió, lo usamos
       if (!firstName && credentials.firstName) {
         firstName = credentials.firstName;
       }
@@ -349,8 +357,6 @@ export const authenticateUser = async (credentials: {
         throw new Error(genericAuthError);
       }
     } else {
-      // 🚀 CORRECCIÓN CLAVE: Si el usuario ya existe pero se registró antes con un nombre genérico ("Apple" o "Usuario") 
-      // y ahora tenemos un nombre válido, se lo actualizamos de una vez para que no se quede sin nombre.
       const currentName = user.name;
       const isGenericName = !currentName || currentName === "Usuario" || currentName === "Apple" || currentName === "Google";
       
