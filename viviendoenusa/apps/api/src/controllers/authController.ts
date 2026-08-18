@@ -40,47 +40,47 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ FUERZA BRUTA: GUARDAR TÉRMINOS (IMPOSIBLE DUPLICAR)
+// 🛠️ CANDADO ANTI-DOBLE CLIC (Evita duplicados exactos en el mismo milisegundo)
 // --------------------------------------------------------
+const termsLock = new Set<string>();
+
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
+  // Si el usuario ya está siendo procesado en este instante, ignoramos la petición extra
+  if (termsLock.has(userId)) return;
+  termsLock.add(userId);
+
   try {
-    // 1. Borramos sin preguntar para matar cualquier duplicado por doble clic del frontend
+    // 1. Borramos cualquier rastro previo para limpiar
     await db.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
-    
     // 2. Insertamos el único y definitivo
     await db.insert(userTermsAcceptance).values({ 
-      userId: userId, 
+      userId, 
       ipAddress: ipAddress || null 
     });
-    console.log(`✅ [TÉRMINOS] Guardado único y exitoso para el usuario: ${userId}`);
   } catch (error) {
-    console.error("❌ Error forzando términos:", error);
+    console.error("❌ Error guardando términos:", error);
+  } finally {
+    // Soltamos el candado después de 2 segundos (tiempo de sobra para matar el doble render)
+    setTimeout(() => termsLock.delete(userId), 2000);
   }
 };
 
 // --------------------------------------------------------
-// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO
+// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO 
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   if (!pushToken || pushToken.trim() === '') return;
   
   try {
-    const existingDevice = await db.select()
-      .from(userDevices)
-      .where(eq(userDevices.expoPushToken, pushToken))
-      .limit(1);
-
-    if (existingDevice.length > 0) {
-      await db.update(userDevices)
-        .set({ userId: userId, deviceType: deviceType || existingDevice[0].deviceType, updatedAt: new Date() })
-        .where(eq(userDevices.expoPushToken, pushToken));
-    } else {
-      await db.insert(userDevices).values({
-        userId: userId,
-        expoPushToken: pushToken,
-        deviceType: deviceType || 'unknown',
-      });
-    }
+    // Borramos sin preguntar para matar tokens huérfanos o duplicados
+    await db.delete(userDevices).where(eq(userDevices.expoPushToken, pushToken));
+    
+    // Insertamos limpio 
+    await db.insert(userDevices).values({
+      userId: userId,
+      expoPushToken: pushToken,
+      deviceType: deviceType || 'unknown',
+    });
   } catch (error) {
     console.error("❌ Error guardando dispositivo:", error);
   }
@@ -109,7 +109,7 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       
-      // COMPLETAR PERFIL DESPUÉS DE SELECCIONAR APPLE/GOOGLE (Cuando le das a Guardar)
+      // COMPLETAR PERFIL
       if (!user.phone && (data.authProvider === 'apple' || data.authProvider === 'google')) {
          let hashedPassword = user.password;
          if (data.password) {
@@ -128,7 +128,7 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         // AQUÍ SE GUARDAN LOS TÉRMINOS Y EL DISPOSITIVO (SOLO AL GUARDAR EL PERFIL)
+         // 🔥 AQUÍ SE GUARDAN: Ya está blindado contra el doble clic
          await ensureTermsAccepted(updatedUser.id, ipAddress);
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
 
@@ -155,7 +155,7 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
       isVerified: data.isVerified
     }).returning();
 
-    // AQUÍ SE GUARDAN LOS TÉRMINOS Y EL DISPOSITIVO (USUARIO NUEVO CLÁSICO)
+    // 🔥 AQUÍ SE GUARDAN: Ya está blindado contra el doble clic
     await ensureTermsAccepted(newUser.id, ipAddress);
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
 
@@ -166,7 +166,7 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
 };
 
 // --------------------------------------------------------
-// 2. 🔍 CONSULTA DE USUARIO (Con Signed URLs mantenidas)
+// 2. 🔍 CONSULTA DE USUARIO 
 // --------------------------------------------------------
 export const getUser = async (idOrEmail: string) => {
   try {
@@ -192,7 +192,7 @@ export const getUser = async (idOrEmail: string) => {
 };
 
 // --------------------------------------------------------
-// 3. 🔄 ACTUALIZACIÓN DE USUARIO (Con Signed URLs mantenidas)
+// 3. 🔄 ACTUALIZACIÓN DE USUARIO 
 // --------------------------------------------------------
 export const updateUser = async (idOrEmail: string, data: any, newImageUri: string | null) => {
   try {
@@ -323,8 +323,6 @@ export const authenticateUser = async (credentials: {
 
     if (!user) {
       if (credentials.isGoogle || credentials.isApple) {
-        // SOLUCIÓN: Solo creamos el usuario base (stub), NO insertamos términos aquí, 
-        // para que se haga únicamente cuando el usuario presione "Guardar"
         const [newUser] = await db.insert(users).values({
           name: capitalizeName(firstName) || "Usuario",
           lastName: capitalizeName(lastName) || (credentials.isApple ? "Apple" : "Google"),
@@ -365,11 +363,10 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // Si la cuenta ya está completa (login normal), actualizamos su token de dispositivo.
-    if (!needsProfile) {
-      await ensureTermsAccepted(user.id);
-      await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
-    }
+    // 🔥 AQUÍ ESTABA EL ERROR: Quité la condición "if (!needsProfile)" que bloqueaba todo.
+    // Ahora, siempre que hagas login, se asegura de guardar los términos y el device INCONDICIONALMENTE.
+    await ensureTermsAccepted(user.id);
+    await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
 
     return {
       message: "Autenticación exitosa",
@@ -455,7 +452,7 @@ export const updatePassword = async (req: Request, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 7. 🔍 OBTENER PERFIL DEL USUARIO (Blindado con Signed URLs)
+// 7. 🔍 OBTENER PERFIL DEL USUARIO 
 // --------------------------------------------------------
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {
@@ -479,43 +476,24 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO
+// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const { token, deviceType } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ error: "No autorizado." });
-    }
+    if (!userId) return res.status(401).json({ error: "No autorizado." });
+    if (!token) return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
 
-    if (!token) {
-      return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
-    }
+    await upsertDeviceToken(userId, token, deviceType);
 
-    // Usamos onConflictDoUpdate para asegurar que se inserte o actualice limpiamente
-    await db.insert(userDevices)
-      .values({
-        userId: userId,
-        expoPushToken: token,
-        deviceType: deviceType || 'unknown',
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: userDevices.expoPushToken,
-        set: { 
-          userId: userId, 
-          deviceType: deviceType || 'unknown',
-          updatedAt: new Date() 
-        },
-      });
-
-    return res.status(200).json({ message: "Dispositivo registrado con éxito." });
+    return res.status(200).json({ message: "Dispositivo registrado." });
   } catch (error: any) {
-    return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
+    return res.status(500).json({ error: `Error interno: ${error.message}` });
   }
 };
+
 // --------------------------------------------------------
 // 9. 🗑️ ELIMINAR CUENTA
 // --------------------------------------------------------
