@@ -40,61 +40,55 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ CANDADO Y REGISTRO LIMPIO DE TÉRMINOS (TRANSACCIÓN SEGURA)
+// 🛠️ TÉRMINOS: FUERZA BRUTA (Permite múltiples sesiones, cero duplicados por error)
 // --------------------------------------------------------
-const termsLock = new Set<string>();
-
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
-  if (termsLock.has(userId)) return;
-  termsLock.add(userId);
-
   try {
-    await db.transaction(async (tx) => {
-      // Borramos cualquier rastro previo para evitar duplicados exactos
-      await tx.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
-      // Insertamos el único válido
-      await tx.insert(userTermsAcceptance).values({ 
-        userId, 
-        ipAddress: ipAddress || null 
-      });
+    // 1. Borramos cualquier registro viejo para evitar los duplicados del "doble-disparo" de React Native
+    await db.execute(sql`DELETE FROM "userTermsAcceptance" WHERE "userId" = ${userId}`);
+    
+    // 2. Insertamos el nuevo registro limpio
+    await db.insert(userTermsAcceptance).values({ 
+      userId, 
+      ipAddress: ipAddress || null 
     });
-    console.log(`✅ [TÉRMINOS] Guardado único y exitoso para: ${userId}`);
-  } catch (error) {
-    console.error("❌ Error guardando términos:", error);
-  } finally {
-    setTimeout(() => termsLock.delete(userId), 2000);
+    console.log(`✅ [TÉRMINOS] Guardado limpio asegurado para: ${userId}`);
+  } catch (error: any) {
+    console.error("❌ [TÉRMINOS] EL VERRACO ERROR ES:", error.message);
   }
 };
 
 // --------------------------------------------------------
-// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO SIN DUPLICADOS (TRANSACCIÓN SEGURA)
+// 🛠️ DISPOSITIVOS: UPSERT Y REPORTE DE ERROR REAL
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
+  console.log(`🔍 [DEBUG DEVICES] Entrando. Token recibido: ${pushToken}`);
+
   if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '') {
-    console.log("⚠️ [DEBUG DEVICES] pushToken viene vacío u omitido.");
+    console.log("⚠️ [DEBUG DEVICES] Token nulo o vacío.");
     return;
   }
   
-  const cleanToken = pushToken.trim();
-  const cleanDevice = deviceType || 'unknown';
+  const tokenStr = pushToken.trim();
+  const deviceStr = deviceType || 'unknown';
 
   try {
-    await db.transaction(async (tx) => {
-      // 1. Limpiamos si el token ya estaba asociado a otro usuario
-      await tx.delete(userDevices).where(eq(userDevices.expoPushToken, cleanToken));
-      // 2. Limpiamos dispositivos viejos de este usuario para mantener solo el activo
-      await tx.delete(userDevices).where(eq(userDevices.userId, userId));
-      
-      // 3. Insertamos el dispositivo fresco de manera limpia
-      await tx.insert(userDevices).values({
+    // IMPORTANTE: Esto solo funciona si en pgAdmin corregiste "expo_push_token" y le pusiste la restricción UNIQUE
+    await db.insert(userDevices)
+      .values({
         userId: userId,
-        expoPushToken: cleanToken,
-        deviceType: cleanDevice,
+        expoPushToken: tokenStr,
+        deviceType: deviceStr,
+      })
+      .onConflictDoUpdate({
+        target: userDevices.expoPushToken, // Si el token ya existe en la tabla...
+        set: { userId: userId, deviceType: deviceStr } // ...solo le actualizamos el dueño.
       });
-    });
-    console.log("✅ [DEBUG DEVICES] Dispositivo guardado correctamente en la BD");
-  } catch (error) {
-    console.error("❌ [DEBUG DEVICES] Error crítico en DB al guardar dispositivo:", error);
+      
+    console.log(`✅ [DEBUG DEVICES] Dispositivo guardado en BD.`);
+  } catch (error: any) {
+    // Si falla, ESTO NOS DIRÁ EXACTAMENTE POR QUÉ RAILWAY LO RECHAZA
+    console.error("❌ [DEBUG DEVICES] EL VERRACO ERROR ES:", error.message);
   }
 };
 
