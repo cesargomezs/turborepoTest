@@ -1,4 +1,4 @@
-import { db } from "../../../../packages/db/src"; 
+import { db } from "../../../../packages/db/src";
 import { users, userDevices, userTermsAcceptance } from "../../../../packages/db/src/schema";
 import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
@@ -15,7 +15,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey); 
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images';
 
 const googleClient = new OAuth2Client(); 
@@ -62,22 +62,18 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
 };
 
 // --------------------------------------------------------
-// 🛠️ DISPOSITIVOS: UPSERT BLINDADO PARA EVITAR FALLOS EN RAILWAY
+// 🛠️ DISPOSITIVOS: UPSERT BLINDADO CON RESPALDO AUTOMÁTICO
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   console.log(`🔍 [DEBUG DEVICES] Entrando. Token recibido: ${pushToken}`);
-
-  if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '' || pushToken === 'undefined') {
-    console.log("⚠️ [DEBUG DEVICES] Token nulo, vacío o 'undefined'.");
-    return;
-  }
   
-  const tokenStr = pushToken.trim();
-  const deviceStr = deviceType || 'unknown';
+  const tokenStr = (pushToken && typeof pushToken === 'string' && pushToken.trim() !== '' && pushToken !== 'undefined') 
+    ? pushToken.trim() 
+    : `fallback_token_${userId}_${Date.now()}`;
+
+  const deviceStr = deviceType || 'ios';
 
   try {
-    // Si ya existe el token, actualizamos el userId y el tipo. 
-    // Si la tabla no tiene la restricción UNIQUE en expoPushToken, hacemos un manejo seguro borrando previo o usando un insert simple.
     const existingDevice = await db.select().from(userDevices).where(eq(userDevices.expoPushToken, tokenStr));
 
     if (existingDevice.length > 0) {
@@ -296,7 +292,7 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 };
 
 // --------------------------------------------------------
-// 4. 🌐 AUTENTICACIÓN CENTRALIZADA
+// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Con respaldo automático de devices)
 // --------------------------------------------------------
 export const authenticateUser = async (credentials: { 
   idToken?: string; 
