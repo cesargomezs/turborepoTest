@@ -479,36 +479,43 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP (DONDE REALMENTE LLEGA)
+// 8. 📱 GUARDAR O ACTUALIZAR TOKEN PUSH DEL DISPOSITIVO
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const { token, deviceType } = req.body;
 
-    console.log("📥 [DEVICES] Petición recibida:", { userId, token, deviceType });
+    if (!userId) {
+      return res.status(401).json({ error: "No autorizado." });
+    }
 
-    if (!userId) return res.status(401).json({ error: "No autorizado." });
-    if (!token) return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
+    if (!token) {
+      return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
+    }
 
-    // 1. Borramos si ese token ya existía para evitar choques en la base de datos
-    await db.delete(userDevices).where(eq(userDevices.expoPushToken, token));
-    
-    // 2. Insertamos el token limpio asociado al usuario
-    await db.insert(userDevices).values({
-      userId: userId,
-      expoPushToken: token,
-      deviceType: deviceType || 'unknown',
-    });
+    // Usamos onConflictDoUpdate para asegurar que se inserte o actualice limpiamente
+    await db.insert(userDevices)
+      .values({
+        userId: userId,
+        expoPushToken: token,
+        deviceType: deviceType || 'unknown',
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: userDevices.expoPushToken,
+        set: { 
+          userId: userId, 
+          deviceType: deviceType || 'unknown',
+          updatedAt: new Date() 
+        },
+      });
 
-    console.log("✅ [DEVICES] Token de dispositivo guardado con éxito en la DB");
-    return res.status(200).json({ message: "Dispositivo registrado." });
+    return res.status(200).json({ message: "Dispositivo registrado con éxito." });
   } catch (error: any) {
-    console.error("❌ [DEVICES] Error crítico al guardar:", error);
-    return res.status(500).json({ error: `Error interno: ${error.message}` });
+    return res.status(500).json({ error: `Error al guardar el dispositivo: ${error.message}` });
   }
 };
-
 // --------------------------------------------------------
 // 9. 🗑️ ELIMINAR CUENTA
 // --------------------------------------------------------
