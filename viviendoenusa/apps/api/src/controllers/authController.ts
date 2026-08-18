@@ -40,14 +40,14 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ TÉRMINOS: FUERZA BRUTA (Permite múltiples sesiones, cero duplicados por error)
+// 🛠️ TÉRMINOS: FUERZA BRUTA (Corregido el nombre de tabla)
 // --------------------------------------------------------
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
   try {
-    // 1. Borramos cualquier registro viejo para evitar los duplicados del "doble-disparo" de React Native
-    await db.execute(sql`DELETE FROM "userTermsAcceptance" WHERE "userId" = ${userId}`);
+    // Usamos el borrado nativo de Drizzle para que él maneje las minúsculas/mayúsculas de Postgres
+    await db.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
     
-    // 2. Insertamos el nuevo registro limpio
+    // Insertamos el nuevo registro limpio
     await db.insert(userTermsAcceptance).values({ 
       userId, 
       ipAddress: ipAddress || null 
