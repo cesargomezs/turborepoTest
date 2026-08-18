@@ -30,12 +30,27 @@ const authLimiter = rateLimit({
 // Ruta protegida para perfil
 router.get('/mi-perfil', verifyToken, getMiPerfil);
 
-// Registrar usuario
+// Registrar usuario (CLÁSICO O COMPLETAR PERFIL SOCIAL)
 router.post('/register', async (req, res) => {
   try {
-    const newUser = await registerUser(req.body.data, req.body.newImageUri);
+    // 🔥 EL FIX DEL ROUTER: Asegurarnos de atrapar el token venga donde venga
+    const requestData = {
+      ...req.body.data,
+      pushToken: req.body.pushToken || req.body.data?.pushToken,
+      deviceType: req.body.deviceType || req.body.data?.deviceType
+    };
+
+    // Capturar la IP real para los términos y condiciones
+    const forwarded = req.headers['x-forwarded-for'];
+    const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const reqIp = ipString ? ipString.split(',')[0].trim() : req.socket?.remoteAddress;
+
+    // Ahora sí le pasamos toda la data completa (incluyendo el token) y la IP
+    const newUser = await registerUser(requestData, req.body.newImageUri, reqIp);
+    
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, baseSecret, { expiresIn: '7d' });
+    
     res.status(200).json({ user: newUser, token: token });
   } catch (error: any) { 
     res.status(400).json({ error: error.message });
@@ -46,13 +61,11 @@ router.post('/register', async (req, res) => {
 router.get('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const targetId = req.params.id || req.user?.id;
-    if (!targetId) {
-      return res.status(400).json({ error: "ID de usuario no proporcionado" });
-    }
+    if (!targetId) return res.status(400).json({ error: "ID no proporcionado" });
+    
     const user = await getUser(String(targetId));
-    if (!user) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
-    }
+    if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+    
     return res.status(200).json(user);
   } catch (error: any) { 
     return res.status(500).json({ error: error.message });
@@ -63,12 +76,12 @@ router.get('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
 router.put('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const targetId = req.params.id || req.user?.id;
-    if (!targetId) {
-      return res.status(400).json({ error: "ID de usuario no proporcionado" });
-    }
+    if (!targetId) return res.status(400).json({ error: "ID no proporcionado" });
+    
     if (req.user?.id !== String(targetId) && req.user?.typeDetail !== 'SAdmin') {
       return res.status(403).json({ error: "No tienes permiso para editar este perfil." });
     }
+    
     const { data, newImageUri } = req.body;
     const updatedUser = await updateUser(String(targetId), data, newImageUri);
     return res.status(200).json({ message: "Perfil actualizado", user: updatedUser });
@@ -80,16 +93,11 @@ router.put('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
 // Ruta centralizada de login
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
+    // Aquí el router sí extrae el pushToken del body, por lo que el controlador sí lo recibe
     const { email, password, idToken, isGoogle, isApple, pushToken, deviceType } = req.body; 
     
     const result = await authenticateUser({ 
-      email, 
-      password, 
-      idToken, 
-      isGoogle,
-      isApple,
-      pushToken,
-      deviceType
+      email, password, idToken, isGoogle, isApple, pushToken, deviceType
     });
     
     res.status(200).json(result);
@@ -109,7 +117,7 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// Ruta protegida para registrar o actualizar el token push del dispositivo
+// Ruta protegida para registrar token push del dispositivo post-login
 router.post('/save-device-token', verifyToken, saveDeviceToken);
 
 // Actualizar contraseña
@@ -118,5 +126,4 @@ router.post('/update-password', updatePassword);
 // Dar de baja / eliminar cuenta
 router.delete('/delete-account', verifyToken, deleteUserAccount);
 
-// 🚀 ESTO ES LO QUE HACE QUE EL ERROR EN INDEX.TS DESAPAREZCA
 export default router;
