@@ -40,57 +40,59 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ CANDADO ANTI-DOBLE CLIC (Evita duplicados exactos en el mismo milisegundo)
+// 🛠️ CANDADO ANTI-DOBLE CLIC PARA TÉRMINOS
 // --------------------------------------------------------
 const termsLock = new Set<string>();
 
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
-  // Si el usuario ya está siendo procesado en este instante, ignoramos la petición extra
   if (termsLock.has(userId)) return;
   termsLock.add(userId);
 
   try {
-    // 1. Borramos cualquier rastro previo para limpiar
     await db.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
-    // 2. Insertamos el único y definitivo
     await db.insert(userTermsAcceptance).values({ 
       userId, 
       ipAddress: ipAddress || null 
     });
+    console.log(`✅ [TÉRMINOS] Guardado único y exitoso para: ${userId}`);
   } catch (error) {
     console.error("❌ Error guardando términos:", error);
   } finally {
-    // Soltamos el candado después de 2 segundos (tiempo de sobra para matar el doble render)
     setTimeout(() => termsLock.delete(userId), 2000);
   }
 };
 
 // --------------------------------------------------------
-// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO 
+// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO CON DEBUGGING
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
-  if (!pushToken || pushToken.trim() === '') return;
+  console.log("🔍 [DEBUG DEVICES] Entrando a upsertDeviceToken");
+  console.log("🔍 [DEBUG DEVICES] Datos recibidos:", { userId, pushToken, deviceType });
+
+  if (!pushToken || pushToken.trim() === '') {
+    console.log("⚠️ [DEBUG DEVICES] pushToken viene vacío o nulo. El frontend no lo envió en esta petición.");
+    return;
+  }
   
   try {
-    // Borramos sin preguntar para matar tokens huérfanos o duplicados
     await db.delete(userDevices).where(eq(userDevices.expoPushToken, pushToken));
-    
-    // Insertamos limpio 
     await db.insert(userDevices).values({
       userId: userId,
       expoPushToken: pushToken,
       deviceType: deviceType || 'unknown',
     });
+    console.log("✅ [DEBUG DEVICES] Insert en tabla user_devices exitoso");
   } catch (error) {
-    console.error("❌ Error guardando dispositivo:", error);
+    console.error("❌ [DEBUG DEVICES] Error crítico en DB:", error);
   }
 };
 
 // --------------------------------------------------------
-// 1. REGISTRO DE USUARIO CLÁSICO Y COMPLETAR PERFIL (Social)
+// 1. REGISTRO DE USUARIO CLÁSICO Y COMPLETAR PERFIL
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null, reqIp?: string) => {
   try {
+    console.log("🔍 [DEBUG AUTH] Petición de registro recibida. Token:", data.pushToken);
     const existingUsers = await db.select().from(users).where(eq(users.email, data.email));
     
     let stateObj = undefined;
@@ -109,7 +111,6 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       
-      // COMPLETAR PERFIL
       if (!user.phone && (data.authProvider === 'apple' || data.authProvider === 'google')) {
          let hashedPassword = user.password;
          if (data.password) {
@@ -128,7 +129,6 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         // 🔥 AQUÍ SE GUARDAN: Ya está blindado contra el doble clic
          await ensureTermsAccepted(updatedUser.id, ipAddress);
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
 
@@ -155,7 +155,6 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
       isVerified: data.isVerified
     }).returning();
 
-    // 🔥 AQUÍ SE GUARDAN: Ya está blindado contra el doble clic
     await ensureTermsAccepted(newUser.id, ipAddress);
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
 
@@ -282,7 +281,7 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 };
 
 // --------------------------------------------------------
-// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Google + Apple + Email)
+// 4. 🌐 AUTENTICACIÓN CENTRALIZADA
 // --------------------------------------------------------
 export const authenticateUser = async (credentials: { 
   idToken?: string; 
@@ -297,6 +296,8 @@ export const authenticateUser = async (credentials: {
     let email = credentials.email;
     let firstName = "";
     let lastName = "";
+
+    console.log("🔍 [DEBUG AUTH] Petición de login recibida. Token:", credentials.pushToken);
 
     if (credentials.isGoogle && credentials.idToken) {
       const ticket = await googleClient.verifyIdToken({ idToken: credentials.idToken });
@@ -363,8 +364,7 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    // 🔥 AQUÍ ESTABA EL ERROR: Quité la condición "if (!needsProfile)" que bloqueaba todo.
-    // Ahora, siempre que hagas login, se asegura de guardar los términos y el device INCONDICIONALMENTE.
+    console.log("🔍 [DEBUG AUTH] Autenticación exitosa. Insertando TÉRMINOS y DEVICES para:", user.id);
     await ensureTermsAccepted(user.id);
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
 
@@ -479,6 +479,7 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 // 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
+  console.log("🔍 [DEBUG] Petición recibida en /save-device-token");
   try {
     const userId = req.user?.id;
     const { token, deviceType } = req.body;
