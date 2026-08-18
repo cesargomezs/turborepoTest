@@ -25,7 +25,7 @@ import { handleUniversalShare } from '../../utils/shareHelper';
 
 const BANNED_WORDS = Array.isArray((badWordsData as any)?.badWordsList) ? (badWordsData as any).badWordsList : []; 
 
-// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
+// 🚀 LÓGICA DE VALIDACIÓN CON REGEX
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   const lowerText = text.toLowerCase();
@@ -34,11 +34,9 @@ const containsBadWords = (text: string): boolean => {
     if (!word) return false;
     const lowerWord = word.toLowerCase();
     
-    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
     const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
     if (exactRegex.test(lowerText)) return true;
 
-    // 2. Atrapa letras repetidas al final para evadir filtros
     const lastChar = lowerWord.slice(-1);
     const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
@@ -73,10 +71,8 @@ export default function JobsScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
 
-  // 🚀 Extraemos el rol y creamos la validación
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
-
 
   useEffect(() => {
     if (!userToken) {
@@ -91,7 +87,6 @@ export default function JobsScreen() {
   const jobstabData = (t.jobstab as any) || {};
   
   const JOB_CATEGORIES = jobstabData.jobCategories;
-  
   const SUGGESTED_TITLES: Record<string, string[]> = jobstabData.jobtitles || {};
   const SHIFT_OPTIONS = t.jobstab?.shifts;
 
@@ -171,8 +166,11 @@ export default function JobsScreen() {
   });
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
   
+  // 🚀 ESTADOS UNIFICADOS PARA PAGO EN EMPRESAS
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
+  const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
   const [newJob, setNewJob] = useState<{
       title: string; company: string; companyId: string; category: string; description: string; 
@@ -194,8 +192,33 @@ export default function JobsScreen() {
   
   const [tempCompanyProfile, setTempCompanyProfile] = useState<any>(null);
 
-  const [reviewForm, setReviewForm] = useState({ visible: false, text: '', rating: 0, isAnonymous: false });
+  // 🚀 AQUI ESTA EL ESTADO CORREGIDO QUE FALTABA
+  const [showReviewInput, setShowReviewInput] = useState(false);
+  const [reviewForm, setReviewForm] = useState({ text: '', rating: 0, isAnonymous: false });
+  
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
+
+  // 🚀 CARGA DE URL FIRMADA PARA EL QR DE ZELLE DESDE SUPABASE
+  useEffect(() => {
+    const loadZelleQr = async () => {
+      try {
+        const { createClient } = require('@supabase/supabase-js');
+        const supabaseUrlLocal = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+        const supabaseAnonKeyLocal = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+        
+        if (supabaseUrlLocal && supabaseAnonKeyLocal) {
+          const client = createClient(supabaseUrlLocal, supabaseAnonKeyLocal);
+          const { data } = await client.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+          if (data?.signedUrl) {
+            setZelleQrUrl(data.signedUrl);
+          }
+        }
+      } catch (error) {
+        console.warn("⚠️ No se pudo obtener la URL firmada de qrzelle.webp", error);
+      }
+    };
+    loadZelleQr();
+  }, []);
 
   useEffect(() => {
     const fetchTariff = async () => {
@@ -250,7 +273,6 @@ export default function JobsScreen() {
     } catch (e) { console.error("Error al obtener pendientes de admin", e); }
   };
 
-  // 🚀 EFFECT PARA CONTROLAR EL ADMIN MODE (LIMPIA LA LISTA SI SE APAGA)
   useEffect(() => {
     if (isAdminMode) {
       fetchPendingCompaniesForAdmin();
@@ -506,9 +528,13 @@ export default function JobsScreen() {
   };
 
   const handleRegisterCompany = async () => {
-    if (!newCompanyForm.name.trim() || !newCompanyForm.phone.trim() || !formRefCode.trim()) {
-      triggerAlert("Campos Incompletos", "Por favor ingresa el nombre de la empresa, teléfono y código de confirmación de pago.");
+    if (!newCompanyForm.name.trim() || !newCompanyForm.phone.trim()) {
+      triggerAlert("Campos Incompletos", "Por favor ingresa el nombre de la empresa y teléfono.");
       return;
+    }
+
+    if (!formRefCode.trim()) {
+      return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.");
     }
     
     if (containsBadWords(newCompanyForm.name)) {
@@ -556,6 +582,10 @@ export default function JobsScreen() {
         finalImageName = uploadData.identificadorArchivo;
       }
 
+      // 🚀 ASIGNACIÓN DEL PAYLOAD SEGÚN EL INPUT ÚNICO
+      const finalPlan = uiPayType === 'coupon' ? 'coupon' : newCompanyForm.premiumPlan;
+      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
+
       const payload = {
         userId: currentUserId,
         name: newCompanyForm.name.trim(),
@@ -566,9 +596,11 @@ export default function JobsScreen() {
         email: newCompanyForm.email.trim() || null,     
         website: newCompanyForm.website.trim() || null, 
         logoUrl: finalImageName, 
-        premiumPlan: newCompanyForm.premiumPlan, 
-        referenceCode: formRefCode,
-        paymentMethod: formPayMethod
+        premiumPlan: finalPlan, 
+        referenceCode: finalRefCode,
+        paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
+        couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
+        tariffPlan: (companyTariffs as any)[finalPlan]
       };
 
       const res = await fetch(API_COMPANIES_URL, {
@@ -601,6 +633,7 @@ export default function JobsScreen() {
       
       setNewCompanyForm({ name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'basic' });
       setFormRefCode('');
+      setUiPayType('subscription');
       setFormPayMethod('Zelle');
       setPublishView('form');
       triggerAlert("Suscripción en Revisión", "Tu empresa ha sido registrada. Podrás publicar en cuanto verifiquemos tu suscripción Premium.");
@@ -800,7 +833,8 @@ export default function JobsScreen() {
           return { ...prev, reviews: updatedReviews, rating: newAverage };
       });
       
-      setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false });
+      setReviewForm({ text: '', rating: 0, isAnonymous: false });
+      setShowReviewInput(false);
       triggerAlert("¡Gracias!", "Tu reseña ha sido publicada.");
     } catch (e: any) { triggerAlert("Aviso", e.message); }
   };
@@ -854,23 +888,18 @@ export default function JobsScreen() {
       : [];
   const activeCount = companyJobs.filter(j => j.isOpen).length;
 
-  // 🚀 DISEÑO DE TARJETA ACTUALIZADO IGUAL A ABOGADOS
   const PendingCompanyItem = ({ comp }: { comp: any }) => {
     const [selectedMonths, setSelectedMonths] = useState(1);
-    
-    // Fondo sólido como en la tarjeta principal de abogados
     const cardBgColor = isDark ? '#1E1E1E' : '#FFFFFF';
 
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: '#FFB74D' }}>
         
-        {/* Banner amarillo superior */}
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
           <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
           <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>En revisión. Será publicado pronto.</ThemedText>
         </View>
 
-        {/* Fila del Plan y Nuevo */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
           <View style={{ backgroundColor: planStyles[comp.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || DynamicColors.inputBg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
             <ThemedText style={{ color: planStyles[comp.premiumPlan as keyof typeof planStyles]?.selected || '#FF5F6D', fontSize: 11, fontWeight: '900' }}>
@@ -883,7 +912,6 @@ export default function JobsScreen() {
           </View>
         </View>
 
-        {/* Imagen Cabecera (Logo) */}
         <View style={{ width: '100%', height: isLargeWeb ? 200 : 140, position: 'relative' }}>
           {comp.logoUrl ? (
             <Image source={{ uri: comp.logoUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -894,7 +922,6 @@ export default function JobsScreen() {
           )}
         </View>
 
-        {/* Contenido principal */}
         <View style={{ padding: 15, paddingBottom: 15 }}>
           <ThemedText style={{ fontWeight: '900', fontSize: 20, color: DynamicColors.text }}>{comp.name}</ThemedText>
           
@@ -908,7 +935,6 @@ export default function JobsScreen() {
             {t.jobstab.contact} {comp.phoneCode} {comp.phone}
           </ThemedText>
 
-          {/* Controles de Administrador */}
           <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
             <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
                <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
@@ -967,7 +993,6 @@ export default function JobsScreen() {
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)} style={{ padding: 0 }}>
                       <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={25} color={showSavedOnly ? DynamicColors.accent : DynamicColors.text} style={{opacity: showSavedOnly ? 1 : 0.6}}/>
                   </TouchableOpacity>
-                  {/* 🚀 BOTÓN ADMIN ACTUALIZADO */}
                   <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }} style={{ padding: 0 }}>
                       <MaterialCommunityIcons name="briefcase-search" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
                   </TouchableOpacity>
@@ -1566,41 +1591,6 @@ export default function JobsScreen() {
                              style={{ backgroundColor: DynamicColors.inputBg, padding: 15, borderRadius: 12, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                          />
 
-                         <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 10 }}>{t.jobstab.labelplan}</ThemedText>
-                         <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                             {[
-                                 { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc },
-                                 { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
-                                 { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
-                                 { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
-                             ].map(plan => {
-                                 const pStyle = planStyles[plan.id as keyof typeof planStyles];
-                                 const isSelected = newCompanyForm.premiumPlan === plan.id;
-                                 
-                                 return (
-                                 <TouchableOpacity 
-                                     key={plan.id}
-                                     onPress={() => setNewCompanyForm({...newCompanyForm, premiumPlan: plan.id})}
-                                     style={{ 
-                                        padding: 15, 
-                                        borderRadius: 14, 
-                                        borderWidth: 1, 
-                                        borderColor: isSelected ? pStyle.selected : DynamicColors.border, 
-                                        backgroundColor: isSelected ? pStyle.unselected(isDark) : DynamicColors.inputBg 
-                                     }}
-                                 >
-                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                             <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : DynamicColors.subtext} />
-                                             <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : DynamicColors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
-                                         </View>
-                                         <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText>
-                                     </View>
-                                     <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.text, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
-                                 </TouchableOpacity>
-                             )})}
-                         </View>
-
                          <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.labeltelcompanie}</ThemedText>
                          <View style={{ flexDirection: 'row', backgroundColor: DynamicColors.inputBg, borderRadius: 14, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden', marginBottom: 25 }}>
                              <TouchableOpacity onPress={() => setPublishView('country')} style={{ paddingHorizontal: 15, justifyContent: 'center', borderRightWidth: 1, borderRightColor: DynamicColors.border, flexDirection: 'row', alignItems: 'center' }}>
@@ -1617,25 +1607,119 @@ export default function JobsScreen() {
                              />
                          </View>
 
-                         <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
-                            <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
-                            <ThemedText style={{ fontSize: 13, marginBottom: 12, color: DynamicColors.text }}>
-                                {t.jobstab.labelregistercomp1}<ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[newCompanyForm.premiumPlan]} USD</ThemedText> {t.jobstab.labelregistercomp2}  
-                            </ThemedText>
-                            
-                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                {['Zelle'].map((method) => (
-                                <TouchableOpacity 
-                                    key={method}
-                                    onPress={() => setFormPayMethod(method)} 
-                                    style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                                >
-                                    <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText>
-                                </TouchableOpacity>
-                                ))}
-                            </View>
+                         {/* 🚀 NUEVO UX: SELECCIÓN DE MÉTODO (PAGO O CUPÓN) EN LA EMPRESA */}
+                         <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                           <TouchableOpacity 
+                             onPress={() => { setUiPayType('subscription'); if(newCompanyForm.premiumPlan === 'coupon') setNewCompanyForm({...newCompanyForm, premiumPlan: 'basic'}); setFormRefCode(''); }}
+                             style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                           >
+                             <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
+                             <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
+                           </TouchableOpacity>
 
-                            <TextInput style={{ padding: 14, borderRadius: 12, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text }} placeholder={t.jobstab.placehoderreference+`${formPayMethod}...`} placeholderTextColor="#999" value={formRefCode} onChangeText={t => setFormRefCode(t.toUpperCase())} />
+                           <TouchableOpacity 
+                             onPress={() => { setUiPayType('coupon'); setNewCompanyForm({...newCompanyForm, premiumPlan: 'coupon'}); setFormRefCode(''); }}
+                             style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                           >
+                             <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
+                             <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
+                           </TouchableOpacity>
+                         </View>
+
+                         {uiPayType === 'subscription' && (
+                           <>
+                             <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
+                             <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                                 {[
+                                     { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
+                                     { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
+                                     { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
+                                 ].map(plan => {
+                                     const pStyle = planStyles[plan.id as keyof typeof planStyles];
+                                     const isSelected = newCompanyForm.premiumPlan === plan.id;
+                                     
+                                     return (
+                                     <TouchableOpacity 
+                                         key={plan.id}
+                                         onPress={() => setNewCompanyForm({...newCompanyForm, premiumPlan: plan.id})}
+                                         style={{ 
+                                            padding: 15, 
+                                            borderRadius: 14, 
+                                            borderWidth: 1, 
+                                            borderColor: isSelected ? pStyle.selected : DynamicColors.border, 
+                                            backgroundColor: isSelected ? pStyle.unselected(isDark) : DynamicColors.inputBg 
+                                         }}
+                                     >
+                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                 <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : DynamicColors.subtext} />
+                                                 <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : DynamicColors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
+                                             </View>
+                                             <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText>
+                                         </View>
+                                         <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.text, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                                     </TouchableOpacity>
+                                 )})}
+                             </View>
+
+                             <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
+                             <ThemedText style={{ fontSize: 13, marginBottom: 12, color: DynamicColors.text }}>
+                                 {t.jobstab.labelregistercomp1}<ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[newCompanyForm.premiumPlan]} USD</ThemedText> {t.jobstab.labelregistercomp2}  
+                             </ThemedText>
+                             
+                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                                 {['Zelle'].map((method) => (
+                                 <TouchableOpacity 
+                                     key={method}
+                                     onPress={() => setFormPayMethod(method)} 
+                                     style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                                 >
+                                     <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText>
+                                 </TouchableOpacity>
+                                 ))}
+                             </View>
+
+                             <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: DynamicColors.border }}>
+                               {zelleQrUrl ? (
+                                 <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
+                               ) : (
+                                 <View style={{ width: 180, height: 180, justifyContent: 'center', alignItems: 'center' }}>
+                                   <ActivityIndicator size="small" color={DynamicColors.accent} />
+                                 </View>
+                               )}
+                               <ThemedText style={{ fontSize: 11, fontWeight: '700', color: DynamicColors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+                             </View>
+                           </>
+                         )}
+
+                         {uiPayType === 'coupon' && (
+                           <View style={{ marginBottom: 10 }}>
+                             <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar el registro de tu empresa sin cargos.</ThemedText>
+                           </View>
+                         )}
+
+                         <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
+                           <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.accent, marginBottom: 10 }}>
+                             {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Código de Verificación'}
+                           </ThemedText>
+
+                           <TextInput 
+                             style={{ 
+                               padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, 
+                               backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.06)') : DynamicColors.inputBg, 
+                               borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, 
+                               color: DynamicColors.text, 
+                               textAlign: uiPayType === 'coupon' ? 'center' : 'left',
+                               fontSize: 16,
+                               ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) 
+                             }} 
+                             placeholder={uiPayType === 'coupon' ? 'ESCRIBE TU CÓDIGO AQUÍ...' : `# CONFIRMACION DE ${formPayMethod}...`} 
+                             placeholderTextColor={DynamicColors.subtext}
+                             value={formRefCode} 
+                             onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
+                             autoCapitalize="characters"
+                           />
                          </View>
 
                          <TouchableOpacity onPress={handleRegisterCompany} disabled={isCreatingCompany}>
@@ -1931,95 +2015,94 @@ export default function JobsScreen() {
       </RNModal>
 
       {/* MODAL RESEÑAS EMPRESA */}
-      <RNModal visible={!!selectedCompany} transparent animationType="slide">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setSelectedCompany(null)} />
-            <View style={{ width: width > 600 ? 500 : '90%', maxHeight: height * 0.85, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 28, padding: 25, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden' }}>
+      <RNModal visible={!!selectedCompany} transparent animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => { setSelectedCompany(null); setShowReviewInput(false); }} />
+            <View style={{ width: width > 600 ? 500 : '92%', height: height * 0.78, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 32, padding: 25, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border }}>
               {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-                <View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <ThemedText style={{ fontSize: 20, fontWeight: 'bold', color: DynamicColors.text }}>{selectedCompany?.company}</ThemedText>
-                        {selectedCompany?.isCompanyVerified && <MaterialCommunityIcons name="check-decagram" size={18} color="#4CAF50" style={{marginLeft: 6}} />}
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                        <MaterialCommunityIcons name="star" size={16} color="#FFB300" />
-                        <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.text, marginLeft: 4 }}>{selectedCompany?.rating > 0 ? selectedCompany?.rating.toFixed(1) : 'Sin reseñas'}</ThemedText>
-                    </View>
+                <View style={{ flex: 1 }}>
+                    <ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedCompany?.company}</ThemedText>
+                    <ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>{t.storestab?.commutnityopini || 'Opiniones'}</ThemedText>
                 </View>
-                <TouchableOpacity onPress={() => setSelectedCompany(null)}><MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => { setSelectedCompany(null); setShowReviewInput(false); }}>
+                  <MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} />
+                </TouchableOpacity>
               </View>
-
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                
-                {reviewForm.visible ? (
-                    <View style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 16, padding: 15, marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border }}>
-                        <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 10 }}>{t.jobstab.ratigcompanie}</ThemedText>
-                        
-                        <View style={{ flexDirection: 'row', marginBottom: 15, gap: 5 }}>
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <TouchableOpacity key={star} onPress={() => setReviewForm(prev => ({...prev, rating: star}))}>
-                                    <MaterialCommunityIcons name="star" size={32} color={star <= reviewForm.rating ? "#FFB300" : DynamicColors.iconInactive} />
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        <TextInput
-                            value={reviewForm.text}
-                            onChangeText={t => setReviewForm(prev => ({...prev, text: t}))}
-                            placeholder={t.jobstab.labeldescribe}
-                            placeholderTextColor={DynamicColors.subtext}
-                            multiline
-                            autoCapitalize="sentences"
-                            style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 12, padding: 15, color: DynamicColors.text, minHeight: 80, textAlignVertical: 'top', marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }}
-                        />
-
-                        <TouchableOpacity onPress={() => setReviewForm(prev => ({...prev, isAnonymous: !prev.isAnonymous}))} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-                            <MaterialCommunityIcons name={reviewForm.isAnonymous ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={DynamicColors.accent} />
-                            <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.labelanonimous}</ThemedText>
-                        </TouchableOpacity>
-
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <TouchableOpacity onPress={() => setReviewForm({ visible: false, text: '', rating: 0, isAnonymous: false })} style={{ flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', backgroundColor: DynamicColors.categoryUnselected }}>
-                                <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.cancel}</ThemedText>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={handleSubmitReview} style={{ flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', backgroundColor: DynamicColors.accent }}>
-                                <ThemedText style={{ fontWeight: 'bold', color: '#FFF' }}>{t.jobstab.publish}</ThemedText>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                ) : (
-                    <TouchableOpacity onPress={() => setReviewForm(prev => ({...prev, visible: true}))} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255, 95, 109, 0.1)', padding: 14, borderRadius: 14, marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.accent }}>
-                        <MaterialCommunityIcons name="pencil-plus-outline" size={20} color={DynamicColors.accent} />
-                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.accent }}>{t.jobstab.writereview}</ThemedText>
+              {!showReviewInput ? (
+                <View style={{ flex: 1 }}>
+                  <TouchableOpacity onPress={() => { const hasReviewed = selectedCompany?.reviews?.some((r: any) => r.userId === currentUserId); if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } setShowReviewInput(true); }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                    <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                       <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
+                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {selectedCompany?.reviews?.map((r: any) => (
+                       <View key={r.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                           <View style={{ flexDirection: 'row', gap: 2 }}>
+                             {[1, 2, 3, 4, 5].map((s) => (
+                               <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
+                             ))}
+                           </View>
+                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                             {r.image ? (
+                               <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
+                             ) : (
+                               <MaterialCommunityIcons name="account-circle" size={24} color={DynamicColors.subtext} />
+                             )}
+                             <ThemedText style={{ color: DynamicColors.text, fontSize: 12, fontStyle: 'italic' }}>{r.userName || r.name || 'Anónimo'}</ThemedText>
+                           </View>
+                         </View>
+                         <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.text}</ThemedText>
+                       </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : (
+                <View style={{ flex: 1, paddingVertical: 10 }}>
+                    <TouchableOpacity onPress={() => setShowReviewInput(false)} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+                        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+                        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>Volver</ThemedText>
                     </TouchableOpacity>
-                )}
 
-                {selectedCompany?.reviews && selectedCompany.reviews.length > 0 ? (
-                    selectedCompany.reviews.map((r: any) => (
-                        <View key={r.id} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 16, padding: 15, marginBottom: 10, borderWidth: 1, borderColor: DynamicColors.border }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                <View style={{ flexDirection: 'row' }}>
-                                    {[1, 2, 3, 4, 5].map(s => (
-                                        <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : DynamicColors.iconInactive} />
-                                    ))}
-                                </View>
+                    <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 10 }}>{t.jobstab.ratigcompanie}</ThemedText>
+                    
+                    <View style={{ flexDirection: 'row', marginBottom: 15, gap: 5 }}>
+                        {[1, 2, 3, 4, 5].map(star => (
+                            <TouchableOpacity key={star} onPress={() => setReviewForm(prev => ({...prev, rating: star}))}>
+                                <MaterialCommunityIcons name="star" size={32} color={star <= reviewForm.rating ? "#FFB300" : DynamicColors.iconInactive} />
+                            </TouchableOpacity>
+                        ))}
+                    </View>
 
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 5 }}>
-                                  {r.image ? ( <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/> ) : ( <MaterialCommunityIcons name="account-circle" size={24} color={DynamicColors.subtext} /> )}
-                                  <ThemedText style={{ color: DynamicColors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.userName}</ThemedText>
-                                </View> 
+                    <TextInput
+                        value={reviewForm.text}
+                        onChangeText={t => setReviewForm(prev => ({...prev, text: t}))}
+                        placeholder={t.jobstab.labeldescribe}
+                        placeholderTextColor={DynamicColors.subtext}
+                        multiline
+                        autoCapitalize="sentences"
+                        style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 12, padding: 15, color: DynamicColors.text, minHeight: 80, textAlignVertical: 'top', marginBottom: 15, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }}
+                    />
 
-                            </View>
-                            <ThemedText style={{ color: DynamicColors.text, fontSize: 14, lineHeight: 20 }}>{r.text}</ThemedText>
-                        </View>
-                    ))
-                ) : (
-                    !reviewForm.visible && <ThemedText style={{ textAlign: 'center', fontSize:13, marginTop: 20, fontWeight: 'bold' }}>{t.jobstab.firtsreview}</ThemedText>
-                )}
-              </ScrollView>
+                    <TouchableOpacity onPress={() => setReviewForm(prev => ({...prev, isAnonymous: !prev.isAnonymous}))} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                        <MaterialCommunityIcons name={reviewForm.isAnonymous ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={DynamicColors.accent} />
+                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.labelanonimous}</ThemedText>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={handleSubmitReview} style={{ borderRadius: 12, overflow: 'hidden' }}>
+                        <LinearGradient colors={reviewForm.text.trim() && reviewForm.rating > 0 ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 14, alignItems: 'center' }}>
+                            <ThemedText style={{ fontWeight: 'bold', color: '#FFF' }}>{t.jobstab.publish}</ThemedText>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
+              )}
             </View>
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </RNModal>
     </View>
   );

@@ -305,7 +305,7 @@ export const getSupportById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR CONTACTO DE APOYO (ACTUALIZADO CON LÓGICA DE CUPONES)
+// 📥 3. CREAR CONTACTO DE APOYO (VALIDACIÓN DE CUPÓN BLINDADA)
 // =====================================================================
 export const createSupport = async (data: any) => {
   try {
@@ -314,26 +314,32 @@ export const createSupport = async (data: any) => {
       cleanImage = cleanImage.replace('support/', '');
     }
 
-    const validUserId = sanitizeText(data.userId) || TEMP_USER_ID;
+    const validUserId = sanitizeText(data.userId) || (typeof TEMP_USER_ID !== 'undefined' ? TEMP_USER_ID : null);
     const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
     
     const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-    // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
-    const isCoupon = planSeleccionado === 'cupon' || metodoPago === 'cupon';
+    // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
+    const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-    if (isCoupon) {
-      if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
-      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
-      
-      if (!promo) throw new Error("El cupón ingresado no existe.");
-      if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
-    }
+    // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
+    let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdSupportResult = await db.transaction(async (tx) => {
       
+      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
+      if (isCoupon) {
+        if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
+        
+        // Búsqueda SQL insensible a mayúsculas/minúsculas para evitar errores
+        const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
+        
+        if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
+        if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+      }
+
       const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
 
       const supportPayload: any = {
@@ -347,24 +353,28 @@ export const createSupport = async (data: any) => {
         lat: data.lat ? Number(data.lat) : null, 
         lng: data.lng ? Number(data.lng) : null, 
         userId: validUserId, 
-        premiumPlan: isCoupon ? 'cupon' : planSeleccionado, // 👈 Ajuste dinámico del plan
-        couponCode: codigoReferencia, 
+        premiumPlan: isCoupon ? 'coupon' : planSeleccionado, // 👈 Ajuste dinámico del plan
+        couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
         approved: isCoupon ? true : false // 👈 Si es cupón, nace aprobado
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
 
-      // 🚀 Si hay un código, registramos el pago
-      if (codigoReferencia && metodoPago) {
+      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint en la BD)
+      if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentSupportPrice(); 
+
+        // Si es cupón, le añadimos la fecha a la referencia en la tabla de pagos 
+        // para que Postgres no explote por "referencia duplicada" al usar varios cupones
+        const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
 
         await tx.insert(payments).values({
           entityType: 'support',
           entityId: newSupport.id,
           userId: validUserId,
-          referenceCode: codigoReferencia, 
-          paymentMethod: metodoPago, 
+          referenceCode: safePaymentReference, 
+          paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
           amount: isCoupon ? "0.00" : basePrice, // 👈 Monto cero si es cupón
           durationDays: 30, 
           status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
@@ -372,30 +382,30 @@ export const createSupport = async (data: any) => {
         });
       }
 
-      // 🚀 2. QUEMAR EL CUPÓN
+      // 🚀 5. QUEMAR EL CUPÓN
       if (isCoupon) {
         await tx.update(promoCodes)
         .set({
           isUsed: true, 
           usedByUserId: validUserId, 
-          usedForEntityId: newSupport.id, // 👈 CORRECCIÓN CRÍTICA: newSupport.id en lugar de support.id
+          usedForEntityId: newSupport.id, 
           entityType: 'support', 
           usedAt: new Date() 
         })
-        .where(eq(promoCodes.code, codigoReferencia)); 
+        .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
       }
 
       return {
          ...newSupport,
-         referenceCode: codigoReferencia,
-         paymentMethod: metodoPago,
+         referenceCode: isCoupon ? realPromoCode : codigoReferencia,
+         paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionSupp: safeDesc
       };
     });
 
-    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
-    if (createdSupportResult) {
+    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
+    if (createdSupportResult && createdSupportResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdSupportResult.nameSupp,
         createdSupportResult.referenceCode || 'N/A',
@@ -408,11 +418,12 @@ export const createSupport = async (data: any) => {
   } catch (error: any) { 
     console.error("❌ Error en createSupport:", error);
     
+    // Filtramos los errores de Constraint
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
-       throw new Error("Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único.");
+       throw new Error("El código de referencia de pago ya está en uso.");
     }
 
-    throw new Error(`Error al crear el contacto de apoyo: ${error.message}`);
+    throw new Error(error.message || "Error al crear el contacto de apoyo.");
   }
 };
 

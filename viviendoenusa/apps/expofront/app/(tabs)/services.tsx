@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
+import AppTutorialModal from '@/components/AppTutorialModal';
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL EN LUGAR DE ASYNCSTORAGE
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
@@ -79,6 +80,14 @@ export default function ServicesScreen() {
   
   const textColor = isDark ? '#FFFFFF' : '#1A1A1A';
   const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+
+  // 🚀 PALETA DINÁMICA PARA EL TUTORIAL
+  const DynamicColors = {
+    text: isDark ? '#FFFFFF' : '#1A1A1A',
+    subtext: isDark ? '#B0BEC5' : '#546E7A',
+    border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+    iconInactive: isDark ? '#E0E0E0' : '#666666',
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -218,6 +227,13 @@ export default function ServicesScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* 🚀 EL TUTORIAL INVISIBLE (Solo saltará si es su primera vez) */}
+      <AppTutorialModal 
+         isDark={isDark} 
+         Colors={DynamicColors} 
+         orangeGradient={['#FF5F6D', '#FFC371']} 
+      />
     </View>
   );
 }

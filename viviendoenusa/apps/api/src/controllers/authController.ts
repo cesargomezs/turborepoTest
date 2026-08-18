@@ -176,15 +176,18 @@ export const getUser = async (idOrEmail: string) => {
     if (!rows || rows.length === 0) return null;
 
     const user = rows[0];
-    let signedImageUrl = user.imageUrl;
+    let publicImageUrl = user.imageUrl;
 
+    // 🚀 CAMBIO PARA EVITAR PARPADEO: Obtenemos URL Pública en lugar de Firmada
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
-      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
-      if (data) { signedImageUrl = data.signedUrl; }
+      const { data } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
+      if (data && data.publicUrl) { 
+        publicImageUrl = data.publicUrl; 
+      }
     }
 
-    return { ...user, imageUrl: signedImageUrl };
+    return { ...user, imageUrl: publicImageUrl };
   } catch (error: any) {
     throw new Error(`Error al consultar el usuario: ${error.message}`);
   }
@@ -266,15 +269,18 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
     });
     
     const finalUser = updatedRows[0];
-    let signedImageUrl = finalUser.imageUrl;
+    let publicImageUrl = finalUser.imageUrl;
 
+    // 🚀 CAMBIO PARA EVITAR PARPADEO: Obtenemos URL Pública en lugar de Firmada
     if (finalUser.imageUrl && !finalUser.imageUrl.startsWith('http')) {
       const rutaArchivo = finalUser.imageUrl.startsWith('users/') ? finalUser.imageUrl : `users/${finalUser.imageUrl}`;
-      const { data: signedData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
-      if (signedData) { signedImageUrl = signedData.signedUrl; }
+      const { data: publicData } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
+      if (publicData && publicData.publicUrl) { 
+        publicImageUrl = publicData.publicUrl; 
+      }
     }
 
-    return { ...finalUser, imageUrl: signedImageUrl };
+    return { ...finalUser, imageUrl: publicImageUrl };
   } catch (error: any) {
     throw new Error(`Error al actualizar el usuario: ${error.message}`);
   }
@@ -461,15 +467,18 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
     if (userProfile.length === 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
     
     const user = userProfile[0];
-    let signedImageUrl = user.imageUrl;
+    let publicImageUrl = user.imageUrl;
 
+    // 🚀 CAMBIO PARA EVITAR PARPADEO: Obtenemos URL Pública en lugar de Firmada
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
-      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
-      if (data) { signedImageUrl = data.signedUrl; }
+      const { data } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
+      if (data && data.publicUrl) { 
+        publicImageUrl = data.publicUrl; 
+      }
     }
 
-    return res.status(200).json({ ...user, imageUrl: signedImageUrl });
+    return res.status(200).json({ ...user, imageUrl: publicImageUrl });
   } catch (error) {
     return res.status(500).json({ error: 'Error al obtener el perfil.' });
   }

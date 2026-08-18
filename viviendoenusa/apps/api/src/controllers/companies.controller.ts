@@ -164,20 +164,26 @@ export const createCompany = async (data: any) => {
         finalLogoUrl = finalLogoUrl.replace('companies/', '');
       }
 
-      const validUserId = sanitizeText(data.userId) || TEMP_USER_ID;
+      const validUserId = sanitizeText(data.userId) || (typeof TEMP_USER_ID !== 'undefined' ? TEMP_USER_ID : null);
       const selectedPlan = sanitizeText(data.premiumPlan) || 'basic';
       const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
       const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-      // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
-      const isCoupon = selectedPlan === 'cupon' || metodoPago === 'cupon';
+      // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
+      const isCoupon = selectedPlan === 'coupon' || metodoPago === 'coupon' || selectedPlan === 'cupon' || metodoPago === 'cupon';
 
+      // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
+      let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
+
+      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
       if (isCoupon) {
-        if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
-        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
+        if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
-        if (!promo) throw new Error("El cupón ingresado no existe.");
-        if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
+        // Búsqueda SQL insensible a mayúsculas/minúsculas
+        const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
+        
+        if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
+        if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
       }
       
       const companyPayload: any = {
@@ -191,25 +197,28 @@ export const createCompany = async (data: any) => {
         website: sanitizeText(data.website) || null,
         logoUrl: finalLogoUrl, 
         isVerified: isCoupon ? true : false, // 👈 Si es cupón, nace verificada
-        premiumPlan: isCoupon ? 'cupon' : selectedPlan, // 👈 Ajuste dinámico del plan
+        premiumPlan: isCoupon ? 'coupon' : selectedPlan, // 👈 Ajuste dinámico del plan
         status: isCoupon ? 'approved' : 'pending', // 👈 Si es cupón, nace aprobada
       };
 
       const [newCompany] = await tx.insert(companies).values(companyPayload).returning();
 
-      // 🚀 Si hay un código, registramos el pago
-      if (codigoReferencia && metodoPago) {
+      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint)
+      if (codigoReferencia || realPromoCode) {
         const prices = await getCurrentCompanyPrices();
         let amountToPay = prices.basic;
         if (selectedPlan === 'premium') amountToPay = prices.premium;
         if (selectedPlan === 'unlimited') amountToPay = prices.unlimited;
 
+        // Modificamos la referencia si es un cupón para evitar colisiones en Postgres
+        const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
+
         await tx.insert(payments).values({
           entityType: 'company',
           entityId: newCompany.id,
           userId: validUserId,
-          referenceCode: codigoReferencia, 
-          paymentMethod: metodoPago, 
+          referenceCode: safePaymentReference, 
+          paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
           amount: isCoupon ? "0.00" : amountToPay, // 👈 Monto cero si es cupón
           durationDays: 30, 
           status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
@@ -217,7 +226,7 @@ export const createCompany = async (data: any) => {
         });
       }
 
-      // 🚀 2. QUEMAR EL CUPÓN
+      // 🚀 5. QUEMAR EL CUPÓN
       if (isCoupon) {
         await tx.update(promoCodes)
         .set({
@@ -227,18 +236,18 @@ export const createCompany = async (data: any) => {
           entityType: 'company',
           usedAt: new Date() 
         })
-        .where(eq(promoCodes.code, codigoReferencia)); 
+        .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
       }
 
       return {
          ...newCompany,
-         referenceCode: codigoReferencia,
-         paymentMethod: metodoPago
+         referenceCode: isCoupon ? realPromoCode : codigoReferencia,
+         paymentMethod: isCoupon ? 'Coupon' : metodoPago
       };
     });
 
-      // 🚀 NUEVO: DISPARA LA ALERTA A TELEGRAM
-      if (createdCompanyResult) {
+      // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
+      if (createdCompanyResult && createdCompanyResult.paymentMethod !== 'Coupon') {
         sendTelegramAlert(
           createdCompanyResult.name,
           createdCompanyResult.referenceCode || 'N/A',
@@ -249,10 +258,14 @@ export const createCompany = async (data: any) => {
       return createdCompanyResult;
 
   } catch (error: any) { 
-    if (error.code === '23505' || error.message.includes('unique constraint')) {
+    console.error("❌ Error en createCompany:", error);
+
+    // Filtramos los errores de Constraint
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
        throw new Error("Ya existe una empresa registrada con este EIN o referencia de pago duplicada.");
     }
-    throw new Error(`Error al registrar la empresa: ${error.message}`);
+    
+    throw new Error(error.message || `Error al registrar la empresa.`);
   }
 };
 

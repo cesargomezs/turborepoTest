@@ -337,7 +337,7 @@ const sendTelegramAlert = async (lawyerName: string, refCode: string, method: st
 };
 
 // =====================================================================
-// 📥 3. CREAR ABOGADO (ACTUALIZADO CON LÓGICA DE CUPONES)
+// 📥 3. CREAR ABOGADO (VALIDACIÓN DE CUPÓN BLINDADA)
 // =====================================================================
 export const createLawyer = async (req: Request, res: Response) => {
   const reqAny = req as any;
@@ -359,7 +359,6 @@ export const createLawyer = async (req: Request, res: Response) => {
     }
 
     const createdLawyerResult = await db.transaction(async (tx) => {
-      // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
       const { lat, lng } = getCoordsFromZip(data.zip || '');
       
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
@@ -369,17 +368,28 @@ export const createLawyer = async (req: Request, res: Response) => {
       const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
       const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-      // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
-      const isCoupon = planSeleccionado === 'cupon' || metodoPago === 'cupon';
+      // 🚀 1. DETECTAR SI ES CUPÓN
+      const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
+      // 🚀 2. EXTRAER EL CÓDIGO REAL (Usamos directamente lo que mandó el front o limpiamos la referencia)
+      let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
+
+      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS
       if (isCoupon) {
-        if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
-        const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
+        if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
-        if (!promo) throw new Error("El cupón ingresado no existe.");
-        if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
+        // Búsqueda SQL insensible a mayúsculas/minúsculas para evitar errores tontos
+        const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
+        
+        if (!promo) {
+          throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
+        }
+        if (promo.isUsed) {
+          throw new Error("Este cupón ya fue utilizado anteriormente.");
+        }
       }
 
+      // Si pasa la validación, armamos el perfil
       const lawyerPayload: any = {
         nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
         area: sanitizeText(data.area) || 'General',
@@ -391,7 +401,7 @@ export const createLawyer = async (req: Request, res: Response) => {
         descriptionLawy: safeDesc,
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
-        premiumPlan: isCoupon ? 'cupon' : planSeleccionado, // 👈 Ajuste dinámico del plan
+        premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
         userId: validUserId, 
         approved: isCoupon ? true : false, // 👈 Si es cupón, nace aprobado
         estate: finalEstate 
@@ -399,46 +409,50 @@ export const createLawyer = async (req: Request, res: Response) => {
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
-      // 🚀 Si hay un código, registramos el pago
-      if (codigoReferencia && metodoPago) {
+      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint)
+      if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentLawyerPrice();
+        
+        // Si es cupón, le añadimos la fecha a la referencia en la tabla de pagos 
+        // para que la BD no explote por "referencia duplicada"
+        const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
+
         await tx.insert(payments).values({
           entityType: 'lawyer',
           entityId: newLawyer.id,
           userId: validUserId,
-          referenceCode: codigoReferencia, 
-          paymentMethod: metodoPago, 
-          amount: isCoupon ? "0.00" : (data.tariffPlan || basePrice), // 👈 Monto cero si es cupón
+          referenceCode: safePaymentReference, 
+          paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
+          amount: isCoupon ? "0.00" : (data.tariffPlan || basePrice), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
+          status: isCoupon ? "approved" : "pending", 
           approvedAt: isCoupon ? new Date() : null
         });
       }
 
-      // 🚀 2. QUEMAR EL CUPÓN
+      // 🚀 5. QUEMAR EL CUPÓN PARA QUE NO SE VUELVA A USAR
       if (isCoupon) {
           await tx.update(promoCodes)
           .set({
             isUsed: true, 
-            usedByUserId: validUserId, // 👈 Usamos el ID validado de arriba
-            usedForEntityId: newLawyer.id, // 👈 CORRECCIÓN CRÍTICA: newLawyer.id en lugar de lawyers.id
+            usedByUserId: validUserId,
+            usedForEntityId: newLawyer.id,
             entityType: 'lawyer',
             usedAt: new Date() 
           })
-          .where(eq(promoCodes.code, codigoReferencia)); 
+          .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
       }
 
       return {
          ...newLawyer,
-         referenceCode: codigoReferencia,
-         paymentMethod: metodoPago,
+         referenceCode: isCoupon ? realPromoCode : codigoReferencia,
+         paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionLawy: safeDesc
       };
     });
 
-    // 🚀 DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
-    if (createdLawyerResult) {
+    if (createdLawyerResult && createdLawyerResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdLawyerResult.nameLawy, 
         createdLawyerResult.referenceCode || 'N/A', 
@@ -451,11 +465,13 @@ export const createLawyer = async (req: Request, res: Response) => {
   } catch (error: any) { 
     console.error("❌ Error en createLawyer:", error);
     
-    if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
-       return resAny.status(409).json({ error: "Ese código de referencia de pago ya fue utilizado. Por favor, ingresa un código válido y único." });
+    // Filtramos los errores de Constraint por si acaso
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
+       return resAny.status(409).json({ error: "El código de referencia de pago ya está en uso." });
     }
 
-    return resAny.status(400).json({ error: `Error al crear el abogado: ${error.message}` });
+    // Le devolvemos el error exacto al usuario (ej: "El cupón no existe")
+    return resAny.status(400).json({ error: error.message || "Error al crear el abogado." });
   }
 };
 

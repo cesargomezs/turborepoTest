@@ -43,11 +43,9 @@ const containsBadWords = (text: string): boolean => {
     if (!word) return false;
     const lowerWord = word.toLowerCase();
     
-    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
     const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
     if (exactRegex.test(lowerText)) return true;
 
-    // 2. Atrapa letras repetidas al final para evadir filtros
     const lastChar = lowerWord.slice(-1);
     const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
@@ -66,7 +64,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 
 const openDirections = (item: any) => {
   const label = encodeURIComponent(item.name || item.nameSupp || 'Ubicacion');
-  const url = Platform.select({ ios: `maps:0,0?q=${label}@${item.lat},${item.lng}`, android: `geo:0,0?q=${item.lat},${item.lng}(${label})`, web: `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}` });
+  const url = Platform.select({ ios: `maps:0,0?q=${item.lat},${item.lng}`, android: `geo:0,0?q=${item.lat},${item.lng}(${label})`, web: `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}` });
   if (url) RNLinking.openURL(url);
 };
 
@@ -86,7 +84,6 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         <TextInput value={comment} onChangeText={setComment} placeholder="Escribe tu opinión..." placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} multiline style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
       </View>
       <TouchableOpacity onPress={() => { 
-          // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN LA RESEÑA
           if(containsBadWords(comment)) { 
             const errorMsg = t.genericlabel.labelinapro || "Contenido inapropiado detectado.";
             Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg); 
@@ -104,7 +101,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 const SupportFormModal = memo(({
   visible, onClose, onSuccess, currentUserId, userToken, userMetadata, companyTariffs,
   t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
-  CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height 
+  CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height, zelleQrUrl 
 }: any) => {
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -115,12 +112,15 @@ const SupportFormModal = memo(({
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formPlan, setFormPlan] = useState('basic');
-  const [formCoupon, setFormCoupon] = useState('');
-  const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   const [isPublishing, setIsPublishing] = useState(false);
 
-  const isFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage && formRefCode.trim());
+  // 🚀 ESTADOS CLAVE UNIFICADOS
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
+  const [formRefCode, setFormRefCode] = useState(''); 
+
+  const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
+  const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
   const textlabel = t.genericlabel.labelmessagepay || "";
   const parts = textlabel.split("{amount}");
@@ -130,8 +130,8 @@ const SupportFormModal = memo(({
   useEffect(() => {
     if (visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
-      setFormImage(null); setFormCategoryIdx(1); setFormPlan('basic'); setFormCoupon(''); 
-      setFormRefCode(''); setFormPayMethod('Zelle'); 
+      setFormImage(null); setFormCategoryIdx(1); setFormPlan('basic');  
+      setFormRefCode(''); setFormPayMethod('Zelle'); setUiPayType('subscription');
     }
   }, [visible]);
 
@@ -145,7 +145,11 @@ const SupportFormModal = memo(({
       return Platform.OS === 'web' ? window.alert(t.genericlabel.labelfields) : Alert.alert("Atención", t.genericlabel.labelfields); 
     }
 
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN EL MODAL DE CREACIÓN
+    if (!formRefCode.trim()) {
+      const errorMsg = uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.";
+      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Atención", errorMsg);
+    }
+
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
     if (containsBadWords(contentToValidate)) {
       const errorMsg = t.genericlabel.labelinapro || "Contenido inapropiado detectado.";
@@ -195,6 +199,9 @@ const SupportFormModal = memo(({
       
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       
+      const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
+      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
+
       const payload = { 
         nameSupp: formName.trim(),
         descriptionSupp: formDesc.trim(), 
@@ -208,10 +215,11 @@ const SupportFormModal = memo(({
         userId: userMetadata?.id || userMetadata?.userId || null, 
         estate: userMetadata?.estate || 'California', 
         approved: false, 
-        premiumPlan: formPlan, 
-        couponCode: formCoupon ? formCoupon.trim() : '', 
-        referenceCode: formRefCode, 
-        paymentMethod: formPayMethod 
+        premiumPlan: finalPlan, 
+        couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', 
+        referenceCode: finalRefCode, 
+        paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
+        tariffPlan: (companyTariffs as any)[finalPlan]
       };
       
       const response = await fetch(API_STORES_URL, { 
@@ -243,7 +251,11 @@ const SupportFormModal = memo(({
         phone: savedFromDB.phone, 
         status: 'pending', 
         userId: currentUserId, 
-        timepostEnd: null 
+        timepostEnd: null,
+        premiumPlan: finalPlan, 
+        couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', 
+        referenceCode: finalRefCode, 
+        paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod
       };
 
       onSuccess(newEntryLocal, formZip);
@@ -300,37 +312,105 @@ const SupportFormModal = memo(({
               <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelzipcde} placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
               <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.lablelespecia} placeholderTextColor={Colors.subtext} value={formDesc} onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} multiline autoCapitalize="sentences" />
 
-              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
-              <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                  {[  
-                      { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc }, 
-                      { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc }, 
-                      { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc }, 
-                      { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
-                  ].map(plan => {
-                      const pStyle = planStyles[plan.id as keyof typeof planStyles]; const isSelected = formPlan === plan.id;
-                      return (
-                      <TouchableOpacity key={plan.id} onPress={() => setFormPlan(plan.id)} style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : Colors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><View style={{ flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} /><ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : Colors.text, marginLeft: 8 }}>{plan.name}</ThemedText></View><ThemedText style={{ fontWeight: '900', fontSize: 16, color: Colors.text }}>${plan.price}</ThemedText></View>
-                          <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : Colors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
-                      </TouchableOpacity>
-                  )})}
-              </View>
-              
-              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none' }}>{t.genericlabel.labelphonecont}</ThemedText>
+              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color:Colors.text }}>{t.genericlabel.labelphonecont}</ThemedText>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 15, overflow: 'hidden' }}>
                 <TouchableOpacity activeOpacity={0.7} onPress={() => setCountryIdx(prev => (prev === 0 ? 0 : 0))} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}><ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx].flag}</ThemedText><ThemedText style={{ fontWeight: '800', color: Colors.text, marginRight: 4 }}>{COUNTRIES[countryIdx].code}</ThemedText></TouchableOpacity>
                 <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.subtext} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
 
-              <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>{t.genericlabel.labelcheckpay}</ThemedText>
-                <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>{before}<ThemedText style={{ fontWeight: '900', color: Colors.accent }}>${(companyTariffs as any)[formPlan]} USD</ThemedText>{after}   </ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                  {['Zelle'].map((method) => ( <TouchableOpacity key={method} onPress={() => setFormPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? Colors.accent : Colors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}><ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText></TouchableOpacity> ))}
-                </View>
-                <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelconfirmpay + `${formPayMethod}...`} placeholderTextColor={Colors.subtext} value={formRefCode} onChangeText={(text) => setFormRefCode(text.toUpperCase())} autoCapitalize="characters" />
+              {/* 🚀 NUEVO UX: SELECCIÓN DE MÉTODO (PAGO O CUPÓN) */}
+              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                <TouchableOpacity 
+                  onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                  style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                >
+                  <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                  style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                >
+                  <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                </TouchableOpacity>
               </View>
+
+              {/* RUTA DE SUSCRIPCIÓN */}
+              {uiPayType === 'subscription' && (
+                <>
+                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
+                  <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                      {[  
+                          { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc }, 
+                          { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc }, 
+                          { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
+                      ].map(plan => {
+                          const pStyle = planStyles[plan.id as keyof typeof planStyles]; const isSelected = formPlan === plan.id;
+                          return (
+                          <TouchableOpacity key={plan.id} onPress={() => setFormPlan(plan.id)} style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : Colors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg }}>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><View style={{ flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} /><ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : Colors.text, marginLeft: 8 }}>{plan.name}</ThemedText></View><ThemedText style={{ fontWeight: '900', fontSize: 16, color: Colors.text }}>${plan.price}</ThemedText></View>
+                              <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : Colors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                          </TouchableOpacity>
+                      )})}
+                  </View>
+                  
+                  <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                    <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>{t.genericlabel.labelcheckpay}</ThemedText>
+                    <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>{before}<ThemedText style={{ fontWeight: '900', color: Colors.accent }}>${(companyTariffs as any)[formPlan]} USD</ThemedText>{after} escaneando el código QR oficial abajo.</ThemedText>
+                    
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                      {['Zelle'].map((method) => ( <View key={method} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}><ThemedText style={{ fontWeight: '900', color: Colors.accent }}>{method}</ThemedText></View> ))}
+                    </View>
+
+                    {/* 🚀 RENDERIZADO DEL CÓDIGO QR DE ZELLE DESDE SUPABASE */}
+                    <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: Colors.border }}>
+                      {zelleQrUrl ? (
+                        <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
+                      ) : (
+                        <View style={{ width: 180, height: 180, justifyContent: 'center', alignItems: 'center' }}>
+                          <ActivityIndicator size="small" color={Colors.accent} />
+                        </View>
+                      )}
+                      <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* RUTA DE CUPÓN */}
+              {uiPayType === 'coupon' && (
+                <View style={{ marginBottom: 10 }}>
+                  <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
+                </View>
+              )}
+
+              {/* 🚀 EL INPUT CAMALEÓN ÚNICO CON ALTO CONTRASTE */}
+              <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.accent, marginBottom: 10 }}>
+                  {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
+                </ThemedText>
+
+                <TextInput 
+                  style={{ 
+                    padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, 
+                    backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.06)') : Colors.inputBg, 
+                    borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, 
+                    color: Colors.text, 
+                    textAlign: uiPayType === 'coupon' ? 'center' : 'left',
+                    fontSize: 16,
+                    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) 
+                  }} 
+                  placeholder={uiPayType === 'coupon' ? 'ESCRIBE TU CÓDIGO AQUÍ...' : `# CONFIRMACION DE ${formPayMethod}...`} 
+                  placeholderTextColor={Colors.subtext}
+                  value={formRefCode} 
+                  onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
+                  autoCapitalize="characters"
+                />
+              </View>
+
               <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
                 <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                   {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}<ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.genericbtn.sendrequest}</ThemedText>
@@ -362,8 +442,6 @@ export default function SupportScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken;
   const { t } = useTranslation();
 
-  // 🚀 1. NUEVO: Extraemos el rol y creamos la validación
-  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
   
@@ -407,6 +485,7 @@ export default function SupportScreen() {
   const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' });
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
   const isZipValid = zipCode.length === 5;
@@ -417,6 +496,28 @@ export default function SupportScreen() {
   const ringAnim = useRef(new Animated.Value(0)).current;
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
+
+  // 🚀 CARGA DE URL FIRMADA PARA EL QR DE ZELLE DESDE SUPABASE
+  useEffect(() => {
+    const loadZelleQr = async () => {
+      try {
+        const { createClient } = require('@supabase/supabase-js');
+        const supabaseUrlLocal = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+        const supabaseAnonKeyLocal = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+        
+        if (supabaseUrlLocal && supabaseAnonKeyLocal) {
+          const client = createClient(supabaseUrlLocal, supabaseAnonKeyLocal);
+          const { data } = await client.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+          if (data?.signedUrl) {
+            setZelleQrUrl(data.signedUrl);
+          }
+        }
+      } catch (error) {
+        console.warn("⚠️ No se pudo obtener la URL firmada de qrzelle.webp", error);
+      }
+    };
+    loadZelleQr();
+  }, []);
 
   const applyLocalFilters = (supportList: any[], categoryIdx: number, lat: number, lng: number) => {
     let filtered = (categoryIdx === 0) ? [...supportList] : supportList.filter(l => Number(l.categoryId) === categoryIdx);
@@ -479,7 +580,6 @@ export default function SupportScreen() {
     });
   };
 
-  // 🚀 ACTUALIZADO: Si el admin activa el modo, trae los pendientes globales
   useEffect(() => { 
     if (isAdminMode) { 
       fetchAllPendingSupports(); 
@@ -492,7 +592,6 @@ export default function SupportScreen() {
     } 
   }, [isAdminMode]);
 
-  // 🚀 ACTUALIZADO: Fetch global para el administrador
   const fetchAllPendingSupports = async () => {
     try {
       setLoading(true);
@@ -749,6 +848,7 @@ export default function SupportScreen() {
         ICONS_ARRAY={ICONS_ARRAY}
         COUNTRIES={COUNTRIES}
         height={height} 
+        zelleQrUrl={zelleQrUrl}
       />
 
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>

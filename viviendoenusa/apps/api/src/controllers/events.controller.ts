@@ -282,16 +282,11 @@ export const createEvent = async (data: any) => {
     const metodoPago = cleanData.paymentMethod ? String(cleanData.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = cleanData.referenceCode ? String(cleanData.referenceCode).trim() : '';
 
-    // 🚀 1. MAGIA DEL CUPÓN: Validamos por el plan O por el método de pago
-    const isCoupon = planSeleccionado === 'cupon' || metodoPago === 'cupon';
+    // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
+    const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-    if (isCoupon) {
-      if (!codigoReferencia) throw new Error("Por favor, ingresa el código del cupón.");
-      const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, codigoReferencia));
-      
-      if (!promo) throw new Error("El cupón ingresado no existe.");
-      if (promo.isUsed) throw new Error("Este cupón ya fue utilizado.");
-    }
+    // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
+    let realPromoCode = cleanData.couponCode ? String(cleanData.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     // 🚀 Coordenadas sincrónicas locales
     const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
@@ -303,6 +298,17 @@ export const createEvent = async (data: any) => {
 
     // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdEventResult = await db.transaction(async (tx) => {
+        
+        // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
+        if (isCoupon) {
+          if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
+          
+          // Búsqueda SQL insensible a mayúsculas/minúsculas
+          const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
+          
+          if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
+          if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+        }
 
         const payload: any = {
           title: cleanData.title || 'Sin título',
@@ -320,27 +326,30 @@ export const createEvent = async (data: any) => {
           phone: cleanData.phone || '',
           contactMethod: cleanData.contactMethod || 'whatsapp',
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
-          premiumPlan: isCoupon ? 'cupon' : planSeleccionado, 
+          premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
           userId: validUserId, 
           approved: isCoupon ? true : false, // 👈 Si es un cupón válido, el evento nace aprobado
         };
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
-        // 🚀 Si hay un código, registramos el pago
-        if (codigoReferencia && metodoPago) {
+        // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint)
+        if (codigoReferencia || realPromoCode) {
             const today = new Date();
             const eventDate = new Date(payload.dateEvent);
             const diffTime = eventDate.getTime() - today.getTime();
             const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
+            // Modificamos la referencia si es un cupón para evitar colisiones en Postgres
+            const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
+
             await tx.insert(payments).values({
               entityType: 'event', 
               entityId: newEvent.id,
               userId: validUserId, 
-              referenceCode: codigoReferencia, 
-              paymentMethod: metodoPago, 
-              amount: isCoupon ? "0.00" : (data.tariffPlan || await getCurrentEventPrice()), // 👈 Monto cero si es cupón
+              referenceCode: safePaymentReference, 
+              paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
+              amount: isCoupon ? "0.00" : (cleanData.tariffPlan || await getCurrentEventPrice()), // 👈 Monto cero si es cupón
               durationDays: daysLeft, 
               timepost_end: eventDate,
               status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
@@ -348,28 +357,28 @@ export const createEvent = async (data: any) => {
             });
         }
 
-        // 🚀 2. QUEMAR EL CUPÓN
+        // 🚀 5. QUEMAR EL CUPÓN
         if (isCoupon) {
           await tx.update(promoCodes)
           .set({
             isUsed: true, 
-            usedByUserId: validUserId, // 👈 CORRECCIÓN: Usamos el ID que ya pasó por la limpieza
+            usedByUserId: validUserId, 
             usedForEntityId: newEvent.id, 
             entityType: 'event',
             usedAt: new Date() 
           })
-          .where(eq(promoCodes.code, codigoReferencia)); 
+          .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
         }
 
         return {
            ...newEvent,
-           referenceCode: codigoReferencia,
-           paymentMethod: metodoPago
+           referenceCode: isCoupon ? realPromoCode : codigoReferencia,
+           paymentMethod: isCoupon ? 'Coupon' : metodoPago
         };
     });
 
-    // 🚀 DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
-    if (createdEventResult) {
+    // 🚀 DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
+    if (createdEventResult && createdEventResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdEventResult.title || 'Sin título',
         createdEventResult.referenceCode || 'N/A',
@@ -381,10 +390,13 @@ export const createEvent = async (data: any) => {
 
   } catch (error: any) { 
     console.error("❌ Error en createEvent:", error);
-    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
-       throw new Error("Ese código de referencia de pago ya fue utilizado.");
+    
+    // Filtramos los errores de Constraint
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
+       throw new Error("El código de referencia de pago ya está en uso.");
     }
-    throw new Error(`Error al crear el evento: ${error.message}`);
+    
+    throw new Error(error.message || "Error al crear el evento.");
   }
 };
 

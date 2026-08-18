@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, memo, use } from 'react';
+import React, { useState, useMemo, useEffect, useRef, memo } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
@@ -30,6 +30,7 @@ import { handleUniversalShare } from '../../../utils/shareHelper';
 // 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
+
 // --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
@@ -270,10 +271,14 @@ export default function StoresScreen() {
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
 
-  const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
-
   const [formPlan, setFormPlan] = useState('basic');
+
+  // 🚀 ESTADOS CLAVE UNIFICADOS
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
+  const [formRefCode, setFormRefCode] = useState(''); // Sirve para Zelle Y para el Cupón
+  const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
+
   const [companyTariffs, setCompanyTariffs] = useState({
     coupon: '0.00', 
     basic: '50.00', 
@@ -292,12 +297,14 @@ export default function StoresScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  const isFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage && formRefCode.trim());
+  // 🚀 LÓGICA DE VALIDACIÓN DINÁMICA
+  const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
+  const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
   const resetForm = () => {
     setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
     setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); 
-    setFormRefCode(''); setFormPayMethod('Zelle'); 
+    setFormRefCode(''); setFormPayMethod('Zelle'); setFormPlan('basic'); setUiPayType('subscription');
   };
 
   useEffect(() => {
@@ -325,6 +332,28 @@ export default function StoresScreen() {
       }
     };
     fetchTariff();
+  }, []);
+
+  // 🚀 CARGA DE URL FIRMADA PARA EL QR DE ZELLE DESDE SUPABASE
+  useEffect(() => {
+    const loadZelleQr = async () => {
+      try {
+        const { createClient } = require('@supabase/supabase-js');
+        const supabaseUrlLocal = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+        const supabaseAnonKeyLocal = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+        
+        if (supabaseUrlLocal && supabaseAnonKeyLocal) {
+          const client = createClient(supabaseUrlLocal, supabaseAnonKeyLocal);
+          const { data } = await client.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+          if (data?.signedUrl) {
+            setZelleQrUrl(data.signedUrl);
+          }
+        }
+      } catch (error) {
+        console.warn("⚠️ No se pudo obtener la URL firmada de qrzelle.webp", error);
+      }
+    };
+    loadZelleQr();
   }, []);
 
   const fetchStoresData = async (searchZip: string) => {
@@ -494,7 +523,6 @@ export default function StoresScreen() {
   const fetchAllPendingStores = async () => {
     try {
       setLoading(true);
-      // 🚀 CAMBIO: Quitamos el userId para traer TODOS los negocios
       const res = await fetch(`${API_STORES_URL}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}` }
@@ -629,7 +657,7 @@ export default function StoresScreen() {
 
   const handlePublishStore = async () => {
     if (!isFormValid) {
-      return Alert.alert("Atención", "Completar nombre, ubicación, foto y código de pago son obligatorios.");
+      return Alert.alert("Atención", "Completar nombre, ubicación, foto y código de activación son obligatorios.");
     }
     
     // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS
@@ -689,6 +717,10 @@ export default function StoresScreen() {
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       
+      // 🚀 ASIGNACIÓN DEL PAYLOAD SEGÚN EL INPUT ÚNICO
+      const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
+      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
+
       const payload = {
         nameStores: formName, 
         descriptionStores: formDesc, 
@@ -702,11 +734,11 @@ export default function StoresScreen() {
         userId: currentUserId,
         approved: false,
         estate: userMetadata?.estate || '',
-        referenceCode: formRefCode,
-        paymentMethod: formPayMethod,
-        premiumPlan: formPlan,
-        
-        tariffPlan: (companyTariffs as any)[formPlan]
+        referenceCode: finalRefCode,
+        paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
+        premiumPlan: finalPlan,
+        couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
+        tariffPlan: (companyTariffs as any)[finalPlan]
       };
 
       const response = await fetch(API_STORES_URL, {
@@ -737,9 +769,10 @@ export default function StoresScreen() {
         phone: savedFromDB.phone,
         status: 'pending',
         estate: userMetadata?.estate || '',
-        referenceCode: formRefCode,
-        paymentMethod: formPayMethod,
-        premiumPlan: formPlan,
+        referenceCode: finalRefCode,
+        paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
+        premiumPlan: finalPlan,
+        couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
         userId: currentUserId,
         timepostEnd: null
       };
@@ -1321,34 +1354,6 @@ export default function StoresScreen() {
                   autoCapitalize="sentences" 
                 />
                 
-                {/* 🚀 SELECCIONAR PLAN */}
-                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5 }}>SELECCIONA TU PLAN *</ThemedText>
-                <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                    {[
-                        { id: 'coupon', name: t.categoryplan.coupon, price: companyTariffs.coupon, desc: t.categoryplan.coupondesc },
-                        { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
-                        { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
-                        { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
-                    ].map(plan => {
-                        const pStyle = planStyles[plan.id as keyof typeof planStyles];
-                        const isSelected = formPlan === plan.id;
-                        return (
-                        <TouchableOpacity 
-                            key={plan.id} onPress={() => setFormPlan(plan.id)}
-                            style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : DynamicColors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : DynamicColors.inputBg }}
-                        >
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : DynamicColors.subtext} />
-                                    <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : DynamicColors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
-                                </View>
-                                <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText>
-                            </View>
-                            <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
-                        </TouchableOpacity>
-                    )})}
-                </View>
-
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none',color:DynamicColors.text  }}>{t.storestab?.phoneContacto || 'Teléfono'}</ThemedText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, overflow: 'hidden' }}>
                   <TouchableOpacity 
@@ -1367,28 +1372,113 @@ export default function StoresScreen() {
                     style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
-                  <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: DynamicColors.accent }}>Verificación de Pago</ThemedText>
-                  
-                  <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: DynamicColors.text }}>
-                    Para promocionar tu negocio, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> mediante Zelle o Venmo y escribe el código de confirmación aquí abajo.
-                  </ThemedText>
-                  
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                    {['Zelle'].map((method) => (
-                      <TouchableOpacity 
-                        key={method}
-                        onPress={() => setFormPayMethod(method)} 
-                        style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                      >
-                        <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText>
-                      </TouchableOpacity>
-                    ))}
+                {/* 🚀 NUEVO UX: SELECCIÓN DE MÉTODO (PAGO O CUPÓN) */}
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
+                  </TouchableOpacity>
+                </View>
+
+                {/* RUTA DE SUSCRIPCIÓN */}
+                {uiPayType === 'subscription' && (
+                  <>
+                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
+                    <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                        {[
+                          { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
+                          { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
+                          { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
+                        ].map(plan => {
+                            const pStyle = planStyles[plan.id as keyof typeof planStyles];
+                            const isSelected = formPlan === plan.id;
+                            
+                            return (
+                            <TouchableOpacity 
+                                key={plan.id}
+                                onPress={() => setFormPlan(plan.id)}
+                                style={{ 
+                                    padding: 15, 
+                                    borderRadius: 14, 
+                                    borderWidth: 1, 
+                                    borderColor: isSelected ? pStyle.selected : DynamicColors.border, 
+                                    backgroundColor: isSelected ? pStyle.unselected(isDark) : DynamicColors.inputBg 
+                                }}
+                            >
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : DynamicColors.subtext} />
+                                        <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : DynamicColors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
+                                    </View>
+                                    <ThemedText style={{ fontWeight: '900', fontSize: 16, color: DynamicColors.text }}>${plan.price}</ThemedText>
+                                </View>
+                                <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : DynamicColors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                            </TouchableOpacity>
+                        )})}
+                    </View>
+
+                    <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: DynamicColors.text }}>
+                      Para promocionar tu negocio, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> escaneando el código QR oficial abajo.
+                    </ThemedText>
+                    
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                      {['Zelle'].map((method) => (
+                        <View key={method} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: DynamicColors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
+                          <ThemedText style={{ fontWeight: '900', color: DynamicColors.accent }}>{method}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* 🚀 RENDERIZADO DEL CÓDIGO QR DE ZELLE DESDE SUPABASE */}
+                    <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: DynamicColors.border }}>
+                      {zelleQrUrl ? (
+                        <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
+                      ) : (
+                        <View style={{ width: 180, height: 180, justifyContent: 'center', alignItems: 'center' }}>
+                          <ActivityIndicator size="small" color={DynamicColors.accent} />
+                        </View>
+                      )}
+                      <ThemedText style={{ fontSize: 11, fontWeight: '700', color: DynamicColors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+                    </View>
+                  </>
+                )}
+
+                {/* RUTA DE CUPÓN */}
+                {uiPayType === 'coupon' && (
+                  <View style={{ marginBottom: 10 }}>
+                    <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
                   </View>
+                )}
+
+                {/* 🚀 EL INPUT CAMALEÓN ÚNICO CON ALTO CONTRASTE */}
+                <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
+                  <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.accent, marginBottom: 10 }}>
+                    {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
+                  </ThemedText>
 
                   <TextInput 
-                    style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 15, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                    placeholder={`# CONFIRMACION DE ${formPayMethod}...`} 
+                    style={{ 
+                      padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, 
+                      backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.06)') : DynamicColors.inputBg, 
+                      borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, 
+                      color: DynamicColors.text, 
+                      textAlign: uiPayType === 'coupon' ? 'center' : 'left',
+                      fontSize: 16,
+                      ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) 
+                    }} 
+                    placeholder={uiPayType === 'coupon' ? 'ESCRIBE TU CÓDIGO AQUÍ...' : `# CONFIRMACION DE ${formPayMethod}...`} 
                     placeholderTextColor={DynamicColors.subtext}
                     value={formRefCode} 
                     onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
