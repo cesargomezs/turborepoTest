@@ -9,16 +9,16 @@ import { StatusBar } from 'expo-status-bar';
 import store from './store';
 import '../global.css';
 
-// 🚀 1. IMPORTAMOS EL THEME PROVIDER DE NAVEGACIÓN
+// 🚀 IMPORTAMOS EL THEME PROVIDER DE NAVEGACIÓN
 import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { DarkTheme, DefaultTheme } from '../constants/Theme';
 
-// 🚀 2. IMPORTAMOS NUESTRO THEME PROVIDER
+// 🚀 IMPORTAMOS NUESTRO THEME PROVIDER
 import { ThemeProvider as CustomAppThemeProvider, useAppTheme } from './src/context/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
 
-// 🚀 3. SUB-COMPONENTE PARA LEER EL ESTADO GLOBAL
+// 🚀 SUB-COMPONENTE PARA LEER EL ESTADO GLOBAL
 function AppLayoutNavigator() {
   const { isDark } = useAppTheme();
 
@@ -60,14 +60,12 @@ function AppLayoutNavigator() {
   );
 }
 
-// 🚀 4. EL ROOT LAYOUT ENVUELVE TODO ORDENADAMENTE
+// 🚀 EL ROOT LAYOUT ENVUELVE TODO ORDENADAMENTE
 export default function RootLayout() {
-  // Añadimos "error" para capturar si falla la carga
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  // 🔴 DEBUG DE ERRORES AL CARGAR FUENTES/ASSETS
   useEffect(() => {
     if (error) {
       console.error("Error crítico cargando fuentes:", error);
@@ -80,11 +78,7 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  // Si no ha cargado...
   if (!loaded) {
-    // 🔴 PANTALLA ROJA DE DIAGNÓSTICO: 
-    // Si ves esto en tu iPhone o simulador, significa que el archivo de la fuente 
-    // o imagen no se empaquetó bien y está bloqueando el arranque de la app.
     if (error) {
       return (
          <View style={{ flex: 1, backgroundColor: 'red', justifyContent: 'center', alignItems: 'center' }}>

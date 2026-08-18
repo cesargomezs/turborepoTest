@@ -39,33 +39,36 @@ const capitalizeName = (str: any) => {
   return str.trim().split(/\s+/).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 };
 
-// --------------------------------------------------------
-// 🛠️ TÉRMINOS: FUERZA BRUTA (Corregido el nombre de tabla)
-// --------------------------------------------------------
+// 🛠️ UPSERT INFALIBLE PARA TÉRMINOS (Evita duplicados y errores)
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
   try {
-    // Usamos el borrado nativo de Drizzle para que él maneje las minúsculas/mayúsculas de Postgres
-    await db.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
-    
-    // Insertamos el nuevo registro limpio
-    await db.insert(userTermsAcceptance).values({ 
-      userId, 
-      ipAddress: ipAddress || null 
-    });
-    console.log(`✅ [TÉRMINOS] Guardado limpio asegurado para: ${userId}`);
+    await db.insert(userTermsAcceptance)
+      .values({
+        userId,
+        ipAddress: ipAddress || null,
+      })
+      .onConflictDoUpdate({
+        target: userTermsAcceptance.userId,
+        set: {
+          ipAddress: ipAddress || null,
+          acceptedAt: new Date(),
+        },
+      });
+
+    console.log(`✅ [TÉRMINOS] Upsert exitoso asegurado para: ${userId}`);
   } catch (error: any) {
-    console.error("❌ [TÉRMINOS] EL VERRACO ERROR ES:", error.message);
+    console.error("❌ [TÉRMINOS] ERROR ES:", error.message);
   }
 };
 
 // --------------------------------------------------------
-// 🛠️ DISPOSITIVOS: UPSERT Y REPORTE DE ERROR REAL
+// 🛠️ DISPOSITIVOS: UPSERT BLINDADO PARA EVITAR FALLOS EN RAILWAY
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   console.log(`🔍 [DEBUG DEVICES] Entrando. Token recibido: ${pushToken}`);
 
-  if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '') {
-    console.log("⚠️ [DEBUG DEVICES] Token nulo o vacío.");
+  if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '' || pushToken === 'undefined') {
+    console.log("⚠️ [DEBUG DEVICES] Token nulo, vacío o 'undefined'.");
     return;
   }
   
@@ -73,22 +76,26 @@ const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?
   const deviceStr = deviceType || 'unknown';
 
   try {
-    // IMPORTANTE: Esto solo funciona si en pgAdmin corregiste "expo_push_token" y le pusiste la restricción UNIQUE
-    await db.insert(userDevices)
-      .values({
-        userId: userId,
-        expoPushToken: tokenStr,
-        deviceType: deviceStr,
-      })
-      .onConflictDoUpdate({
-        target: userDevices.expoPushToken, // Si el token ya existe en la tabla...
-        set: { userId: userId, deviceType: deviceStr } // ...solo le actualizamos el dueño.
-      });
-      
-    console.log(`✅ [DEBUG DEVICES] Dispositivo guardado en BD.`);
+    // Si ya existe el token, actualizamos el userId y el tipo. 
+    // Si la tabla no tiene la restricción UNIQUE en expoPushToken, hacemos un manejo seguro borrando previo o usando un insert simple.
+    const existingDevice = await db.select().from(userDevices).where(eq(userDevices.expoPushToken, tokenStr));
+
+    if (existingDevice.length > 0) {
+      await db.update(userDevices)
+        .set({ userId: userId, deviceType: deviceStr })
+        .where(eq(userDevices.expoPushToken, tokenStr));
+      console.log(`✅ [DEBUG DEVICES] Dispositivo actualizado en BD para el usuario: ${userId}`);
+    } else {
+      await db.insert(userDevices)
+        .values({
+          userId: userId,
+          expoPushToken: tokenStr,
+          deviceType: deviceStr,
+        });
+      console.log(`✅ [DEBUG DEVICES] Dispositivo insertado con éxito en BD.`);
+    }
   } catch (error: any) {
-    // Si falla, ESTO NOS DIRÁ EXACTAMENTE POR QUÉ RAILWAY LO RECHAZA
-    console.error("❌ [DEBUG DEVICES] EL VERRACO ERROR ES:", error.message);
+    console.error("❌ [DEBUG DEVICES] EL ERROR AL GUARDAR DEVICE ES:", error.message);
   }
 };
 
@@ -503,17 +510,18 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP
+// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP (O HEADERS)
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { token, deviceType } = req.body;
+    const token = req.body.token || req.headers['x-push-token'];
+    const deviceType = req.body.deviceType || 'ios';
 
     if (!userId) return res.status(401).json({ error: "No autorizado." });
     if (!token) return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
 
-    await upsertDeviceToken(userId, token, deviceType);
+    await upsertDeviceToken(userId, token as string, deviceType);
 
     return res.status(200).json({ message: "Dispositivo registrado." });
   } catch (error: any) {
