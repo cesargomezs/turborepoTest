@@ -40,23 +40,21 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ VALIDADOR: GUARDAR TÉRMINOS (SOLO 1 VEZ)
+// 🛠️ FUERZA BRUTA: GUARDAR TÉRMINOS (IMPOSIBLE DUPLICAR)
 // --------------------------------------------------------
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
   try {
-    const existingTerms = await db.select()
-      .from(userTermsAcceptance)
-      .where(eq(userTermsAcceptance.userId, userId))
-      .limit(1);
-
-    if (existingTerms.length === 0) {
-      await db.insert(userTermsAcceptance).values({ 
-        userId, 
-        ipAddress: ipAddress || null 
-      });
-    }
+    // 1. Borramos sin preguntar para matar cualquier duplicado por doble clic del frontend
+    await db.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
+    
+    // 2. Insertamos el único y definitivo
+    await db.insert(userTermsAcceptance).values({ 
+      userId: userId, 
+      ipAddress: ipAddress || null 
+    });
+    console.log(`✅ [TÉRMINOS] Guardado único y exitoso para el usuario: ${userId}`);
   } catch (error) {
-    console.error("❌ Error validando términos:", error);
+    console.error("❌ Error forzando términos:", error);
   }
 };
 
@@ -481,20 +479,32 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP
+// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP (DONDE REALMENTE LLEGA)
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const { token, deviceType } = req.body;
 
+    console.log("📥 [DEVICES] Petición recibida:", { userId, token, deviceType });
+
     if (!userId) return res.status(401).json({ error: "No autorizado." });
     if (!token) return res.status(400).json({ error: "El token de notificaciones es obligatorio." });
 
-    await upsertDeviceToken(userId, token, deviceType);
+    // 1. Borramos si ese token ya existía para evitar choques en la base de datos
+    await db.delete(userDevices).where(eq(userDevices.expoPushToken, token));
+    
+    // 2. Insertamos el token limpio asociado al usuario
+    await db.insert(userDevices).values({
+      userId: userId,
+      expoPushToken: token,
+      deviceType: deviceType || 'unknown',
+    });
 
+    console.log("✅ [DEVICES] Token de dispositivo guardado con éxito en la DB");
     return res.status(200).json({ message: "Dispositivo registrado." });
   } catch (error: any) {
+    console.error("❌ [DEVICES] Error crítico al guardar:", error);
     return res.status(500).json({ error: `Error interno: ${error.message}` });
   }
 };
