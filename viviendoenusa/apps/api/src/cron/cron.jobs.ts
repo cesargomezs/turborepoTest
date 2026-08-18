@@ -123,7 +123,7 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
         return false;
     });
 
-    if (promosForToday.length === 0) return;
+    if (promosForToday.length === 0) return; 
 
     for (const promo of promosForToday) {
         if (!promo.zip) continue; // Saltar si el negocio no tiene ZIP
