@@ -40,7 +40,7 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ CANDADO ANTI-DOBLE CLIC PARA TÉRMINOS
+// 🛠️ CANDADO ANTI-DUPLICADOS PARA TÉRMINOS
 // --------------------------------------------------------
 const termsLock = new Set<string>();
 
@@ -49,6 +49,7 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
   termsLock.add(userId);
 
   try {
+    // 🚀 Borramos cualquier registro previo para evitar duplicados exactos
     await db.delete(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
     await db.insert(userTermsAcceptance).values({ 
       userId, 
@@ -63,25 +64,26 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
 };
 
 // --------------------------------------------------------
-// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO CON DEBUGGING
+// 🛠️ VALIDADOR: GUARDAR DISPOSITIVO SIN DUPLICADOS
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   console.log("🔍 [DEBUG DEVICES] Entrando a upsertDeviceToken");
-  console.log("🔍 [DEBUG DEVICES] Datos recibidos:", { userId, pushToken, deviceType });
 
   if (!pushToken || pushToken.trim() === '') {
-    console.log("⚠️ [DEBUG DEVICES] pushToken viene vacío o nulo. El frontend no lo envió en esta petición.");
+    console.log("⚠️ [DEBUG DEVICES] pushToken viene vacío o nulo.");
     return;
   }
   
   try {
-    await db.delete(userDevices).where(eq(userDevices.expoPushToken, pushToken));
+    // 🚀 Limpiamos duplicados previos de este token o de este usuario exacto
+    await db.delete(userDevices).where(sql`${userDevices.expoPushToken} = ${pushToken} OR ${userDevices.userId} = ${userId}`);
+    
     await db.insert(userDevices).values({
       userId: userId,
       expoPushToken: pushToken,
       deviceType: deviceType || 'unknown',
     });
-    console.log("✅ [DEBUG DEVICES] Insert en tabla user_devices exitoso");
+    console.log("✅ [DEBUG DEVICES] Dispositivo guardado correctamente en la BD");
   } catch (error) {
     console.error("❌ [DEBUG DEVICES] Error crítico en DB:", error);
   }
@@ -92,7 +94,6 @@ const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null, reqIp?: string) => {
   try {
-    console.log("🔍 [DEBUG AUTH] Petición de registro recibida. Token:", data.pushToken);
     const existingUsers = await db.select().from(users).where(eq(users.email, data.email));
     
     let stateObj = undefined;
@@ -165,7 +166,7 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
 };
 
 // --------------------------------------------------------
-// 2. 🔍 CONSULTA DE USUARIO 
+// 2. 🔍 CONSULTA DE USUARIO (URL Pública para evitar parpadeo)
 // --------------------------------------------------------
 export const getUser = async (idOrEmail: string) => {
   try {
@@ -178,7 +179,6 @@ export const getUser = async (idOrEmail: string) => {
     const user = rows[0];
     let publicImageUrl = user.imageUrl;
 
-    // 🚀 CAMBIO PARA EVITAR PARPADEO: Obtenemos URL Pública en lugar de Firmada
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
       const { data } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
@@ -271,7 +271,6 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
     const finalUser = updatedRows[0];
     let publicImageUrl = finalUser.imageUrl;
 
-    // 🚀 CAMBIO PARA EVITAR PARPADEO: Obtenemos URL Pública en lugar de Firmada
     if (finalUser.imageUrl && !finalUser.imageUrl.startsWith('http')) {
       const rutaArchivo = finalUser.imageUrl.startsWith('users/') ? finalUser.imageUrl : `users/${finalUser.imageUrl}`;
       const { data: publicData } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
@@ -287,12 +286,14 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 };
 
 // --------------------------------------------------------
-// 4. 🌐 AUTENTICACIÓN CENTRALIZADA
+// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (CON CAPTURA ROBUSTA DE NOMBRE EN APPLE/GOOGLE)
 // --------------------------------------------------------
 export const authenticateUser = async (credentials: { 
   idToken?: string; 
   email?: string; 
   password?: string; 
+  firstName?: string; // 👈 Recibimos por si el front lo manda explícito
+  lastName?: string;  // 👈 Recibimos por si el front lo manda explícito
   isGoogle: boolean; 
   isApple?: boolean; 
   pushToken?: string;  
@@ -300,18 +301,16 @@ export const authenticateUser = async (credentials: {
 }) => {
   try {
     let email = credentials.email;
-    let firstName = "";
-    let lastName = "";
-
-    console.log("🔍 [DEBUG AUTH] Petición de login recibida. Token:", credentials.pushToken);
+    let firstName = credentials.firstName || "";
+    let lastName = credentials.lastName || "";
 
     if (credentials.isGoogle && credentials.idToken) {
       const ticket = await googleClient.verifyIdToken({ idToken: credentials.idToken });
       const payload = ticket.getPayload();
       if (!payload || !payload.email) throw new Error("Token de Google inválido");
       email = payload.email;
-      firstName = payload.given_name || "";
-      lastName = payload.family_name || "";
+      if (!firstName) firstName = payload.given_name || "";
+      if (!lastName) lastName = payload.family_name || "";
     }
 
     if (credentials.isApple && credentials.idToken) {
@@ -320,6 +319,14 @@ export const authenticateUser = async (credentials: {
         throw new Error("Token de Apple inválido");
       }
       email = decoded.email || `apple_${decoded.sub}@viviendoenusa.app`;
+      
+      // Si Apple trae nombre en el token o el frontend lo envió, lo usamos
+      if (!firstName && credentials.firstName) {
+        firstName = credentials.firstName;
+      }
+      if (!lastName && credentials.lastName) {
+        lastName = credentials.lastName;
+      }
     }
 
     if (!email) throw new Error("Email requerido");
@@ -340,6 +347,19 @@ export const authenticateUser = async (credentials: {
         user = newUser;
       } else {
         throw new Error(genericAuthError);
+      }
+    } else {
+      // 🚀 CORRECCIÓN CLAVE: Si el usuario ya existe pero se registró antes con un nombre genérico ("Apple" o "Usuario") 
+      // y ahora tenemos un nombre válido, se lo actualizamos de una vez para que no se quede sin nombre.
+      const currentName = user.name;
+      const isGenericName = !currentName || currentName === "Usuario" || currentName === "Apple" || currentName === "Google";
+      
+      if (isGenericName && (firstName || lastName)) {
+        const [updatedUser] = await db.update(users).set({
+          name: capitalizeName(firstName) || user.name,
+          lastName: capitalizeName(lastName) || user.lastName,
+        }).where(eq(users.id, user.id)).returning();
+        user = updatedUser;
       }
     }
 
@@ -370,7 +390,6 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    console.log("🔍 [DEBUG AUTH] Autenticación exitosa. Insertando TÉRMINOS y DEVICES para:", user.id);
     await ensureTermsAccepted(user.id);
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
 
@@ -469,7 +488,6 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
     const user = userProfile[0];
     let publicImageUrl = user.imageUrl;
 
-    // 🚀 CAMBIO PARA EVITAR PARPADEO: Obtenemos URL Pública en lugar de Firmada
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
       const { data } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
@@ -488,7 +506,6 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 // 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
-  console.log("🔍 [DEBUG] Petición recibida en /save-device-token");
   try {
     const userId = req.user?.id;
     const { token, deviceType } = req.body;
