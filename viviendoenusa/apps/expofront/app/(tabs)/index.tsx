@@ -571,7 +571,7 @@ export default function HomeScreen() {
     setTimeout(() => {
       const successMsg = `${t?.welcome || '¡Hola, '}${finalUser?.firstName ? finalUser.firstName : ''}!`;
       if (isWebPlatform) window.alert(successMsg);
-      else Alert.alert(isEnglish ? "Success!" : "¡Éxito!", successMsg);
+      else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
     }, 300);
   };
 
