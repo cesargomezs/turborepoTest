@@ -393,6 +393,7 @@ export const userDevices = pgTable('user_devices', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+//ALTER TABLE user_devices ADD CONSTRAINT unique_expo_push_token UNIQUE (expo_push_token);
 
 
 // 19. TABLA: account_deletion_surveys (Tener un registro de por qué los usuarios se borran de la app, para mejorar la retención)
@@ -456,3 +457,5 @@ export const promoCodes = pgTable("promo_codes", {
     user: one(users, { fields: [reviews.userId], references: [users.id] }),
     typeDetail: one(typeDetail, { fields: [reviews.typeDetailId], references: [typeDetail.id] }),
   }));
+
+  

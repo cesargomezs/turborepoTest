@@ -66,32 +66,33 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   console.log(`🔍 [DEBUG DEVICES] Entrando. Token recibido: ${pushToken}`);
-  
-  const tokenStr = (pushToken && typeof pushToken === 'string' && pushToken.trim() !== '' && pushToken !== 'undefined') 
-    ? pushToken.trim() 
-    : `fallback_token_${userId}_${Date.now()}`;
 
+  // Si el token no es válido o es un fallback, no ensuciamos la BD a menos que no haya NADA registrado
+  if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '' || pushToken === 'undefined' || pushToken.includes('fallback_token')) {
+    console.log("⚠️ [DEBUG DEVICES] Token omitido (es nulo, indefinido o un respaldo innecesario).");
+    return;
+  }
+  
+  const tokenStr = pushToken.trim();
   const deviceStr = deviceType || 'ios';
 
   try {
-    const existingDevice = await db.select().from(userDevices).where(eq(userDevices.expoPushToken, tokenStr));
-
-    if (existingDevice.length > 0) {
-      await db.update(userDevices)
-        .set({ userId: userId, deviceType: deviceStr })
-        .where(eq(userDevices.expoPushToken, tokenStr));
-      console.log(`✅ [DEBUG DEVICES] Dispositivo actualizado en BD para el usuario: ${userId}`);
-    } else {
-      await db.insert(userDevices)
-        .values({
-          userId: userId,
-          expoPushToken: tokenStr,
-          deviceType: deviceStr,
-        });
-      console.log(`✅ [DEBUG DEVICES] Dispositivo insertado con éxito en BD.`);
-    }
+    // Si ya existe este token exacto, actualizamos el usuario
+    // Si la tabla tiene la restricción UNIQUE, esto hará un upsert limpio
+    await db.insert(userDevices)
+      .values({
+        userId: userId,
+        expoPushToken: tokenStr,
+        deviceType: deviceStr,
+      })
+      .onConflictDoUpdate({
+        target: userDevices.expoPushToken,
+        set: { userId: userId, deviceType: deviceStr, updatedAt: new Date() }
+      });
+      
+    console.log(`✅ [DEBUG DEVICES] Token real guardado/actualizado exitosamente.`);
   } catch (error: any) {
-    console.error("❌ [DEBUG DEVICES] EL ERROR AL GUARDAR DEVICE ES:", error.message);
+    console.error("❌ [DEBUG DEVICES] ERROR AL GUARDAR DEVICE:", error.message);
   }
 };
 
