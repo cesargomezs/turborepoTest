@@ -39,7 +39,9 @@ const capitalizeName = (str: any) => {
   return str.trim().split(/\s+/).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 };
 
-// 🛠️ UPSERT INFALIBLE PARA TÉRMINOS (Evita duplicados y errores)
+// --------------------------------------------------------
+// 🛠️ TÉRMINOS: UPSERT SEGURO
+// --------------------------------------------------------
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
   try {
     await db.insert(userTermsAcceptance)
@@ -54,22 +56,18 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
           acceptedAt: new Date(),
         },
       });
-
-    console.log(`✅ [TÉRMINOS] Upsert exitoso asegurado para: ${userId}`);
   } catch (error: any) {
     console.error("❌ [TÉRMINOS] ERROR ES:", error.message);
   }
 };
 
 // --------------------------------------------------------
-// 🛠️ DISPOSITIVOS: UPSERT BLINDADO CON RESPALDO AUTOMÁTICO
+// 🛠️ DISPOSITIVOS: ESTRICTO Y ÚNICO (Cero basura, 1 solo registro)
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
-  console.log(`🔍 [DEBUG DEVICES] Entrando. Token recibido: ${pushToken}`);
-
-  // Si el token no es válido o es un fallback, no ensuciamos la BD a menos que no haya NADA registrado
-  if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '' || pushToken === 'undefined' || pushToken.includes('fallback_token')) {
-    console.log("⚠️ [DEBUG DEVICES] Token omitido (es nulo, indefinido o un respaldo innecesario).");
+  // 1. Si no viene token, viene vacío o es 'undefined', NO HACEMOS NADA. Cero registros basura.
+  if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '' || pushToken === 'undefined') {
+    console.log(`⚠️ [DEVICES] Sin token real para el usuario ${userId}. Se omite registro en BD.`);
     return;
   }
   
@@ -77,27 +75,26 @@ const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?
   const deviceStr = deviceType || 'ios';
 
   try {
-    // Si ya existe este token exacto, actualizamos el usuario
-    // Si la tabla tiene la restricción UNIQUE, esto hará un upsert limpio
-    await db.insert(userDevices)
-      .values({
-        userId: userId,
-        expoPushToken: tokenStr,
-        deviceType: deviceStr,
-      })
-      .onConflictDoUpdate({
-        target: userDevices.expoPushToken,
-        set: { userId: userId, deviceType: deviceStr, updatedAt: new Date() }
-      });
-      
-    console.log(`✅ [DEBUG DEVICES] Token real guardado/actualizado exitosamente.`);
+    // 2. Buscamos por USER_ID para garantizar que cada usuario tenga máximo UN solo dispositivo.
+    const existingDevice = await db.select().from(userDevices).where(eq(userDevices.userId, userId));
+
+    if (existingDevice.length > 0) {
+      await db.update(userDevices)
+        .set({ expoPushToken: tokenStr, deviceType: deviceStr, updatedAt: new Date() })
+        .where(eq(userDevices.userId, userId));
+      console.log(`✅ [DEVICES] Token actualizado para el usuario: ${userId}`);
+    } else {
+      await db.insert(userDevices)
+        .values({ userId: userId, expoPushToken: tokenStr, deviceType: deviceStr });
+      console.log(`✅ [DEVICES] Nuevo dispositivo registrado con éxito.`);
+    }
   } catch (error: any) {
-    console.error("❌ [DEBUG DEVICES] ERROR AL GUARDAR DEVICE:", error.message);
+    console.error("❌ [DEVICES] ERROR AL GUARDAR DEVICE:", error.message);
   }
 };
 
 // --------------------------------------------------------
-// 1. REGISTRO DE USUARIO CLÁSICO Y COMPLETAR PERFIL
+// 1. REGISTRO DE USUARIO
 // --------------------------------------------------------
 export const registerUser = async (data: any, imageUrl: string | null, reqIp?: string) => {
   try {
@@ -173,7 +170,7 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
 };
 
 // --------------------------------------------------------
-// 2. 🔍 CONSULTA DE USUARIO (URL Pública)
+// 2. CONSULTA DE USUARIO
 // --------------------------------------------------------
 export const getUser = async (idOrEmail: string) => {
   try {
@@ -201,7 +198,7 @@ export const getUser = async (idOrEmail: string) => {
 };
 
 // --------------------------------------------------------
-// 3. 🔄 ACTUALIZACIÓN DE USUARIO 
+// 3. ACTUALIZACIÓN DE USUARIO 
 // --------------------------------------------------------
 export const updateUser = async (idOrEmail: string, data: any, newImageUri: string | null) => {
   try {
@@ -293,7 +290,7 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
 };
 
 // --------------------------------------------------------
-// 4. 🌐 AUTENTICACIÓN CENTRALIZADA (Con respaldo automático de devices)
+// 4. AUTENTICACIÓN CENTRALIZADA 
 // --------------------------------------------------------
 export const authenticateUser = async (credentials: { 
   idToken?: string; 
@@ -417,7 +414,7 @@ export const authenticateUser = async (credentials: {
 };
 
 // --------------------------------------------------------
-// 5. 📧 ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
+// 5. ENVÍO DE CORREO PARA RECUPERAR CONTRASEÑA
 // --------------------------------------------------------
 export const sendPasswordResetEmail = async (email: string) => {
   try {
@@ -455,7 +452,7 @@ export const sendPasswordResetEmail = async (email: string) => {
 };
 
 // --------------------------------------------------------
-// 6. 🔐 ACTUALIZAR CONTRASEÑA EN LA BASE DE DATOS
+// 6. ACTUALIZAR CONTRASEÑA EN LA BASE DE DATOS
 // --------------------------------------------------------
 export const updatePassword = async (req: Request, res: Response) => {
   const { token, password } = req.body;
@@ -481,7 +478,7 @@ export const updatePassword = async (req: Request, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 7. 🔍 OBTENER PERFIL DEL USUARIO 
+// 7. OBTENER PERFIL DEL USUARIO 
 // --------------------------------------------------------
 export const getMiPerfil = async (req: AuthRequest, res: Response) => {
   try {
@@ -507,7 +504,7 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 8. 📱 GUARDAR TOKEN PUSH DESDE LA APP (O HEADERS)
+// 8. GUARDAR TOKEN PUSH DESDE LA APP (O HEADERS)
 // --------------------------------------------------------
 export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
   try {
@@ -527,7 +524,7 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. 🗑️ ELIMINAR CUENTA
+// 9. ELIMINAR CUENTA
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
