@@ -267,6 +267,23 @@ export default function HomeScreen() {
   const scrollToBottom = () => { landingScrollRef.current?.scrollToEnd({ animated: true }); };
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
 
+  // 🚀 FUNCIÓN MAESTRA ANTICRASH PARA OBTENER EL TOKEN ANTES DE CUALQUIER LOGIN
+  const getSafePushToken = async () => {
+    if (isWebPlatform || !Notifications || !Device || !Device.isDevice) return undefined;
+    try {
+      // Usamos el ID declarado exactamente en tu código original
+      const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status === 'granted') {
+        const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        return tokenData.data;
+      }
+    } catch (e) {
+      console.log("Error obteniendo push token seguro:", e);
+    }
+    return undefined;
+  };
+
   useEffect(() => {
     const loadSignedImages = async () => {
       if (!supabase) return;
@@ -345,11 +362,18 @@ export default function HomeScreen() {
   useEffect(() => {
     const verifyGoogle = async (id_token: string) => {
       try {
+        const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
         const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+        
         const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken: id_token, isGoogle: true })
+          body: JSON.stringify({ 
+            idToken: id_token, 
+            isGoogle: true,
+            pushToken: pushTokenReal, 
+            deviceType: Platform.OS 
+          })
         });
         const dataRes = await res.json();
 
@@ -407,7 +431,6 @@ export default function HomeScreen() {
         let lastName = credential.fullName?.familyName || '';
         
         try {
-          // Validamos que atob exista en el entorno antes de intentar decodificar
           if (!appleEmail && typeof atob !== 'undefined') {
             const base64Url = credential.identityToken.split('.')[1];
             const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -419,11 +442,20 @@ export default function HomeScreen() {
            console.log("Decodificación local omitida", e);
         }
 
+        const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
         const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+        
         const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken: credential.identityToken, isApple: true, isGoogle: false, email: appleEmail })
+          body: JSON.stringify({ 
+            idToken: credential.identityToken, 
+            isApple: true, 
+            isGoogle: false, 
+            email: appleEmail,
+            pushToken: pushTokenReal,
+            deviceType: Platform.OS
+          })
         });
         const dataRes = await res.json();
 
@@ -615,6 +647,8 @@ export default function HomeScreen() {
     setIsSubmittingProfile(true);
 
     try {
+      const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
+      
       const finalPayload = { 
         email: form.email, 
         firstName: form.firstName, 
@@ -624,7 +658,9 @@ export default function HomeScreen() {
         zip: form.zipCode, 
         birth: form.birthDate.toISOString(), 
         isVerified: true, 
-        authProvider: authProvider 
+        authProvider: authProvider,
+        pushToken: pushTokenReal,
+        deviceType: Platform.OS
       };
       
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000'; 
@@ -645,7 +681,7 @@ export default function HomeScreen() {
             const loginRes = await fetch(`${API_URL}/auth/login`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: form.email, idToken: socialToken, isGoogle: authProvider === 'google', isApple: authProvider === 'apple' })
+              body: JSON.stringify({ email: form.email, idToken: socialToken, isGoogle: authProvider === 'google', isApple: authProvider === 'apple', pushToken: pushTokenReal, deviceType: Platform.OS })
             });
             const loginData = await loginRes.json();
             if (loginRes.ok && loginData.token) {
@@ -694,6 +730,7 @@ export default function HomeScreen() {
     return !isNaN(form.birthDate.getTime()) ? form.birthDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   };
 
+  // 🚀 AQUI MODIFICAMOS EL ACTION PRINCIPAL PARA MANDAR EL TOKEN SIEMPRE
   const handleAuthAction = async () => {
     Keyboard.dismiss();
     if (isRegistering && !acceptedTerms) {
@@ -711,12 +748,13 @@ export default function HomeScreen() {
     }
 
     try {
+      const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
       const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
 
       const payload = isRegistering 
-        ? { data: { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, phone: form.phone, zip: form.zipCode, birth: form.birthDate.toISOString(), isVerified: false } }
-        : { email: form.email, password: form.password, isGoogle: false }; 
+        ? { data: { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, phone: form.phone, zip: form.zipCode, birth: form.birthDate.toISOString(), isVerified: false, pushToken: pushTokenReal, deviceType: Platform.OS } }
+        : { email: form.email, password: form.password, isGoogle: false, pushToken: pushTokenReal, deviceType: Platform.OS }; 
 
       const response = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
