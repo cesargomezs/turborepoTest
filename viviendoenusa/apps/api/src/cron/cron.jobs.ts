@@ -126,7 +126,7 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
     if (promosForToday.length === 0) return; 
 
     for (const promo of promosForToday) {
-        if (!promo.zip) continue; // Saltar si el negocio no tiene ZIP
+        if (!promo.zip) continue; // Saltar si el negocio no tiene ZIP 
 
         // 2. BÚSQUEDA POR ZIP: Se notifica a los usuarios en el mismo código postal
         const nearbyUsers = await db.select({ id: users.id })
