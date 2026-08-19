@@ -4,7 +4,7 @@ import { sql, eq } from "drizzle-orm";
 import { Request, Response } from 'express';
 
 export const getPlatformStats = async (req: Request, res: Response) => {
-  try {
+  try { 
     // Contar usuarios totales
     const [usersData] = await db.select({ count: sql<number>`count(*)::int` }).from(users);
     
@@ -21,6 +21,6 @@ export const getPlatformStats = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error obteniendo estadísticas:", error);
-    return res.status(500).json({ error: "Error interno" });
+    return res.status(500).json({ error: "Error interno " });
   }
 };
