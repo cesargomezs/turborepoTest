@@ -26,14 +26,17 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication'; 
 
-// 🚀 IMPORTACIÓN SEGURA PARA EVITAR EL ERROR DE EXPO PUSH TOKEN MANAGER EN LOCAL
+// 🚀 IMPORTACIÓN ULTRA SEGURA (EVITA EL CRASH DE PANTALLA ROJA)
 let Notifications: any = null;
 let Device: any = null;
-try {
-  Notifications = require('expo-notifications');
-  Device = require('expo-device');
-} catch (e) {
-  console.log("Módulos nativos de notificaciones no disponibles en este entorno.");
+
+if (Platform.OS !== 'web') {
+  try {
+    Notifications = require('expo-notifications');
+    Device = require('expo-device');
+  } catch (error) {
+    console.log("Faltan los módulos nativos en el binario.");
+  }
 }
 
 import Head from 'expo-router/head'; 
@@ -48,7 +51,6 @@ import { useAppTheme } from '../src/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { createClient } from '@supabase/supabase-js'; 
 
-// 🚀 IMPORTAMOS LA LISTA DE GROSERÍAS
 import badWordsData from '../../utils/babwords.json';
 
 // 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS
@@ -79,7 +81,7 @@ const containsBadWords = (text: string): boolean => {
   });
 };
 
-// 🚀 CREDENCIALES DE SUPABASE DESDE .ENV 🚀
+// 🚀 CREDENCIALES DE SUPABASE DESDE .ENV
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -267,25 +269,31 @@ export default function HomeScreen() {
   const scrollToBottom = () => { landingScrollRef.current?.scrollToEnd({ animated: true }); };
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
 
-  // 🚀 FUNCIÓN MAESTRA ANTICRASH PARA OBTENER EL TOKEN ANTES DE CUALQUIER LOGIN
+  // 🚀 FUNCIÓN SILENCIOSA: OBTENCIÓN DE TOKEN SIN ALERTAS MOLESTAS
   const getSafePushToken = async () => {
-    if (isWebPlatform || !Notifications || !Device || !Device.isDevice) return undefined;
+    if (Platform.OS === 'web') return undefined; 
+    if (!Notifications) return undefined;
+
     try {
       const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert("Permiso Denegado", "Las notificaciones no fueron autorizadas por el sistema.");
-        return undefined;
+      
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
       }
+      
+      if (finalStatus !== 'granted') return undefined;
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-      console.log("TOKEN REAL OBTENIDO:", tokenData.data);
       return tokenData.data;
     } catch (e: any) {
-      // 🚀 ESTO NOS DIRÁ EL ERROR EXACTO EN TU IPHONE
-      Alert.alert("Error Push Token", JSON.stringify(e.message || e));
-      console.log("Error detallado obteniendo push token:", e);
+      return undefined;
     }
-    return undefined;
   };
 
   useEffect(() => {
@@ -362,11 +370,10 @@ export default function HomeScreen() {
     });
   };
 
-  // 🚀 LÓGICA DE VALIDACIÓN PREVIA PARA GOOGLE
   useEffect(() => {
     const verifyGoogle = async (id_token: string) => {
       try {
-        const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
+        const pushTokenReal = await getSafePushToken();
         const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
         
         const res = await fetch(`${API_URL}/auth/login`, {
@@ -381,11 +388,9 @@ export default function HomeScreen() {
         });
         const dataRes = await res.json();
 
-        // 🚀 Si el backend lo reconoce Y tiene el perfil completado, entra directo
         if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
           await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
         } else {
-          // 🚀 Si no tiene el perfil completado, OBLIGA a abrir el modal
           let googleEmail = dataRes.user?.email || dataRes.email || ''; 
           let name = dataRes.user?.firstName || '';
           let lastName = dataRes.user?.lastName || '';
@@ -408,7 +413,6 @@ export default function HomeScreen() {
           setShowCompletionModal(true);
         }
       } catch (error) {
-        console.log("Error decodificando o verificando token", error);
         isWebPlatform ? window.alert("Error de conexión.") : Alert.alert("Error", "No se pudo verificar la cuenta.");
       }
     };
@@ -418,7 +422,6 @@ export default function HomeScreen() {
     }
   }, [response]);
 
-  // 🚀 LÓGICA DE VALIDACIÓN PREVIA PARA APPLE
   const handleAppleLogin = async () => {
     try {
       const credential = await AppleAuthentication.signInAsync({
@@ -429,7 +432,6 @@ export default function HomeScreen() {
       });
 
       if (credential.identityToken) {
-        // EXTRACCIÓN SEGURA DEL JWT DE APPLE PARA EVITAR CORREOS VACÍOS
         let appleEmail = credential.email || ''; 
         let name = credential.fullName?.givenName || '';
         let lastName = credential.fullName?.familyName || '';
@@ -442,11 +444,9 @@ export default function HomeScreen() {
             const claims = JSON.parse(jsonPayload);
             if (claims.email) appleEmail = claims.email;
           }
-        } catch(e) {
-           console.log("Decodificación local omitida", e);
-        }
+        } catch(e) {}
 
-        const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
+        const pushTokenReal = await getSafePushToken();
         const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
         
         const res = await fetch(`${API_URL}/auth/login`, {
@@ -463,11 +463,9 @@ export default function HomeScreen() {
         });
         const dataRes = await res.json();
 
-        // 🚀 Si la cuenta ya existe y tiene teléfono registrado, entra directo
         if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
           await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
         } else {
-          // 🚀 De lo contrario, solicita completar perfil
           if (!appleEmail && dataRes.user?.email) appleEmail = dataRes.user.email;
           if (!name && dataRes.user?.firstName) name = dataRes.user.firstName;
           if (!lastName && dataRes.user?.lastName) lastName = dataRes.user.lastName;
@@ -489,7 +487,6 @@ export default function HomeScreen() {
       }
     } catch (e: any) {
       if (e.code !== 'ERR_REQUEST_CANCELED') {
-        console.error("Error en Apple Sign In:", e);
         const errorMsg = isEnglish ? "Could not sign in with Apple." : "No se pudo iniciar sesión con Apple.";
         isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
       }
@@ -509,9 +506,9 @@ export default function HomeScreen() {
 
   useEffect(() => {
     async function setupNotifications() {
-      if (isWebPlatform || !Notifications || !Device) return;
+      if (Platform.OS === 'web' || !Notifications) return; 
       try {
-        if (Device.isDevice) {
+        if (Device && Device.isDevice) {
           const settings = await Notifications.getPermissionsAsync() as any;
           let finalStatus = settings.status || (settings.granted ? 'granted' : 'denied');
           
@@ -568,7 +565,6 @@ export default function HomeScreen() {
     } catch (error) {}
   };
 
-  // 🚀 BLINDAJE CONTRA EL CRASH DE SECURESTORE
   const handlePostLoginSuccess = async (userObj: any, token: string, fullDataRes: any = null) => {
     const validToken = (token && typeof token === 'string' && token.trim() !== '') 
       ? token 
@@ -591,12 +587,11 @@ export default function HomeScreen() {
     await login(finalUser, validToken);
     dispatch(setUserMetadata({ ...finalUser, token: validToken }));
 
-    if (Device && Notifications && Device.isDevice && !isWebPlatform) {
+    if (Platform.OS !== 'web' && Device && Device.isDevice && Notifications) {
       try {
-        const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
-        const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-        if (tokenData?.data) {
-          await registerPushTokenInBackend(tokenData.data, validToken);
+        const tokenReal = await getSafePushToken();
+        if (tokenReal) {
+          await registerPushTokenInBackend(tokenReal, validToken);
         }
       } catch (e) {}
     }
@@ -611,7 +606,6 @@ export default function HomeScreen() {
     }, 300);
   };
 
-  // 🚀 GUARDA DE PERFIL CON VALIDACIÓN ESTRICTA DE EDAD Y LOGUEO DIRECTO SI EXISTE
   const submitProfileCompletion = async () => {
     Keyboard.dismiss();
     
@@ -632,7 +626,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // 🚀 VALIDACIÓN MAYOR DE 18 AÑOS INTOCABLE
     const today = new Date();
     const birthDate = form.birthDate;
     let age = today.getFullYear() - birthDate.getFullYear();
@@ -651,7 +644,7 @@ export default function HomeScreen() {
     setIsSubmittingProfile(true);
 
     try {
-      const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
+      const pushTokenReal = await getSafePushToken(); 
       
       const finalPayload = { 
         email: form.email, 
@@ -677,7 +670,6 @@ export default function HomeScreen() {
       const dataRes = await response.json();
       
       if (!response.ok) {
-        // 🚀 SI EL USUARIO YA EXISTE, SE LOGUEA DIRECTO Y CIERRA EL MODAL (Solución al bucle)
         if (dataRes.error && dataRes.error.includes("ya está registrado")) {
           setShowCompletionModal(false);
           
@@ -734,7 +726,6 @@ export default function HomeScreen() {
     return !isNaN(form.birthDate.getTime()) ? form.birthDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   };
 
-  // 🚀 AQUI MODIFICAMOS EL ACTION PRINCIPAL PARA MANDAR EL TOKEN SIEMPRE
   const handleAuthAction = async () => {
     Keyboard.dismiss();
     if (isRegistering && !acceptedTerms) {
@@ -752,7 +743,7 @@ export default function HomeScreen() {
     }
 
     try {
-      const pushTokenReal = await getSafePushToken(); // INYECTAMOS EL TOKEN AQUÍ
+      const pushTokenReal = await getSafePushToken(); 
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
       const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
 
@@ -872,7 +863,7 @@ export default function HomeScreen() {
         <Head>
           <title>Viviendo en USA | La App de la Comunidad Hispana</title>
           
-          <meta name="description" content="Únete a Viviendo en USA, la red principal para la comunidad hispana. Encuentra abogados, médicos, emprendimientos, red de apoyo, empleos y negocios locales." />
+          <meta name="description" content="Únete al proyecto real Viviendo en USA, la red principal para la comunidad hispana. Encuentra abogados, médicos, emprendimientos, red de apoyo, empleos y negocios locales." />
           <meta name="keywords" content="hispanos en usa, comunidad latina, abogados para hispanos, asesoría legal, red de apoyo, emprendimientos latinos, buscar empleo, negocios hispanos, servicios médicos, latinos en estados unidos, directorio hispano" />
           <meta name="robots" content="index, follow" />
           
@@ -1279,7 +1270,6 @@ export default function HomeScreen() {
 
                                   <ThemedTextInput label={t?.headertab?.email || (isEnglish ? "Email" : "Correo electrónico")} value={form.email} onChangeText={(v: string) => setForm({...form, email: v})} placeholder="ejemplo@correo.com" keyboardType="email-address" autoCapitalize="none" />
                                   
-                                  {/* 🚀 DISEÑO ESTÉTICO DE TELÉFONO EN EL FORMULARIO DE REGISTRO */}
                                   {isLargeWeb ? (
                                     <View style={{ flexDirection: 'row', gap: 12 }}>
                                       <View style={{ flex: 1 }}>
@@ -1544,7 +1534,7 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* 🚀 MODAL DE COMPLETAR PERFIL CON CAMPOS DE NOMBRE Y APELLIDO Y VALIDACIÓN DE EDAD */}
+        {/* 🚀 MODAL DE COMPLETAR PERFIL */}
         <Modal visible={showCompletionModal} transparent={true} animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: width > 768 ? 500 : width * 0.92 }]}>
@@ -1556,7 +1546,6 @@ export default function HomeScreen() {
                 
                 <View style={{ gap: 15, marginBottom: 10, width: '100%' }}>
                   
-                  {/* 🚀 CAMPOS DE NOMBRE Y APELLIDO PARA APPLE Y GOOGLE */}
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.headertab?.name || (isEnglish ? "Name" : "Nombre")}</ThemedText>
                     <TextInput 

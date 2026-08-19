@@ -105,7 +105,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
     console.log(`📱 [PUSH MASIVO] Se enviarán ${messages.length} notificaciones a celulares cercanos...`);
 
     for (const chunk of chunks) {
-      await fetch('https://exp.host/--/api/v2/push/send', {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -114,6 +114,9 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         },
         body: JSON.stringify(chunk),
       });
+      
+      const responseJson = await response.json();
+      console.log("📥 [RESPUESTA DE EXPO PUSH]:", JSON.stringify(responseJson));
     }
     console.log(`✅ [PUSH MASIVO] ¡Envío geolocalizado completado exitosamente!`);
   } catch (error) {
