@@ -40,19 +40,20 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ TÉRMINOS: UPSERT SEGURO
+// 🛠️ TÉRMINOS: UPSERT SEGURO CORREGIDO
 // --------------------------------------------------------
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
   try {
     await db.insert(userTermsAcceptance)
       .values({
         userId,
-        ipAddress: ipAddress || null,
+        ipAddress: ipAddress || '0.0.0.0', // 👈 Forzamos un string por defecto en lugar de null
+        acceptedAt: new Date(),            // 👈 Inyectamos la fecha explícitamente
       })
       .onConflictDoUpdate({
         target: userTermsAcceptance.userId,
         set: {
-          ipAddress: ipAddress || null,
+          ipAddress: ipAddress || '0.0.0.0',
           acceptedAt: new Date(),
         },
       });
@@ -134,8 +135,9 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
            isVerified: true
          }).where(eq(users.id, user.id)).returning();
 
-         await ensureTermsAccepted(updatedUser.id, ipAddress);
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
+         await ensureTermsAccepted(updatedUser.id, ipAddress);
+         
 
          return updatedUser;
       }
@@ -160,8 +162,9 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
       isVerified: data.isVerified
     }).returning();
 
-    await ensureTermsAccepted(newUser.id, ipAddress);
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
+    await ensureTermsAccepted(newUser.id, ipAddress);
+    
 
     return newUser;
   } catch (error: any) {
@@ -391,8 +394,9 @@ export const authenticateUser = async (credentials: {
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
 
-    await ensureTermsAccepted(user.id);
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
+    await ensureTermsAccepted(user.id);
+    
 
     return {
       message: "Autenticación exitosa",

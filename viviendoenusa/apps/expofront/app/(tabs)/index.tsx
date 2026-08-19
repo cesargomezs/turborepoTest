@@ -271,15 +271,19 @@ export default function HomeScreen() {
   const getSafePushToken = async () => {
     if (isWebPlatform || !Notifications || !Device || !Device.isDevice) return undefined;
     try {
-      // Usamos el ID declarado exactamente en tu código original
       const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
       const { status } = await Notifications.requestPermissionsAsync();
-      if (status === 'granted') {
-        const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-        return tokenData.data;
+      if (status !== 'granted') {
+        Alert.alert("Permiso Denegado", "Las notificaciones no fueron autorizadas por el sistema.");
+        return undefined;
       }
-    } catch (e) {
-      console.log("Error obteniendo push token seguro:", e);
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+      console.log("TOKEN REAL OBTENIDO:", tokenData.data);
+      return tokenData.data;
+    } catch (e: any) {
+      // 🚀 ESTO NOS DIRÁ EL ERROR EXACTO EN TU IPHONE
+      Alert.alert("Error Push Token", JSON.stringify(e.message || e));
+      console.log("Error detallado obteniendo push token:", e);
     }
     return undefined;
   };
