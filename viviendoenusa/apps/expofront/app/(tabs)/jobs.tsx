@@ -25,24 +25,22 @@ import { handleUniversalShare } from '../../utils/shareHelper';
 
 const BANNED_WORDS = Array.isArray((badWordsData as any)?.badWordsList) ? (badWordsData as any).badWordsList : []; 
 
-// 🚀 LÓGICA DE VALIDACIÓN CON REGEX
+// 🚀 LÓGICA DE VALIDACIÓN MEJORADA (EVITA FALSOS POSITIVOS EN PALABRAS COMO VEHÍCULO O ESPECTÁCULO)
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  const lowerText = text.toLowerCase();
+  const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  return BANNED_WORDS.some((word: string) => {
-    if (!word) return false;
-    const lowerWord = word.toLowerCase();
-    
-    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
-    if (exactRegex.test(lowerText)) return true;
+  return wordsInText.some(userWord => {
+    return BANNED_WORDS.some((bannedWord: string) => {
+      if (!bannedWord) return false;
+      const lowerBanned = bannedWord.toLowerCase();
 
-    const lastChar = lowerWord.slice(-1);
-    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
-    if (repeatedRegex.test(lowerText)) return true;
-    
-    return false;
+      if (userWord === lowerBanned) return true;
+      if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
+      if (userWord === `re${lowerBanned}`) return true;
+
+      return false;
+    });
   });
 };
 
@@ -166,7 +164,6 @@ export default function JobsScreen() {
   });
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
   
-  // 🚀 ESTADOS UNIFICADOS PARA PAGO EN EMPRESAS
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
@@ -192,13 +189,11 @@ export default function JobsScreen() {
   
   const [tempCompanyProfile, setTempCompanyProfile] = useState<any>(null);
 
-  // 🚀 AQUI ESTA EL ESTADO CORREGIDO QUE FALTABA
   const [showReviewInput, setShowReviewInput] = useState(false);
   const [reviewForm, setReviewForm] = useState({ text: '', rating: 0, isAnonymous: false });
   
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
 
-  // 🚀 CARGA DE URL FIRMADA PARA EL QR DE ZELLE DESDE SUPABASE
   useEffect(() => {
     const loadZelleQr = async () => {
       try {
@@ -582,7 +577,6 @@ export default function JobsScreen() {
         finalImageName = uploadData.identificadorArchivo;
       }
 
-      // 🚀 ASIGNACIÓN DEL PAYLOAD SEGÚN EL INPUT ÚNICO
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : newCompanyForm.premiumPlan;
       const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
 
@@ -1607,7 +1601,6 @@ export default function JobsScreen() {
                              />
                          </View>
 
-                         {/* 🚀 NUEVO UX: SELECCIÓN DE MÉTODO (PAGO O CUPÓN) EN LA EMPRESA */}
                          <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
                          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                            <TouchableOpacity 

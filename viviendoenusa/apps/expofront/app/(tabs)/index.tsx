@@ -63,21 +63,27 @@ try {
 
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  const lowerText = text.toLowerCase();
+  
+  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
+  const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  return BANNED_WORDS.some(word => {
-    if (!word) return false;
-    const lowerWord = word.toLowerCase();
-    
-    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
-    if (exactRegex.test(lowerText)) return true;
+  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
+  return wordsInText.some(userWord => {
+    return BANNED_WORDS.some(bannedWord => {
+      if (!bannedWord) return false;
+      const lowerBanned = bannedWord.toLowerCase();
 
-    const lastChar = lowerWord.slice(-1);
-    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
-    if (repeatedRegex.test(lowerText)) return true;
-    
-    return false;
+      // Comprobación de coincidencia exacta de la palabra aislada
+      if (userWord === lowerBanned) return true;
+      
+      // Comprobación de plurales comunes (ej: palabra -> palabras)
+      if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
+
+      // Comprobación con prefijo común (ej: re-palabra)
+      if (userWord === `re${lowerBanned}`) return true;
+
+      return false;
+    });
   });
 };
 
@@ -212,6 +218,11 @@ export default function HomeScreen() {
   
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // 🚀 ESTADOS PARA SOPORTE IT / TUTORIAL
+  const [showITSupportModal, setShowITSupportModal] = useState(false);
+  const [itMessage, setItMessage] = useState('');
+  const [isSendingIT, setIsSendingIT] = useState(false);
 
   const [termsData, setTermsData] = useState({ version: '', content_html: '' });
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
@@ -565,20 +576,17 @@ export default function HomeScreen() {
     } catch (error) {}
   };
 
+  // 🚀 ACTUALIZADO: PARCHE DE SEGURIDAD PARA NOMBRE VACÍO EN APPLE SIGN-IN
   const handlePostLoginSuccess = async (userObj: any, token: string, fullDataRes: any = null) => {
     const validToken = (token && typeof token === 'string' && token.trim() !== '') 
       ? token 
       : 'session_token_' + Date.now();
 
-    let finalUser = userObj;
-    if (!finalUser) {
-      finalUser = fullDataRes ? {
-        id: fullDataRes.id || '0',
-        email: fullDataRes.email || form.email,
-        firstName: fullDataRes.firstName || form.firstName,
-        lastName: fullDataRes.lastName || form.lastName
-      } : { email: form.email || 'usuario@viviendoenusa.app', firstName: form.firstName, lastName: form.lastName };
-    }
+    // Forzamos a que herede lo que hay en el formulario si el backend lo omite
+    let finalUser = { ...userObj };
+    
+    if (!finalUser.firstName && form.firstName) finalUser.firstName = form.firstName;
+    if (!finalUser.lastName && form.lastName) finalUser.lastName = form.lastName;
 
     if (!finalUser || Object.keys(finalUser).length === 0) {
       finalUser = { email: form.email || 'usuario@viviendoenusa.app', firstName: form.firstName, lastName: form.lastName };
@@ -604,6 +612,46 @@ export default function HomeScreen() {
       if (isWebPlatform) window.alert(successMsg);
       else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
     }, 300);
+  };
+
+  // 🚀 FUNCIÓN PARA ENVIAR CORREO AL SOPORTE IT
+  const handleSendITSupport = async () => {
+    if (!itMessage.trim()) {
+      return isWebPlatform ? window.alert(isEnglish ? "Please write your message." : "Por favor escribe tu mensaje.") : Alert.alert("Aviso", isEnglish ? "Please write your message." : "Por favor escribe tu mensaje.");
+    }
+
+    if (containsBadWords(itMessage)) {
+      const errorMsg = isEnglish ? "Inappropriate content detected." : "El mensaje contiene lenguaje inapropiado.";
+      return isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
+    }
+
+    setIsSendingIT(true);
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+      const response = await fetch(`${API_URL}/admin/it-support`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: form.email || 'No proporcionado',
+          userName: `${form.firstName} ${form.lastName}`.trim() || 'Usuario Anónimo',
+          message: itMessage
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el mensaje");
+
+      const successMsg = isEnglish ? "Message sent to IT Support!" : "¡Tu reporte ha sido enviado a Soporte IT!";
+      isWebPlatform ? window.alert(successMsg) : Alert.alert("¡Enviado!", successMsg);
+      setItMessage('');
+      setShowITSupportModal(false);
+    } catch (error) {
+      const errorMsg = isEnglish ? "Error sending message." : "Ocurrió un error al enviar el mensaje.";
+      isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
+    } finally {
+      setIsSendingIT(false);
+    }
   };
 
   const submitProfileCompletion = async () => {
@@ -1491,6 +1539,19 @@ export default function HomeScreen() {
                                   </View>
                                 )
                               )}
+                              
+                              {/* 🚀 BOTÓN DE SOPORTE Y TUTORIALES */}
+                              <View style={{ width: '100%', alignItems: 'center', marginTop: 20 }}>
+                                <TouchableOpacity 
+                                  onPress={() => setShowITSupportModal(true)}
+                                  style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}
+                                >
+                                  <MaterialCommunityIcons name="lifebuoy" size={18} color={DynamicColors.subtext} />
+                                  <Text style={{ color: DynamicColors.subtext, fontSize: 13, fontWeight: '600', marginLeft: 6, textDecorationLine: 'underline' }}>
+                                    {isEnglish ? "Need help or tutorial?" : "¿Necesitas ayuda o un tutorial?"}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
                             </View>
 
                           </ScrollView>
@@ -1504,6 +1565,7 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
         
+        {/* 🚀 MODAL DE RECUPERACIÓN DE CONTRASEÑA */}
         <Modal visible={showResetModal} transparent={true} animationType="fade" onRequestClose={() => setShowResetModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 400) }]}>
@@ -1530,6 +1592,47 @@ export default function HomeScreen() {
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 🚀 MODAL PARA SOPORTE TÉCNICO / TUTORIAL */}
+        <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 420), padding: 24 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text }}>{isEnglish ? "IT Support / Help" : "Soporte Técnico / Ayuda"}</ThemedText>
+                <TouchableOpacity onPress={() => setShowITSupportModal(false)}>
+                  <MaterialCommunityIcons name="close" size={26} color={DynamicColors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ThemedText style={{ fontSize: 13, marginBottom: 15, color: DynamicColors.subtext, lineHeight: 18 }}>
+                {isEnglish 
+                  ? "Describe your technical issue or if you need a tutorial. We will reply to the email you provided." 
+                  : "Escribe tu problema técnico o si necesitas un tutorial. Te responderemos al correo proporcionado."}
+              </ThemedText>
+
+              <TextInput 
+                value={itMessage}
+                onChangeText={setItMessage}
+                placeholder={isEnglish ? "How can we help you?" : "¿En qué te podemos ayudar?"}
+                placeholderTextColor={DynamicColors.subtext}
+                multiline
+                style={{ backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, padding: 14, borderRadius: 16, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) }}
+              />
+
+              <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
+                <LinearGradient colors={orangeGradient as any} style={{ paddingVertical: 16, alignItems: 'center' }}>
+                  {isSendingIT ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>
+                      {isEnglish ? "Send Message" : "Enviar a Soporte IT"}
+                    </ThemedText>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>

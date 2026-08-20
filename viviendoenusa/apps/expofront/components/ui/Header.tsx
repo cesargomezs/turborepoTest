@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
+import { createClient } from '@supabase/supabase-js'; // 🚀 IMPORTAMOS SUPABASE
 
 import { Colors } from '../../constants/Colors';
 import { ThemedText } from '../ThemedText';
@@ -20,6 +21,16 @@ import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 import { handleUniversalShare } from '../../utils/shareHelper';
 
+// 🚀 IMPORTACIÓN SEGURA DE NOTIFICACIONES PARA EVITAR CRASH EN WEB
+let Notifications: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    Notifications = require('expo-notifications');
+  } catch (error) {
+    console.log("Faltan los módulos nativos de notificaciones en el binario.");
+  }
+}
+
 // 🚀 IMPORTAMOS LA LISTA DE GROSERÍAS
 import badWordsData from '../../utils/babwords.json';
 
@@ -29,6 +40,12 @@ const API_USERS_URL = `${API_BASE_URL}/auth/profile`;
 const API_REGISTER_URL = `${API_BASE_URL}/auth/register`; 
 const API_UPLOAD_URL = `${API_BASE_URL}/api/subir-imagen-optimizada/users`; 
 const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`; 
+
+// 🚀 CONFIGURACIÓN DE SUPABASE PARA RECUPERAR LAS IMÁGENES
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+const NOMBRE_BUCKET = 'images';
 
 // ==========================================
 // 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS
@@ -157,6 +174,7 @@ export default function Header({ title }: { title?: string }) {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [activeProfileRole, setActiveProfileRole] = useState('User'); 
+  const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null); // 🚀 ESTADO PARA URL DE SUPABASE
 
   const [profileData, setProfileData] = useState({
     email: '',
@@ -237,6 +255,34 @@ export default function Header({ title }: { title?: string }) {
     if (!isCreatingUser) fetchUserData();
   }, [isCreatingUser, settingsModalVisible, REAL_USER_ID, token]);
 
+  // 🚀 LÓGICA PARA CONVERTIR LA RUTA DEL BUCKET EN UNA URL VISIBLE
+  useEffect(() => {
+    const getSignedAvatar = async () => {
+      if (!supabase || !profileData.image_url) {
+        setSignedImageUrl(null);
+        return;
+      }
+      
+      // Si la URL ya viene completa desde Google o Apple, la usamos directo
+      if (profileData.image_url.startsWith('http')) {
+        setSignedImageUrl(profileData.image_url);
+        return;
+      }
+      
+      // Si es una ruta relativa de Supabase (ej: users/img-123.webp), pedimos la URL firmada
+      try {
+        const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(profileData.image_url, 604800);
+        if (data?.signedUrl) {
+          setSignedImageUrl(data.signedUrl);
+        }
+      } catch (e) {
+        console.error("Error obteniendo imagen firmada de Supabase", e);
+      }
+    };
+
+    getSignedAvatar();
+  }, [profileData.image_url]);
+
   useEffect(() => {
     if (isWeb && typeof window !== 'undefined') {
       window.history.replaceState(null, '', '/');
@@ -292,6 +338,38 @@ export default function Header({ title }: { title?: string }) {
       return () => clearInterval(interval);
     }
   }, [REAL_USER_ID, token]);
+
+  // =====================================================================
+  // 🚀 LISTENER GLOBAL: NAVEGACIÓN DESDE NOTIFICACIÓN EXTERNA (DEEP LINK)
+  // =====================================================================
+  useEffect(() => {
+    if (Platform.OS === 'web' || !Notifications) return;
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
+      const notificationData = response.notification.request.content.data;
+      
+      const routes: Record<string, { path: string, param: string }> = {
+        'job': { path: '/jobs', param: 'openJobId' },
+        'store': { path: '/tabservices/stores', param: 'id' },
+        'community': { path: '/tabservices/community', param: 'openEventId' },
+        'event': { path: '/tabservices/events', param: 'openEventId' },
+        'lawyer': { path: '/tabservices/lawyers', param: 'id' },
+        'support': { path: '/tabservices/support', param: 'id' },
+      };
+
+      const type = notificationData?.type;
+      const target = type ? routes[type] : null;
+
+      if (target) {
+        const targetId = notificationData.referenceId || notificationData.reference_id || notificationData.id;
+        if (targetId) {
+          router.navigate({ pathname: target.path as any, params: { [target.param]: targetId } });
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [router]);
 
   const hasUnread = notifications.some(n => n.read === false || n.isRead === false || n.is_read === false);
 
@@ -606,9 +684,10 @@ export default function Header({ title }: { title?: string }) {
     }
   };
 
+  // 🚀 AQUÍ SE APLICA LA MAGIA DE LA IMAGEN FIRMADA
   const currentDisplayImage = profileData.new_image_uri 
     ? { uri: profileData.new_image_uri } 
-    : (profileData.image_url ? { uri: profileData.image_url } : require('../../assets/images/cesar.webp'));
+    : (signedImageUrl ? { uri: signedImageUrl } : require('../../assets/images/cesar.webp'));
 
   return (
     <View style={{ width: '100%', backgroundColor: 'transparent' }}>

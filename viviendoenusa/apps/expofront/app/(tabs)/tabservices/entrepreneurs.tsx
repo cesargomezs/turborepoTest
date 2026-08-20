@@ -41,23 +41,27 @@ try {
 // 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  const lowerText = text.toLowerCase();
+  
+  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
+  const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  return BANNED_WORDS.some(word => {
-    if (!word) return false;
-    const lowerWord = word.toLowerCase();
-    
-    // 1. Atrapa la palabra exacta, plurales (s, es) y prefijos comunes como 're'
-    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
-    if (exactRegex.test(lowerText)) return true;
+  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
+  return wordsInText.some(userWord => {
+    return BANNED_WORDS.some(bannedWord => {
+      if (!bannedWord) return false;
+      const lowerBanned = bannedWord.toLowerCase();
 
-    // 2. Atrapa letras repetidas al final para evadir filtros
-    const lastChar = lowerWord.slice(-1);
-    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
-    if (repeatedRegex.test(lowerText)) return true;
-    
-    return false;
+      // Comprobación de coincidencia exacta de la palabra aislada
+      if (userWord === lowerBanned) return true;
+      
+      // Comprobación de plurales comunes (ej: palabra -> palabras)
+      if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
+
+      // Comprobación con prefijo común (ej: re-palabra)
+      if (userWord === `re${lowerBanned}`) return true;
+
+      return false;
+    });
   });
 };
 

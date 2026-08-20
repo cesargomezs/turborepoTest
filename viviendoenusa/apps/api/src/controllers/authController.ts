@@ -47,8 +47,8 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
     await db.insert(userTermsAcceptance)
       .values({
         userId,
-        ipAddress: ipAddress || '0.0.0.0', // 👈 Forzamos un string por defecto en lugar de null
-        acceptedAt: new Date(),            // 👈 Inyectamos la fecha explícitamente
+        ipAddress: ipAddress || '0.0.0.0', 
+        acceptedAt: new Date(),            
       })
       .onConflictDoUpdate({
         target: userTermsAcceptance.userId,
@@ -66,7 +66,6 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
 // 🛠️ DISPOSITIVOS: ESTRICTO Y ÚNICO (Cero basura, 1 solo registro)
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
-  // 1. Si no viene token, viene vacío o es 'undefined', NO HACEMOS NADA. Cero registros basura.
   if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '' || pushToken === 'undefined') {
     console.log(`⚠️ [DEVICES] Sin token real para el usuario ${userId}. Se omite registro en BD.`);
     return;
@@ -76,7 +75,6 @@ const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?
   const deviceStr = deviceType || 'ios';
 
   try {
-    // 2. Buscamos por USER_ID para garantizar que cada usuario tenga máximo UN solo dispositivo.
     const existingDevice = await db.select().from(userDevices).where(eq(userDevices.userId, userId));
 
     if (existingDevice.length > 0) {
@@ -138,8 +136,8 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
          await ensureTermsAccepted(updatedUser.id, ipAddress);
          
-
-         return updatedUser;
+         // 🚀 INYECCIÓN DEL ALIAS firstName
+         return { ...updatedUser, firstName: updatedUser.name };
       }
 
       throw new Error("El correo electrónico ya está registrado. Por favor, inicia sesión.");
@@ -165,8 +163,8 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
     await ensureTermsAccepted(newUser.id, ipAddress);
     
-
-    return newUser;
+    // 🚀 INYECCIÓN DEL ALIAS firstName
+    return { ...newUser, firstName: newUser.name };
   } catch (error: any) {
     throw new Error(error.message); 
   }
@@ -194,7 +192,8 @@ export const getUser = async (idOrEmail: string) => {
       }
     }
 
-    return { ...user, imageUrl: publicImageUrl };
+    // 🚀 INYECCIÓN DEL ALIAS firstName
+    return { ...user, firstName: user.name, imageUrl: publicImageUrl };
   } catch (error: any) {
     throw new Error(`Error al consultar el usuario: ${error.message}`);
   }
@@ -286,7 +285,8 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
       }
     }
 
-    return { ...finalUser, imageUrl: publicImageUrl };
+    // 🚀 INYECCIÓN DEL ALIAS firstName
+    return { ...finalUser, firstName: finalUser.name, imageUrl: publicImageUrl };
   } catch (error: any) {
     throw new Error(`Error al actualizar el usuario: ${error.message}`);
   }
