@@ -1,19 +1,35 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useState, useEffect, useRef } from 'react'; 
+import { useState, useEffect, useRef, useCallback } from 'react'; 
 import { 
-  View, Image, Platform, TouchableOpacity, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, TextInput, Alert, useWindowDimensions, Keyboard, Animated, PanResponder, Dimensions, ActivityIndicator
+  View, 
+  Image, 
+  Platform, 
+  TouchableOpacity, 
+  Modal, 
+  StyleSheet, 
+  ScrollView, 
+  KeyboardAvoidingView, 
+  TextInput, 
+  Alert, 
+  useWindowDimensions, 
+  Keyboard, 
+  Animated, 
+  PanResponder, 
+  Dimensions, 
+  ActivityIndicator
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
-import { createClient } from '@supabase/supabase-js'; // 🚀 IMPORTAMOS SUPABASE
+import { createClient } from '@supabase/supabase-js'; 
 
 import { Colors } from '../../constants/Colors';
 import { ThemedText } from '../ThemedText';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { useRouter, usePathname } from 'expo-router'; 
+// 🚀 IMPORTAMOS useFocusEffect PARA EL AUTO-REFRESCO DE PESTAÑAS
+import { useRouter, usePathname, useFocusEffect } from 'expo-router'; 
 import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage, toggleAuth } from '../../redux/slices'; 
 import { useTranslation } from '../../hooks/useTranslation'; 
 import { useAppTheme } from '@/app/src/context/ThemeContext'; 
@@ -21,7 +37,6 @@ import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 import { handleUniversalShare } from '../../utils/shareHelper';
 
-// 🚀 IMPORTACIÓN SEGURA DE NOTIFICACIONES PARA EVITAR CRASH EN WEB
 let Notifications: any = null;
 if (Platform.OS !== 'web') {
   try {
@@ -31,7 +46,6 @@ if (Platform.OS !== 'web') {
   }
 }
 
-// 🚀 IMPORTAMOS LA LISTA DE GROSERÍAS
 import badWordsData from '../../utils/babwords.json';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND || process.env.EXPO_PUBLIC_URL_BACKEND;
@@ -41,15 +55,11 @@ const API_REGISTER_URL = `${API_BASE_URL}/auth/register`;
 const API_UPLOAD_URL = `${API_BASE_URL}/api/subir-imagen-optimizada/users`; 
 const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`; 
 
-// 🚀 CONFIGURACIÓN DE SUPABASE PARA RECUPERAR LAS IMÁGENES
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const NOMBRE_BUCKET = 'images';
 
-// ==========================================
-// 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS
-// ==========================================
 let BANNED_WORDS: string[] = [];
 try {
   BANNED_WORDS = Array.isArray((badWordsData as any).badWordsList) ? (badWordsData as any).badWordsList : [];
@@ -57,29 +67,23 @@ try {
   console.error("Error cargando badwords.json:", e);
 }
 
+// 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS MEJORADA CON LIMITES DE PALABRAS (\b)
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  const lowerText = text.toLowerCase();
+  const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  return BANNED_WORDS.some(word => {
-    if (!word) return false;
-    const lowerWord = word.toLowerCase();
-    
-    const exactRegex = new RegExp(`\\b(re)?${lowerWord}(s|es)?\\b`, 'i');
-    if (exactRegex.test(lowerText)) return true;
-
-    const lastChar = lowerWord.slice(-1);
-    const escapedLastChar = lastChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const repeatedRegex = new RegExp(`\\b(re)?${lowerWord}${escapedLastChar}+\\b`, 'i');
-    if (repeatedRegex.test(lowerText)) return true;
-    
-    return false;
+  return wordsInText.some(userWord => {
+    return BANNED_WORDS.some((bannedWord: string) => {
+      if (!bannedWord) return false;
+      const lowerBanned = bannedWord.toLowerCase();
+      if (userWord === lowerBanned) return true;
+      if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
+      if (userWord === `re${lowerBanned}`) return true;
+      return false;
+    });
   });
 };
 
-// ==========================================
-// 🚀 COMPONENTE: ITEM DESLIZABLE (SWIPE TO DELETE)
-// ==========================================
 const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, onSwipeRight: () => void }) => {
   const pan = useRef(new Animated.Value(0)).current;
   
@@ -141,25 +145,27 @@ export default function Header({ title }: { title?: string }) {
   
   const { t } = useTranslation();
   const selectedLanguage = useMockSelector((state: any) => state.language.code);
+  
+  // 🚀 VARIABLES GLOBALES DE REDUX PARA AUTO-REFRESCO DE TODAS LAS PESTAÑAS
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
+  const globalName = userMetadata?.name || '';
+  const globalLastName = userMetadata?.lastName || userMetadata?.last_name || '';
+  const globalImageUrl = userMetadata?.imageUrl || '';
   
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false); 
 
-  // 🚀 ESTADOS PARA GENERACIÓN DE CUPONES SADMIN
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [generatedCoupon, setGeneratedCoupon] = useState('');
   const [isGeneratingCoupon, setIsGeneratingCoupon] = useState(false);
 
-  // 🚀 ESTADOS PARA ENCUESTA DE ELIMINACIÓN
   const [showDeleteSurveyModal, setShowDeleteSurveyModal] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
   const [customDeleteReason, setCustomDeleteReason] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
-  // 🚀 ESTADOS PARA IT SUPPORT (SOPORTE TÉCNICO)
   const [itMessage, setItMessage] = useState('');
   const [isSendingIT, setIsSendingIT] = useState(false);
   const [showITSupportModal, setShowITSupportModal] = useState(false);
@@ -174,7 +180,7 @@ export default function Header({ title }: { title?: string }) {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [activeProfileRole, setActiveProfileRole] = useState('User'); 
-  const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null); // 🚀 ESTADO PARA URL DE SUPABASE
+  const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null); 
 
   const [profileData, setProfileData] = useState({
     email: '',
@@ -215,7 +221,8 @@ export default function Header({ title }: { title?: string }) {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`, 
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
         }
       });
       
@@ -245,33 +252,46 @@ export default function Header({ title }: { title?: string }) {
 
         dispatch(setUserMetadata({
           ...userMetadata,
-          estate: userData.estate || userData.state || ''
+          name: userData.name || userMetadata.name,
+          lastName: userData.lastName || userData.last_name || userMetadata.lastName,
+          imageUrl: userData.imageUrl || userData.image_url || userMetadata.imageUrl,
+          estate: userData.estate || userData.state || userMetadata.estate || ''
         }));
       }
     } catch (error) { console.error("Error al obtener datos:", error); }
   };
 
-  useEffect(() => {
-    if (!isCreatingUser) fetchUserData();
-  }, [isCreatingUser, settingsModalVisible, REAL_USER_ID, token]);
+  // 🚀 GARANTIZA QUE EL HEADER SE ACTUALICE AL CAMBIAR DE PESTAÑA
+  useFocusEffect(
+    useCallback(() => {
+      if (!isCreatingUser) fetchUserData();
+    }, [isCreatingUser, settingsModalVisible, REAL_USER_ID, token])
+  );
 
-  // 🚀 LÓGICA PARA CONVERTIR LA RUTA DEL BUCKET EN UNA URL VISIBLE
+  // 🚀 LÓGICA VINCULADA GLOBALMENTE A REDUX PARA LAS FOTOS
   useEffect(() => {
     const getSignedAvatar = async () => {
-      if (!supabase || !profileData.image_url) {
+      let imageUrlToProcess = globalImageUrl || profileData.image_url;
+
+      if (!supabase || !imageUrlToProcess) {
         setSignedImageUrl(null);
         return;
       }
-      
-      // Si la URL ya viene completa desde Google o Apple, la usamos directo
-      if (profileData.image_url.startsWith('http')) {
-        setSignedImageUrl(profileData.image_url);
-        return;
+
+      if (imageUrlToProcess.startsWith('http')) {
+        if (imageUrlToProcess.includes('supabase.co')) {
+          const fileName = imageUrlToProcess.split('/').pop();
+          imageUrlToProcess = `users/${fileName}`; 
+        } else {
+          setSignedImageUrl(imageUrlToProcess);
+          return;
+        }
+      } else if (!imageUrlToProcess.startsWith('users/')) {
+        imageUrlToProcess = `users/${imageUrlToProcess}`;
       }
       
-      // Si es una ruta relativa de Supabase (ej: users/img-123.webp), pedimos la URL firmada
       try {
-        const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(profileData.image_url, 604800);
+        const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(imageUrlToProcess, 604800);
         if (data?.signedUrl) {
           setSignedImageUrl(data.signedUrl);
         }
@@ -281,7 +301,7 @@ export default function Header({ title }: { title?: string }) {
     };
 
     getSignedAvatar();
-  }, [profileData.image_url]);
+  }, [globalImageUrl, profileData.image_url]);
 
   useEffect(() => {
     if (isWeb && typeof window !== 'undefined') {
@@ -294,60 +314,43 @@ export default function Header({ title }: { title?: string }) {
 
     try {
       const url = `${API_BASE_URL}/notifications?userId=${REAL_USER_ID}`;
-      
       const res = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`, 
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
-
-      if (!res.ok) {
-        throw new Error(`Error ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Error ${res.status}`);
 
       const data = await res.json();
-      
       let fetchedNotifs: any[] = [];
-      if (Array.isArray(data)) {
-        fetchedNotifs = data;
-      } else if (data && Array.isArray(data.data)) {
-        fetchedNotifs = data.data;
-      } else if (data && Array.isArray(data.notifications)) {
-        fetchedNotifs = data.notifications;
-      }
+      if (Array.isArray(data)) fetchedNotifs = data;
+      else if (data && Array.isArray(data.data)) fetchedNotifs = data.data;
+      else if (data && Array.isArray(data.notifications)) fetchedNotifs = data.notifications;
 
-      fetchedNotifs.sort((a: any, b: any) => {
-        const dateA = new Date(a.createdAt || a.created_at || a.visibleAt || 0).getTime();
-        const dateB = new Date(b.createdAt || b.created_at || b.visibleAt || 0).getTime();
-        return dateB - dateA;
-      });
-
+      fetchedNotifs.sort((a: any, b: any) => new Date(b.createdAt || b.visibleAt || 0).getTime() - new Date(a.createdAt || a.visibleAt || 0).getTime());
       setNotifications(fetchedNotifs);
     } catch (error: any) { 
-      console.log("Aviso: No se pudieron cargar las notificaciones:", error?.message || "Error desconocido");
       setNotifications([]); 
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      if (REAL_USER_ID && token) fetchNotifications();
+    }, [REAL_USER_ID, token])
+  );
+
   useEffect(() => {
     if (REAL_USER_ID && token) {
-      fetchNotifications();
       const interval = setInterval(() => fetchNotifications(), 60000); 
       return () => clearInterval(interval);
     }
   }, [REAL_USER_ID, token]);
 
-  // =====================================================================
-  // 🚀 LISTENER GLOBAL: NAVEGACIÓN DESDE NOTIFICACIÓN EXTERNA (DEEP LINK)
-  // =====================================================================
   useEffect(() => {
     if (Platform.OS === 'web' || !Notifications) return;
 
     const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const notificationData = response.notification.request.content.data;
-      
       const routes: Record<string, { path: string, param: string }> = {
         'job': { path: '/jobs', param: 'openJobId' },
         'store': { path: '/tabservices/stores', param: 'id' },
@@ -389,10 +392,7 @@ export default function Header({ title }: { title?: string }) {
     setNotifModalVisible(false);
     setNotifications(prev => prev.filter(n => n.id !== notif.id));
     try { 
-      await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, { 
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      }); 
+      await fetch(`${API_NOTIFICATIONS_URL}/${notif.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
     } catch (error) {}
 
     setTimeout(() => {
@@ -415,36 +415,21 @@ export default function Header({ title }: { title?: string }) {
   const handleDeleteNotificationOnly = async (notifId: string) => {
     setNotifications(prev => prev.filter(n => n.id !== notifId));
     try { 
-      await fetch(`${API_NOTIFICATIONS_URL}/${notifId}`, { 
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      }); 
+      await fetch(`${API_NOTIFICATIONS_URL}/${notifId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
     } catch (error) {}
   };
 
-  // =====================================================================
-  // 🚀 GENERAR Y COMPARTIR CUPÓN VIP (SOLO ADMIN)
-  // =====================================================================
   const handleGenerateCoupon = async () => {
     setIsGeneratingCoupon(true);
     setGeneratedCoupon('');
     try {
       const response = await fetch(`${API_BASE_URL}/promo-codes/generate`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        }
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
       });
-
       if (!response.ok) throw new Error("No se pudo generar el cupón");
-
       const data = await response.json();
-      if(data.success && data.promoCode) {
-        setGeneratedCoupon(data.promoCode.code);
-      }
+      if(data.success && data.promoCode) setGeneratedCoupon(data.promoCode.code);
     } catch (error) {
-      console.error("Error generando cupón:", error);
       Alert.alert("Error", "No se pudo generar el cupón. Revisa tu conexión o el backend.");
     } finally {
       setIsGeneratingCoupon(false);
@@ -456,49 +441,26 @@ export default function Header({ title }: { title?: string }) {
     await handleUniversalShare({
       title: '🎟️ Cupón VIP - Viviendo en USA',
       description: `¡Felicidades! Has recibido un cupón de acceso exclusivo para registrar y publicar tu perfil o negocio gratis en Viviendo en USA.\n\n🔑 Código VIP: ${generatedCoupon}\n\n⚠️ *Nota importante:* Este código es de **un solo uso**.\n\n📝 Instrucciones:\n1. Ingresa a la app y dirígete al registro correspondiente.\n2. Selecciona el 'Plan Coupon'.\n3. Ingresa tu código en la referencia para validación automática.`,
-      phone: '',
-      address: 'Todo USA',
-      zip: '',
-      image: '',
+      phone: '', address: 'Todo USA', zip: '', image: '',
     });
   };
 
   const handleSendITSupport = async () => {
-    if (!itMessage.trim()) {
-      return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
-    }
-
-    if (containsBadWords(itMessage)) {
-      const errorMsg = "El mensaje contiene lenguaje inapropiado y no puede ser enviado.";
-      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
-    }
-
+    if (!itMessage.trim()) return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
+    if (containsBadWords(itMessage)) return Platform.OS === 'web' ? window.alert("El mensaje contiene lenguaje inapropiado y no puede ser enviado.") : Alert.alert("Error", "El mensaje contiene lenguaje inapropiado y no puede ser enviado.");
+    
     setIsSendingIT(true);
     try {
       const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({
-          email: profileData.email,
-          userName: `${profileData.name} ${profileData.last_name}`,
-          message: itMessage
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ email: profileData.email, userName: `${profileData.name} ${profileData.last_name}`, message: itMessage })
       });
-
       if (!response.ok) throw new Error("No se pudo enviar el mensaje");
-
       Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
       setItMessage('');
       setShowITSupportModal(false);
-    } catch (error) {
-      console.error("Error enviando IT Support:", error);
-      Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo.");
-    } finally {
-      setIsSendingIT(false);
-    }
+    } catch (error) { Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo."); } 
+    finally { setIsSendingIT(false); }
   };
 
   const handleDeleteAccountPress = () => {
@@ -509,62 +471,28 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const executeDelete = async () => {
-    if (!deleteReason) {
-      const msg = "Por favor, selecciona un motivo para ayudarnos a mejorar.";
-      return isWeb ? window.alert(msg) : Alert.alert("Atención", msg);
-    }
+    if (!deleteReason) return isWeb ? window.alert("Por favor, selecciona un motivo para ayudarnos a mejorar.") : Alert.alert("Atención", "Por favor, selecciona un motivo para ayudarnos a mejorar.");
+    if (deleteReason === 'Otro' && !customDeleteReason.trim()) return isWeb ? window.alert("Por favor, especifica el motivo.") : Alert.alert("Atención", "Por favor, especifica el motivo.");
     
-    if (deleteReason === 'Otro' && !customDeleteReason.trim()) {
-      const msg = "Por favor, especifica el motivo.";
-      return isWeb ? window.alert(msg) : Alert.alert("Atención", msg);
-    }
-
     setIsDeletingAccount(true);
     try {
       const finalReason = deleteReason === 'Otro' ? customDeleteReason : deleteReason;
-      
       const response = await fetch(API_DELETE_ACCOUNT_URL, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ reason: finalReason }) 
       });
+      if (!response.ok) throw new Error("No se pudo eliminar la cuenta. Intenta más tarde.");
 
-      if (!response.ok) {
-        throw new Error("No se pudo eliminar la cuenta. Intenta más tarde.");
-      }
-
-      if (isWeb) {
-        window.alert("Tu cuenta y datos personales han sido eliminados con éxito.");
-      } else {
-        Alert.alert("Cuenta Eliminada", "Tus datos personales han sido borrados con éxito.");
-      }
-      
+      isWeb ? window.alert("Tu cuenta y datos personales han sido eliminados con éxito.") : Alert.alert("Cuenta Eliminada", "Tus datos personales han sido borrados con éxito.");
       setShowDeleteSurveyModal(false);
       
-      if (typeof logout === 'function') {
-        await logout();
-      }
+      if (typeof logout === 'function') await logout();
       dispatch(setUserMetadata({} as any)); 
       dispatch(toggleAuth()); 
-
-      if (Platform.OS === 'web') {
-        window.location.replace('/'); 
-      } else {
-        router.replace('/');
-      }
-      
+      Platform.OS === 'web' ? window.location.replace('/') : router.replace('/');
     } catch (error: any) {
-      if (isWeb) {
-        window.alert(`Error: ${error.message}`);
-      } else {
-        Alert.alert("Error", error.message);
-      }
-    } finally {
-      setIsDeletingAccount(false);
-    }
+      isWeb ? window.alert(`Error: ${error.message}`) : Alert.alert("Error", error.message);
+    } finally { setIsDeletingAccount(false); }
   };
 
   const toggleCreateMode = (create: boolean) => {
@@ -586,22 +514,14 @@ export default function Header({ title }: { title?: string }) {
 
   const pickProfileImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, 
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1, 
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 1, 
     });
-    if (!result.canceled) {
-      setProfileData({ ...profileData, new_image_uri: result.assets[0].uri });
-    }
+    if (!result.canceled) setProfileData({ ...profileData, new_image_uri: result.assets[0].uri });
   };
 
   const handleSaveProfile = async () => {
     const contentToValidate = `${profileData.name} ${profileData.last_name}`;
-    if (containsBadWords(contentToValidate)) {
-      const errorMsg = "El nombre o apellido contiene palabras no permitidas.";
-      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
-    }
+    if (containsBadWords(contentToValidate)) return Platform.OS === 'web' ? window.alert("El nombre o apellido contiene palabras no permitidas.") : Alert.alert("Error", "El nombre o apellido contiene palabras no permitidas.");
 
     setIsSavingProfile(true);
     try {
@@ -616,19 +536,11 @@ export default function Header({ title }: { title?: string }) {
           const blob = await response.blob();
           imageFormData.append('imagen', blob, filename); 
         } else {
-          imageFormData.append('imagen', {
-            uri: profileData.new_image_uri,
-            name: filename,
-            type: 'image/jpeg', 
-          } as any);
+          imageFormData.append('imagen', { uri: profileData.new_image_uri, name: filename, type: 'image/jpeg' } as any);
         }
 
         const uploadRes = await fetch(API_UPLOAD_URL, {
-          method: 'POST',
-          body: imageFormData,
-          headers: { 
-            'Authorization': `Bearer ${token}`
-          } 
+          method: 'POST', body: imageFormData, headers: { 'Authorization': `Bearer ${token}` } 
         });
 
         if (!uploadRes.ok) {
@@ -659,12 +571,7 @@ export default function Header({ title }: { title?: string }) {
       const method = isCreatingUser ? 'POST' : 'PUT';
 
       const res = await fetch(endpoint, {
-        method: method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify(payload)
+        method: method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
@@ -674,20 +581,32 @@ export default function Header({ title }: { title?: string }) {
       
       Alert.alert("Éxito", isCreatingUser ? "Usuario creado correctamente" : "Perfil actualizado correctamente");
       closeSettingsModal();
+      
+      // 🚀 EMITIMOS EL CAMBIO GLOBAL INSTANTÁNEO A REDUX
+      dispatch(setUserMetadata({
+        ...userMetadata,
+        name: profileData.name,
+        lastName: profileData.last_name,
+        imageUrl: finalImageName || profileData.image_url || '',
+        estate: profileData.estate || ''
+      }));
+
       fetchUserData(); 
       
     } catch (error: any) {
       console.error("Error al guardar perfil:", error);
       Alert.alert("Error", error.message);
-    } finally {
-      setIsSavingProfile(false);
-    }
+    } finally { setIsSavingProfile(false); }
   };
 
-  // 🚀 AQUÍ SE APLICA LA MAGIA DE LA IMAGEN FIRMADA
   const currentDisplayImage = profileData.new_image_uri 
     ? { uri: profileData.new_image_uri } 
-    : (signedImageUrl ? { uri: signedImageUrl } : require('../../assets/images/cesar.webp'));
+    : (signedImageUrl 
+        ? { uri: signedImageUrl } 
+        : (globalImageUrl ? { uri: globalImageUrl } : require('../../assets/images/cesar.webp')));
+
+  const displayNameToRender = globalName || profileData.name || '';
+  const displayLastNameToRender = globalLastName || profileData.last_name || '';
 
   return (
     <View style={{ width: '100%', backgroundColor: 'transparent' }}>
@@ -699,7 +618,7 @@ export default function Header({ title }: { title?: string }) {
             </TouchableOpacity>
             <View style={{ marginLeft: 12 }}>
               <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>
-                {t.welcome + profileData.name + ' ' + (profileData.last_name ? profileData.last_name.substring(0, 1) : '')}
+                {t.welcome + displayNameToRender + ' ' + (displayLastNameToRender ? displayLastNameToRender.substring(0, 1) : '')}
               </ThemedText>
               {isSuperAdmin && (
                  <ThemedText style={{ fontSize: 11, color: '#FF5F6D', fontWeight: 'bold' }}>SAdmin Panel</ThemedText>
