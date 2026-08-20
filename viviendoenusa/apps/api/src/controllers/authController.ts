@@ -136,7 +136,6 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
          await upsertDeviceToken(updatedUser.id, data.pushToken, data.deviceType);
          await ensureTermsAccepted(updatedUser.id, ipAddress);
          
-         // 🚀 INYECCIÓN DEL ALIAS firstName
          return { ...updatedUser, firstName: updatedUser.name };
       }
 
@@ -163,7 +162,6 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
     await upsertDeviceToken(newUser.id, data.pushToken, data.deviceType);
     await ensureTermsAccepted(newUser.id, ipAddress);
     
-    // 🚀 INYECCIÓN DEL ALIAS firstName
     return { ...newUser, firstName: newUser.name };
   } catch (error: any) {
     throw new Error(error.message); 
@@ -184,15 +182,15 @@ export const getUser = async (idOrEmail: string) => {
     const user = rows[0];
     let publicImageUrl = user.imageUrl;
 
+    // 🚀 CORRECCIÓN: FIRMAMOS LA URL PARA QUE NO SALGA EN BLANCO
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
-      const { data } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
-      if (data && data.publicUrl) { 
-        publicImageUrl = data.publicUrl; 
+      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 604800);
+      if (data && data.signedUrl) { 
+        publicImageUrl = data.signedUrl; 
       }
     }
 
-    // 🚀 INYECCIÓN DEL ALIAS firstName
     return { ...user, firstName: user.name, imageUrl: publicImageUrl };
   } catch (error: any) {
     throw new Error(`Error al consultar el usuario: ${error.message}`);
@@ -277,15 +275,15 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
     const finalUser = updatedRows[0];
     let publicImageUrl = finalUser.imageUrl;
 
+    // 🚀 CORRECCIÓN: FIRMAMOS LA URL AL ACTUALIZAR PERFIL
     if (finalUser.imageUrl && !finalUser.imageUrl.startsWith('http')) {
       const rutaArchivo = finalUser.imageUrl.startsWith('users/') ? finalUser.imageUrl : `users/${finalUser.imageUrl}`;
-      const { data: publicData } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
-      if (publicData && publicData.publicUrl) { 
-        publicImageUrl = publicData.publicUrl; 
+      const { data: publicData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 604800);
+      if (publicData && publicData.signedUrl) { 
+        publicImageUrl = publicData.signedUrl; 
       }
     }
 
-    // 🚀 INYECCIÓN DEL ALIAS firstName
     return { ...finalUser, firstName: finalUser.name, imageUrl: publicImageUrl };
   } catch (error: any) {
     throw new Error(`Error al actualizar el usuario: ${error.message}`);
@@ -493,11 +491,12 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
     const user = userProfile[0];
     let publicImageUrl = user.imageUrl;
 
+    // 🚀 CORRECCIÓN: FIRMAMOS LA URL AL PEDIR EL PERFIL
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
-      const { data } = supabase.storage.from(NOMBRE_BUCKET).getPublicUrl(rutaArchivo);
-      if (data && data.publicUrl) { 
-        publicImageUrl = data.publicUrl; 
+      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 604800);
+      if (data && data.signedUrl) { 
+        publicImageUrl = data.signedUrl; 
       }
     }
 
