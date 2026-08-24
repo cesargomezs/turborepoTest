@@ -1,18 +1,20 @@
-import React, { useState, useRef, useEffect, memo } from 'react';
+import React, { useState, useRef, useEffect, memo, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions, Animated, Easing,
   TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert,
-  Modal, KeyboardAvoidingView, ColorValue, Share
+  Modal, KeyboardAvoidingView, ColorValue, Share, AppState 
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur'; 
-import { useRouter, useLocalSearchParams, router } from 'expo-router';
+import { useRouter, useLocalSearchParams, router, useFocusEffect } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import MapView from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -28,6 +30,52 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
+
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+
+const refreshSupabaseUrl = async (url: string, fallbackFolder = 'lawyers') => {
+  if (!url || typeof url !== 'string' || url.length < 5) return null;
+  if (!supabaseClient) return url;
+
+  if (url.includes('supabase.co')) {
+    let cleanPath = '';
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/images/');
+      if (parts.length > 1) {
+        cleanPath = parts[1]; 
+      } else {
+        cleanPath = url.split('/').pop()?.split('?')[0] || '';
+      }
+    } catch (e) {
+      cleanPath = url.split('/').pop()?.split('?')[0] || '';
+    }
+
+    if (!cleanPath.includes('/')) {
+        cleanPath = `${fallbackFolder}/${cleanPath}`;
+    }
+
+    try {
+      const { data } = await supabaseClient.storage.from('images').createSignedUrl(cleanPath, 604800);
+      return data?.signedUrl || url;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (!url.startsWith('http')) {
+     const path = url.includes('/') ? url : `${fallbackFolder}/${url}`;
+     try {
+       const { data } = await supabaseClient.storage.from('images').createSignedUrl(path, 604800);
+       return data?.signedUrl || url;
+     } catch(e) { return url; }
+  }
+
+  return url; 
+};
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/lawyers';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
@@ -56,25 +104,14 @@ const planStyles: any = {
 
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  
-  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
-
-  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
-
-      // Comprobación de coincidencia exacta de la palabra aislada
       if (userWord === lowerBanned) return true;
-      
-      // Comprobación de plurales comunes (ej: palabra -> palabras)
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
-
-      // Comprobación con prefijo común (ej: re-palabra)
       if (userWord === `re${lowerBanned}`) return true;
-
       return false;
     });
   });
@@ -108,6 +145,7 @@ const ActionBtn = ({ icon, text, color, bgColor, onPress, flex, width, disabled 
 );
 
 const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets, userToken }: any) => {
+  const isWebLocal = Platform.OS === 'web';
   const [renewRefCode, setRenewRefCode] = useState('');
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
@@ -120,17 +158,14 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   }, [visible]);
 
   const handleRenewSubmit = async () => {
-    if (!renewRefCode.trim()) return Alert.alert((t.lawyerstab as any)?.noticeTitle || "Aviso", (t.lawyerstab as any)?.enterRefCode || "Ingresa el código de confirmación de pago.");
+    if (!renewRefCode.trim()) return Alert.alert((t.lawyerstab as any)?.noticeTitle || "Aviso", (t.lawyerstab as any)?.enterRefCode || "Ingresa el código de confirmación.");
     
     setIsRenewing(true);
     try {
-      const payload = { referenceCode: renewRefCode, paymentMethod: renewPayMethod, userId: currentUserId };
+      const payload = { referenceCode: isWebLocal ? renewRefCode : `COUPON-${renewRefCode.toUpperCase()}`, paymentMethod: isWebLocal ? renewPayMethod : 'Coupon', userId: currentUserId };
       const res = await fetch(`${API_BASE_URL}/${lawyerToRenew.id}/renew`, {
         method: 'POST', 
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}` 
-        }, 
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` }, 
         body: JSON.stringify(payload)
       });
       if (res.status === 401) { router.replace('/'); return; }
@@ -157,21 +192,28 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
               <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
 
-            <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
-              Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariffs} USD y enviando el comprobante aquí abajo.
-            </ThemedText>
-            
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-              {['Zelle', 'Venmo'].map((method) => (
-                <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
-                  <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {isWebLocal ? (
+              <>
+                <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
+                  Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariffs} USD y enviando el comprobante aquí abajo.
+                </ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                  {['Zelle', 'Venmo'].map((method) => (
+                    <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                      <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
+                Renueva la visibilidad de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> ingresando tu Código de Renovación oficial.
+              </ThemedText>
+            )}
 
             <TextInput 
               style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-              placeholder={`# CONFIRMACION DE ${renewPayMethod}...`} placeholderTextColor={Colors.subtext}
+              placeholder={isWebLocal ? `# CONFIRMACION DE ${renewPayMethod}...` : 'ESCRIBE TU CÓDIGO AQUÍ...'} placeholderTextColor={Colors.subtext}
               value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
             />
 
@@ -190,6 +232,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
 
 // 🚀 MODAL SUGERIR ABOGADO 
 const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, companyTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets, userToken, router, zelleQrUrl }: any) => {
+  const isWebLocal = Platform.OS === 'web';
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -200,9 +243,10 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
-  const [formPlan, setFormPlan] = useState('basic');
   
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
+  // 🚀 CAMUFLAJE: Si es Web, permite suscripción por defecto; Si es Móvil, fuerza a Cupón/Gratis.
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWebLocal ? 'subscription' : 'coupon');
+  const [formPlan, setFormPlan] = useState(isWebLocal ? 'basic' : 'coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
 
   const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
@@ -214,7 +258,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
     if(visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
       setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); setFormPayMethod('Zelle');
-      setFormPlan('basic'); setUiPayType('subscription'); setFormRefCode('');
+      setFormPlan(isWebLocal ? 'basic' : 'coupon'); setUiPayType(isWebLocal ? 'subscription' : 'coupon'); setFormRefCode('');
     }
   }, [visible]);
 
@@ -232,7 +276,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
     }
 
     if (!formRefCode.trim()) {
-      return Alert.alert("Atención", uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.");
+      return Alert.alert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
     }
 
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
@@ -267,12 +311,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         }
 
         const uploadResponse = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+'/api/subir-imagen-optimizada/lawyers', {
-          method: 'POST', 
-          body: formData, 
-          headers: { 
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${userToken}` 
-          },
+          method: 'POST', body: formData, headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${userToken}` },
         });
         
         if (uploadResponse.status === 401) { setIsPublishing(false); router.replace('/'); return; }
@@ -302,12 +341,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
       };
 
       const response = await fetch(API_BASE_URL, {
-        method: 'POST', 
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}` 
-        }, 
-        body: JSON.stringify(payload)
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` }, body: JSON.stringify(payload)
       });
       if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
@@ -376,78 +410,41 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 })}
               </View>
 
-              <TextInput 
-                style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.placeHoldname || 'Nombre' } 
-                placeholderTextColor={Colors.subtext} 
-                value={formName} 
-                onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} 
-                autoCapitalize="words"
-              />
-              <TextInput 
-                style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text,  ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.placeHoldAddress || 'Dirección' } 
-                placeholderTextColor={Colors.subtext} 
-                value={formAddress} 
-                onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} 
-                autoCapitalize="words"
-              />
-              <TextInput 
-                style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.messagezip || 'ZIP'} 
-                placeholderTextColor={Colors.subtext} 
-                value={formZip} 
-                onChangeText={setFormZip} 
-                keyboardType="numeric" maxLength={5} 
-              />
-              <TextInput 
-                style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                placeholder={(t.lawyerstab as any)?.description || 'Descripción'} 
-                placeholderTextColor={Colors.subtext} 
-                value={formDesc} 
-                onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')}
-                multiline 
-                autoCapitalize="sentences"
-              />
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.placeHoldname || 'Nombre' } placeholderTextColor={Colors.subtext} value={formName} onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words"/>
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text,  ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.placeHoldAddress || 'Dirección' } placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words"/>
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.messagezip || 'ZIP'} placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
+              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={(t.lawyerstab as any)?.description || 'Descripción'} placeholderTextColor={Colors.subtext} value={formDesc} onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} multiline autoCapitalize="sentences"/>
 
               <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: Colors.text }}>{(t.lawyerstab as any)?.phoneContacto || 'Teléfono'}</ThemedText>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 20, overflow: 'hidden' }}>
-                <TouchableOpacity 
-                  activeOpacity={0.7}
-                  onPress={() => setCountryIdx(prev => (prev + 1) % COUNTRIES.length)}
-                  style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}
-                >
+                <TouchableOpacity activeOpacity={0.7} onPress={() => setCountryIdx(prev => (prev + 1) % COUNTRIES.length)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, borderRightWidth: 1, borderRightColor: Colors.border, height: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}>
                   <ThemedText style={{ fontSize: 18, marginRight: 5 }}>{COUNTRIES[countryIdx]?.flag || ''}</ThemedText>
                   <ThemedText style={{ fontWeight: '800', color: Colors.text, marginRight: 4 }}>{COUNTRIES[countryIdx]?.code || ''}</ThemedText>
                   <MaterialCommunityIcons name="chevron-down" size={16} color={Colors.subtext} />
                 </TouchableOpacity>
-                <TextInput value={formPhone} onChangeText={setFormPhone}
-                  placeholder="(909) 000-0000" keyboardType="phone-pad"
-                  placeholderTextColor={Colors.subtext}
-                  style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '800', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" keyboardType="phone-pad" placeholderTextColor={Colors.subtext} style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '800', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
               
-              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                <TouchableOpacity 
-                  onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                  style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                >
-                  <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                </TouchableOpacity>
+              {/* 🚀 EL CAMUFLAJE: SOLO MOSTRAR OPCIONES DE PAGO SI ES WEB */}
+              {isWebLocal && (
+                <>
+                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                    <TouchableOpacity onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                      <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                    </TouchableOpacity>
 
-                <TouchableOpacity 
-                  onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                  style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                >
-                  <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                </TouchableOpacity>
-              </View>
+                    <TouchableOpacity onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                      <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
 
-              {/* RUTA DE SUSCRIPCIÓN */}
-              {uiPayType === 'subscription' && (
+              {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
+              {uiPayType === 'subscription' && isWebLocal && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                   <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -460,17 +457,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                           const isSelected = formPlan === plan.id;
                           
                           return (
-                          <TouchableOpacity 
-                              key={plan.id}
-                              onPress={() => setFormPlan(plan.id)}
-                              style={{ 
-                                  padding: 15, 
-                                  borderRadius: 14, 
-                                  borderWidth: 1, 
-                                  borderColor: isSelected ? pStyle.selected : Colors.border, 
-                                  backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg 
-                              }}
-                          >
+                          <TouchableOpacity key={plan.id} onPress={() => setFormPlan(plan.id)} style={{ padding: 15, borderRadius: 14, borderWidth: 1, borderColor: isSelected ? pStyle.selected : Colors.border, backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg }}>
                               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                       <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} />
@@ -495,7 +482,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                     ))}
                   </View>
 
-                  {/* 🚀 RENDERIZADO DEL CÓDIGO QR DE ZELLE DESDE SUPABASE */}
                   <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: Colors.border }}>
                     {zelleQrUrl ? (
                       <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
@@ -509,14 +495,18 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 </>
               )}
 
-              {/* RUTA DE CUPÓN */}
+              {/* RUTA DE CUPÓN (VISIBLE EN AMBAS, PERO ES LA ÚNICA EN MÓVIL) */}
               {uiPayType === 'coupon' && (
                 <View style={{ marginBottom: 10 }}>
-                  <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>
+                    {isWebLocal 
+                      ? "Si dispones de un código promocional o período de cortesía, escríbelo en el campo inferior para habilitar tu registro sin cargos."
+                      : "Para publicar tu perfil en nuestro directorio, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
+                    }
+                  </ThemedText>
                 </View>
               )}
 
-              {/* 🚀 EL INPUT CAMALEÓN ÚNICO CON ALTO CONTRASTE */}
               <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                 <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.accent, marginBottom: 10 }}>
                   {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
@@ -565,6 +555,8 @@ export default function LawyersScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
+  // 🚀 HOOK DE FOCO Y ESTADO ACTIVO
+  const isFocused = useIsFocused();
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken;
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
@@ -643,16 +635,44 @@ export default function LawyersScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
+  // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
+  useFocusEffect(
+    useCallback(() => {
+      if (isAdminMode) {
+        fetchAllPendingLawyers();
+      } else {
+        if (zipCode.length === 5) {
+          fetchLawyersData(zipCode);
+        } else {
+          setPendingLawyers([]);
+        }
+      }
+    }, [isAdminMode, zipCode])
+  );
+
+  // 🚀 DETECTOR DE DESPERTAR (APPSTATE)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === 'active' && isFocused) {
+        console.log("🚀 La app despertó en Abogados. Refrescando...");
+        if (isAdminMode) {
+          fetchAllPendingLawyers();
+        } else {
+          if (zipCode.length === 5) {
+            fetchLawyersData(zipCode);
+          }
+        }
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [isFocused, isAdminMode, zipCode]);
+
   useEffect(() => {
     const loadZelleQr = async () => {
       try {
-        const { createClient } = require('@supabase/supabase-js');
-        const supabaseUrlLocal = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-        const supabaseAnonKeyLocal = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-        
-        if (supabaseUrlLocal && supabaseAnonKeyLocal) {
-          const client = createClient(supabaseUrlLocal, supabaseAnonKeyLocal);
-          const { data } = await client.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+        if (supabaseClient) {
+          const { data } = await supabaseClient.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
           if (data?.signedUrl) {
             setZelleQrUrl(data.signedUrl);
           }
@@ -744,27 +764,38 @@ export default function LawyersScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        const mappedData = data.map(item => ({
-          id: item.id,
-          name: item.nameLawy || 'Sin nombre',
-          description: item.description || item.descriptionLawy || '',
-          address: item.address || item.addressLawy || '',
-          area: item.area || 'General',
-          zip: item.zip,
-          image: item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
-          lat: Number(item.lat) || 34.0934,
-          lng: Number(item.lng) || -117.5847,
-          phone: item.phone || '',
-          rating: Number(item.totalRating) || Number(item.rating) || 0,
-          reviews: Array.isArray(item.reviews) ? item.reviews : [],
-          totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
-          status: item.approved ? 'approved' : 'pending',
-          referenceCode: item.referenceCode,
-          paymentMethod: item.paymentMethod,
-          userId: item.userId || item.user_id,
-          timepostEnd: item.timepostEnd || item.timepost_end,
-          premiumPlan: item.premiumPlan, 
-          couponCode: item.couponCode
+        // 🚀 FIRMA AL VUELO DE IMÁGENES
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
+          const freshImage = await refreshSupabaseUrl(rawImage, 'lawyers');
+
+          const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
+             const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
+             return { ...r, image: freshReviewImage };
+          })) : [];
+
+          return {
+            id: item.id,
+            name: item.nameLawy || 'Sin nombre',
+            description: item.description || item.descriptionLawy || '',
+            address: item.address || item.addressLawy || '',
+            area: item.area || 'General',
+            zip: item.zip,
+            image: freshImage,
+            lat: Number(item.lat) || 34.0934,
+            lng: Number(item.lng) || -117.5847,
+            phone: item.phone || '',
+            rating: Number(item.totalRating) || Number(item.rating) || 0,
+            reviews: parsedReviews,
+            totalReviews: Number(item.totalReviews) || parsedReviews.length,
+            status: item.approved ? 'approved' : 'pending',
+            referenceCode: item.referenceCode,
+            paymentMethod: item.paymentMethod,
+            userId: item.userId || item.user_id,
+            timepostEnd: item.timepostEnd || item.timepost_end,
+            premiumPlan: item.premiumPlan, 
+            couponCode: item.couponCode
+          };
         }));
         
         const approved = mappedData.filter(s => s.status === 'approved');
@@ -824,27 +855,32 @@ export default function LawyersScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        const mappedData = data.map(item => ({
-          id: item.id,
-          name: item.nameLawy || 'Sin nombre',
-          description: item.description || item.descriptionLawy || '',
-          address: item.address || item.addressLawy || '',
-          area: item.area || 'General',
-          zip: item.zip,
-          image: item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
-          lat: Number(item.lat) || 34.0934,
-          lng: Number(item.lng) || -117.5847,
-          phone: item.phone || '',
-          rating: Number(item.totalRating) || Number(item.rating) || 0,
-          reviews: Array.isArray(item.reviews) ? item.reviews : [],
-          totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
-          status: item.approved ? 'approved' : 'pending',
-          referenceCode: item.referenceCode,
-          paymentMethod: item.paymentMethod,
-          userId: item.userId || item.user_id,
-          timepostEnd: item.timepostEnd || item.timepost_end,
-          premiumPlan: item.premiumPlan, 
-          couponCode: item.couponCode 
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
+          const freshImage = await refreshSupabaseUrl(rawImage, 'lawyers');
+
+          return {
+            id: item.id,
+            name: item.nameLawy || 'Sin nombre',
+            description: item.description || item.descriptionLawy || '',
+            address: item.address || item.addressLawy || '',
+            area: item.area || 'General',
+            zip: item.zip,
+            image: freshImage,
+            lat: Number(item.lat) || 34.0934,
+            lng: Number(item.lng) || -117.5847,
+            phone: item.phone || '',
+            rating: Number(item.totalRating) || Number(item.rating) || 0,
+            reviews: Array.isArray(item.reviews) ? item.reviews : [],
+            totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
+            status: item.approved ? 'approved' : 'pending',
+            referenceCode: item.referenceCode,
+            paymentMethod: item.paymentMethod,
+            userId: item.userId || item.user_id,
+            timepostEnd: item.timepostEnd || item.timepost_end,
+            premiumPlan: item.premiumPlan, 
+            couponCode: item.couponCode 
+          };
         }));
         setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
       }
@@ -990,18 +1026,6 @@ export default function LawyersScreen() {
   }, [allLawyers, selectedArea, userLocation, isFilteredByMap]);
 
   useEffect(() => {
-    if (isAdminMode) {
-      fetchAllPendingLawyers();
-    } else {
-      if (zipCode.length !== 5) {
-        setPendingLawyers([]);
-      } else {
-        fetchLawyersData(zipCode);
-      }
-    }
-  }, [isAdminMode]);
-
-  useEffect(() => {
     Animated.loop(
       Animated.sequence([
         Animated.timing(ringAnim, { toValue: 1, duration: 50, easing: Easing.linear, useNativeDriver: true }),
@@ -1052,12 +1076,15 @@ export default function LawyersScreen() {
               if (res.ok) {
                 const data = await res.json();
                 
+                const rawImage = data.image || data.imageUrl;
+                const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'lawyers') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
+
                 const mappedSupport = {
                     ...data,
                     name: data.nameLawy || data.name || 'Sin nombre',
                     description: data.descriptionLawy || data.description || '',
                     address: data.addressLawy || data.address || '',
-                    image: data.image || data.imageUrl || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
+                    image: freshImage,
                     lat: Number(data.lat) || 34.0934,
                     lng: Number(data.lng) || -117.5847,
                     status: data.approved ? 'approved' : 'pending',

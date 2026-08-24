@@ -1,15 +1,18 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ActivityIndicator,
-  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, ColorValue
+  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, ColorValue, AppState // 🚀 AÑADIDO AppState
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter } from 'expo-router'; 
+import { useRouter, useFocusEffect } from 'expo-router'; // 🚀 AÑADIDO useFocusEffect
+import { useIsFocused } from '@react-navigation/native'; // 🚀 AÑADIDO useIsFocused
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { createClient } from '@supabase/supabase-js'; // 🚀 AÑADIDO SUPABASE
+
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
@@ -20,30 +23,68 @@ import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+
+// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
+const refreshSupabaseUrl = async (url: string, fallbackFolder = 'donations') => {
+  if (!url || typeof url !== 'string' || url.length < 5) return null;
+  if (!supabaseClient) return url;
+
+  if (url.includes('supabase.co')) {
+    let cleanPath = '';
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/images/');
+      if (parts.length > 1) {
+        cleanPath = parts[1]; 
+      } else {
+        cleanPath = url.split('/').pop()?.split('?')[0] || '';
+      }
+    } catch (e) {
+      cleanPath = url.split('/').pop()?.split('?')[0] || '';
+    }
+
+    if (!cleanPath.includes('/')) {
+        cleanPath = `${fallbackFolder}/${cleanPath}`;
+    }
+
+    try {
+      const { data } = await supabaseClient.storage.from('images').createSignedUrl(cleanPath, 604800);
+      return data?.signedUrl || url;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (!url.startsWith('http')) {
+     const path = url.includes('/') ? url : `${fallbackFolder}/${url}`;
+     try {
+       const { data } = await supabaseClient.storage.from('images').createSignedUrl(path, 604800);
+       return data?.signedUrl || url;
+     } catch(e) { return url; }
+  }
+
+  return url; 
+};
+
 // --- 1. LÓGICA DE VALIDACIÓN GLOBAL ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   
-  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
-
-      // Comprobación de coincidencia exacta de la palabra aislada
       if (userWord === lowerBanned) return true;
-      
-      // Comprobación de plurales comunes (ej: palabra -> palabras)
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
-
-      // Comprobación con prefijo común (ej: re-palabra)
       if (userWord === `re${lowerBanned}`) return true;
-
       return false;
     });
   });
@@ -71,10 +112,12 @@ export default function DonationsScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
+  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
+  const isFocused = useIsFocused();
+
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
-  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+  const userToken = userMetadata?.token || userMetadata?.accessToken; 
   
-  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
     if (!userToken) {
       router.replace('/');
@@ -96,7 +139,6 @@ export default function DonationsScreen() {
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue] = isDark ? ['#333333', '#444444'] : ['#dddddd', '#cccccc'];
 
-  // ESTILOS DINÁMICOS
   const DynamicColors = {
     text: isDark ? '#FFFFFF' : '#1A1A1A',
     subtext: isDark ? '#B0BEC5' : '#364045',
@@ -142,7 +184,7 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
-  // 🚀 FETCH
+  // 🚀 FETCH (CON REFRESH AL VUELO DE SUPABASE)
   const fetchDonations = async (searchZip?: string) => {
     if (!searchZip || searchZip.trim().length !== 5) return;
     try {
@@ -158,13 +200,47 @@ export default function DonationsScreen() {
       if (res.status === 401) { router.replace('/'); return; }
 
       const data = await res.json();
-      setDonations(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) {
+        // 🚀 FIRMAMOS TODAS LAS IMÁGENES AL VUELO AQUÍ
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.image || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'donations') : null;
+          return { ...item, image: freshImage };
+        }));
+        setDonations(mappedData);
+      } else {
+        setDonations([]);
+      }
     } catch (e) {
       console.error("Error obteniendo donaciones:", e);
     } finally {
       setIsLoadingPosts(false);
     }
   };
+
+  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
+  useFocusEffect(
+    useCallback(() => {
+      if (zipCode && zipCode.length === 5) {
+        fetchDonations(zipCode);
+      }
+    }, [zipCode])
+  );
+
+  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa en la pantalla
+      if (nextAppState === 'active' && isFocused) {
+        console.log("🚀 La app despertó en Donaciones. Refrescando donaciones...");
+        if (zipCode && zipCode.length === 5) {
+          fetchDonations(zipCode);
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isFocused, zipCode]);
 
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) window.alert(`${title}\n${message}`); 
@@ -223,7 +299,6 @@ export default function DonationsScreen() {
       return;
     }
 
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS
     const contentToValidate = `${trimmedTitle} ${trimmedDesc}`;
     if (containsBadWords(contentToValidate)) {
       triggerAlert((t.communitytab as any)?.textInappropriateTittle || "Atención", (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado detectado.");
@@ -422,7 +497,6 @@ export default function DonationsScreen() {
                     />
                   </View>
 
-                  {/* 🚀 CATEGORÍAS ADAPTATIVAS: Salto de línea (wrap) en Web, Scroll horizontal en Móvil */}
                   {!isLargeWeb && (
                     <View style={{ marginBottom: 15 }}>
                       {isWeb ? (
@@ -564,7 +638,6 @@ export default function DonationsScreen() {
 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, color:DynamicColors.text  }}>{(t.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
                 
-                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap en Web para salto de línea ordenado */}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                   {CATEGORY_LABELS.map((catLabel: string, index: number) => {
                     if (index === 0) return null; 
@@ -655,7 +728,6 @@ export default function DonationsScreen() {
 // --- 3. COMPONENTE DE TARJETA DE DONACIÓN ---
 const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels, isWeb, handleShare }: any) => {
   
-  // 🚀 BLINDAJE: Si la BD no manda nombre, usamos 'Usuario' por defecto
   const safeOwnerName = item.ownerName || item.userId || 'Usuario';
   const isOwner = safeOwnerName === currentUserName;
   const isDelivered = item.statusId === '6a226ffa-9edf-4886-931f-64299f8a6f7f';
@@ -692,7 +764,6 @@ const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orang
       </View>
 
       <TouchableOpacity activeOpacity={0.9} onPress={() => onPreview(item.image)}>
-        {/* 🚀 BLINDAJE VISUAL: Muestra un cuadro gris si falla la URL de la imagen en BD */}
         {item.image && item.image.length > 5 ? (
           <Image 
             source={{ uri: item.image }} 
@@ -736,7 +807,6 @@ const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orang
             </TouchableOpacity>
           )}
 
-          {/* 🚀 BOTÓN DE COMPARTIR ACTUALIZADO Y OCULTO EN WEB */}
           {!isWeb && (
             <TouchableOpacity onPress={() => handleShare(item)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
               <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />

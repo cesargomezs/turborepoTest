@@ -219,11 +219,6 @@ export default function HomeScreen() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // 🚀 ESTADOS PARA SOPORTE IT / TUTORIAL
-  const [showITSupportModal, setShowITSupportModal] = useState(false);
-  const [itMessage, setItMessage] = useState('');
-  const [isSendingIT, setIsSendingIT] = useState(false);
-
   const [termsData, setTermsData] = useState({ version: '', content_html: '' });
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
 
@@ -612,46 +607,6 @@ export default function HomeScreen() {
       if (isWebPlatform) window.alert(successMsg);
       else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
     }, 300);
-  };
-
-  // 🚀 FUNCIÓN PARA ENVIAR CORREO AL SOPORTE IT
-  const handleSendITSupport = async () => {
-    if (!itMessage.trim()) {
-      return isWebPlatform ? window.alert(isEnglish ? "Please write your message." : "Por favor escribe tu mensaje.") : Alert.alert("Aviso", isEnglish ? "Please write your message." : "Por favor escribe tu mensaje.");
-    }
-
-    if (containsBadWords(itMessage)) {
-      const errorMsg = isEnglish ? "Inappropriate content detected." : "El mensaje contiene lenguaje inapropiado.";
-      return isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
-    }
-
-    setIsSendingIT(true);
-    try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
-      const response = await fetch(`${API_URL}/admin/it-support`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: form.email || 'No proporcionado',
-          userName: `${form.firstName} ${form.lastName}`.trim() || 'Usuario Anónimo',
-          message: itMessage
-        })
-      });
-
-      if (!response.ok) throw new Error("No se pudo enviar el mensaje");
-
-      const successMsg = isEnglish ? "Message sent to IT Support!" : "¡Tu reporte ha sido enviado a Soporte IT!";
-      isWebPlatform ? window.alert(successMsg) : Alert.alert("¡Enviado!", successMsg);
-      setItMessage('');
-      setShowITSupportModal(false);
-    } catch (error) {
-      const errorMsg = isEnglish ? "Error sending message." : "Ocurrió un error al enviar el mensaje.";
-      isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
-    } finally {
-      setIsSendingIT(false);
-    }
   };
 
   const submitProfileCompletion = async () => {
@@ -1539,19 +1494,6 @@ export default function HomeScreen() {
                                   </View>
                                 )
                               )}
-                              
-                              {/* 🚀 BOTÓN DE SOPORTE Y TUTORIALES */}
-                              <View style={{ width: '100%', alignItems: 'center', marginTop: 20 }}>
-                                <TouchableOpacity 
-                                  onPress={() => setShowITSupportModal(true)}
-                                  style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}
-                                >
-                                  <MaterialCommunityIcons name="lifebuoy" size={18} color={DynamicColors.subtext} />
-                                  <Text style={{ color: DynamicColors.subtext, fontSize: 13, fontWeight: '600', marginLeft: 6, textDecorationLine: 'underline' }}>
-                                    {isEnglish ? "Need help or tutorial?" : "¿Necesitas ayuda o un tutorial?"}
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
                             </View>
 
                           </ScrollView>
@@ -1592,47 +1534,6 @@ export default function HomeScreen() {
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
-        </Modal>
-
-        {/* 🚀 MODAL PARA SOPORTE TÉCNICO / TUTORIAL */}
-        <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 420), padding: 24 }]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text }}>{isEnglish ? "IT Support / Help" : "Soporte Técnico / Ayuda"}</ThemedText>
-                <TouchableOpacity onPress={() => setShowITSupportModal(false)}>
-                  <MaterialCommunityIcons name="close" size={26} color={DynamicColors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <ThemedText style={{ fontSize: 13, marginBottom: 15, color: DynamicColors.subtext, lineHeight: 18 }}>
-                {isEnglish 
-                  ? "Describe your technical issue or if you need a tutorial. We will reply to the email you provided." 
-                  : "Escribe tu problema técnico o si necesitas un tutorial. Te responderemos al correo proporcionado."}
-              </ThemedText>
-
-              <TextInput 
-                value={itMessage}
-                onChangeText={setItMessage}
-                placeholder={isEnglish ? "How can we help you?" : "¿En qué te podemos ayudar?"}
-                placeholderTextColor={DynamicColors.subtext}
-                multiline
-                style={{ backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, padding: 14, borderRadius: 16, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: DynamicColors.border, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) }}
-              />
-
-              <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
-                <LinearGradient colors={orangeGradient as any} style={{ paddingVertical: 16, alignItems: 'center' }}>
-                  {isSendingIT ? (
-                    <ActivityIndicator color="#FFF" size="small" />
-                  ) : (
-                    <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>
-                      {isEnglish ? "Send Message" : "Enviar a Soporte IT"}
-                    </ThemedText>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
             </View>
           </View>
         </Modal>

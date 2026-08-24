@@ -17,7 +17,8 @@ import {
   Animated, 
   PanResponder, 
   Dimensions, 
-  ActivityIndicator
+  ActivityIndicator,
+  AppState // 🚀 IMPORTAMOS AppState
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
@@ -181,6 +182,7 @@ export default function Header({ title }: { title?: string }) {
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [activeProfileRole, setActiveProfileRole] = useState('User'); 
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null); 
+  const [wakeUpTrigger, setWakeUpTrigger] = useState(0); // 🚀 GATILLO PARA RESUCITAR IMÁGENES AL DESPERTAR
 
   const [profileData, setProfileData] = useState({
     email: '',
@@ -261,12 +263,55 @@ export default function Header({ title }: { title?: string }) {
     } catch (error) { console.error("Error al obtener datos:", error); }
   };
 
+  const fetchNotifications = async () => {
+    if (!REAL_USER_ID || !token) return;
+
+    try {
+      const url = `${API_BASE_URL}/notifications?userId=${REAL_USER_ID}`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+
+      const data = await res.json();
+      let fetchedNotifs: any[] = [];
+      if (Array.isArray(data)) fetchedNotifs = data;
+      else if (data && Array.isArray(data.data)) fetchedNotifs = data.data;
+      else if (data && Array.isArray(data.notifications)) fetchedNotifs = data.notifications;
+
+      fetchedNotifs.sort((a: any, b: any) => new Date(b.createdAt || b.visibleAt || 0).getTime() - new Date(a.createdAt || a.visibleAt || 0).getTime());
+      setNotifications(fetchedNotifs);
+    } catch (error: any) { 
+      setNotifications([]); 
+    }
+  };
+
   // 🚀 GARANTIZA QUE EL HEADER SE ACTUALICE AL CAMBIAR DE PESTAÑA
   useFocusEffect(
     useCallback(() => {
       if (!isCreatingUser) fetchUserData();
     }, [isCreatingUser, settingsModalVisible, REAL_USER_ID, token])
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (REAL_USER_ID && token) fetchNotifications();
+    }, [REAL_USER_ID, token])
+  );
+
+  // 🚀 DETECTOR DE DESPERTAR (APPSTATE) EXCLUSIVO PARA EL HEADER
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log("🚀 La app despertó. Refrescando perfil y notificaciones globales...");
+        if (!isCreatingUser) fetchUserData();
+        if (REAL_USER_ID && token) fetchNotifications();
+        setWakeUpTrigger(prev => prev + 1); // 🚀 Fuerza re-firma de la imagen
+      }
+    });
+    return () => subscription.remove();
+  }, [isCreatingUser, REAL_USER_ID, token]);
 
   // 🚀 LÓGICA VINCULADA GLOBALMENTE A REDUX PARA LAS FOTOS
   useEffect(() => {
@@ -301,43 +346,13 @@ export default function Header({ title }: { title?: string }) {
     };
 
     getSignedAvatar();
-  }, [globalImageUrl, profileData.image_url]);
+  }, [globalImageUrl, profileData.image_url, wakeUpTrigger]); // 🚀 DEPENDE DE wakeUpTrigger
 
   useEffect(() => {
     if (isWeb && typeof window !== 'undefined') {
       window.history.replaceState(null, '', '/');
     }
   }, [pathname]);
-
-  const fetchNotifications = async () => {
-    if (!REAL_USER_ID || !token) return;
-
-    try {
-      const url = `${API_BASE_URL}/notifications?userId=${REAL_USER_ID}`;
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-      });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-
-      const data = await res.json();
-      let fetchedNotifs: any[] = [];
-      if (Array.isArray(data)) fetchedNotifs = data;
-      else if (data && Array.isArray(data.data)) fetchedNotifs = data.data;
-      else if (data && Array.isArray(data.notifications)) fetchedNotifs = data.notifications;
-
-      fetchedNotifs.sort((a: any, b: any) => new Date(b.createdAt || b.visibleAt || 0).getTime() - new Date(a.createdAt || a.visibleAt || 0).getTime());
-      setNotifications(fetchedNotifs);
-    } catch (error: any) { 
-      setNotifications([]); 
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      if (REAL_USER_ID && token) fetchNotifications();
-    }, [REAL_USER_ID, token])
-  );
 
   useEffect(() => {
     if (REAL_USER_ID && token) {
@@ -582,7 +597,6 @@ export default function Header({ title }: { title?: string }) {
       Alert.alert("Éxito", isCreatingUser ? "Usuario creado correctamente" : "Perfil actualizado correctamente");
       closeSettingsModal();
       
-      // 🚀 EMITIMOS EL CAMBIO GLOBAL INSTANTÁNEO A REDUX
       dispatch(setUserMetadata({
         ...userMetadata,
         name: profileData.name,

@@ -1,20 +1,22 @@
 import Head from 'expo-router/head';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, ActivityIndicator, Image, Linking, Alert,
-  Modal as RNModal, KeyboardAvoidingView, Share, ColorValue, Text
+  Modal as RNModal, KeyboardAvoidingView, Share, ColorValue, Text, AppState // 🚀 IMPORTAMOS AppState
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter } from 'expo-router'; 
+import { useRouter, useFocusEffect } from 'expo-router'; // 🚀 IMPORTAMOS useFocusEffect
+import { useIsFocused } from '@react-navigation/native'; // 🚀 IMPORTAMOS useIsFocused
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
+import { createClient } from '@supabase/supabase-js'; // 🚀 IMPORTAMOS SUPABASE
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -31,6 +33,53 @@ import { handleUniversalShare } from '../../../utils/shareHelper';
 // =====================================================================
 const API_ENTREPRENEURSHIP_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/entrepreneurship';
 
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+
+// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
+const refreshSupabaseUrl = async (url: string, fallbackFolder = 'entrepreneurship') => {
+  if (!url || typeof url !== 'string' || url.length < 5) return null;
+  if (!supabaseClient) return url;
+
+  if (url.includes('supabase.co')) {
+    let cleanPath = '';
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/images/');
+      if (parts.length > 1) {
+        cleanPath = parts[1]; 
+      } else {
+        cleanPath = url.split('/').pop()?.split('?')[0] || '';
+      }
+    } catch (e) {
+      cleanPath = url.split('/').pop()?.split('?')[0] || '';
+    }
+
+    if (!cleanPath.includes('/')) {
+        cleanPath = `${fallbackFolder}/${cleanPath}`;
+    }
+
+    try {
+      const { data } = await supabaseClient.storage.from('images').createSignedUrl(cleanPath, 604800);
+      return data?.signedUrl || url;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (!url.startsWith('http')) {
+     const path = url.includes('/') ? url : `${fallbackFolder}/${url}`;
+     try {
+       const { data } = await supabaseClient.storage.from('images').createSignedUrl(path, 604800);
+       return data?.signedUrl || url;
+     } catch(e) { return url; }
+  }
+
+  return url; 
+};
+
 let BANNED_WORDS: string[] = [];
 try {
   BANNED_WORDS = Array.isArray((badWordsData as any).badWordsList) ? (badWordsData as any).badWordsList : [];
@@ -42,22 +91,15 @@ try {
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   
-  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
 
-      // Comprobación de coincidencia exacta de la palabra aislada
       if (userWord === lowerBanned) return true;
-      
-      // Comprobación de plurales comunes (ej: palabra -> palabras)
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
-
-      // Comprobación con prefijo común (ej: re-palabra)
       if (userWord === `re${lowerBanned}`) return true;
 
       return false;
@@ -65,7 +107,6 @@ const containsBadWords = (text: string): boolean => {
   });
 };
 
-// 🚀 FUNCIÓN PARA FORMATEAR NÚMEROS (Ej: 1500 -> 1.5k)
 const formatCount = (count: number) => {
   if (!count) return '0';
   if (count >= 1000) {
@@ -121,7 +162,6 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [comment, setComment] = useState('');
 
   const handlePrePublish = () => {
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS EN LA RESEÑA
     if (containsBadWords(comment)) {
       const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
       Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
@@ -188,29 +228,26 @@ export default function EntrepreneurshipScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
+  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
+  const isFocused = useIsFocused();
+
   const { t } = useTranslation();
   const stylesUnified = useUnifiedCardStyles();
   const router = useRouter();
   
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
-  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+  const userToken = userMetadata?.token || userMetadata?.accessToken; 
 
-  // 🚀 1. NUEVO: Extraemos el rol y creamos la validación
-  // (Si tu base de datos usa otra palabra como 'rol' o 'tipo_usuario', cámbialo aquí)
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
 
-  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN
   useEffect(() => {
     if (!userToken) {
       router.replace('/');
     }
   }, [userToken]);
 
-  // =====================================================================
-  // 🚀 FUNCIÓN DE COMPARTIR ACTUALIZADA (Sin portapapeles manual)
-  // =====================================================================
   const handleShare = async (item: Emprendimiento) => {
     await handleUniversalShare({
       title: t.entrepreneurshiptab.label+item.name,
@@ -255,18 +292,15 @@ export default function EntrepreneurshipScreen() {
   const [results, setResults] = useState<Emprendimiento[]>([]);
   const [pendingItems, setPendingItems] = useState<Emprendimiento[]>([]);
   
-  // ESTADOS PARA EL FILTRO GLOBAL Y GUARDADOS (CACHÉ LOCAL)
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [savedItems, setSavedItems] = useState<string[]>([]); 
 
-  // Modales
   const [isFormVisible, setFormVisible] = useState(false);
   const [detailItem, setDetailItem] = useState<Emprendimiento | null>(null);
   const [reviewTarget, setReviewTarget] = useState<Emprendimiento | null>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // Formulario
   const [formName, setFormName] = useState('');
   const [formAddress, setFormAddress] = useState(''); 
   const [formDesc, setFormDesc] = useState('');
@@ -282,7 +316,6 @@ export default function EntrepreneurshipScreen() {
   const isZipValid = zipCode.length === 5;
   const triggerAlert = (title: string, msg: string) => Platform.OS === 'web' ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
 
-  // EFECTO PARA CARGAR LOS GUARDADOS AL INICIAR
   useEffect(() => {
     const loadSavedItems = async () => {
       try {
@@ -295,7 +328,6 @@ export default function EntrepreneurshipScreen() {
     loadSavedItems();
   }, []);
 
-  // --- LÓGICA DE NEGOCIO ---
   const fetchEntrepreneurships = async (searchZip: string) => {
     try {
       setLoading(true);
@@ -308,20 +340,31 @@ export default function EntrepreneurshipScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        const mappedData: Emprendimiento[] = data.map((item: any) => ({
-          ...item,
-          name: item.nameEntrepren || 'Sin nombre',
-          address: item.addressentr || item.address || '', 
-          categoryId: Number(item.categoryId) || 0,
-          description: item.descriptionEntrepren || '',
-          rating: Number(item.rating) || 5.0,
-          likes: Number(item.likes) || 0,
-          dislikes: Number(item.dislikes) || 0,
-          userVote: item.userVote || null,
-          estate: item.estate || '', 
-          saved: false, 
-          reviews: Array.isArray(item.reviews) ? item.reviews : [],
-          image: item.imageEntrepren || '',
+        // 🚀 FIRMA AL VUELO DE IMÁGENES Y REVIEWS
+        const mappedData: Emprendimiento[] = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.imageEntrepren || item.image || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'entrepreneurship') : '';
+          
+          const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
+             const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
+             return { ...r, image: freshReviewImage };
+          })) : [];
+
+          return {
+            ...item,
+            name: item.nameEntrepren || 'Sin nombre',
+            address: item.addressentr || item.address || '', 
+            categoryId: Number(item.categoryId) || 0,
+            description: item.descriptionEntrepren || '',
+            rating: Number(item.rating) || 5.0,
+            likes: Number(item.likes) || 0,
+            dislikes: Number(item.dislikes) || 0,
+            userVote: item.userVote || null,
+            estate: item.estate || '', 
+            saved: false, 
+            reviews: parsedReviews,
+            image: freshImage,
+          };
         }));
         
         setLocalData(mappedData);
@@ -336,7 +379,6 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // NUEVA FUNCIÓN PARA TRAER LOS GUARDADOS SIN IMPORTAR EL ZIP CODE
   const fetchSavedItems = async () => {
     if (savedItems.length === 0) {
       setResults([]);
@@ -358,20 +400,31 @@ export default function EntrepreneurshipScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        const mappedData: Emprendimiento[] = data.map((item: any) => ({
-          ...item,
-          name: item.nameEntrepren || 'Sin nombre',
-          address: item.addressentr || item.address || '', 
-          categoryId: Number(item.categoryId) || 0,
-          description: item.descriptionEntrepren || '',
-          rating: Number(item.rating) || 5.0,
-          likes: Number(item.likes) || 0,
-          dislikes: Number(item.dislikes) || 0,
-          userVote: item.userVote || null, 
-          estate: userMetadata.estate,
-          saved: true, 
-          reviews: Array.isArray(item.reviews) ? item.reviews : [],
-          image: item.imageEntrepren || '',
+        // 🚀 FIRMA AL VUELO PARA GUARDADOS
+        const mappedData: Emprendimiento[] = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.imageEntrepren || item.image || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'entrepreneurship') : '';
+          
+          const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
+             const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
+             return { ...r, image: freshReviewImage };
+          })) : [];
+
+          return {
+            ...item,
+            name: item.nameEntrepren || 'Sin nombre',
+            address: item.addressentr || item.address || '', 
+            categoryId: Number(item.categoryId) || 0,
+            description: item.descriptionEntrepren || '',
+            rating: Number(item.rating) || 5.0,
+            likes: Number(item.likes) || 0,
+            dislikes: Number(item.dislikes) || 0,
+            userVote: item.userVote || null, 
+            estate: userMetadata.estate,
+            saved: true, 
+            reviews: parsedReviews,
+            image: freshImage,
+          };
         }));
         
         setLocalData(mappedData);
@@ -385,19 +438,37 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // INTERRUPTOR CENTRAL ENTRE BÚSQUEDA NORMAL Y GUARDADOS
-  useEffect(() => {
-    if (showSavedOnly) {
-      fetchSavedItems();
-    } else {
-      if (isZipValid) {
-        fetchEntrepreneurships(zipCode);
+  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA O CAMBIAR MODO GUARDADO
+  useFocusEffect(
+    useCallback(() => {
+      if (showSavedOnly) {
+        fetchSavedItems();
       } else {
-        setLocalData([]);
-        setResults([]);
+        if (isZipValid) {
+          fetchEntrepreneurships(zipCode);
+        }
       }
-    }
-  }, [showSavedOnly]);
+    }, [showSavedOnly, zipCode])
+  );
+
+  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa
+      if (nextAppState === 'active' && isFocused) {
+        console.log("🚀 La app despertó en Emprendimientos. Refrescando...");
+        if (showSavedOnly) {
+          fetchSavedItems();
+        } else {
+          if (isZipValid) {
+            fetchEntrepreneurships(zipCode);
+          }
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isFocused, showSavedOnly, zipCode, isZipValid]);
 
   const handleSearch = async (forcedCategoryIdx?: number) => {
     if (!isZipValid) return;
@@ -416,7 +487,6 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // APLICAR FILTROS EN TIEMPO REAL
   const applyFilters = (dataList: Emprendimiento[], catIdx: number, textQuery: string) => {
     let list = catIdx === 0 ? dataList : dataList.filter(l => l.categoryId === catIdx);
     
@@ -516,15 +586,14 @@ export default function EntrepreneurshipScreen() {
 
       const savedReview = await response.json();
       
-      // 🚀 AQUÍ ESTÁ EL AJUSTE: Atrapamos image y displayTime devueltos por el backend
       const newReview: Review = {
         id: savedReview.id || Date.now().toString(),
         stars: savedReview.stars || stars,
         comment: savedReview.comment || comment,
-        image: savedReview.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg', // 🚀 Foto
+        image: savedReview.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
         name: savedReview.name || userMetadata?.name || 'Anónimo',
         userId: currentUserId, 
-        displayTime: savedReview.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), // 🚀 Hora
+        displayTime: savedReview.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
       };
 
       const updateState = (prevReviews: Review[]) => {
@@ -556,7 +625,6 @@ export default function EntrepreneurshipScreen() {
       triggerAlert('Campos incompletos', 'Completa nombre, dirección, descripción, teléfono, código postal e imagen.'); return;
     }
 
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS (Valida todos los campos en un solo bloque)
     const contentToValidate = `${formName} ${formDesc} ${formAddress} ${formPromo}`;
     if (containsBadWords(contentToValidate)) {
       triggerAlert(
@@ -698,7 +766,6 @@ export default function EntrepreneurshipScreen() {
     } catch (error) { Alert.alert("Error", "No se pudo rechazar."); }
   };
 
-  // --- SUB-COMPONENTES VISUALES ---
   const ActionBtnLine = ({ icon, text, color, bgColor, onPress }: any) => (
     <TouchableOpacity onPress={onPress} style={{ flexGrow: 1, flexBasis: 80, height: 40, paddingHorizontal: 8, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8, marginRight: 6 }}>
        <MaterialCommunityIcons name={icon} size={16} color={color} />

@@ -1,16 +1,19 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Alert, Share, ColorValue, ActivityIndicator,
-  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, Image
+  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, Image,
+  AppState
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useLocalSearchParams } from 'expo-router'; 
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import * as ImagePicker from 'expo-image-picker'; 
+import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -23,9 +26,55 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../utils/shareHelper';
 
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+
+// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
+const refreshSupabaseUrl = async (url: string, fallbackFolder = 'companies') => {
+  if (!url || typeof url !== 'string' || url.length < 5) return null;
+  if (!supabaseClient) return url;
+
+  if (url.includes('supabase.co')) {
+    let cleanPath = '';
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/images/');
+      if (parts.length > 1) {
+        cleanPath = parts[1]; 
+      } else {
+        cleanPath = url.split('/').pop()?.split('?')[0] || '';
+      }
+    } catch (e) {
+      cleanPath = url.split('/').pop()?.split('?')[0] || '';
+    }
+
+    if (!cleanPath.includes('/')) {
+        cleanPath = `${fallbackFolder}/${cleanPath}`;
+    }
+
+    try {
+      const { data } = await supabaseClient.storage.from('images').createSignedUrl(cleanPath, 604800);
+      return data?.signedUrl || url;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (!url.startsWith('http')) {
+     const path = url.includes('/') ? url : `${fallbackFolder}/${url}`;
+     try {
+       const { data } = await supabaseClient.storage.from('images').createSignedUrl(path, 604800);
+       return data?.signedUrl || url;
+     } catch(e) { return url; }
+  }
+
+  return url; 
+};
+
 const BANNED_WORDS = Array.isArray((badWordsData as any)?.badWordsList) ? (badWordsData as any).badWordsList : []; 
 
-// 🚀 LÓGICA DE VALIDACIÓN MEJORADA (EVITA FALSOS POSITIVOS EN PALABRAS COMO VEHÍCULO O ESPECTÁCULO)
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
@@ -54,6 +103,9 @@ export default function JobsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
+  const isFocused = useIsFocused();
 
   const usCitiesData: Record<string, string[]> = t.jobstab.statesCity; 
   const STATES = Object.keys(usCitiesData);
@@ -92,8 +144,8 @@ export default function JobsScreen() {
 
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
-  const isIOS = Platform.OS === 'ios';
   const isLargeWeb = isWeb && width > 1000;
+  const isIOS = Platform.OS === 'ios';
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
@@ -159,12 +211,13 @@ export default function JobsScreen() {
   const [userCompanies, setUserCompanies] = useState<any[]>([]);
   const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '155.00' });
   
+  // 🚀 CAMUFLAJE: En Web permite suscripción por defecto; en Móvil fuerza a Cupón/Gratis
   const [newCompanyForm, setNewCompanyForm] = useState({ 
-    name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'basic'
+    name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: isWeb ? 'basic' : 'coupon'
   });
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
   
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWeb ? 'subscription' : 'coupon');
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
@@ -197,13 +250,8 @@ export default function JobsScreen() {
   useEffect(() => {
     const loadZelleQr = async () => {
       try {
-        const { createClient } = require('@supabase/supabase-js');
-        const supabaseUrlLocal = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-        const supabaseAnonKeyLocal = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-        
-        if (supabaseUrlLocal && supabaseAnonKeyLocal) {
-          const client = createClient(supabaseUrlLocal, supabaseAnonKeyLocal);
-          const { data } = await client.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+        if (supabaseClient) {
+          const { data } = await supabaseClient.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
           if (data?.signedUrl) {
             setZelleQrUrl(data.signedUrl);
           }
@@ -249,7 +297,15 @@ export default function JobsScreen() {
       if (res.status === 401) { router.replace('/'); return; }
       
       const data = await res.json();
-      if (Array.isArray(data)) setUserCompanies(data);
+      if (Array.isArray(data)) {
+        // 🚀 FIRMA AL VUELO DE LOGOS DE EMPRESA DEL USUARIO
+        const mappedCompanies = await Promise.all(data.map(async (comp: any) => {
+          const rawLogo = comp.logoUrl;
+          const freshLogo = rawLogo ? await refreshSupabaseUrl(rawLogo, 'companies') : null;
+          return { ...comp, logoUrl: freshLogo };
+        }));
+        setUserCompanies(mappedCompanies);
+      }
     } catch (e) { console.warn("No se pudieron cargar las empresas."); }
   };
 
@@ -263,18 +319,16 @@ export default function JobsScreen() {
       
       const data = await res.json();
       if (Array.isArray(data)) {
-          setPendingCompanies(data.filter((c: any) => c.status === 'pending' || !c.isVerified));
+        // 🚀 FIRMA AL VUELO DE LOGOS PENDIENTES
+        const mappedCompanies = await Promise.all(data.map(async (comp: any) => {
+          const rawLogo = comp.logoUrl;
+          const freshLogo = rawLogo ? await refreshSupabaseUrl(rawLogo, 'companies') : null;
+          return { ...comp, logoUrl: freshLogo };
+        }));
+        setPendingCompanies(mappedCompanies.filter((c: any) => c.status === 'pending' || !c.isVerified));
       }
     } catch (e) { console.error("Error al obtener pendientes de admin", e); }
   };
-
-  useEffect(() => {
-    if (isAdminMode) {
-      fetchPendingCompaniesForAdmin();
-    } else {
-      setPendingCompanies([]); 
-    }
-  }, [isAdminMode]);
 
   useEffect(() => {
     const loadSavedJobs = async () => {
@@ -298,14 +352,18 @@ export default function JobsScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        const mappedData = data.map(item => {
-          const parsedReviews = item.reviews ? item.reviews.map((r: any) => ({
-             id: r.id,
-             stars: Number(r.rating || r.stars) || 0,
-             text: r.review || r.comment || '',
-             image: r.image || '',
-             userName: r.userName || r.name || 'Anónimo',
-             displayTime: r.displayTime || ''
+        // 🚀 FIRMAMOS AL VUELO IMÁGENES DE LAS RESEÑAS
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const parsedReviews = item.reviews ? await Promise.all(item.reviews.map(async (r: any) => {
+             const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
+             return {
+               id: r.id,
+               stars: Number(r.rating || r.stars) || 0,
+               text: r.review || r.comment || '',
+               image: freshReviewImage,
+               userName: r.userName || r.name || 'Anónimo',
+               displayTime: r.displayTime || ''
+             };
           })) : [];
 
           const realRating = parsedReviews.length > 0 
@@ -336,14 +394,37 @@ export default function JobsScreen() {
             isOpen: item.isOpen,
             displayTime: new Date(item.createdAt).toLocaleDateString()
           };
-        });
+        }));
         setJobs(mappedData);
       }
     } catch (e) { console.error("Error al obtener empleos:", e); } 
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchJobsData(); }, [currentUserId]);
+  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
+  useFocusEffect(
+    useCallback(() => {
+      if (isAdminMode) {
+        fetchPendingCompaniesForAdmin();
+      }
+      fetchJobsData();
+    }, [isAdminMode, currentUserId])
+  );
+
+  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && isFocused) {
+        console.log("🚀 La app despertó en Empleos. Refrescando vacantes e imágenes...");
+        if (isAdminMode) {
+          fetchPendingCompaniesForAdmin();
+        }
+        fetchJobsData();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isFocused, isAdminMode, currentUserId]);
 
   const handleOpenCompanyProfile = async (companyId: string) => {
     if (!companyId) return triggerAlert("Aviso", "Esta vacante no tiene un perfil de empresa verificado enlazado.");
@@ -357,7 +438,9 @@ export default function JobsScreen() {
         
         if (res.ok) {
             const data = await res.json();
-            setSelectedCompanyProfile(data);
+            // 🚀 FIRMA AL VUELO DE LOGO DE LA EMPRESA CONSULTADA
+            const freshLogo = data.logoUrl ? await refreshSupabaseUrl(data.logoUrl, 'companies') : null;
+            setSelectedCompanyProfile({ ...data, logoUrl: freshLogo });
         } else {
             triggerAlert("Error", "No se pudo cargar el perfil de la empresa.");
         }
@@ -467,40 +550,40 @@ export default function JobsScreen() {
       });
   };
 
- const handleShareJob = async (job: any) => {
-  let publicUrl = '';
+  const handleShareJob = async (job: any) => {
+    let publicUrl = '';
 
-  try {
-    const res = await fetch(`${API_COMPANIES_URL}/${job.companyId}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${userToken}` }
-    });
-    if (res.ok) {
-      const companyData = await res.json();
-      const logoName = companyData.logoUrl || ''; 
+    try {
+      const res = await fetch(`${API_COMPANIES_URL}/${job.companyId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (res.ok) {
+        const companyData = await res.json();
+        const logoName = companyData.logoUrl || ''; 
 
-      if (logoName) {
-          if (logoName.startsWith('http://') || logoName.startsWith('https://')) {
-              publicUrl = logoName;
-          } else {
-              const cleanName = logoName.startsWith('companies/') ? logoName.replace('companies/', '') : logoName;
-              publicUrl = `${process.env.EXPO_PUBLIC_URL_BACKEND}/api/imagen-optimizada/companies/${cleanName}`;
-          }
+        if (logoName) {
+            if (logoName.startsWith('http://') || logoName.startsWith('https://')) {
+                publicUrl = logoName;
+            } else {
+                const cleanName = logoName.startsWith('companies/') ? logoName.replace('companies/', '') : logoName;
+                publicUrl = `${process.env.EXPO_PUBLIC_URL_BACKEND}/api/imagen-optimizada/companies/${cleanName}`;
+            }
+        }
       }
+    } catch (error) {
+      console.error("Error al consultar datos de la compañía para compartir:", error);
     }
-  } catch (error) {
-    console.error("Error al consultar datos de la compañía para compartir:", error);
-  }
 
-  await handleUniversalShare({
-    title: `${jobstabData?.label || 'Vacante: '} ${job.title}`,
-    description: `🏢 Empresa: ${job.company}\n\n📝 ${job.description}\n\n💵 Salario: $${job.salaryMin}/hr`,
-    phone: job.phone,
-    address: `${job.city}, ${job.state}`,
-    zip: job.zip,
-    image: publicUrl, 
-  });
-};
+    await handleUniversalShare({
+      title: `${jobstabData?.label || 'Vacante: '} ${job.title}`,
+      description: `🏢 Empresa: ${job.company}\n\n📝 ${job.description}\n\n💵 Salario: $${job.salaryMin}/hr`,
+      phone: job.phone,
+      address: `${job.city}, ${job.state}`,
+      zip: job.zip,
+      image: publicUrl, 
+    });
+  };
 
   const handlePickLogo = async () => {
     try {
@@ -529,7 +612,7 @@ export default function JobsScreen() {
     }
 
     if (!formRefCode.trim()) {
-      return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.");
+      return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
     }
     
     if (containsBadWords(newCompanyForm.name)) {
@@ -625,9 +708,9 @@ export default function JobsScreen() {
         contactMethod: 'call'
       }));
       
-      setNewCompanyForm({ name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'basic' });
+      setNewCompanyForm({ name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: isWeb ? 'basic' : 'coupon' });
       setFormRefCode('');
-      setUiPayType('subscription');
+      setUiPayType(isWeb ? 'subscription' : 'coupon');
       setFormPayMethod('Zelle');
       setPublishView('form');
       triggerAlert("Suscripción en Revisión", "Tu empresa ha sido registrada. Podrás publicar en cuanto verifiquemos tu suscripción Premium.");
@@ -656,7 +739,7 @@ export default function JobsScreen() {
     
     const selectedCompanyData = userCompanies.find(c => c.id === newJob.companyId);
     if (selectedCompanyData && !selectedCompanyData.isVerified) {
-        triggerAlert("Empresa Pendiente", "Tu empresa aún está pendiente de verificación de pago. En cuanto se apruebe, podrás publicar.");
+        triggerAlert("Empresa Pendiente", "Tu empresa aún está pendiente de verificación. En cuanto se apruebe, podrás publicar.");
         return;
     }
 
@@ -700,7 +783,7 @@ export default function JobsScreen() {
       setModalVisible(false);
       setNewJob({ title: '', company: '', companyId: '', category: 'Bodega', description: '', contactMethod: 'call', phoneCode: '+1', phone: '', shifts: [], salaryMin: '', salaryMax: '', state: 'California', city: '' });
 
-      triggerAlert("¡Vacante Publicada!", "Al tener un plan activo, tu vacante se ha publicado inmediatamente.");
+      triggerAlert("¡Vacante Publicada!", "Al tener tu empresa activa, tu vacante se ha publicado inmediatamente.");
     } catch (e) { triggerAlert("Error", "No se pudo publicar la vacante."); } 
     finally { setIsPublishing(false); }
   };
@@ -721,7 +804,7 @@ export default function JobsScreen() {
       setPendingCompanies(prev => prev.filter(c => c.id !== id));
       setJobs(prev => prev.map(j => j.companyId === id ? { ...j, isCompanyVerified: true } : j));
       
-      triggerAlert("Aprobado", "Empresa verificada y suscripción Premium activada.");
+      triggerAlert("Aprobado", "Empresa verificada y activada.");
     } catch (e) { triggerAlert("Error", "No se pudo aprobar la empresa."); }
   };
 
@@ -802,12 +885,15 @@ export default function JobsScreen() {
 
       const savedReview = await res.json();
       
+      // 🚀 FIRMA AL VUELO DE LA FOTO DEL USUARIO QUE ACABA DE RESEÑAR
+      const freshReviewImage = savedReview.image ? await refreshSupabaseUrl(savedReview.image, 'users') : (reviewForm.isAnonymous ? null : (userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg'));
+
       const newReviewFormatted = { 
           id: savedReview.id || Date.now(), 
           text: savedReview.comment || reviewForm.text, 
           stars: Number(savedReview.stars || reviewForm.rating), 
           userName: savedReview.userName || (reviewForm.isAnonymous ? 'Anónimo' : (userMetadata?.name || 'Usuario')),
-          image: savedReview.image || (reviewForm.isAnonymous ? null : (userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg')),
+          image: freshReviewImage,
           displayTime: savedReview.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       
@@ -1601,26 +1687,32 @@ export default function JobsScreen() {
                              />
                          </View>
 
-                         <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                           <TouchableOpacity 
-                             onPress={() => { setUiPayType('subscription'); if(newCompanyForm.premiumPlan === 'coupon') setNewCompanyForm({...newCompanyForm, premiumPlan: 'basic'}); setFormRefCode(''); }}
-                             style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                           >
-                             <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
-                             <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
-                           </TouchableOpacity>
+                         {/* 🚀 EL CAMUFLAJE: SOLO MOSTRAR OPCIONES DE PAGO SI ES WEB */}
+                         {isWeb && (
+                           <>
+                             <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                               <TouchableOpacity 
+                                 onPress={() => { setUiPayType('coupon'); setNewCompanyForm({...newCompanyForm, premiumPlan: 'coupon'}); setFormRefCode(''); }}
+                                 style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                               >
+                                 <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
+                                 <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
+                               </TouchableOpacity>
 
-                           <TouchableOpacity 
-                             onPress={() => { setUiPayType('coupon'); setNewCompanyForm({...newCompanyForm, premiumPlan: 'coupon'}); setFormRefCode(''); }}
-                             style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                           >
-                             <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
-                             <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
-                           </TouchableOpacity>
-                         </View>
+                               <TouchableOpacity 
+                                 onPress={() => { setUiPayType('subscription'); if(newCompanyForm.premiumPlan === 'coupon') setNewCompanyForm({...newCompanyForm, premiumPlan: 'basic'}); setFormRefCode(''); }}
+                                 style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                               >
+                                 <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
+                                 <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
+                               </TouchableOpacity>
+                             </View>
+                           </>
+                         )}
 
-                         {uiPayType === 'subscription' && (
+                         {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
+                         {uiPayType === 'subscription' && isWeb && (
                            <>
                              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                              <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1686,9 +1778,15 @@ export default function JobsScreen() {
                            </>
                          )}
 
+                         {/* RUTA DE CUPÓN (VISIBLE EN AMBAS, PERO ES LA ÚNICA EN MÓVIL) */}
                          {uiPayType === 'coupon' && (
                            <View style={{ marginBottom: 10 }}>
-                             <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar el registro de tu empresa sin cargos.</ThemedText>
+                             <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>
+                               {isWeb 
+                                 ? "Si dispones de un código promocional, escríbelo en el campo inferior para habilitar el registro de tu empresa sin cargos."
+                                 : "Para registrar tu empresa en nuestro directorio, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
+                               }
+                             </ThemedText>
                            </View>
                          )}
 
@@ -1847,7 +1945,7 @@ export default function JobsScreen() {
 
                     <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>{t.jobstab.shitfdispooued}</ThemedText>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-                        {SHIFT_OPTIONS.map(shift => {
+                        {SHIFT_OPTIONS.map((shift: string) => {
                             const isSelected = newJob.shifts.includes(shift);
                             return (
                                 <TouchableOpacity key={shift} onPress={() => toggleNewJobShift(shift)} style={{ borderRadius: 12, overflow: 'hidden', height: 40, borderWidth: isSelected ? 0 : 1, borderColor: DynamicColors.border }}>
@@ -1906,7 +2004,7 @@ export default function JobsScreen() {
                               onPress={() => { setFilterTitle('Todos'); setShowTitlePickerModal(false); }}>
                               <ThemedText style={{ fontWeight: 'bold', color: filterTitle === 'Todos' ? DynamicColors.accent : DynamicColors.text }}>{t.jobstab.alljob}</ThemedText>
                           </TouchableOpacity>
-                          {availableTitles.map((title, index) => (
+                          {availableTitles.map((title: any, index: number) => (
                               <TouchableOpacity 
                                   key={index} 
                                   style={{ padding: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: filterTitle === title ? DynamicColors.accent : DynamicColors.border }} 
@@ -1931,7 +2029,7 @@ export default function JobsScreen() {
                       <TouchableOpacity style={{ padding: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: filterShift === 'Todos' ? DynamicColors.accent : DynamicColors.border }} onPress={() => { setFilterShift('Todos'); setShowShiftPickerModal(false); }}>
                           <ThemedText style={{ fontWeight: 'bold', color: filterShift === 'Todos' ? DynamicColors.accent : DynamicColors.text }}>{t.jobstab.allshifts}</ThemedText>
                       </TouchableOpacity>
-                      {SHIFT_OPTIONS.map((shift, index) => (
+                      {SHIFT_OPTIONS.map((shift: string, index: number) => (
                           <TouchableOpacity key={index} style={{ padding: 12, backgroundColor: DynamicColors.inputBg, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: filterShift === shift ? DynamicColors.accent : DynamicColors.border }} onPress={() => { setFilterShift(shift); setShowShiftPickerModal(false); }}>
                               <ThemedText style={{ fontWeight: 'bold', color: filterShift === shift ? DynamicColors.accent : DynamicColors.text }}>{shift}</ThemedText>
                           </TouchableOpacity>

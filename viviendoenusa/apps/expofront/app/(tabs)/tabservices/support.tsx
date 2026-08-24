@@ -1,13 +1,16 @@
-import React, { useState, useRef, useEffect, memo } from 'react';
-import { TouchableOpacity, View, ScrollView, Platform, StyleSheet, useWindowDimensions, Animated, Easing, TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert, Modal, KeyboardAvoidingView, ColorValue, Share, Linking } from 'react-native';
+import React, { useState, useRef, useEffect, memo, useCallback } from 'react';
+import { TouchableOpacity, View, ScrollView, Platform, StyleSheet, useWindowDimensions, Animated, Easing, TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert, Modal, KeyboardAvoidingView, ColorValue, Share, Linking, AppState } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useLocalSearchParams } from 'expo-router'; 
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router'; 
+import { useIsFocused } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import MapView from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { createClient } from '@supabase/supabase-js';
+
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
@@ -20,8 +23,54 @@ import { useAppTheme } from 'app/src/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
-const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
 
+// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
+const refreshSupabaseUrl = async (url: string, fallbackFolder = 'support') => {
+  if (!url || typeof url !== 'string' || url.length < 5) return null;
+  if (!supabaseClient) return url;
+
+  if (url.includes('supabase.co')) {
+    let cleanPath = '';
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/images/');
+      if (parts.length > 1) {
+        cleanPath = parts[1]; 
+      } else {
+        cleanPath = url.split('/').pop()?.split('?')[0] || '';
+      }
+    } catch (e) {
+      cleanPath = url.split('/').pop()?.split('?')[0] || '';
+    }
+
+    if (!cleanPath.includes('/')) {
+        cleanPath = `${fallbackFolder}/${cleanPath}`;
+    }
+
+    try {
+      const { data } = await supabaseClient.storage.from('images').createSignedUrl(cleanPath, 604800);
+      return data?.signedUrl || url;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (!url.startsWith('http')) {
+     const path = url.includes('/') ? url : `${fallbackFolder}/${url}`;
+     try {
+       const { data } = await supabaseClient.storage.from('images').createSignedUrl(path, 604800);
+       return data?.signedUrl || url;
+     } catch(e) { return url; }
+  }
+
+  return url; 
+};
+
+const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/support';
@@ -37,25 +86,14 @@ const planStyles: any = {
 // 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  
-  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
-
-  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
-
-      // Comprobación de coincidencia exacta de la palabra aislada
       if (userWord === lowerBanned) return true;
-      
-      // Comprobación de plurales comunes (ej: palabra -> palabras)
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
-
-      // Comprobación con prefijo común (ej: re-palabra)
       if (userWord === `re${lowerBanned}`) return true;
-
       return false;
     });
   });
@@ -109,6 +147,7 @@ const SupportFormModal = memo(({
   t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
   CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height, zelleQrUrl 
 }: any) => {
+  const isWebLocal = Platform.OS === 'web';
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formAddress, setFormAddress] = useState(''); 
@@ -117,12 +156,12 @@ const SupportFormModal = memo(({
   const [formPhone, setFormPhone] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
-  const [formPlan, setFormPlan] = useState('basic');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // 🚀 ESTADOS CLAVE UNIFICADOS
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
+  // 🚀 CAMUFLAJE: Si es Web, permite suscripción por defecto; Si es Móvil, fuerza a Cupón/Gratis.
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWebLocal ? 'subscription' : 'coupon');
+  const [formPlan, setFormPlan] = useState(isWebLocal ? 'basic' : 'coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
 
   const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
@@ -136,8 +175,8 @@ const SupportFormModal = memo(({
   useEffect(() => {
     if (visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
-      setFormImage(null); setFormCategoryIdx(1); setFormPlan('basic');  
-      setFormRefCode(''); setFormPayMethod('Zelle'); setUiPayType('subscription');
+      setFormImage(null); setFormCategoryIdx(1); setFormPayMethod('Zelle');
+      setFormPlan(isWebLocal ? 'basic' : 'coupon'); setUiPayType(isWebLocal ? 'subscription' : 'coupon'); setFormRefCode('');
     }
   }, [visible]);
 
@@ -324,28 +363,32 @@ const SupportFormModal = memo(({
                 <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.subtext} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
 
-              {/* 🚀 NUEVO UX: SELECCIÓN DE MÉTODO (PAGO O CUPÓN) */}
-              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                <TouchableOpacity 
-                  onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                  style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                >
-                  <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                </TouchableOpacity>
+              {/* 🚀 EL CAMUFLAJE: SOLO MOSTRAR OPCIONES DE PAGO SI ES WEB */}
+              {isWebLocal && (
+                <>
+                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                    <TouchableOpacity 
+                      onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                      style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                    >
+                      <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                    </TouchableOpacity>
 
-                <TouchableOpacity 
-                  onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                  style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                >
-                  <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                </TouchableOpacity>
-              </View>
+                    <TouchableOpacity 
+                      onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                      style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                    >
+                      <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
 
-              {/* RUTA DE SUSCRIPCIÓN */}
-              {uiPayType === 'subscription' && (
+              {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
+              {uiPayType === 'subscription' && isWebLocal && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                   <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -371,7 +414,6 @@ const SupportFormModal = memo(({
                       {['Zelle'].map((method) => ( <View key={method} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}><ThemedText style={{ fontWeight: '900', color: Colors.accent }}>{method}</ThemedText></View> ))}
                     </View>
 
-                    {/* 🚀 RENDERIZADO DEL CÓDIGO QR DE ZELLE DESDE SUPABASE */}
                     <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: Colors.border }}>
                       {zelleQrUrl ? (
                         <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
@@ -389,11 +431,15 @@ const SupportFormModal = memo(({
               {/* RUTA DE CUPÓN */}
               {uiPayType === 'coupon' && (
                 <View style={{ marginBottom: 10 }}>
-                  <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>
+                    {isWebLocal 
+                      ? "Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos."
+                      : "Para publicar en nuestra red de apoyo, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
+                    }
+                  </ThemedText>
                 </View>
               )}
 
-              {/* 🚀 EL INPUT CAMALEÓN ÚNICO CON ALTO CONTRASTE */}
               <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                 <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.accent, marginBottom: 10 }}>
                   {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
@@ -442,6 +488,9 @@ export default function SupportScreen() {
   const mapRef = useRef<MapView>(null); 
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
+
+  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
+  const isFocused = useIsFocused();
 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
@@ -1087,7 +1136,7 @@ export default function SupportScreen() {
                         </View>
                       )}
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length + ' ' + (t.genericbtn.results || "resultados")} </ThemedText>}
+                        {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.genericbtn.results || "resultados"} </ThemedText>}
                         {isFilteredByMap && ( <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} /><ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{t.genericbtn.viewall || "Ver todos"}</ThemedText></TouchableOpacity> )}
                         {results.map((store) => <SupportCard key={store.id} store={store} />)}
                       </ScrollView>

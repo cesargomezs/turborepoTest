@@ -1,17 +1,20 @@
-import React, { useState, useMemo, useEffect, useRef, memo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, ActivityIndicator, Share, Linking,
-  Modal as RNModal, KeyboardAvoidingView, ColorValue, Text
+  Modal as RNModal, KeyboardAvoidingView, ColorValue, Text, AppState
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useLocalSearchParams } from 'expo-router'; 
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
+import { createClient } from '@supabase/supabase-js';
+
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
@@ -24,6 +27,53 @@ import { useMockSelector } from '@/redux/slices';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+
+// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
+const refreshSupabaseUrl = async (url: string, fallbackFolder = 'events') => {
+  if (!url || typeof url !== 'string' || url.length < 5) return null;
+  if (!supabaseClient) return url;
+
+  if (url.includes('supabase.co')) {
+    let cleanPath = '';
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/images/');
+      if (parts.length > 1) {
+        cleanPath = parts[1]; 
+      } else {
+        cleanPath = url.split('/').pop()?.split('?')[0] || '';
+      }
+    } catch (e) {
+      cleanPath = url.split('/').pop()?.split('?')[0] || '';
+    }
+
+    if (!cleanPath.includes('/')) {
+        cleanPath = `${fallbackFolder}/${cleanPath}`;
+    }
+
+    try {
+      const { data } = await supabaseClient.storage.from('images').createSignedUrl(cleanPath, 604800);
+      return data?.signedUrl || url;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (!url.startsWith('http')) {
+     const path = url.includes('/') ? url : `${fallbackFolder}/${url}`;
+     try {
+       const { data } = await supabaseClient.storage.from('images').createSignedUrl(path, 604800);
+       return data?.signedUrl || url;
+     } catch(e) { return url; }
+  }
+
+  return url; 
+};
+
 let BANNED_WORDS: string[] = [];
 try {
   BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : [];
@@ -34,24 +84,15 @@ try {
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   
-  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
-
-      // Comprobación de coincidencia exacta de la palabra aislada
       if (userWord === lowerBanned) return true;
-      
-      // Comprobación de plurales comunes (ej: palabra -> palabras)
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
-
-      // Comprobación con prefijo común (ej: re-palabra)
       if (userWord === `re${lowerBanned}`) return true;
-
       return false;
     });
   });
@@ -78,6 +119,8 @@ export default function EventsScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
+  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
+  const isFocused = useIsFocused();
   const stylesUnified = useUnifiedCardStyles();
 
   const INTERNAL_CATEGORIES = t.eventstab.categoriesList;
@@ -154,11 +197,11 @@ export default function EventsScreen() {
   const [formTimeEnd, setFormTimeEnd] = useState(new Date());
   
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
-  const [formPlan, setFormPlan] = useState('basic');
 
-  // 🚀 ESTADOS CLAVE UNIFICADOS
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('subscription');
-  const [formRefCode, setFormRefCode] = useState(''); // Sirve para Zelle Y para el Cupón
+  // 🚀 CAMUFLAJE: En Web permite suscripción por defecto; en Móvil fuerza a Cupón/Gratis
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWeb ? 'subscription' : 'coupon');
+  const [formPlan, setFormPlan] = useState(isWeb ? 'basic' : 'coupon');
+  const [formRefCode, setFormRefCode] = useState(''); 
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -175,7 +218,6 @@ export default function EventsScreen() {
 
   const lastProcessedNotifId = useRef<string | null>(null);
 
-  // 🚀 VALIDACIÓN DINÁMICA DE FORMULARIO
   const isBaseFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
   const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
@@ -207,17 +249,11 @@ export default function EventsScreen() {
     fetchTariff();
   }, []);
 
-  // 🚀 CARGA DEL CÓDIGO QR DE ZELLE DESDE SUPABASE
   useEffect(() => {
     const loadZelleQr = async () => {
       try {
-        const { createClient } = require('@supabase/supabase-js');
-        const supabaseUrlLocal = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-        const supabaseAnonKeyLocal = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-        
-        if (supabaseUrlLocal && supabaseAnonKeyLocal) {
-          const client = createClient(supabaseUrlLocal, supabaseAnonKeyLocal);
-          const { data } = await client.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+        if (supabaseClient) {
+          const { data } = await supabaseClient.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
           if (data?.signedUrl) {
             setZelleQrUrl(data.signedUrl);
           }
@@ -229,18 +265,96 @@ export default function EventsScreen() {
     loadZelleQr();
   }, []);
 
-  useEffect(() => {
-    if (isAdminMode) {
-      fetchEvents('', true);
-    } else {
-      if (!zipCode || zipCode.length !== 5) {
+  const fetchEvents = async (searchZip?: string, forceAdminFetch: boolean = false) => {
+    if (!forceAdminFetch && (!searchZip || searchZip.trim().length !== 5)) return;
+    
+    try {
+      setIsLoadingPosts(true);
+      const url = (searchZip && searchZip.trim().length === 5) 
+          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}` 
+          : API_EVENTS_URL;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      
+      if (res.status === 401) { router.replace('/'); return; }
+      
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        // 🚀 FIRMA AL VUELO MASIVA DE IMÁGENES
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          let formattedDate = '';
+          try {
+            formattedDate = new Date(item.dateEvent).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+          } catch(e) { formattedDate = 'Fecha N/A'; }
+
+          const rawImage = item.imageEven || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'events') : '';
+
+          return {
+            ...item,
+            category: INTERNAL_CATEGORIES[item.categoryIdx] || 'Social',
+            date: formattedDate,
+            time: item.timeStart || 'N/A',
+            timeEnd: item.timeEnd || 'N/A',
+            description: item.descriptionEven || '',
+            image: freshImage,
+            location: item.locationEven || '',
+            referenceCode: item.referenceCode,
+            paymentMethod: item.paymentMethod,
+            premiumPlan: item.premiumPlan,
+            couponCode: item.couponCode
+          };
+        }));
+
+        setEvents(mappedData.filter(e => e.approved === true));
+        setPendingEvents(mappedData.filter(e => e.approved !== true));
+      } else {
         setEvents([]);
         setPendingEvents([]);
-      } else {
-        fetchEvents(zipCode, false);
       }
+    } catch (e) {
+      console.error("Error obteniendo eventos:", e);
+    } finally {
+      setIsLoadingPosts(false);
     }
-  }, [isAdminMode]);
+  };
+
+  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
+  useFocusEffect(
+    useCallback(() => {
+      if (isAdminMode) {
+        fetchEvents('', true);
+      } else {
+        if (!zipCode || zipCode.length !== 5) {
+          setEvents([]);
+          setPendingEvents([]);
+        } else {
+          fetchEvents(zipCode, false);
+        }
+      }
+    }, [isAdminMode, zipCode])
+  );
+
+  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa
+      if (nextAppState === 'active' && isFocused) {
+        console.log("🚀 La app despertó en Eventos. Refrescando imágenes...");
+        if (isAdminMode) {
+          fetchEvents('', true);
+        } else if (zipCode && zipCode.length === 5) {
+          fetchEvents(zipCode, false);
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isFocused, zipCode, isAdminMode]);
 
   useEffect(() => {
     if (eventIdFromNotif) {
@@ -271,6 +385,10 @@ export default function EventsScreen() {
                   formattedDate = new Date(data.dateEvent).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
                 } catch(e) { formattedDate = 'Fecha N/A'; }
 
+                // 🚀 FIRMA AL VUELO PARA EVENTO DESDE NOTIFICACIÓN
+                const rawImage = data.imageEven || data.imageUrl;
+                const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'events') : '';
+
                 const eventMapped = {
                   ...data,
                   category: INTERNAL_CATEGORIES[data.categoryIdx] || 'Social',
@@ -278,7 +396,7 @@ export default function EventsScreen() {
                   time: data.timeStart || 'N/A',
                   timeEnd: data.timeEnd || 'N/A',
                   description: data.descriptionEven || '',
-                  image: data.imageEven || '',
+                  image: freshImage,
                   location: data.locationEven || '',
                 };
 
@@ -288,7 +406,6 @@ export default function EventsScreen() {
                   setZipCode(String(data.zip));
                   fetchEvents(String(data.zip), isAdminMode);
                 }
-
               }
             } catch (e) {
               console.error("❌ Error haciendo fetch al ID del evento:", e);
@@ -298,65 +415,11 @@ export default function EventsScreen() {
         }
       }
     }
-  }, [eventIdFromNotif, events]); 
+  }, [eventIdFromNotif, events, isAdminMode]); 
 
   const handleCloseDetailModal = () => {
     setSelectedEventDetails(null);
     router.setParams({ openEventId: '', id: '', referenceId: '' });
-  };
-
-  const fetchEvents = async (searchZip?: string, forceAdminFetch: boolean = false) => {
-    if (!forceAdminFetch && (!searchZip || searchZip.trim().length !== 5)) return;
-    
-    try {
-      setIsLoadingPosts(true);
-      const url = (searchZip && searchZip.trim().length === 5) 
-          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}` 
-          : API_EVENTS_URL;
-
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
-      });
-      
-      if (res.status === 401) { router.replace('/'); return; }
-      
-      const data = await res.json();
-      
-      if (Array.isArray(data)) {
-        const mappedData = data.map(item => {
-          let formattedDate = '';
-          try {
-            formattedDate = new Date(item.dateEvent).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-          } catch(e) { formattedDate = 'Fecha N/A'; }
-
-          return {
-            ...item,
-            category: INTERNAL_CATEGORIES[item.categoryIdx] || 'Social',
-            date: formattedDate,
-            time: item.timeStart || 'N/A',
-            timeEnd: item.timeEnd || 'N/A',
-            description: item.descriptionEven || '',
-            image: item.imageEven || '',
-            location: item.locationEven || '',
-            referenceCode: item.referenceCode,
-            paymentMethod: item.paymentMethod,
-            premiumPlan: item.premiumPlan,
-            couponCode: item.couponCode
-          };
-        });
-
-        setEvents(mappedData.filter(e => e.approved === true));
-        setPendingEvents(mappedData.filter(e => e.approved !== true));
-      } else {
-        setEvents([]);
-        setPendingEvents([]);
-      }
-    } catch (e) {
-      console.error("Error obteniendo eventos:", e);
-    } finally {
-      setIsLoadingPosts(false);
-    }
   };
 
   const ActionBtn = ({ icon, text, color, bgColor, onPress, minWidth = 100, disabled = false }: any) => (
@@ -484,7 +547,6 @@ export default function EventsScreen() {
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
 
-      // 🚀 ASIGNACIÓN DEL PAYLOAD SEGÚN EL INPUT ÚNICO
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
       const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
 
@@ -601,7 +663,9 @@ export default function EventsScreen() {
     setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormZip('');
     setFormPhone(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
     setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
-    setFormRefCode(''); setFormPayMethod('Zelle'); setFormPlan('basic'); setUiPayType('subscription');
+    setFormRefCode(''); setFormPayMethod('Zelle'); 
+    setFormPlan(isWeb ? 'basic' : 'coupon'); 
+    setUiPayType(isWeb ? 'subscription' : 'coupon');
   };
 
   const filteredEvents = useMemo(() => 
@@ -711,7 +775,6 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                {/* 🚀 NUEVO BOTÓN ADMINISTRADOR PARA EVENTOS */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <TouchableOpacity onPress={() => { setEvents([]); setPendingEvents([]); setZipCode(''); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
@@ -860,7 +923,7 @@ export default function EventsScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* MODAL CREAR EVENTO CON PAGO */}
+      {/* MODAL CREAR EVENTO CON CAMUFLAJE */}
       <RNModal visible={isModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
@@ -999,27 +1062,32 @@ export default function EventsScreen() {
                   <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.iconInactive} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                {/* 🚀 NUEVO UX: SELECCIÓN DE MÉTODO (PAGO O CUPÓN) */}
-                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                  <TouchableOpacity 
-                    onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                  >
-                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                  </TouchableOpacity>
+                {/* 🚀 CAMUFLAJE: EN WEB MUESTRA BOTONES; EN MÓVIL FORZADO A CUPÓN */}
+                {isWeb && (
+                  <>
+                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                      <TouchableOpacity 
+                        onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                        style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                      >
+                        <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                        <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                      </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                  >
-                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                  </TouchableOpacity>
-                </View>
+                      <TouchableOpacity 
+                        onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                        style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                      >
+                        <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                        <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
 
-                {uiPayType === 'subscription' && (
+                {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
+                {uiPayType === 'subscription' && isWeb && (
                   <>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                     <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1080,9 +1148,15 @@ export default function EventsScreen() {
                   </>
                 )}
 
+                {/* RUTA DE CUPÓN (VISIBLE EN AMBAS, PERO ES LA ÚNICA EN MÓVIL) */}
                 {uiPayType === 'coupon' && (
                   <View style={{ marginBottom: 10 }}>
-                    <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>Si dispones de un código promocional o cortesía comunitaria, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
+                    <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>
+                      {isWeb 
+                        ? "Si dispones de un código promocional o cortesía comunitaria, escríbelo en el campo inferior para habilitar tu registro sin cargos."
+                        : "Para publicar tu evento en nuestra cartelera, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
+                      }
+                    </ThemedText>
                   </View>
                 )}
 

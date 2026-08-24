@@ -1,15 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ActivityIndicator,
   Platform, Modal as RNModal, KeyboardAvoidingView,
-  ColorValue
+  ColorValue, AppState // 🚀 IMPORTAMOS AppState
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useSegments } from 'expo-router'; 
+import { useRouter, useSegments, useFocusEffect } from 'expo-router'; // 🚀 IMPORTAMOS useFocusEffect
+import { useIsFocused } from '@react-navigation/native'; // 🚀 IMPORTAMOS useIsFocused
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createClient } from '@supabase/supabase-js'; // 🚀 IMPORTAMOS SUPABASE
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -25,28 +27,68 @@ import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+
+// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
+const refreshSupabaseUrl = async (url: string, fallbackFolder = 'community') => {
+  if (!url || typeof url !== 'string' || url.length < 5) return null;
+  if (!supabaseClient) return url;
+
+  if (url.includes('supabase.co')) {
+    let cleanPath = '';
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/images/');
+      if (parts.length > 1) {
+        cleanPath = parts[1]; 
+      } else {
+        cleanPath = url.split('/').pop()?.split('?')[0] || '';
+      }
+    } catch (e) {
+      cleanPath = url.split('/').pop()?.split('?')[0] || '';
+    }
+
+    if (!cleanPath.includes('/')) {
+        cleanPath = `${fallbackFolder}/${cleanPath}`;
+    }
+
+    try {
+      const { data } = await supabaseClient.storage.from('images').createSignedUrl(cleanPath, 604800);
+      return data?.signedUrl || url;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (!url.startsWith('http')) {
+     const path = url.includes('/') ? url : `${fallbackFolder}/${url}`;
+     try {
+       const { data } = await supabaseClient.storage.from('images').createSignedUrl(path, 604800);
+       return data?.signedUrl || url;
+     } catch(e) { return url; }
+  }
+
+  return url; 
+};
+
 // --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   
-  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
 
-      // Comprobación de coincidencia exacta de la palabra aislada
       if (userWord === lowerBanned) return true;
-      
-      // Comprobación de plurales comunes (ej: palabra -> palabras)
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
-
-      // Comprobación con prefijo común (ej: re-palabra)
       if (userWord === `re${lowerBanned}`) return true;
 
       return false;
@@ -54,7 +96,6 @@ const containsBadWords = (text: string): boolean => {
   });
 };
 
-// 🚀 PARSER DEFINITIVO Y A PRUEBA DE BALAS PARA REACT NATIVE
 const parseSafeDate = (dateString: string | Date) => {
   if (!dateString) return new Date();
   const s = dateString.toString();
@@ -76,7 +117,6 @@ const parseSafeDate = (dateString: string | Date) => {
   return isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
-// 🚀 CÁLCULO DE TIEMPO RELATIVO
 const getRelativeTime = (dateString: string | Date) => {
   const past = parseSafeDate(dateString);
   const now = new Date();
@@ -95,7 +135,6 @@ const getRelativeTime = (dateString: string | Date) => {
   return past.toLocaleDateString();
 };
 
-// 📡 URL BASE PARA LA COMUNIDAD
 const API_COMMUNITY_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/community'; 
 
 export default function CommunityScreen() {
@@ -107,11 +146,13 @@ export default function CommunityScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
+  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
+  const isFocused = useIsFocused();
+
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
-  const userToken = userMetadata?.token || userMetadata?.accessToken; // 🚀 Extraemos el Token
+  const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
-  // 🚀 REDIRECCIÓN INMEDIATA SI NO HAY TOKEN (Ni siquiera intenta renderizar llamadas)
   useEffect(() => {
     if (!userToken) {
       router.replace('/');
@@ -218,30 +259,39 @@ export default function CommunityScreen() {
       const apiData = JSON.parse(textResponse);
       
       if (Array.isArray(apiData)) {
-        const formattedPosts = apiData.map((p: any) => ({
-          ...p,
-          likes: p.likes || 0,
-          dislikes: p.dislikes || 0,
-          userVote: p.userVote || null, 
-          createdAt: p.createdAt || new Date().toISOString(), 
-          displayTime: p.createdAt ? getRelativeTime(p.createdAt) : 'Hace un momento'
+        // 🚀 FIRMAMOS TODAS LAS IMÁGENES AL VUELO (POSTS Y COMENTARIOS)
+        const formattedPosts = await Promise.all(apiData.map(async (p: any) => {
+          const freshImage = p.imageUrl ? await refreshSupabaseUrl(p.imageUrl, 'community') : null;
+
+          return {
+            ...p,
+            image: freshImage,
+            likes: p.likes || 0,
+            dislikes: p.dislikes || 0,
+            userVote: p.userVote || null, 
+            createdAt: p.createdAt || new Date().toISOString(), 
+            displayTime: p.createdAt ? getRelativeTime(p.createdAt) : 'Hace un momento'
+          };
         }));
         
         setPosts(formattedPosts);
         
         const commentsMap: Record<string, any[]> = {};
-        formattedPosts.forEach((p: any) => {
+        await Promise.all(formattedPosts.map(async (p: any) => {
           if (p.commentsList && Array.isArray(p.commentsList)) {
-            commentsMap[p.id] = p.commentsList.map((c: any) => ({
-              id: c.id,
-              text: c.comment || c.review || c.text || '',
-              createdAt: c.createdAt || new Date().toISOString(),
-              displayTime: c.createdAt ? getRelativeTime(c.createdAt) : 'Hace un momento',
-              userName: c.userName || 'Usuario Anónimo',
-              image: c.image || null
+            commentsMap[p.id] = await Promise.all(p.commentsList.map(async (c: any) => {
+              const freshReviewImage = c.image ? await refreshSupabaseUrl(c.image, 'users') : null;
+              return {
+                id: c.id,
+                text: c.comment || c.review || c.text || '',
+                createdAt: c.createdAt || new Date().toISOString(),
+                displayTime: c.createdAt ? getRelativeTime(c.createdAt) : 'Hace un momento',
+                userName: c.userName || 'Usuario Anónimo',
+                image: freshReviewImage
+              };
             }));
           }
-        });
+        }));
         setComments(commentsMap);
 
       } else {
@@ -254,8 +304,29 @@ export default function CommunityScreen() {
     }
   };
 
+  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
+  useFocusEffect(
+    useCallback(() => {
+      if (zipCode && zipCode.length === 5) {
+        fetchCommunityPosts(zipCode);
+      }
+    }, [zipCode])
+  );
+
+  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
-  }, []);
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa en la pantalla
+      if (nextAppState === 'active' && isFocused) {
+        console.log("🚀 La app despertó en Comunidad. Refrescando posts...");
+        if (zipCode && zipCode.length === 5) {
+          fetchCommunityPosts(zipCode);
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isFocused, zipCode]); // Depende de que sea la pestaña actual
 
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) { window.alert(`${title}\n${message}`); } 
@@ -274,13 +345,12 @@ export default function CommunityScreen() {
     const trimmedText = postText.trim();
     if (!trimmedText || isPublishing) return;
 
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS PARA EL POST
     if (containsBadWords(trimmedText)) {
       triggerAlert(
         "Contenido Inapropiado", 
         "Hemos detectado lenguaje inapropiado en tu publicación. Por favor, modifícalo para mantener un ambiente de respeto."
       );
-      return; // Detiene la ejecución aquí mismo
+      return; 
     }
 
     setIsPublishing(true);
@@ -396,7 +466,6 @@ export default function CommunityScreen() {
     const trimmed = commentText.trim();
     if (!trimmed || !activeCommentId) return;
 
-    // 🚀 NUEVA VALIDACIÓN ANTI-GROSERÍAS PARA EL COMENTARIO
     if (containsBadWords(trimmed)) {
       triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
       return;
@@ -425,7 +494,6 @@ export default function CommunityScreen() {
 
       const rawCreatedAt = savedReview.createdAt || new Date().toISOString();
 
-      // 🚀 AQUÍ ESTÁ EL AJUSTE: Mapeamos la foto y el nombre real desde el backend
       const newLocalComment = {
         id: savedReview.id || Date.now(),
         text: trimmed,
