@@ -5,9 +5,8 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
 import { imag } from "@tensorflow/tfjs";
 import { logAuditEvent } from "../services/audit.service.js";
-import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import zipcodes from 'zipcodes'; 
 import ws from "ws";
-
 
 if (!(global as any).WebSocket) {
   (global as any).WebSocket = ws;
@@ -15,7 +14,7 @@ if (!(global as any).WebSocket) {
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
+const radiusMiles = process.env.RADIUMILE || 20; 
 export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 })
@@ -28,7 +27,6 @@ const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
   
-  // 🚀 bypass de TypeScript con as any
   const locationInfo = zipcodes.lookup(zip as any);
   
   if (locationInfo) {
@@ -125,7 +123,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (Refactorizada con zipcodes)
+// 🔍 1. CONSULTA GENERAL
 // =====================================================================
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
@@ -137,7 +135,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 
     let finalConditions: any = baseConditions;
 
-    // 🚀 LÓGICA DE GEOFENCING SÚPER RÁPIDA
     if (cleanZipParam && cleanZipParam.length === 5) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
@@ -340,7 +337,7 @@ const sendTelegramAlert = async (lawyerName: string, refCode: string, method: st
 };
 
 // =====================================================================
-// 📥 3. CREAR ABOGADO (VALIDACIÓN DE CUPÓN BLINDADA)
+// 📥 3. CREAR ABOGADO (VALIDACIÓN DE CUPÓN Y FECHA BLINDADA)
 // =====================================================================
 export const createLawyer = async (req: Request, res: Response) => {
   const reqAny = req as any;
@@ -350,7 +347,6 @@ export const createLawyer = async (req: Request, res: Response) => {
   const headerEstate = reqAny.headers?.['estate'] || reqAny.headers?.['Estate'];
 
   try {
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
     const validUserId = sanitizeText(data.userId);
     if (!validUserId) {
       return resAny.status(400).json({ error: "El ID del usuario es obligatorio para registrar un abogado." });
@@ -374,10 +370,14 @@ export const createLawyer = async (req: Request, res: Response) => {
       // 🚀 1. DETECTAR SI ES CUPÓN
       const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-      // 🚀 2. EXTRAER EL CÓDIGO REAL (Usamos directamente lo que mandó el front o limpiamos la referencia)
+      // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS
+      let isApproved = false;
+      let expirationDate = null;
+      let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
+
+      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS Y ASIGNACIÓN DE FECHA
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
@@ -390,6 +390,16 @@ export const createLawyer = async (req: Request, res: Response) => {
         if (promo.isUsed) {
           throw new Error("Este cupón ya fue utilizado anteriormente.");
         }
+
+        // Si es válido, lo aprobamos de una vez
+        isApproved = true;
+        
+        // 🚀 CALCULAMOS LA FECHA DE VENCIMIENTO (+1 MES)
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        expirationDate = d;
+
+        customMessage = "¡Cupón VIP aplicado! Tu perfil ha sido aprobado y publicado por 1 mes.";
       }
 
       // Si pasa la validación, armamos el perfil
@@ -406,31 +416,45 @@ export const createLawyer = async (req: Request, res: Response) => {
         lng: data.lng ? Number(data.lng) : lng, 
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
         userId: validUserId, 
-        approved: isCoupon ? true : false, // 👈 Si es cupón, nace aprobado
+        approved: isApproved,             // 👈 Se guarda aprobado
+        timepostEnd: expirationDate,      // 👈 Se guarda la fecha de +1 mes limpia
         estate: finalEstate 
       };
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint)
+      // 🚀 4. GUARDAR EL PAGO (Usando la Referencia Limpia)
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentLawyerPrice();
         
-        // Si es cupón, le añadimos la fecha a la referencia en la tabla de pagos 
-        // para que la BD no explote por "referencia duplicada"
-        const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
-
-        await tx.insert(payments).values({
+        // Armamos el payload base sin mandar "null" para no enojar a Drizzle
+        const paymentPayload: any = {
           entityType: 'lawyer',
           entityId: newLawyer.id,
           userId: validUserId,
-          referenceCode: safePaymentReference, 
+          referenceCode: realPromoCode || codigoReferencia, 
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
-          amount: isCoupon ? "0.00" : (data.tariffPlan || basePrice), 
+          amount: String(isCoupon ? "0.00" : (data.tariffPlan || basePrice)), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending", 
-          approvedAt: isCoupon ? new Date() : null
-        });
+          status: isCoupon ? "approved" : "pending"
+        };
+
+        // Asignamos las fechas solo si aplican (Cupón)
+        if (isCoupon) {
+          paymentPayload.approvedAt = new Date();
+        }
+        
+        // Verificamos dinámicamente el nombre de la columna para evitar errores de TS
+        if (expirationDate) {
+          if ('timepostEnd' in payments) {
+            paymentPayload.timepostEnd = expirationDate;
+          } else if ('timepost_end' in payments) {
+            paymentPayload.timepost_end = expirationDate;
+          }
+        }
+
+        // Ejecutamos el insert
+        await tx.insert(payments).values(paymentPayload);
       }
 
       // 🚀 5. QUEMAR EL CUPÓN PARA QUE NO SE VUELVA A USAR
@@ -451,10 +475,12 @@ export const createLawyer = async (req: Request, res: Response) => {
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
-         descriptionLawy: safeDesc
+         descriptionLawy: safeDesc,
+         message: customMessage // 👈 Enviamos este mensaje al Front
       };
     });
 
+    // 🚀 6. NOTIFICAR AL ADMIN SOLO SI NO FUE CON CUPÓN
     if (createdLawyerResult && createdLawyerResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdLawyerResult.nameLawy, 
@@ -473,7 +499,7 @@ export const createLawyer = async (req: Request, res: Response) => {
        return resAny.status(409).json({ error: "El código de referencia de pago ya está en uso." });
     }
 
-    // Le devolvemos el error exacto al usuario (ej: "El cupón no existe")
+    // Le devolvemos el error exacto al usuario (ej: "El cupón es inválido")
     return resAny.status(400).json({ error: error.message || "Error al crear el abogado." });
   }
 };
@@ -660,7 +686,7 @@ export const updateLawyer = async (req: Request, res: Response) => {
 };
 
 // =====================================================================
-// 🚀 5. INGRESO DE RATING Y RESEÑA (CORREGIDO)
+// 🚀 5. INGRESO DE RATING Y RESEÑA
 // =====================================================================
 export const createRating = async (data: any) => {
   try {
@@ -736,7 +762,6 @@ export const createRating = async (data: any) => {
       savedComment = reviewRows[0].comment || '';
     }
 
-    // 🚀 NUEVO: Consultamos el nombre y la foto del usuario en la BD para devolverlos
     const [userRecord] = await db.select({
       name: users.name,
       lastName: users.lastName,
@@ -760,7 +785,6 @@ export const createRating = async (data: any) => {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
-      // 🚀 Enviamos la información visual al frontend
       name: formattedName,
       image: signedImageUrl,
       displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -796,7 +820,6 @@ export const renewLawyer = async (id: string, data: any) => {
     const refCode = sanitizeText(data.referenceCode);
     const payMethod = sanitizeText(data.paymentMethod);
 
-    // 🚀 VALIDACIÓN ESTRICTA
     const validUserId = sanitizeText(data.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para renovar.");
@@ -812,7 +835,7 @@ export const renewLawyer = async (id: string, data: any) => {
       await tx.insert(payments).values({
         entityType: 'lawyer',
         entityId: cleanId,
-        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
+        userId: validUserId, 
         referenceCode: refCode, 
         paymentMethod: payMethod, 
         amount: basePrice, 

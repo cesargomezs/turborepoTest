@@ -166,7 +166,7 @@ export default function JobsScreen() {
   const planStyles: any = {
     coupon: {
       selected: '#EA8D2D', 
-      unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)',
+      unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(234, 141, 45, 0.08)',
       text: (isDark: boolean) => isDark ? '#FFF' : '#333',
     },
     basic: {
@@ -530,6 +530,7 @@ export default function JobsScreen() {
     return SUGGESTED_TITLES[activeFilter] || [];
   }, [activeFilter, SUGGESTED_TITLES]);
 
+  // 🚀 HELPER MULTIPLATAFORMA ALERTA WEB Y APP
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) { window.alert(`${title}\n${message}`); } 
     else { Alert.alert(title, message); }
@@ -661,7 +662,9 @@ export default function JobsScreen() {
       }
 
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : newCompanyForm.premiumPlan;
-      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
+      
+      // 🚀 LIMPIEZA TOTAL DEL CUPÓN FRONTEND (Sin "COUPON-")
+      const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
       const payload = {
         userId: currentUserId,
@@ -691,12 +694,17 @@ export default function JobsScreen() {
 
       if (res.status === 401) { setIsCreatingCompany(false); router.replace('/'); return; }
 
+      const savedCompany = await res.json();
+      
+      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Error al registrar la empresa");
+        throw new Error(savedCompany.error || "Error al registrar la empresa");
       }
 
-      const savedCompany = await res.json();
+      // 🚀 PARCHE BOOLEANO ESTRICTO (Detecta si nació aprobada por el cupón)
+      const isBackendApproved = String(savedCompany.status) === 'approved' || savedCompany.isVerified === true;
+      
+      // Añadir directamente a las empresas del usuario en memoria
       setUserCompanies(prev => [savedCompany, ...prev]);
       
       setNewJob(prev => ({ 
@@ -713,7 +721,19 @@ export default function JobsScreen() {
       setUiPayType(isWeb ? 'subscription' : 'coupon');
       setFormPayMethod('Zelle');
       setPublishView('form');
-      triggerAlert("Suscripción en Revisión", "Tu empresa ha sido registrada. Podrás publicar en cuanto verifiquemos tu suscripción Premium.");
+      
+      // 🚀 ALERTA DIFERIDA PARA EVITAR CONGELAMIENTO EN WEB
+      setTimeout(() => {
+        let successMsg = "";
+        if (savedCompany.message) {
+           successMsg = savedCompany.message;
+        } else if (uiPayType === 'coupon' || isBackendApproved) {
+           successMsg = '¡Cupón aplicado! Tu empresa ha sido verificada y activada.';
+        } else {
+           successMsg = "Tu empresa ha sido registrada. Podrás publicar en cuanto verifiquemos tu suscripción.";
+        }
+        triggerAlert('Éxito', successMsg);
+      }, 150);
       
     } catch (e: any) {
       triggerAlert("Error", e.message || "No se pudo registrar la empresa.");

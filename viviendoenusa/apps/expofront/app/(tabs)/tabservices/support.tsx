@@ -141,7 +141,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
-// 🚀 MODAL EXTRAÍDO PARA EVITAR REFRESCO DE LA PANTALLA PRINCIPAL AL ESCRIBIR
+// 🚀 MODAL DE REGISTRO
 const SupportFormModal = memo(({
   visible, onClose, onSuccess, currentUserId, userToken, userMetadata, companyTariffs,
   t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
@@ -172,6 +172,12 @@ const SupportFormModal = memo(({
   const before = parts[0] || "";
   const after = parts[1] || ""; 
 
+  // 🚀 HELPER ALERTA COMPATIBLE CON WEB
+  const triggerAlert = (title: string, message: string) => {
+    if (isWebLocal) window.alert(`${title}\n${message}`); 
+    else Alert.alert(title, message);
+  };
+
   useEffect(() => {
     if (visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
@@ -187,18 +193,18 @@ const SupportFormModal = memo(({
 
   const handlePublishStore = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5) { 
-      return Platform.OS === 'web' ? window.alert(t.genericlabel.labelfields) : Alert.alert("Atención", t.genericlabel.labelfields); 
+      return triggerAlert('Atención', t.genericlabel.labelfields); 
     }
 
     if (!formRefCode.trim()) {
-      const errorMsg = uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.";
-      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Atención", errorMsg);
+      const errorMsg = uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.";
+      return triggerAlert("Atención", errorMsg);
     }
 
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
     if (containsBadWords(contentToValidate)) {
       const errorMsg = t.genericlabel.labelinapro || "Contenido inapropiado detectado.";
-      return Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Atención", errorMsg);
+      return triggerAlert("Atención", errorMsg);
     }
 
     setIsPublishing(true);
@@ -207,9 +213,7 @@ const SupportFormModal = memo(({
       if (formImage) {
         if (!(await validarImagenEnServidor(formImage))) { 
           setIsPublishing(false); 
-          if (Platform.OS === 'web') { window.alert(`Error\n${t.genericlabel.labelerrorimageinapro}`); } 
-          else { Alert.alert("Error", t.genericlabel.labelerrorimageinapro); } 
-          return; 
+          return triggerAlert("Error", t.genericlabel.labelerrorimageinapro);
         }
 
         const formData = new FormData(); 
@@ -245,13 +249,16 @@ const SupportFormModal = memo(({
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
-      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
+      
+      // 🚀 LIMPIEZA TOTAL DEL CUPÓN (Sin "COUPON-")
+      const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
+      // 🚀 VARIABLES AJUSTADAS AL BACKEND (nameSupp, descriptionSupp, etc.)
       const payload = { 
         nameSupp: formName.trim(),
         descriptionSupp: formDesc.trim(), 
         addressSupp: formAddress.trim(), 
-        categoryId: formCategoryIdx, 
+        categoryId: String(formCategoryIdx), 
         zip: formZip.trim(), 
         imageSupp: finalImageName, 
         lat, 
@@ -279,13 +286,18 @@ const SupportFormModal = memo(({
       if (response.status === 401) { setIsPublishing(false); return; }
       
       const savedFromDB = await response.json();
+
+      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!response.ok) throw new Error(savedFromDB.error || t.genericlabel.labelerrorsave);
+
+      // 🚀 PARCHE BOOLEANO ESTRICTO
+      const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEntryLocal = { 
         id: savedFromDB.id, 
-        name: savedFromDB.nameSupp, 
-        description: savedFromDB.descriptionSupp, 
-        address: savedFromDB.addressSupp, 
+        name: savedFromDB.nameSupp || savedFromDB.name, 
+        description: savedFromDB.descriptionSupp || savedFromDB.description, 
+        address: savedFromDB.addressSupp || savedFromDB.address, 
         categoryId: savedFromDB.categoryId, 
         image: formImage || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800', 
         lat, 
@@ -294,19 +306,29 @@ const SupportFormModal = memo(({
         reviews: [], 
         totalReviews: 0, 
         phone: savedFromDB.phone, 
-        status: 'pending', 
+        status: isBackendApproved ? 'approved' : 'pending', // 👈 Status seguro
         userId: currentUserId, 
-        timepostEnd: null,
+        timepostEnd: savedFromDB.timepostEnd || null,
         premiumPlan: finalPlan, 
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', 
         referenceCode: finalRefCode, 
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod
       };
 
+      // 🚀 CERRAMOS MODAL
       onSuccess(newEntryLocal, formZip);
-      Platform.OS === 'web' ? window.alert(t.supporttab.labelcheck) : Alert.alert(t.genericlabel.labelsendreq, t.supporttab.labelcheck);
+
+      // 🚀 ALERTA DIFERIDA
+      setTimeout(() => {
+        let successMsg = "";
+        if (savedFromDB.message) successMsg = savedFromDB.message;
+        else if (uiPayType === 'coupon' || isBackendApproved) successMsg = '¡Cupón aplicado! Tu registro ha sido procesado con éxito.';
+        else successMsg = t.supporttab?.labelcheck || 'Enviado con éxito, pendiente de revisión de pago.';
+        triggerAlert('Éxito', successMsg);
+      }, 150);
+
     } catch (err: any) { 
-      Alert.alert("Error", err.message || t.genericlabel.labelerrorsend); 
+      triggerAlert("Error", err.message || t.genericlabel.labelerrorsend); 
     } finally { 
       setIsPublishing(false); 
     }
@@ -387,7 +409,7 @@ const SupportFormModal = memo(({
                 </>
               )}
 
-              {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
+              {/* RUTA DE SUSCRIPCIÓN */}
               {uiPayType === 'subscription' && isWebLocal && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
@@ -431,15 +453,11 @@ const SupportFormModal = memo(({
               {/* RUTA DE CUPÓN */}
               {uiPayType === 'coupon' && (
                 <View style={{ marginBottom: 10 }}>
-                  <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>
-                    {isWebLocal 
-                      ? "Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos."
-                      : "Para publicar en nuestra red de apoyo, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
-                    }
-                  </ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
                 </View>
               )}
 
+              {/* 🚀 EL INPUT CAMALEÓN */}
               <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                 <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.accent, marginBottom: 10 }}>
                   {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
@@ -489,12 +507,10 @@ export default function SupportScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
-  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
-
-  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken;
+  const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
@@ -556,13 +572,8 @@ export default function SupportScreen() {
   useEffect(() => {
     const loadZelleQr = async () => {
       try {
-        const { createClient } = require('@supabase/supabase-js');
-        const supabaseUrlLocal = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-        const supabaseAnonKeyLocal = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-        
-        if (supabaseUrlLocal && supabaseAnonKeyLocal) {
-          const client = createClient(supabaseUrlLocal, supabaseAnonKeyLocal);
-          const { data } = await client.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+        if (supabaseClient) {
+          const { data } = await supabaseClient.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
           if (data?.signedUrl) {
             setZelleQrUrl(data.signedUrl);
           }
@@ -576,11 +587,14 @@ export default function SupportScreen() {
 
   const applyLocalFilters = (supportList: any[], categoryIdx: number, lat: number, lng: number) => {
     let filtered = (categoryIdx === 0) ? [...supportList] : supportList.filter(l => Number(l.categoryId) === categoryIdx);
+    
+    // 🚀 FILTRO ESTRÍCTO PARA EVITAR VER VENCIDOS
     filtered = filtered.filter(item => {
       const isOwner = item.userId === currentUserId;
       const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) ? new Date(item.timepostEnd) < new Date() : false;
       return isOwner || !isExpired; 
     });
+    
     filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
     return filtered;
   };
@@ -659,10 +673,17 @@ export default function SupportScreen() {
 
       const data = await res.json();
       if (Array.isArray(data)) {
-        const mappedData = data.map(item => ({
-          id: item.id, name: item.nameSupp || 'Sin nombre', description: item.descriptionSupp || '', address: item.addressSupp || '', categoryId: item.categoryId || 0, zip: item.zip, image: item.imageSupp || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
-          lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
-          status: item.approved ? 'approved' : 'pending', ownerName: item.ownerName, premiumPlan: item.premiumPlan, couponCode: item.couponCode, referenceCode: item.referenceCode, paymentMethod: item.paymentMethod, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.imageSupp || item.image || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'support') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
+
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
+
+          return {
+            id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
+            lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
+            status: isAppr ? 'approved' : 'pending', ownerName: item.ownerName, premiumPlan: item.premiumPlan, couponCode: item.couponCode, referenceCode: item.referenceCode, paymentMethod: item.paymentMethod, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+          };
         }));
         setPendingStores(mappedData.filter(s => s.status === 'pending'));
       }
@@ -681,10 +702,17 @@ export default function SupportScreen() {
 
       const data = await res.json();
       if (Array.isArray(data)) {
-        const mappedData = data.map(item => ({
-          id: item.id, name: item.nameSupp || 'Sin nombre', description: item.descriptionSupp || '', address: item.addressSupp || '', categoryId: item.categoryId || 0, zip: item.zip, image: item.imageSupp || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800',
-          lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
-          status: item.approved ? 'approved' : 'pending', ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.imageSupp || item.image || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'support') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
+
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
+
+          return {
+            id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
+            lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
+            status: isAppr ? 'approved' : 'pending', ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+          };
         }));
         const approved = mappedData.filter(s => s.status === 'approved');
         setAllStores(approved);
@@ -729,7 +757,13 @@ export default function SupportScreen() {
             
             if (res.ok) {
               const data = await res.json();
-              const mappedSupport = { ...data, name: data.nameSupp || data.name || 'Sin nombre', description: data.descriptionSupp || data.description || '', address: data.addressSupp || data.address || '', image: data.imageSupp || data.image || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800', lat: Number(data.lat) || 34.0934, lng: Number(data.lng) || -117.5847 };
+              
+              const rawImage = data.imageSupp || data.image || data.imageUrl;
+              const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'support') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
+
+              const isAppr = String(data.approved) === 'true' || data.approved === 1 || data.approved === true;
+
+              const mappedSupport = { ...data, name: data.nameSupp || data.name || 'Sin nombre', description: data.descriptionSupp || data.description || '', address: data.addressSupp || data.address || '', image: freshImage, lat: Number(data.lat) || 34.0934, lng: Number(data.lng) || -117.5847, status: isAppr ? 'approved' : 'pending' };
               syncSearchAndDetail(mappedSupport);
             }
           } catch (e) { }
@@ -805,8 +839,11 @@ export default function SupportScreen() {
   const SupportCard = ({ store, renderAdminControls }: { store: any, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
+    
+    // 🚀 BOOLEANO ESTRICTO APLICADO AQUÍ TAMBIÉN
     const isPending = store.status === 'pending';
     const isOwner = store.userId === currentUserId;
+    
     const isExpired = (store.timepostEnd && new Date(store.timepostEnd).getFullYear() > 1970) ? new Date(store.timepostEnd) < new Date() : false;
     const fadeCard = isExpired && !isPending;
     const safeRating = Number(store.rating) || 0;
@@ -818,7 +855,7 @@ export default function SupportScreen() {
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden' as 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : DynamicColors.border }}>
         
-        {/* 🚀 AÑADIDO: EFECTO OFUSCAR PARA PENDIENTES */}
+        {/* 🚀 EFECTO OFUSCAR PARA PENDIENTES */}
         {isPending && !isAdminMode && (
           <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
         )}
@@ -839,7 +876,7 @@ export default function SupportScreen() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.5 : 1 }}>
             <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}><MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.genericbtn?.reviews || "Reseñas"} {reviewCount > 0 ? `(${formattedCount})` : ''}</ThemedText></TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}><MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.genericbtn.route}</ThemedText></TouchableOpacity>
-            <TouchableOpacity onPress={() => !isPending && Linking.openURL(`tel:${store.phone}`)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}><MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.genericbtn.call}</ThemedText></TouchableOpacity>
+            <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${store.phone}`)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}><MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.genericbtn.call}</ThemedText></TouchableOpacity>
           </View>
           {renderAdminControls && renderAdminControls()}
         </View>
@@ -857,7 +894,7 @@ export default function SupportScreen() {
         {store.couponCode ? ( <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}><MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" /><ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>Cupón: <ThemedText style={{color: '#4CAF50', fontWeight: '900'}}>{store.couponCode}</ThemedText></ThemedText></View> ) : null}
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}><MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" /><ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{store.referenceCode || 'N/A'}</ThemedText> ({store.paymentMethod || 'Pago'})</ThemedText></View>
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-            {[1, 3, 6, 12].map(m => ( <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}><ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText></TouchableOpacity> ))}
+            {[1, 3, 6, 12].map(m => ( <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}><ThemedText style={{color: selectedMonths === m ? '#FFFFFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText></TouchableOpacity> ))}
         </View>
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
           <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, flexDirection: 'row', backgroundColor: '#FF5252', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
@@ -918,7 +955,9 @@ export default function SupportScreen() {
                 {!isWeb &&
                <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="share-variant" size={22} color="#FFF" /></TouchableOpacity>
                 }
-               <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="close" size={24} color="#FFF" /></TouchableOpacity>
+               <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}>
+                 <MaterialCommunityIcons name="close" size={24} color="#FFF" />
+               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ padding: 25 }}>
@@ -1040,7 +1079,6 @@ export default function SupportScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}><MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} /></TouchableOpacity>
                   
-                  {/* 🚀 BOTÓN ADMIN PRENDER/APAGAR AÑADIDO (COMO EN LAS OTRAS SECCIONES) */}
                   <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
                     <MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
                   </TouchableOpacity>
@@ -1056,7 +1094,7 @@ export default function SupportScreen() {
                       {pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)}
                     </View>
                   )}
-                  <TouchableOpacity activeOpacity={0.9} onPress={() => Linking.openURL('tel:988')} style={{ marginBottom: 15 }}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => RNLinking.openURL('tel:988')} style={{ marginBottom: 15 }}>
                     <LinearGradient colors={['#FF416C', '#FF4B2B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center' }}>
                       <View style={{ position: 'relative', width: 48, height: 48, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
                         <Animated.View style={{ position: 'absolute', width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: '#FFFFFF', transform: [{ scale: pulseRingAnim }], opacity: pulseOpacityAnim }} />
@@ -1105,7 +1143,7 @@ export default function SupportScreen() {
               ) : (
                 <View style={{ flex: 1, flexDirection: 'row' }}>
                   <View style={stylesUnified.webSidebar}>
-                    <TouchableOpacity activeOpacity={0.9} onPress={() => Linking.openURL('tel:988')} style={{ marginBottom: 20 }}>
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => RNLinking.openURL('tel:988')} style={{ marginBottom: 20 }}>
                       <LinearGradient colors={['#FF416C', '#FF4B2B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 16, padding: 15, flexDirection: 'row', alignItems: 'center' }}>
                         <View style={{ position: 'relative', width: 40, height: 40, justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
                            <Animated.View style={{ position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#FFFFFF', transform: [{ scale: pulseRingAnim }], opacity: pulseOpacityAnim }} />

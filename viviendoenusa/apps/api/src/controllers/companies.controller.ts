@@ -139,6 +139,9 @@ export const getCompanyById = async (id: string) => {
   }
 };
 
+// =====================================================================
+// 📥 CREAR EMPRESA (CUPÓN LIMPIO + AUTO-APROBACIÓN + 1 MES)
+// =====================================================================
 export const createCompany = async (data: any) => {
   try {
     const createdCompanyResult = await db.transaction(async (tx) => {
@@ -169,11 +172,15 @@ export const createCompany = async (data: any) => {
       const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
       const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-      // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
+      // 🚀 1. MAGIA DEL CUPÓN
       const isCoupon = selectedPlan === 'coupon' || metodoPago === 'coupon' || selectedPlan === 'cupon' || metodoPago === 'cupon';
 
-      // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
+      // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO (Quita el 'COUPON-' que pueda mandar el front)
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
+
+      let isApproved = false;
+      let expirationDate: Date | null = null;
+      let customMessage = "Suscripción en Revisión. Tu empresa ha sido registrada.";
 
       // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
       if (isCoupon) {
@@ -184,6 +191,13 @@ export const createCompany = async (data: any) => {
         
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+
+        // Nace aprobado por usar cupón
+        isApproved = true;
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1); // +1 mes de duración
+        expirationDate = d;
+        customMessage = "¡Cupón VIP aplicado! Tu empresa ha sido verificada y activada por 1 mes.";
       }
       
       const companyPayload: any = {
@@ -196,34 +210,45 @@ export const createCompany = async (data: any) => {
         email: sanitizeText(data.email) || null,
         website: sanitizeText(data.website) || null,
         logoUrl: finalLogoUrl, 
-        isVerified: isCoupon ? true : false, // 👈 Si es cupón, nace verificada
-        premiumPlan: isCoupon ? 'coupon' : selectedPlan, // 👈 Ajuste dinámico del plan
-        status: isCoupon ? 'approved' : 'pending', // 👈 Si es cupón, nace aprobada
+        isVerified: isApproved, // 👈 Si es cupón, nace verificada
+        premiumPlan: isCoupon ? 'coupon' : selectedPlan, 
+        status: isApproved ? 'approved' : 'pending', // 👈 Si es cupón, nace aprobada
       };
+
+      // Inyectar fecha de expiración dinámicamente
+      if (expirationDate) {
+        if ('timepostEnd' in companies) companyPayload.timepostEnd = expirationDate;
+        else if ('timepost_end' in companies) companyPayload.timepost_end = expirationDate;
+      }
 
       const [newCompany] = await tx.insert(companies).values(companyPayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint)
+      // 🚀 4. GUARDAR EL PAGO (Usando `any` para evitar error de TypeScript Overload)
       if (codigoReferencia || realPromoCode) {
         const prices = await getCurrentCompanyPrices();
         let amountToPay = prices.basic;
         if (selectedPlan === 'premium') amountToPay = prices.premium;
         if (selectedPlan === 'unlimited') amountToPay = prices.unlimited;
 
-        // Modificamos la referencia si es un cupón para evitar colisiones en Postgres
-        const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
-
-        await tx.insert(payments).values({
+        const paymentPayload: any = {
           entityType: 'company',
           entityId: newCompany.id,
           userId: validUserId,
-          referenceCode: safePaymentReference, 
+          referenceCode: realPromoCode || codigoReferencia, // 👈 Cupón Limpio
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
-          amount: isCoupon ? "0.00" : amountToPay, // 👈 Monto cero si es cupón
+          amount: String(isCoupon ? "0.00" : amountToPay), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
-          approvedAt: isCoupon ? new Date() : null
-        });
+          status: isCoupon ? "approved" : "pending"
+        };
+
+        if (isCoupon) paymentPayload.approvedAt = new Date();
+
+        if (expirationDate) {
+          if ('timepostEnd' in payments) paymentPayload.timepostEnd = expirationDate;
+          else if ('timepost_end' in payments) paymentPayload.timepost_end = expirationDate;
+        }
+
+        await tx.insert(payments).values(paymentPayload);
       }
 
       // 🚀 5. QUEMAR EL CUPÓN
@@ -242,7 +267,8 @@ export const createCompany = async (data: any) => {
       return {
          ...newCompany,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
-         paymentMethod: isCoupon ? 'Coupon' : metodoPago
+         paymentMethod: isCoupon ? 'Coupon' : metodoPago,
+         message: customMessage // 👈 Mensaje que leerá el frontend
       };
     });
 
@@ -308,15 +334,11 @@ export const updateCompany = async (id: string, data: any) => {
 
         const totalAmount = (monthsToAdd * basePrice).toFixed(2); 
 
-        await tx.update(payments)
-          .set({ 
-             status: "approved", 
-             approvedAt: new Date(), 
-             durationDays: monthsToAdd * 30, 
-             amount: totalAmount, 
-             timepost_end: expirationDate 
-          })
-          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'company')));
+        const payPayload: any = { status: "approved", approvedAt: new Date(), durationDays: monthsToAdd * 30, amount: String(totalAmount) };
+        if ('timepostEnd' in payments) payPayload.timepostEnd = expirationDate;
+        else if ('timepost_end' in payments) payPayload.timepost_end = expirationDate;
+
+        await tx.update(payments).set(payPayload).where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'company')));
 
         const comp = await tx.select({ userId: companies.userId, name: companies.name }).from(companies).where(eq(companies.id, cleanId)).limit(1);
         if (comp.length > 0) {
@@ -362,10 +384,10 @@ export const renewCompany = async (id: string, data: any) => {
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         referenceCode: refCode, 
         paymentMethod: payMethod, 
-        amount: amountToPay, 
+        amount: String(amountToPay), 
         durationDays: 30, 
         status: "pending"
-      });
+      } as any);
 
       const updated = await tx.update(companies).set({ status: 'pending', isVerified: false }).where(eq(companies.id, cleanId)).returning();
         

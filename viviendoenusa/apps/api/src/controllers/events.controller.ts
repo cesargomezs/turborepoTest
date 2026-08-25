@@ -2,11 +2,11 @@ import { db } from "../../../../packages/db/src";
 import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
-import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import zipcodes from 'zipcodes'; 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
+const radiusMiles = process.env.RADIUMILE || 20; 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
@@ -16,7 +16,6 @@ const NOMBRE_BUCKET = 'images';
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
   
-  // 🚀 bypass de TypeScript con as any
   const locationInfo = zipcodes.lookup(zip as any);
   
   if (locationInfo) {
@@ -160,11 +159,9 @@ export const getEvents = async (zip?: string) => {
   try {
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
     
-    // Condición base de visibilidad
     let baseConditions = eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021');
     let finalConditions: any = baseConditions;
 
-    // 🚀 Lógica de Geofencing Súper Rápida
     if (cleanZipParam && cleanZipParam.length === 5) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
@@ -266,13 +263,12 @@ export const getEventById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR EVENTO (ACTUALIZADO CON LÓGICA DE CUPONES)
+// 📥 3. CREAR EVENTO (ACTUALIZADO CON LÓGICA DE CUPONES BLINDADA)
 // =====================================================================
 export const createEvent = async (data: any) => {
   try {
     const cleanData = sanitizePayload(data);
     
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID 
     const validUserId = sanitizeText(cleanData.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para registrar un evento.");
@@ -282,13 +278,9 @@ export const createEvent = async (data: any) => {
     const metodoPago = cleanData.paymentMethod ? String(cleanData.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = cleanData.referenceCode ? String(cleanData.referenceCode).trim() : '';
 
-    // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
-
-    // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
     let realPromoCode = cleanData.couponCode ? String(cleanData.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-    // 🚀 Coordenadas sincrónicas locales
     const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
 
     let cleanImage = cleanData.imageEven || '';
@@ -296,18 +288,21 @@ export const createEvent = async (data: any) => {
         cleanImage = cleanImage.replace('events/', '');
     }
 
-    // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
+    let isApproved = false;
+    let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
+
     const createdEventResult = await db.transaction(async (tx) => {
         
-        // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
         if (isCoupon) {
           if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
           
-          // Búsqueda SQL insensible a mayúsculas/minúsculas
           const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
           
           if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
           if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+
+          isApproved = true;
+          customMessage = "¡Cupón aplicado! Tu evento ha sido publicado con éxito.";
         }
 
         const payload: any = {
@@ -328,36 +323,41 @@ export const createEvent = async (data: any) => {
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
           premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
           userId: validUserId, 
-          approved: isCoupon ? true : false, // 👈 Si es un cupón válido, el evento nace aprobado
+          approved: isApproved, // 👈 Se guarda como aprobado si es un cupón
         };
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
-        // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint)
+        // 🚀 GUARDAR EL PAGO USANDO EL FIX DE TYPESCRIPT 'any'
         if (codigoReferencia || realPromoCode) {
             const today = new Date();
             const eventDate = new Date(payload.dateEvent);
             const diffTime = eventDate.getTime() - today.getTime();
             const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-            // Modificamos la referencia si es un cupón para evitar colisiones en Postgres
-            const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
-
-            await tx.insert(payments).values({
+            const paymentPayload: any = {
               entityType: 'event', 
               entityId: newEvent.id,
               userId: validUserId, 
-              referenceCode: safePaymentReference, 
+              referenceCode: realPromoCode || codigoReferencia, 
               paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
-              amount: isCoupon ? "0.00" : (cleanData.tariffPlan || await getCurrentEventPrice()), // 👈 Monto cero si es cupón
+              amount: String(isCoupon ? "0.00" : (cleanData.tariffPlan || await getCurrentEventPrice())), 
               durationDays: daysLeft, 
-              timepost_end: eventDate,
-              status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
-              approvedAt: isCoupon ? new Date() : null
-            });
+              status: isCoupon ? "approved" : "pending"
+            };
+
+            if (isCoupon) {
+              paymentPayload.approvedAt = new Date();
+            }
+
+            if (eventDate) {
+              if ('timepostEnd' in payments) paymentPayload.timepostEnd = eventDate;
+              else if ('timepost_end' in payments) paymentPayload.timepost_end = eventDate;
+            }
+
+            await tx.insert(payments).values(paymentPayload);
         }
 
-        // 🚀 5. QUEMAR EL CUPÓN
         if (isCoupon) {
           await tx.update(promoCodes)
           .set({
@@ -373,11 +373,11 @@ export const createEvent = async (data: any) => {
         return {
            ...newEvent,
            referenceCode: isCoupon ? realPromoCode : codigoReferencia,
-           paymentMethod: isCoupon ? 'Coupon' : metodoPago
+           paymentMethod: isCoupon ? 'Coupon' : metodoPago,
+           message: customMessage // Enviamos el mensaje final al Front
         };
     });
 
-    // 🚀 DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
     if (createdEventResult && createdEventResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdEventResult.title || 'Sin título',
@@ -390,12 +390,9 @@ export const createEvent = async (data: any) => {
 
   } catch (error: any) { 
     console.error("❌ Error en createEvent:", error);
-    
-    // Filtramos los errores de Constraint
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
        throw new Error("El código de referencia de pago ya está en uso.");
     }
-    
     throw new Error(error.message || "Error al crear el evento.");
   }
 };
@@ -415,7 +412,6 @@ export const updateEvent = async (id: string, data: any) => {
         cleanPayload.imageEven = cleanPayload.imageEven.replace('events/', '');
     }
     
-    // 🚀 Obtenemos el registro actual para validar si ya había sido aprobado
     const [existingEvent] = await db.select().from(events).where(eq(events.id, cleanId));
     if (!existingEvent) throw new Error("Evento no encontrado");
     
@@ -434,23 +430,25 @@ export const updateEvent = async (id: string, data: any) => {
         if (cleanPayload.approved === true) {
             const expirationDate = event.dateEvent ? new Date(event.dateEvent) : new Date();
 
+            const paymentUpdatePayload: any = { 
+                status: 'approved', 
+                approvedAt: new Date()
+            };
+
+            if ('timepostEnd' in payments) paymentUpdatePayload.timepostEnd = expirationDate;
+            else if ('timepost_end' in payments) paymentUpdatePayload.timepost_end = expirationDate;
+
             await tx.update(payments)
-                .set({ 
-                    status: 'approved', 
-                    approvedAt: new Date(), 
-                    timepost_end: expirationDate 
-                })
+                .set(paymentUpdatePayload)
                 .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));
         }
 
-        // 🚀 LÓGICA DE NOTIFICACIONES (Solo si se aprueba ahora mismo)
         if (cleanPayload.approved === true && !wasApprovedBefore && event && event.dateEvent) {
             const today = new Date();
             const eventDate = new Date(event.dateEvent);
             const diffTime = eventDate.getTime() - today.getTime();
             const totalDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            // 1. Recordatorios programados para el DUEÑO del evento (Si existe un ID válido)
             if (totalDaysLeft >= 0 && event.userId) {
                 const notifsToInsert = [];
                 for (let i = 0; i <= totalDaysLeft; i++) {
@@ -493,9 +491,7 @@ export const updateEvent = async (id: string, data: any) => {
                 }
             }
 
-            // 2. 🚀 NUEVA LÓGICA MASIVA: Notificar a todos en un radio de 20 millas
             console.log("✅ [DEBUG PUSH EVENTOS] Evento aprobado. Buscando usuarios cercanos...");
-            
             const titleText = "¡Nuevo Evento en tu área! 🎉";
             const bodyText = `Se ha publicado: ${event.title}. ¡Revisa los detalles!`;
             let usersToNotify: { id: string }[] = [];
@@ -543,7 +539,6 @@ export const updateEvent = async (id: string, data: any) => {
         return event || null;
     });
 
-    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
     if (pushNotificationData) {
         sendMassPushNotification(pushNotificationData).catch(err => {
            console.error("❌ [DEBUG PUSH] Falló el Push Notification:", err);
@@ -557,9 +552,6 @@ export const updateEvent = async (id: string, data: any) => {
   }
 };
 
-// =====================================================================
-// 🗑️ 5. ELIMINAR EVENTO
-// =====================================================================
 export const deleteEvent = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);

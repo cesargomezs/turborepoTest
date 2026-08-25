@@ -29,16 +29,13 @@ import { Colors } from '@/constants/Colors';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
-// 📡 URL BASE PARA LOS NEGOCIOS/TIENDAS
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
 
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
 
-// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'stores') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
   if (!supabaseClient) return url;
@@ -80,14 +77,11 @@ const refreshSupabaseUrl = async (url: string, fallbackFolder = 'stores') => {
   return url; 
 };
 
-// --- CONFIGURACIÓN Y VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
-
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
@@ -100,32 +94,13 @@ const containsBadWords = (text: string): boolean => {
   });
 };
 
-const COUNTRIES = [
-  { code: '+1', flag: '🇺🇸', name: 'USA' },
-  { code: '+1', flag: '🇺🇸', name: 'USA' }
-];
+const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }, { code: '+1', flag: '🇺🇸', name: 'USA' }];
 
 const planStyles: any = {
-  coupon: { 
-    selected: '#EA8D2D', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  },
-  basic: { 
-    selected: '#FF5F6D', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  },
-  premium: { 
-    selected: '#F5A623', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  },
-  unlimited: { 
-    selected: '#10B981', 
-    unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', 
-    text: (isDark: boolean) => isDark ? '#FFF' : '#333' 
-  }
+  coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  basic: { selected: '#FF5F6D', unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  premium: { selected: '#F5A623', unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
+  unlimited: { selected: '#10B981', unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' }
 };
 
 const openDirections = (store: any) => {
@@ -166,7 +141,6 @@ const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, curre
     
     setIsRenewing(true);
     try {
-      // 🚀 CAMUFLAJE: Si es móvil, se manda como Cupón automáticamente.
       const payload = { 
         referenceCode: isWebLocal ? renewRefCode : `COUPON-${renewRefCode.toUpperCase()}`, 
         paymentMethod: isWebLocal ? renewPayMethod : 'Coupon', 
@@ -254,7 +228,6 @@ export default function StoresScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
-  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
   const stylesUnified = useUnifiedCardStyles();
 
@@ -280,6 +253,12 @@ export default function StoresScreen() {
   const isAndroid = Platform.OS === 'android';
   const isLargeWeb = isWeb && width > 1000;
   const isIOS = Platform.OS === 'ios';
+
+  // 🚀 HELPER ALERTA COMPATIBLE CON WEB
+  const triggerAlert = (title: string, message: string) => {
+    if (isWeb) window.alert(`${title}\n${message}`); 
+    else Alert.alert(title, message);
+  };
 
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
@@ -333,22 +312,18 @@ export default function StoresScreen() {
 
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   
-  // 🚀 CAMUFLAJE: En Web permite suscripción por defecto; en Móvil fuerza a Cupón/Gratis
+  // 🚀 CAMUFLAJE: En Web permite suscripción por defecto; en Móvil fuerza a Cupón
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWeb ? 'subscription' : 'coupon');
   const [formPlan, setFormPlan] = useState(isWeb ? 'basic' : 'coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
   const [companyTariffs, setCompanyTariffs] = useState({
-    coupon: '0.00', 
-    basic: '50.00', 
-    premium: '99.00', 
-    unlimited: '149.56' 
+    coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.56' 
   });
 
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
-
   const [currentTariff, setCurrentTariff] = useState<string>("50.00");
 
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
@@ -423,7 +398,6 @@ export default function StoresScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // 🚀 FIRMAMOS AL VUELO IMÁGENES Y REVIEWS
         const mappedData = await Promise.all(data.map(async (item: any) => {
           const rawImage = item.imageStores || item.image || item.imageUrl;
           const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'stores') : '';
@@ -432,6 +406,9 @@ export default function StoresScreen() {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
              return { ...r, image: freshReviewImage };
           })) : [];
+          
+          // 🚀 PARCHE ESTRICTO DE BOOLEANOS
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
 
           return {
             id: item.id,
@@ -447,7 +424,7 @@ export default function StoresScreen() {
             rating: Number(item.rating) || 0,
             reviews: parsedReviews,
             totalReviews: Number(item.totalReviews) || parsedReviews.length,
-            status: item.approved ? 'approved' : 'pending',
+            status: isAppr ? 'approved' : 'pending',
             estate: item.estate || item.state || '',
             ownerName: item.ownerName,
             referenceCode: item.referenceCode,
@@ -488,10 +465,11 @@ export default function StoresScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // 🚀 FIRMAMOS AL VUELO IMÁGENES PENDIENTES
         const mappedData = await Promise.all(data.map(async (item: any) => {
           const rawImage = item.imageStores || item.image || item.imageUrl;
           const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'stores') : '';
+          
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
 
           return {
             id: item.id,
@@ -507,7 +485,7 @@ export default function StoresScreen() {
             rating: Number(item.rating) || 0,
             reviews: Array.isArray(item.reviews) ? item.reviews : [],
             totalReviews: Number(item.totalReviews) || 0,
-            status: item.approved ? 'approved' : 'pending',
+            status: isAppr ? 'approved' : 'pending',
             ownerName: item.ownerName,
             referenceCode: item.referenceCode, 
             paymentMethod: item.paymentMethod,
@@ -526,7 +504,6 @@ export default function StoresScreen() {
     }
   };
 
-  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
   useFocusEffect(
     useCallback(() => {
       if (isAdminMode) {
@@ -541,12 +518,9 @@ export default function StoresScreen() {
     }, [isAdminMode, zipCode])
   );
 
-  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa en la pantalla
       if (nextAppState === 'active' && isFocused) {
-        console.log("🚀 La app despertó en Emprendimientos. Refrescando imágenes...");
         if (isAdminMode) {
           fetchAllPendingStores();
         } else if (zipCode && zipCode.length === 5) {
@@ -583,7 +557,6 @@ export default function StoresScreen() {
               if (res.ok) {
                 const data = await res.json();
                 
-                // 🚀 FIRMAMOS LA NOTIFICACIÓN AL VUELO
                 const rawImage = data.imageStores || data.image || data.imageUrl;
                 const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'stores') : '';
 
@@ -753,12 +726,16 @@ export default function StoresScreen() {
 
   const handlePublishStore = async () => {
     if (!isFormValid) {
-      return Alert.alert("Atención", "Completar nombre, ubicación, foto y código de activación son obligatorios.");
+      return triggerAlert("Atención", "Completar nombre, ubicación, foto y código de activación son obligatorios.");
     }
     
+    if (!formRefCode.trim()) {
+      return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
+    }
+
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
     if (containsBadWords(contentToValidate)) {
-      return Alert.alert(
+      return triggerAlert(
         t.communitytab?.textInappropriateTittle || "Atención", 
         t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado."
       );
@@ -771,7 +748,7 @@ export default function StoresScreen() {
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
           setIsPublishing(false);
-          return Alert.alert(t.communitytab?.imageInappropriateTittle || "Bloqueada", t.communitytab?.imageInappropriateDescription || "Imagen inválida");
+          return triggerAlert(t.communitytab?.imageInappropriateTittle || "Bloqueada", t.communitytab?.imageInappropriateDescription || "Imagen inválida");
         }
 
         const formData = new FormData();
@@ -813,7 +790,9 @@ export default function StoresScreen() {
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
-      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
+      
+      // 🚀 LIMPIEZA TOTAL DEL CUPÓN (Sin "COUPON-")
+      const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
       const payload = {
         nameStores: formName, 
@@ -847,7 +826,12 @@ export default function StoresScreen() {
       if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
       const savedFromDB = await response.json();
+      
+      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando tienda");
+
+      // 🚀 PARCHE BOOLEANO ESTRICTO
+      const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEntryLocal = {
         id: savedFromDB.id,
@@ -861,29 +845,39 @@ export default function StoresScreen() {
         reviews: [],
         totalReviews: 0,
         phone: savedFromDB.phone,
-        status: 'pending',
+        status: isBackendApproved ? 'approved' : 'pending',
         estate: userMetadata?.estate || '',
         referenceCode: finalRefCode,
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         premiumPlan: finalPlan,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
         userId: currentUserId,
-        timepostEnd: null
+        timepostEnd: savedFromDB.timepostEnd || null
       };
       
-      setPendingStores([newEntryLocal, ...pendingStores]);
+      // 🚀 CERRAMOS EL MODAL PRIMERO
       setModalVisible(false);
       resetForm();
       
       if (!zipCode || zipCode.length < 5) {
         setZipCode(formZip);
         handleSearch(undefined, formZip);
+      } else {
+        if (isBackendApproved) setAllStores(prev => [newEntryLocal, ...prev]);
+        setPendingStores(prev => [newEntryLocal, ...prev]);
       }
 
-      Alert.alert(t.storestab?.sendnewsug || "Enviado con éxito, pendiente de aprobación");
+      // 🚀 ALERTA CON DELAY PARA NO BLOQUEAR LA WEB
+      setTimeout(() => {
+        let successMsg = "";
+        if (savedFromDB.message) successMsg = savedFromDB.message;
+        else if (uiPayType === 'coupon' || isBackendApproved) successMsg = '¡Cupón aplicado! Tu registro ha sido procesado con éxito.';
+        else successMsg = t.storestab?.sendnewsug || "Enviado con éxito, pendiente de aprobación";
+        triggerAlert('Éxito', successMsg);
+      }, 150);
 
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Error");
+      triggerAlert("Error", err.message || "Error al procesar la solicitud.");
     } finally {
       setIsPublishing(false);
     }
@@ -928,9 +922,9 @@ export default function StoresScreen() {
       }
       
       setPendingStores(pendingStores.filter(s => s.id !== store.id));
-      Alert.alert("Aprobado", `El negocio ha sido aprobado exitosamente por ${durationMonths} meses.`);
+      triggerAlert("Aprobado", `El negocio ha sido aprobado exitosamente por ${durationMonths} meses.`);
     } catch (error) {
-      Alert.alert("Error", "No se pudo aprobar.");
+      triggerAlert("Error", "No se pudo aprobar.");
     }
   };
 
@@ -944,15 +938,17 @@ export default function StoresScreen() {
       if (!response.ok) throw new Error("Error en servidor");
 
       setPendingStores(pendingStores.filter(e => e.id !== id));
-      Alert.alert("Rechazado", "Negocio eliminado.");
+      triggerAlert("Rechazado", "Negocio eliminado.");
     } catch (error) {
-      Alert.alert("Error", "No se pudo rechazar.");
+      triggerAlert("Error", "No se pudo rechazar.");
     }
   };
 
   const StoreCard = ({ store, renderAdminControls, isAdminMode }: { store: any, renderAdminControls?: any, isAdminMode?: boolean }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
+    
+    // 🚀 AHORA IS PENDING FUNCIONA CORRECTAMENTE
     const isPending = store.status === 'pending';
     const isOwner = store.userId === currentUserId;
     
@@ -1114,7 +1110,6 @@ export default function StoresScreen() {
     const adminControls = () => (
       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
         
-        {/* Etiqueta del PLAN */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
             {store.premiumPlan && (
                 <View style={{ backgroundColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || DynamicColors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.selected || DynamicColors.border }}>
@@ -1125,7 +1120,6 @@ export default function StoresScreen() {
             )}
         </View>
 
-        {/* Etiqueta del Cupón */}
         {store.couponCode ? (
             <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}>
                <MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" />
@@ -1135,7 +1129,6 @@ export default function StoresScreen() {
             </View>
         ) : null}
 
-        {/* Etiqueta de la Referencia de Pago */}
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
            <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
            <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -1143,7 +1136,6 @@ export default function StoresScreen() {
            </ThemedText>
         </View>
 
-        {/* Selector de Meses */}
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
           {[1, 3, 6, 12].map(m => (
             <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
@@ -1152,7 +1144,6 @@ export default function StoresScreen() {
           ))}
         </View>
         
-        {/* 🚀 BOTONES DE APROBAR/RECHAZAR EN BLANCO */}
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
             <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Rechazar</Text>
@@ -1171,7 +1162,6 @@ export default function StoresScreen() {
   return (
     <View style={stylesUnified.container}>
 
-      {/* MODAL DE RENOVACIÓN */}
       <RenewStoreModal 
         visible={renewModalVisible} 
         onClose={() => setRenewModalVisible(false)} 
@@ -1181,7 +1171,6 @@ export default function StoresScreen() {
         isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} userToken={userToken} router={router}
       />
 
-      {/* MODAL DETALLE */}
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -1252,7 +1241,6 @@ export default function StoresScreen() {
         </View>
       </Modal>
 
-      {/* MODAL RESEÑAS */}
       <Modal visible={!!selectedStore} transparent animationType="slide" statusBarTranslucent>
         <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
@@ -1350,9 +1338,9 @@ export default function StoresScreen() {
                           setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
                           setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
 
-                          Alert.alert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+                          triggerAlert('¡Gracias!', 'Tu reseña ha sido publicada exitosamente.');
                         } catch (e) {
-                          Alert.alert("Error", "No se pudo conectar al servidor.");
+                          triggerAlert("Error", "No se pudo conectar al servidor.");
                         } finally {
                           setShowReviewInput(false);
                         }
@@ -1383,7 +1371,6 @@ export default function StoresScreen() {
                 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none',color:DynamicColors.text}}>{t.storestab?.category || 'Categoría'}</ThemedText>
                 
-                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap para Web */}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6, marginBottom: 14 }}>
                   {CATEGORIES_LIST.map((cat, index) => {
                     if (index === 0) return null; 
@@ -1463,7 +1450,6 @@ export default function StoresScreen() {
                     style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                {/* 🚀 CAMUFLAJE: EN WEB MUESTRA BOTONES; EN MÓVIL FORZADO A CUPÓN */}
                 {isWeb && (
                   <>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
@@ -1487,7 +1473,6 @@ export default function StoresScreen() {
                   </>
                 )}
 
-                {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
                 {uiPayType === 'subscription' && isWeb && (
                   <>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
@@ -1536,7 +1521,6 @@ export default function StoresScreen() {
                       ))}
                     </View>
 
-                    {/* 🚀 RENDERIZADO DEL CÓDIGO QR DE ZELLE DESDE SUPABASE */}
                     <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: DynamicColors.border }}>
                       {zelleQrUrl ? (
                         <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
@@ -1550,19 +1534,12 @@ export default function StoresScreen() {
                   </>
                 )}
 
-                {/* RUTA DE CUPÓN (VISIBLE EN AMBAS, PERO ES LA ÚNICA EN MÓVIL) */}
                 {uiPayType === 'coupon' && (
                   <View style={{ marginBottom: 10 }}>
-                    <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>
-                      {isWeb
-                        ? "Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos."
-                        : "Para publicar tu negocio en nuestro directorio, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
-                      }
-                    </ThemedText>
+                    <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
                   </View>
                 )}
 
-                {/* 🚀 EL INPUT CAMALEÓN ÚNICO CON ALTO CONTRASTE */}
                 <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
                   <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: DynamicColors.accent, marginBottom: 10 }}>
                     {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
@@ -1598,7 +1575,6 @@ export default function StoresScreen() {
         </View>
       </Modal>
 
-      {/* ESTRUCTURA PRINCIPAL */}
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border }}>
@@ -1626,7 +1602,6 @@ export default function StoresScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 BOTÓN ADMINISTRADOR */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
@@ -1639,7 +1614,6 @@ export default function StoresScreen() {
 
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
-                  {/* 🚀 PENDIENTES MOVIDOS AL FINAL (DESPUÉS DE RESULTADOS) */}
                     {isAdminMode && pendingStores.length > 0 && (
                     <View style={{ marginTop: 20 }}>
                       <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
@@ -1649,7 +1623,6 @@ export default function StoresScreen() {
                     </View>
                   )} 
                   
-                  {/* 🚀 CATEGORÍAS ADAPTATIVAS PARA STORES: FlexWrap en Web, Scroll en Móvil */}
                   <View style={{ marginBottom: 15 }}>
                     {isWeb ? (
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -1772,7 +1745,6 @@ export default function StoresScreen() {
                     <View style={{ flex: 1 }}>
                       
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                        {/* 🚀 PENDIENTES ABAJO EN WEB TAMBIÉN */}
                         {isAdminMode && pendingStores.length > 0 && (
                           <View style={{ marginTop: 20 }}>
                             <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
@@ -1827,7 +1799,6 @@ export default function StoresScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB para Sugerir Negocio (UNIVERSAL) */}
       <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="store-plus-outline" size={32} color="#FFF" />

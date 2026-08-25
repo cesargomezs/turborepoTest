@@ -358,6 +358,10 @@ export const createStore = async (data: any) => {
     // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
+    let isApproved = false;
+    let expirationDate: Date | null = null;
+    let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
+
     // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdStoreResult = await db.transaction(async (tx) => {
       
@@ -370,6 +374,13 @@ export const createStore = async (data: any) => {
         
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+
+        isApproved = true;
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1); // +1 mes
+        expirationDate = d;
+
+        customMessage = "¡Cupón aplicado! Tu negocio ha sido publicado con éxito por 1 mes.";
       }
 
       const safeDesc = sanitizeText(data.description || data.descriptionStores) || '';
@@ -387,32 +398,41 @@ export const createStore = async (data: any) => {
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
         userId: validUserId, 
-        approved: isCoupon ? true : false, // 👈 Si es cupón, nace aprobado
+        approved: isApproved, // 👈 Si es cupón, nace aprobado
         createdAt: new Date(),
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado // 👈 Ajuste dinámico del plan
       };
+
+      if (expirationDate) {
+        if ('timepostEnd' in stores) storePayload.timepostEnd = expirationDate;
+        else if ('timepost_end' in stores) storePayload.timepost_end = expirationDate;
+      }
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint en la BD)
+      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint y Error Typescript Any)
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentStorePrice();
 
-        // Si es cupón, le añadimos la fecha a la referencia en la tabla de pagos 
-        // para que Postgres no explote por "referencia duplicada" al usar varios cupones
-        const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
-
-        await tx.insert(payments).values({
+        const paymentPayload: any = {
           entityType: 'store',
           entityId: newStore.id,
           userId: validUserId,
-          referenceCode: safePaymentReference, 
+          referenceCode: realPromoCode || codigoReferencia, 
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
-          amount: isCoupon ? "0.00" : (data.tariffPlan || basePrice), // 👈 Monto cero si es cupón
+          amount: String(isCoupon ? "0.00" : (data.tariffPlan || basePrice)), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
-          approvedAt: isCoupon ? new Date() : null
-        });
+          status: isCoupon ? "approved" : "pending"
+        };
+
+        if (isCoupon) paymentPayload.approvedAt = new Date();
+
+        if (expirationDate) {
+          if ('timepostEnd' in payments) paymentPayload.timepostEnd = expirationDate;
+          else if ('timepost_end' in payments) paymentPayload.timepost_end = expirationDate;
+        }
+
+        await tx.insert(payments).values(paymentPayload);
       }
 
       // 🚀 5. QUEMAR EL CUPÓN
@@ -433,7 +453,8 @@ export const createStore = async (data: any) => {
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
-         descriptionStores: safeDesc
+         descriptionStores: safeDesc,
+         message: customMessage // 👈 Enviamos mensaje custom al front
       };
     });
 
@@ -464,18 +485,23 @@ export const createStore = async (data: any) => {
 // =====================================================================
 // 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR
 // =====================================================================
-export const updateStore = async (id: string, data: any) => {
+export const updateStore = async (req: Request, res: Response) => {
+  const reqAny = req as any;
+  const resAny = res as any;
+  const id = reqAny.params?.id;
+  const data = reqAny.body || {};
+
   try {
-    const res = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/stores/${id}`);
-    const response = await res.json();
-    const amount = Number(response.payments) || 0;
+    const resPay = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/stores/${id}`);
+    const responsePay = await resPay.json();
+    const amount = Number(responsePay.payments) || 0;
 
     const cleanId = sanitizeText(id);
-    if (!cleanId) throw new Error("ID inválido");
+    if (!cleanId) return resAny.status(400).json({ error: "ID inválido" });
 
     // 🚀 Obtenemos el registro actual para validar si ya había sido aprobado
     const [existingStore] = await db.select().from(stores).where(eq(stores.id, cleanId));
-    if (!existingStore) throw new Error("Negocio no encontrado");
+    if (!existingStore) return resAny.status(404).json({ error: "Negocio no encontrado" });
 
     const wasApprovedBefore = existingStore.approved === true;
     let pushNotificationData: any = null;
@@ -486,9 +512,7 @@ export const updateStore = async (id: string, data: any) => {
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
-        if (data[key] !== undefined) {
-           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
-        }
+        if (data[key] !== undefined) updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
       }
 
       if (data.description !== undefined || data.descriptionStores !== undefined) {
@@ -509,36 +533,23 @@ export const updateStore = async (id: string, data: any) => {
         let monthsToAdd = 1; 
         if (data.durationMonths) {
           const parsedMonths = Number(data.durationMonths);
-          if (!isNaN(parsedMonths)) {
-            monthsToAdd = parsedMonths;
-          }
+          if (!isNaN(parsedMonths)) monthsToAdd = parsedMonths;
         }
         
         const expirationDate = new Date();
         expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
-        
         updatePayload.timepostEnd = expirationDate; 
 
         const totalAmount = (monthsToAdd * amount).toFixed(2); 
-        const daysToAdd = monthsToAdd * 30; 
 
-        await tx.update(payments)
-          .set({ 
-             status: "approved", 
-             approvedAt: new Date(), 
-             durationDays: daysToAdd, 
-             amount: totalAmount, 
-             timepost_end: expirationDate 
-          })
-          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'store')));
+        const payPayload: any = { status: "approved", approvedAt: new Date(), durationDays: monthsToAdd * 30, amount: String(totalAmount) };
+        if ('timepostEnd' in payments) payPayload.timepostEnd = expirationDate;
+        else if ('timepost_end' in payments) payPayload.timepost_end = expirationDate;
+
+        await tx.update(payments).set(payPayload).where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'store')));
       }
 
-      const updated = await tx
-        .update(stores)
-        .set(updatePayload) 
-        .where(eq(stores.id, cleanId))
-        .returning();
-        
+      const updated = await tx.update(stores).set(updatePayload).where(eq(stores.id, cleanId)).returning();
       const store = updated[0];
 
       // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
@@ -552,101 +563,58 @@ export const updateStore = async (id: string, data: any) => {
 
         if (store.zip) {
           const nearbyZips = zipcodes.radius(store.zip as any, Number(radiusMiles)); 
-
           if (nearbyZips && nearbyZips.length > 0) {
-            usersToNotify = await tx.select({ id: users.id })
-                                    .from(users)
-                                    .where(inArray(users.zip, nearbyZips as string[]));
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
           } else {
-            usersToNotify = await tx.select({ id: users.id })
-                                    .from(users)
-                                    .where(eq(users.zip, String(store.zip)));
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(store.zip)));
           }
         }
 
         if (usersToNotify.length > 0) {
           const notificationsToInsert = usersToNotify.map(u => {
-            const payload: any = {
-              title: titleText,
-              description: bodyText,
-              type: "store", 
-              visibleAt: new Date(), 
-              userId: u.id,
-              isRead: false
-            };
+            const payload: any = { title: titleText, description: bodyText, type: "store", visibleAt: new Date(), userId: u.id, isRead: false };
             if ('referenceId' in notifications) payload.referenceId = String(store.id);
             else if ('reference_id' in notifications) payload.reference_id = String(store.id);
             return payload;
           });
 
           await tx.insert(notifications).values(notificationsToInsert);
-
-          pushNotificationData = {
-            title: titleText,
-            body: bodyText,
-            referenceId: String(store.id),
-            userIds: usersToNotify.map(u => u.id) 
-          };
+          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(store.id), userIds: usersToNotify.map(u => u.id) };
         }
       }
 
       return store || null;
     });
 
-    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
     if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
-         console.error("❌ [DEBUG PUSH] Falló el Push Notification de negocios:", err);
-      });
+      sendMassPushNotification(pushNotificationData).catch(err => console.error("❌ [DEBUG PUSH] Falló:", err));
     }
 
-    return updatedStoreResult;
+    return resAny.status(200).json(updatedStoreResult);
 
   } catch (error: any) { 
-    console.error("❌ Error en updateStore:", error);
-    throw new Error(`Error al actualizar el negocio: ${error.message}`);
+    return resAny.status(500).json({ error: `Error al actualizar el negocio: ${error.message}` });
   }
 };
 
 // =====================================================================
-// 🚀 5. INGRESO DE RATING Y RESEÑA (CORREGIDO PARA DEVOLVER NOMBRE Y FOTO)
+// 🚀 5. INGRESO DE RATING Y RESEÑA 
 // =====================================================================
 export const createStoreReview = async (data: any) => {
   try {
-    // 🚀 VALIDACIÓN ESTRICTA
     const validUserId = sanitizeText(data.userId);
-    if (!validUserId || validUserId.length < 20) {
-        throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
-    }
+    if (!validUserId || validUserId.length < 20) throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
 
     const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
 
-    let existingRating = null;
-
     if (validUserId && targetReferenceId) {
-       existingRating = await db.select()
-          .from(ratingTable)
-          .where(
-            and(
-              eq(ratingTable.referenceId, targetReferenceId),
-              eq(ratingTable.userId, validUserId)
-            )
-          )
-          .limit(1);
-
-        if (existingRating && existingRating.length > 0) {
-            throw new Error("El usuario ya ha publicado una reseña para este negocio.");
-        }
+       const existingRating = await db.select().from(ratingTable).where(and(eq(ratingTable.referenceId, targetReferenceId), eq(ratingTable.userId, validUserId))).limit(1);
+        if (existingRating && existingRating.length > 0) throw new Error("El usuario ya ha publicado una reseña para este negocio.");
     }
 
-    const ratingPayload: any = {
-      rating: String(Number(data.stars || data.rating || 5)), 
-      userId: validUserId,
-    };
-
+    const ratingPayload: any = { rating: String(Number(data.stars || data.rating || 5)), userId: validUserId };
     if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'stores';
     else ratingPayload.type_entry = 'stores';
-
     if ('referenceId' in ratingTable) ratingPayload.referenceId = targetReferenceId;
     else ratingPayload.reference_id = targetReferenceId;
 
@@ -657,10 +625,7 @@ export const createStoreReview = async (data: any) => {
     const incomingText = sanitizeText(data.comment || data.text || data.review);
     
     if (incomingText && incomingText !== '') {
-      const reviewPayload: any = {
-        userId: validUserId
-      };
-
+      const reviewPayload: any = { userId: validUserId };
       if ('review' in reviewsTable) reviewPayload.review = incomingText;
       else if ('text' in reviewsTable) reviewPayload.text = incomingText;
       else reviewPayload.comment = incomingText;
@@ -669,129 +634,57 @@ export const createStoreReview = async (data: any) => {
       else if ('ratingId' in reviewsTable) reviewPayload.ratingId = generatedRatingId;
       else reviewPayload.rating_id = generatedRatingId;
       
-      const typeCodeRecord = await db.select({ id: typeDetail.id })
-        .from(typeDetail)
-        .where(sql`${typeDetail.typeCode} = 'Store' OR ${typeDetail.typeCode} = 'Stores'`)
-        .limit(1);
+      const typeCodeRecord = await db.select({ id: typeDetail.id }).from(typeDetail).where(sql`${typeDetail.typeCode} = 'Store' OR ${typeDetail.typeCode} = 'Stores'`).limit(1);
+      if (!typeCodeRecord || typeCodeRecord.length === 0) throw new Error("Error en la Base de Datos: La categoría 'Store' no existe en la tabla typeDetail.");
 
-      if (!typeCodeRecord || typeCodeRecord.length === 0) {
-        throw new Error("Error en la Base de Datos: La categoría 'Store' no existe en la tabla typeDetail.");
-      }
-
-      const typeDetailIdResolved = typeCodeRecord[0].id;
-
-      if ('typeDetailId' in reviewsTable) {
-          reviewPayload.typeDetailId = typeDetailIdResolved;
-      } else {
-          reviewPayload.type_detail_id = typeDetailIdResolved;
-      }
+      if ('typeDetailId' in reviewsTable) reviewPayload.typeDetailId = typeCodeRecord[0].id;
+      else reviewPayload.type_detail_id = typeCodeRecord[0].id;
 
       const reviewRows = await db.insert(reviewsTable).values(reviewPayload).returning();
       savedComment = reviewRows[0].comment || '';
     }
 
-    // 🚀 NUEVO: Consultamos el nombre y la foto del usuario en la BD para devolverlos
-    const [userRecord] = await db.select({
-      name: users.name,
-      lastName: users.lastName,
-      imageUrl: users.imageUrl
-    }).from(users).where(eq(users.id, validUserId));
-
+    const [userRecord] = await db.select({ name: users.name, lastName: users.lastName, imageUrl: users.imageUrl }).from(users).where(eq(users.id, validUserId));
     let signedImageUrl = null;
     if (userRecord && userRecord.imageUrl) {
-      const rutaArchivo = userRecord.imageUrl.startsWith('users/') 
-        ? userRecord.imageUrl 
-        : `users/${userRecord.imageUrl}`;
+      const rutaArchivo = userRecord.imageUrl.startsWith('users/') ? userRecord.imageUrl : `users/${userRecord.imageUrl}`;
       const { data: storageData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
       if (storageData) signedImageUrl = storageData.signedUrl;
     }
 
-    const formattedName = userRecord 
-      ? `${userRecord.name} ${userRecord.lastName ? userRecord.lastName.substring(0, 1) : ''}`
-      : 'Usuario';
-
     return {
-      id: generatedRatingId,
-      stars: Number(newRating[0].rating),
-      comment: savedComment,
-      // 🚀 Enviamos la información visual al frontend
-      name: formattedName,
-      image: signedImageUrl,
-      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      id: generatedRatingId, stars: Number(newRating[0].rating), comment: savedComment,
+      name: userRecord ? `${userRecord.name} ${userRecord.lastName ? userRecord.lastName.substring(0, 1) : ''}` : 'Usuario',
+      image: signedImageUrl, displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-  } catch (error: any) {
-    console.error("❌ Error CRÍTICO en createStoreReview:", error.message);
-    throw new Error(`Error al crear la calificación: ${error.message}`);
-  }
+  } catch (error: any) { throw new Error(`Error al crear la calificación: ${error.message}`); }
 };
 
-// =====================================================================
-// 🗑️ 6. ELIMINAR NEGOCIO 
-// =====================================================================
 export const deleteStore = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
-
     const deleted = await db.delete(stores).where(eq(stores.id, cleanId)).returning();
     return deleted[0] || null;
-  } catch (error: any) {
-    throw new Error(`Error al eliminar el negocio: ${error.message}`);
-  }
+  } catch (error: any) { throw new Error(`Error al eliminar el negocio: ${error.message}`); }
 };
 
-// =====================================================================
-// 🔄 7. RENOVAR NEGOCIO
-// =====================================================================
 export const renewStore = async (id: string, data: any) => {
   try {
-    const cleanId = sanitizeText(id);
-    const refCode = sanitizeText(data.referenceCode);
-    const payMethod = sanitizeText(data.paymentMethod);
-    
-    // 🚀 VALIDACIÓN ESTRICTA
+    const cleanId = sanitizeText(id); const refCode = sanitizeText(data.referenceCode); const payMethod = sanitizeText(data.paymentMethod);
     const validUserId = sanitizeText(data.userId);
-    if (!validUserId) {
-      throw new Error("El ID del usuario es obligatorio para renovar.");
-    }
-
-    if (!refCode || !payMethod || !cleanId) {
-      throw new Error("Se requiere el código de referencia y método de pago.");
-    }
+    if (!validUserId) throw new Error("El ID del usuario es obligatorio para renovar.");
+    if (!refCode || !payMethod || !cleanId) throw new Error("Se requiere el código de referencia y método de pago.");
 
     return await db.transaction(async (tx) => {
       const basePrice = await getCurrentStorePrice();
-
-      await tx.insert(payments).values({
-        entityType: 'store',
-        entityId: cleanId,
-        userId: validUserId, // 🚀 SE USA EL ID VALIDADO
-        referenceCode: refCode, 
-        paymentMethod: payMethod, 
-        amount: basePrice, 
-        durationDays: 30, 
-        status: "pending"
-      });
-
-      const updated = await tx
-        .update(stores)
-        .set({ approved: false }) 
-        .where(eq(stores.id, cleanId))
-        .returning();
-        
-      return {
-         ...updated[0],
-         referenceCode: refCode,
-         paymentMethod: payMethod
-      };
+      await tx.insert(payments).values({ entityType: 'store', entityId: cleanId, userId: validUserId, referenceCode: refCode, paymentMethod: payMethod, amount: String(basePrice), durationDays: 30, status: "pending" } as any);
+      const updated = await tx.update(stores).set({ approved: false }).where(eq(stores.id, cleanId)).returning();
+      return { ...updated[0], referenceCode: refCode, paymentMethod: payMethod };
     });
-
   } catch (error: any) { 
-    console.error("❌ Error en renewStore:", error);
-    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
-       throw new Error("Ese código de referencia de pago ya fue utilizado en otra transacción.");
-    }
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) throw new Error("Ese código de referencia de pago ya fue utilizado en otra transacción.");
     throw new Error(`Error al renovar el negocio: ${error.message}`);
   }
 };

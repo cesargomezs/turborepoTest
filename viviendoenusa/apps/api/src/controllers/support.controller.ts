@@ -305,9 +305,11 @@ export const getSupportById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR CONTACTO DE APOYO (VALIDACIÓN DE CUPÓN BLINDADA)
+// 📥 3. CREAR CONTACTO DE APOYO (CON CUPÓN LIMPIO Y 1 MES DE VIGENCIA)
 // =====================================================================
-export const createSupport = async (data: any) => {
+export const createSupport = async (req: any, res: any) => {
+  const data = req.body || {};
+
   try {
     let cleanImage = sanitizeText(data.imageSupp) || '';
     if (cleanImage.startsWith('support/')) {
@@ -323,8 +325,13 @@ export const createSupport = async (data: any) => {
     // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-    // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
+    // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO (Quita el 'COUPON-' que envía el front)
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
+
+    // 🚀 VARIABLES DE ESTADO Y FECHA
+    let isApproved = false;
+    let expirationDate: Date | null = null;
+    let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
     // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdSupportResult = await db.transaction(async (tx) => {
@@ -338,6 +345,13 @@ export const createSupport = async (data: any) => {
         
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+
+        // Si es válido, se aprueba de una vez
+        isApproved = true;
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1); // +1 mes de duración exacta
+        expirationDate = d;
+        customMessage = "¡Cupón VIP aplicado! Tu publicación ha sido aprobada por 1 mes.";
       }
 
       const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
@@ -353,33 +367,43 @@ export const createSupport = async (data: any) => {
         lat: data.lat ? Number(data.lat) : null, 
         lng: data.lng ? Number(data.lng) : null, 
         userId: validUserId, 
-        premiumPlan: isCoupon ? 'coupon' : planSeleccionado, // 👈 Ajuste dinámico del plan
+        premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
         couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
-        approved: isCoupon ? true : false // 👈 Si es cupón, nace aprobado
+        approved: isApproved // 👈 Guarda True si usó cupón
       };
+
+      // Inyectar fecha de expiración de forma dinámica
+      if (expirationDate) {
+        if ('timepostEnd' in support) supportPayload.timepostEnd = expirationDate;
+        else if ('timepost_end' in support) supportPayload.timepost_end = expirationDate;
+      }
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint en la BD)
+      // 🚀 4. GUARDAR EL PAGO (Usando `any` para evitar el crash de TS Overload en Drizzle)
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentSupportPrice(); 
 
-        // Si es cupón, le añadimos la fecha a la referencia en la tabla de pagos 
-        // para que Postgres no explote por "referencia duplicada" al usar varios cupones
-        const safePaymentReference = isCoupon ? `CUPON-${realPromoCode}-${Date.now()}` : codigoReferencia;
-
-        await tx.insert(payments).values({
+        const paymentPayload: any = {
           entityType: 'support',
           entityId: newSupport.id,
           userId: validUserId,
-          referenceCode: safePaymentReference, 
+          referenceCode: realPromoCode || codigoReferencia, // 👈 Cupón limpio
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
-          amount: isCoupon ? "0.00" : basePrice, // 👈 Monto cero si es cupón
+          amount: String(isCoupon ? "0.00" : basePrice), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending", // 👈 Pago aprobado de inmediato
-          approvedAt: isCoupon ? new Date() : null
-        });
+          status: isCoupon ? "approved" : "pending"
+        };
+
+        if (isCoupon) paymentPayload.approvedAt = new Date();
+
+        if (expirationDate) {
+          if ('timepostEnd' in payments) paymentPayload.timepostEnd = expirationDate;
+          else if ('timepost_end' in payments) paymentPayload.timepost_end = expirationDate;
+        }
+
+        await tx.insert(payments).values(paymentPayload);
       }
 
       // 🚀 5. QUEMAR EL CUPÓN
@@ -400,11 +424,11 @@ export const createSupport = async (data: any) => {
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
-         descriptionSupp: safeDesc
+         descriptionSupp: safeDesc,
+         message: customMessage // 👈 Mensaje que leerá el frontend
       };
     });
 
-    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
     if (createdSupportResult && createdSupportResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdSupportResult.nameSupp,
@@ -413,17 +437,16 @@ export const createSupport = async (data: any) => {
       ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
     }
 
-    return createdSupportResult;
+    return res.status(201).json(createdSupportResult);
 
   } catch (error: any) { 
     console.error("❌ Error en createSupport:", error);
     
-    // Filtramos los errores de Constraint
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
-       throw new Error("El código de referencia de pago ya está en uso.");
+       return res.status(409).json({ error: "El código de referencia de pago ya está en uso." });
     }
 
-    throw new Error(error.message || "Error al crear el contacto de apoyo.");
+    return res.status(400).json({ error: error.message || "Error al crear el contacto de apoyo." });
   }
 };
 
@@ -602,7 +625,6 @@ export const createSupportReview = async (data: any) => {
       savedComment = reviewRows[0].comment || '';
     }
 
-    // 🚀 NUEVO: Consultamos el nombre y la foto del usuario en la BD para devolverlos
     const [userRecord] = await db.select({
       name: users.name,
       lastName: users.lastName,
@@ -626,7 +648,6 @@ export const createSupportReview = async (data: any) => {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
-      // 🚀 Enviamos la información visual al frontend
       name: formattedName,
       image: signedImageUrl,
       displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -675,10 +696,10 @@ export const renewSupport = async (id: string, data: any) => {
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 
         referenceCode: refCode, 
         paymentMethod: payMethod, 
-        amount: basePrice, 
+        amount: String(basePrice), 
         durationDays: 30, 
         status: "pending"
-      });
+      } as any);
 
       const updated = await tx
         .update(support)

@@ -293,6 +293,9 @@ export default function EventsScreen() {
 
           const rawImage = item.imageEven || item.imageUrl;
           const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'events') : '';
+          
+          // 🚀 PARCHE ESTRICTO DE BOOLEANOS
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
 
           return {
             ...item,
@@ -306,7 +309,8 @@ export default function EventsScreen() {
             referenceCode: item.referenceCode,
             paymentMethod: item.paymentMethod,
             premiumPlan: item.premiumPlan,
-            couponCode: item.couponCode
+            couponCode: item.couponCode,
+            approved: isAppr
           };
         }));
 
@@ -388,6 +392,7 @@ export default function EventsScreen() {
                 // 🚀 FIRMA AL VUELO PARA EVENTO DESDE NOTIFICACIÓN
                 const rawImage = data.imageEven || data.imageUrl;
                 const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'events') : '';
+                const isAppr = String(data.approved) === 'true' || data.approved === 1 || data.approved === true;
 
                 const eventMapped = {
                   ...data,
@@ -398,6 +403,7 @@ export default function EventsScreen() {
                   description: data.descriptionEven || '',
                   image: freshImage,
                   location: data.locationEven || '',
+                  approved: isAppr
                 };
 
                 setSelectedEventDetails(eventMapped); 
@@ -548,7 +554,9 @@ export default function EventsScreen() {
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
 
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
-      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
+      
+      // 🚀 LIMPIEZA TOTAL DEL CUPÓN (Sin "COUPON-")
+      const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
       const newEntryPayload = {
         title: trimmedTitle, 
@@ -584,7 +592,12 @@ export default function EventsScreen() {
       if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
       const savedFromDB = await response.json();
+      
+      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando evento");
+
+      // 🚀 PARCHE BOOLEANO ESTRICTO PARA SABER SI EL BACKEND LO APROBÓ
+      const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEventLocal = {
         ...savedFromDB,
@@ -598,19 +611,37 @@ export default function EventsScreen() {
         referenceCode: finalRefCode,
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         premiumPlan: finalPlan,
-        couponCode: uiPayType === 'coupon' ? formRefCode.trim() : ''
+        couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
+        approved: isBackendApproved
       };
 
-      setPendingEvents(prev => [newEventLocal, ...prev]);
+      // 🚀 CERRAMOS EL MODAL PRIMERO
       setModalVisible(false);
       resetForm();
       
       if (!zipCode || zipCode.length < 5) {
         setZipCode(trimmedZip);
         fetchEvents(trimmedZip, isAdminMode);
+      } else {
+        if (isBackendApproved) {
+            setEvents(prev => [newEventLocal, ...prev]);
+        } else {
+            setPendingEvents(prev => [newEventLocal, ...prev]);
+        }
       }
       
-      triggerAlert("¡Recibido!", "Tu evento ha sido enviado y el pago será revisado pronto.");
+      // 🚀 MOSTRAMOS EL MENSAJE CON DELAY PARA NO BLOQUEAR LA WEB
+      setTimeout(() => {
+        let successMsg = "";
+        if (savedFromDB.message) {
+           successMsg = savedFromDB.message;
+        } else if (uiPayType === 'coupon' || isBackendApproved) {
+           successMsg = '¡Cupón aplicado! Tu evento ha sido publicado con éxito.';
+        } else {
+           successMsg = 'Tu evento ha sido enviado y el pago será revisado pronto.';
+        }
+        triggerAlert('¡Recibido!', successMsg);
+      }, 150);
       
     } catch (err: any) {
       triggerAlert("Error", err.message || t.communitytab?.errorServer || "Error");
@@ -692,6 +723,15 @@ export default function EventsScreen() {
                  </View>
              )}
          </View>
+
+         {ev.couponCode ? (
+             <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}>
+                <MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" />
+                <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
+                   Cupón: <ThemedText style={{color: '#4CAF50', fontWeight: '900'}}>{ev.couponCode}</ThemedText>
+                </ThemedText>
+             </View>
+         ) : null}
 
          <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
             <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
@@ -1282,7 +1322,9 @@ export default function EventsScreen() {
 const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls, isWeb, handleShare, isAdminMode, currentUserId }: any) => {
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
-  const isPending = !item.approved;
+  
+  // 🚀 AHORA EL ESTADO PENDING FUNCIONA CORRECTAMENTE
+  const isPending = item.status === 'pending';
   const isOwner = item.userId === currentUserId;
   
   const cardBgColor = isPending 
@@ -1295,7 +1337,7 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
         onPress={() => onOpen(item)} 
         style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
     >
-      {/* 🚀 AQUÍ ESTÁ EL EFECTO DE OFUSCAR PARA EVENTOS PENDIENTES */}
+      {/* 🚀 OFUSCAR EVENTOS PENDIENTES */}
       {isPending && !isAdminMode && (
         <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
       )}

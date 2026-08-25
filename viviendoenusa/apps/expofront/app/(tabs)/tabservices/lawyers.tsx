@@ -150,6 +150,15 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
 
+  // 🚀 HELPER DE ALERTAS MULTIPLATAFORMA
+  const triggerAlert = (title: string, message: string) => {
+    if (isWebLocal) {
+      window.alert(`${title}\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
   useEffect(() => {
     if (visible) {
       setRenewRefCode('');
@@ -158,7 +167,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   }, [visible]);
 
   const handleRenewSubmit = async () => {
-    if (!renewRefCode.trim()) return Alert.alert((t.lawyerstab as any)?.noticeTitle || "Aviso", (t.lawyerstab as any)?.enterRefCode || "Ingresa el código de confirmación.");
+    if (!renewRefCode.trim()) return triggerAlert((t.lawyerstab as any)?.noticeTitle || "Aviso", (t.lawyerstab as any)?.enterRefCode || "Ingresa el código de confirmación.");
     
     setIsRenewing(true);
     try {
@@ -169,11 +178,14 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
         body: JSON.stringify(payload)
       });
       if (res.status === 401) { router.replace('/'); return; }
-      if (!res.ok) throw new Error();
-      Alert.alert((t.lawyerstab as any)?.successTitle || 'Éxito' , (t.lawyerstab as any)?.renewSuccessMsg || 'Renovación enviada');
+      
+      const dataRes = await res.json();
+      if (!res.ok) throw new Error(dataRes.error || "Error al procesar solicitud");
+      
+      triggerAlert((t.lawyerstab as any)?.successTitle || 'Éxito' , (t.lawyerstab as any)?.renewSuccessMsg || 'Renovación enviada');
       onSuccess();
-    } catch (e) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle || 'Error' , (t.lawyerstab as any)?.renewErrorMsg || 'Error al renovar');
+    } catch (e: any) {
+      triggerAlert((t.lawyerstab as any)?.errorTitle || 'Error' , e.message || (t.lawyerstab as any)?.renewErrorMsg || 'Error al renovar');
     } finally {
       setIsRenewing(false);
     }
@@ -244,7 +256,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   
-  // 🚀 CAMUFLAJE: Si es Web, permite suscripción por defecto; Si es Móvil, fuerza a Cupón/Gratis.
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWebLocal ? 'subscription' : 'coupon');
   const [formPlan, setFormPlan] = useState(isWebLocal ? 'basic' : 'coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
@@ -253,6 +264,15 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
+
+  // 🚀 HELPER DE ALERTAS MULTIPLATAFORMA
+  const triggerAlert = (title: string, message: string) => {
+    if (isWebLocal) {
+      window.alert(`${title}\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
 
   useEffect(() => {
     if(visible) {
@@ -272,16 +292,16 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
 
   const handlePublishLawyer = async () => {
     if (!formName.trim() || !formAddress.trim() || formZip.length < 5) {
-      return Alert.alert((t.lawyerstab as any)?.alertmessage || 'Completa todos los campos');
+      return triggerAlert('Atención', 'Completa todos los campos obligatorios');
     }
 
     if (!formRefCode.trim()) {
-      return Alert.alert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
+      return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
     }
 
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
     if (containsBadWords(contentToValidate)) {
-      return Alert.alert(
+      return triggerAlert(
         "Contenido Inapropiado", 
         "Hemos detectado lenguaje inapropiado en tu publicación. Por favor, modifícalo para mantener un ambiente de respeto."
       );
@@ -294,7 +314,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         const esSegura = await validarImagenEnServidor(formImage);
         if (!esSegura) {
           setIsPublishing(false);
-          return Alert.alert((t.communitytab as any)?.imageInappropriateTittle || 'Error', (t.communitytab as any)?.imageInappropriateDescription || 'Imagen inapropiada');
+          return triggerAlert((t.communitytab as any)?.imageInappropriateTittle || 'Error', (t.communitytab as any)?.imageInappropriateDescription || 'Imagen inapropiada');
         }
         
         const formData = new FormData();
@@ -346,20 +366,40 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
       if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
       const savedFromDB = await response.json();
-      if (!response.ok) throw new Error(savedFromDB.error || "Error guardando abogado");
+      
+      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
+      if (!response.ok) throw new Error(savedFromDB.error || "Error al procesar la solicitud");
+
+      // 🚀 PARCHE BOOLEANO ESTRICTO (Para evitar que "false" se vuelva true)
+      const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEntryLocal = {
-        id: savedFromDB.id, name: savedFromDB.nameLawy, description: savedFromDB.description,
+        id: savedFromDB.id, name: savedFromDB.nameLawy || savedFromDB.name, description: savedFromDB.description,
         address: savedFromDB.address, area: savedFromDB.area, image: formImage, lat, lng,
-        rating: 0, reviews: [], totalReviews: 0, phone: savedFromDB.phone, status: 'pending',
-        referenceCode: finalRefCode, paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod, userId: currentUserId, timepostEnd: null,
+        rating: 0, reviews: [], totalReviews: 0, phone: savedFromDB.phone, 
+        status: isBackendApproved ? 'approved' : 'pending', // 👈 ¡Filtro corregido!
+        referenceCode: finalRefCode, paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod, userId: currentUserId, timepostEnd: savedFromDB.timepostEnd || null,
         premiumPlan: finalPlan, couponCode: uiPayType === 'coupon' ? formRefCode.trim() : ''
       };
       
-      Alert.alert((t.lawyerstab as any)?.sendnewsug || 'Enviado');
+      // 🚀 CERRAMOS EL MODAL PRIMERO
       onSuccess(newEntryLocal, formZip);
+
+      // 🚀 MOSTRAMOS EL MENSAJE CON DELAY PARA NO BLOQUEAR LA WEB
+      setTimeout(() => {
+        let successMsg = "";
+        if (savedFromDB.message) {
+           successMsg = savedFromDB.message;
+        } else if (uiPayType === 'coupon' || isBackendApproved) {
+           successMsg = '¡Cupón aplicado! Tu registro ha sido procesado con éxito.';
+        } else {
+           successMsg = (t.lawyerstab as any)?.sendnewsug || 'Enviado con éxito, pendiente de revisión de pago.';
+        }
+        triggerAlert('Éxito', successMsg);
+      }, 150);
+
     } catch (err: any) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", err.message || (t.communitytab as any)?.errorServer || "Error");
+      triggerAlert((t.lawyerstab as any)?.errorTitle || "Error", err.message || "No se pudo completar la solicitud.");
     } finally {
       setIsPublishing(false);
     }
@@ -635,6 +675,64 @@ export default function LawyersScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
+  // 🚀 COMPONENTE DE FORMULARIO DE RESEÑAS DEFINIDO AQUÍ MISMO
+  const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState('');
+
+    const triggerAlertReview = (title: string, message: string) => {
+      if (Platform.OS === 'web') {
+        window.alert(`${title}\n${message}`);
+      } else {
+        Alert.alert(title, message);
+      }
+    };
+
+    const handlePrePublish = () => {
+      if (containsBadWords(comment)) {
+        const errorMsg = (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado.";
+        triggerAlertReview("Aviso", errorMsg);
+        return;
+      }
+      onPublish(rating, comment);
+    };
+
+    return (
+      <View style={{ flex: 1, paddingVertical: 10 }}>
+        <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+          <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{(t.lawyerstab as any)?.backBtn || 'Volver' }</ThemedText>
+        </TouchableOpacity>
+        <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 , color:Colors.text}}>{(t.lawyerstab as any)?.experience || 'Tu Experiencia'}</ThemedText>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
+          {[1, 2, 3, 4, 5].map(s => (
+            <TouchableOpacity key={s} onPress={() => setRating(s)}>
+              <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+          <TextInput 
+            value={comment} 
+            onChangeText={(text) => {
+              const formattedText = text.length > 0 ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+              setComment(formattedText);
+            }} 
+            placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder || 'Escribe tu opinión...'} 
+            placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
+            multiline autoCapitalize="sentences"
+            style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+          />
+        </View>
+        <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+          <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
+            <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.publishBtn || 'Publicar'}</ThemedText>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
+  });
+
   // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
   useFocusEffect(
     useCallback(() => {
@@ -687,14 +785,24 @@ export default function LawyersScreen() {
   const applyLocalFilters = (lawyersList: any[], areaName: string, lat: number, lng: number) => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
     
+    // 🚀 FILTRAMOS LOS VENCIDOS PARA EL PÚBLICO (EL DUEÑO LOS SIGUE VIENDO)
+    filtered = filtered.filter(item => {
+      const isOwner = item.userId === currentUserId;
+      const isPending = item.status === 'pending';
+      const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) 
+        ? new Date(item.timepostEnd) < new Date() 
+        : false;
+      return isOwner || (!isExpired && !isPending); 
+    });
+
     filtered.sort((a, b) => {
       const aIsOwner = a.userId === currentUserId;
       const aIsExpired = a.timepostEnd ? new Date(a.timepostEnd) < new Date() : false;
-      const aNeedsRenewal = aIsOwner && aIsExpired;
+      const aNeedsRenewal = aIsOwner && aIsExpired && a.status !== 'pending';
 
       const bIsOwner = b.userId === currentUserId;
       const bIsExpired = b.timepostEnd ? new Date(b.timepostEnd) < new Date() : false;
-      const bNeedsRenewal = bIsOwner && bIsExpired;
+      const bNeedsRenewal = bIsOwner && bIsExpired && b.status !== 'pending';
 
       if (aNeedsRenewal && !bNeedsRenewal) return -1;
       if (!aNeedsRenewal && bNeedsRenewal) return 1;
@@ -704,53 +812,6 @@ export default function LawyersScreen() {
 
     return filtered;
   };
-
-  const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
-    const [rating, setRating] = useState(5);
-    const [comment, setComment] = useState('');
-    const handlePrePublish = () => {
-      if (containsBadWords(comment)) {
-        const errorMsg = (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado.";
-        Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Aviso", errorMsg);
-        return;
-      }
-      onPublish(rating, comment);
-    };
-    return (
-      <View style={{ flex: 1, paddingVertical: 10 }}>
-        <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-          <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{(t.lawyerstab as any)?.backBtn || 'Volver' }</ThemedText>
-        </TouchableOpacity>
-        <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 , color:Colors.text}}>{(t.lawyerstab as any)?.experience || 'Tu Experiencia'}</ThemedText>
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
-          {[1, 2, 3, 4, 5].map(s => (
-            <TouchableOpacity key={s} onPress={() => setRating(s)}>
-              <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-          <TextInput 
-            value={comment} 
-            onChangeText={(text) => {
-              const formattedText = text.length > 0 ? text.charAt(0).toUpperCase() + text.slice(1) : text;
-              setComment(formattedText);
-            }} 
-            placeholder={(t.lawyerstab as any)?.writeOpinionPlaceholder || 'Escribe tu opinión...'} 
-            placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
-            multiline autoCapitalize="sentences"
-            style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-          />
-        </View>
-        <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-          <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
-            <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{(t.lawyerstab as any)?.publishBtn || 'Publicar'}</ThemedText>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    );
-  });
 
   const fetchLawyersData = async (searchZip: string) => {
     try {
@@ -773,6 +834,9 @@ export default function LawyersScreen() {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
              return { ...r, image: freshReviewImage };
           })) : [];
+          
+          // 🚀 PARCHE ESTRICTO DE BOOLEANOS (Evita que "false" string se vuelva true)
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
 
           return {
             id: item.id,
@@ -788,7 +852,7 @@ export default function LawyersScreen() {
             rating: Number(item.totalRating) || Number(item.rating) || 0,
             reviews: parsedReviews,
             totalReviews: Number(item.totalReviews) || parsedReviews.length,
-            status: item.approved ? 'approved' : 'pending',
+            status: isAppr ? 'approved' : 'pending',
             referenceCode: item.referenceCode,
             paymentMethod: item.paymentMethod,
             userId: item.userId || item.user_id,
@@ -798,14 +862,15 @@ export default function LawyersScreen() {
           };
         }));
         
-        const approved = mappedData.filter(s => s.status === 'approved');
-        setAllLawyers(approved);
-        setLocalData(approved);
+        // 🚀 AHORA EL DUEÑO SÍ PUEDE VER SUS POSTS PENDIENTES EN LA LISTA PRINCIPAL
+        const approvedOrOwnedPending = mappedData.filter(s => s.status === 'approved' || (s.status === 'pending' && s.userId === currentUserId));
+        setAllLawyers(approvedOrOwnedPending);
+        setLocalData(approvedOrOwnedPending);
         
         if (!isAdminMode) {
           setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
         }
-        return approved;
+        return approvedOrOwnedPending;
       }
       return [];
     } catch (e) {
@@ -859,6 +924,8 @@ export default function LawyersScreen() {
           const rawImage = item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
           const freshImage = await refreshSupabaseUrl(rawImage, 'lawyers');
 
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
+
           return {
             id: item.id,
             name: item.nameLawy || 'Sin nombre',
@@ -873,7 +940,7 @@ export default function LawyersScreen() {
             rating: Number(item.totalRating) || Number(item.rating) || 0,
             reviews: Array.isArray(item.reviews) ? item.reviews : [],
             totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
-            status: item.approved ? 'approved' : 'pending',
+            status: isAppr ? 'approved' : 'pending',
             referenceCode: item.referenceCode,
             paymentMethod: item.paymentMethod,
             userId: item.userId || item.user_id,
@@ -988,9 +1055,14 @@ export default function LawyersScreen() {
       }
       
       setPendingLawyers(pendingLawyers.filter(s => s.id !== lawyer.id));
-      Alert.alert((t.lawyerstab as any)?.approvedTitle || "Aprobado", ((t.lawyerstab as any)?.approvedMsgPrefix || "Aprobado por ") + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix || " meses" ));
+      
+      if (Platform.OS === 'web') {
+        window.alert(((t.lawyerstab as any)?.approvedMsgPrefix || "Aprobado por ") + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix || " meses"));
+      } else {
+        Alert.alert((t.lawyerstab as any)?.approvedTitle || "Aprobado", ((t.lawyerstab as any)?.approvedMsgPrefix || "Aprobado por ") + durationMonths + ((t.lawyerstab as any)?.approvedMsgSuffix || " meses" ));
+      }
     } catch (error) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.approveError);
+      Platform.OS === 'web' ? window.alert((t.lawyerstab as any)?.approveError || "Error al aprobar") : Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.approveError);
     }
   };
 
@@ -1003,9 +1075,14 @@ export default function LawyersScreen() {
       if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error((t.lawyerstab as any)?.serverError);
       setPendingLawyers(pendingLawyers.filter(e => e.id !== id));
-      Alert.alert((t.lawyerstab as any)?.rejectedTitle, (t.lawyerstab as any)?.rejectedMsg );
+      
+      if (Platform.OS === 'web') {
+        window.alert((t.lawyerstab as any)?.rejectedMsg);
+      } else {
+        Alert.alert((t.lawyerstab as any)?.rejectedTitle, (t.lawyerstab as any)?.rejectedMsg );
+      }
     } catch (error) {
-      Alert.alert((t.lawyerstab as any)?.errorTitle, (t.genericbtn as any)?.rejectError);
+      Platform.OS === 'web' ? window.alert((t.genericbtn as any)?.rejectError || "Error al rechazar") : Alert.alert((t.lawyerstab as any)?.errorTitle, (t.genericbtn as any)?.rejectError);
     }
   };
 
@@ -1079,6 +1156,8 @@ export default function LawyersScreen() {
                 const rawImage = data.image || data.imageUrl;
                 const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'lawyers') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
 
+                const isAppr = String(data.approved) === 'true' || data.approved === 1 || data.approved === true;
+
                 const mappedSupport = {
                     ...data,
                     name: data.nameLawy || data.name || 'Sin nombre',
@@ -1087,7 +1166,7 @@ export default function LawyersScreen() {
                     image: freshImage,
                     lat: Number(data.lat) || 34.0934,
                     lng: Number(data.lng) || -117.5847,
-                    status: data.approved ? 'approved' : 'pending',
+                    status: isAppr ? 'approved' : 'pending',
                     timepostEnd: data.timepostEnd || data.timepost_end
                 };
                 
@@ -1105,6 +1184,8 @@ export default function LawyersScreen() {
 
   const LawyerCard = ({ lawyer, isReviewMode = false, renderAdminControls }: { lawyer: any, isReviewMode?: boolean, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
+    
+    // 🚀 AHORA IS PENDING FUNCIONA PERFECTO GRACIAS AL PARCHE BOOLEANO
     const isPending = lawyer.status === 'pending';
     const isOwner = lawyer.userId === currentUserId;
     
@@ -1142,11 +1223,12 @@ export default function LawyersScreen() {
           </View>
         )}
 
+        {/* 🚀 EL LETRERO ROJO DE CADUCADO YA NO SALDRÁ CUANDO ESTÉ PENDIENTE */}
         {isOwner && isExpired && !isPending && (
           <View style={{ backgroundColor: 'rgba(255, 82, 82, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 82, 82, 0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
               <MaterialCommunityIcons name="alert-circle" size={20} color="#FF5252" />
-              <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>{(t.lawyerstab as any)?.expiredWarning }</ThemedText>
+              <ThemedText style={{ color: '#FF5252', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>Suscripción vencida. El público no puede verlo.</ThemedText>
             </View>
             <TouchableOpacity onPress={() => { setLawyerToRenew(lawyer); setRenewModalVisible(true); }} style={{ backgroundColor: '#FF5252', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 10 }}>
               <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 12 }}>{(t.lawyerstab as any)?.renewBtn || "Renovar"}</ThemedText>
