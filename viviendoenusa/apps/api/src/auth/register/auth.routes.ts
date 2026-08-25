@@ -10,7 +10,8 @@ import {
   sendPasswordResetEmail,
   getMiPerfil,
   saveDeviceToken,
-  deleteUserAccount
+  deleteUserAccount,
+  getPlatformStats // 🚀 IMPORTACIÓN AGREGADA
 } from '../../controllers/authController';
 import jwt from 'jsonwebtoken';
 
@@ -27,25 +28,25 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// 🚀 NUEVA RUTA PÚBLICA: Estadísticas de impacto para la web
+router.get('/stats', getPlatformStats);
+
 // Ruta protegida para perfil
 router.get('/mi-perfil', verifyToken, getMiPerfil);
 
 // Registrar usuario (CLÁSICO O COMPLETAR PERFIL SOCIAL)
 router.post('/register', async (req, res) => {
   try {
-    // 🔥 EL FIX DEL ROUTER: Asegurarnos de atrapar el token venga donde venga
     const requestData = {
       ...req.body.data,
       pushToken: req.body.pushToken || req.body.data?.pushToken,
       deviceType: req.body.deviceType || req.body.data?.deviceType
     };
 
-    // Capturar la IP real para los términos y condiciones
     const forwarded = req.headers['x-forwarded-for'];
     const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     const reqIp = ipString ? ipString.split(',')[0].trim() : req.socket?.remoteAddress;
 
-    // Ahora sí le pasamos toda la data completa (incluyendo el token) y la IP
     const newUser = await registerUser(requestData, req.body.newImageUri, reqIp);
     
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
@@ -93,7 +94,6 @@ router.put('/profile/:id', verifyToken, async (req: AuthRequest, res: Response) 
 // Ruta centralizada de login
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
-    // Aquí el router sí extrae el pushToken del body, por lo que el controlador sí lo recibe
     const { email, password, idToken, isGoogle, isApple, pushToken, deviceType } = req.body; 
     
     const result = await authenticateUser({ 

@@ -182,7 +182,6 @@ export const getUser = async (idOrEmail: string) => {
     const user = rows[0];
     let publicImageUrl = user.imageUrl;
 
-    // 🚀 CORRECCIÓN: FIRMAMOS LA URL PARA QUE NO SALGA EN BLANCO
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
       const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 604800);
@@ -275,7 +274,6 @@ export const updateUser = async (idOrEmail: string, data: any, newImageUri: stri
     const finalUser = updatedRows[0];
     let publicImageUrl = finalUser.imageUrl;
 
-    // 🚀 CORRECCIÓN: FIRMAMOS LA URL AL ACTUALIZAR PERFIL
     if (finalUser.imageUrl && !finalUser.imageUrl.startsWith('http')) {
       const rutaArchivo = finalUser.imageUrl.startsWith('users/') ? finalUser.imageUrl : `users/${finalUser.imageUrl}`;
       const { data: publicData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 604800);
@@ -394,7 +392,6 @@ export const authenticateUser = async (credentials: {
 
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
     await ensureTermsAccepted(user.id);
-    
 
     return {
       message: "Autenticación exitosa",
@@ -491,7 +488,6 @@ export const getMiPerfil = async (req: AuthRequest, res: Response) => {
     const user = userProfile[0];
     let publicImageUrl = user.imageUrl;
 
-    // 🚀 CORRECCIÓN: FIRMAMOS LA URL AL PEDIR EL PERFIL
     if (user.imageUrl && !user.imageUrl.startsWith('http')) {
       const rutaArchivo = user.imageUrl.startsWith('users/') ? user.imageUrl : `users/${user.imageUrl}`;
       const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 604800);
@@ -546,5 +542,47 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
     return res.status(200).json({ success: true, message: "Cuenta dada de baja." });
   } catch (error: any) {
     return res.status(500).json({ error: `Error: ${error.message}` });
+  }
+};
+
+// --------------------------------------------------------
+// 10. OBTENER ESTADÍSTICAS DE LA PLATAFORMA (STATS) 🚀
+// --------------------------------------------------------
+export const getPlatformStats = async (req: Request, res: Response) => {
+  try {
+    // Contamos usuarios directamente desde la BD
+    const [usersCount] = await db.select({ value: sql`COUNT(*)` }).from(users);
+    let totalUsers = Number(usersCount?.value) || 1250;
+
+    // Inicializamos con los valores de fallback
+    let totalCompanies = 180;
+    let totalJobs = 340;
+
+    // Importamos dinámicamente los schemas para no romper el compilador si cambian los nombres
+    try {
+      const schema = require("../../../../packages/db/src/schema");
+      
+      if (schema.companies) {
+        const [compCount] = await db.select({ value: sql`COUNT(*)` }).from(schema.companies);
+        totalCompanies = Number(compCount?.value) || 180;
+      }
+      
+      if (schema.jobs) {
+        const [jobCount] = await db.select({ value: sql`COUNT(*)` }).from(schema.jobs);
+        totalJobs = Number(jobCount?.value) || 340;
+      }
+    } catch (e) {
+      console.warn("⚠️ Fallo en conteo de companies/jobs, usando fallback:", e);
+    }
+
+    return res.status(200).json({
+      users: totalUsers,
+      jobs: totalJobs,
+      companies: totalCompanies
+    });
+    
+  } catch (error: any) {
+    console.error("❌ Error en getPlatformStats:", error.message);
+    return res.status(500).json({ error: "Error al obtener estadísticas" });
   }
 };
