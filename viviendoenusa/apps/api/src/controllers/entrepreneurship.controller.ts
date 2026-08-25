@@ -1,9 +1,9 @@
 import { db } from "../../../../packages/db/src"; 
-import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable, notifications, userDevices, typeDetail } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
+import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable, notifications, userDevices, typeDetail } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
 import { alias } from "drizzle-orm/pg-core"; 
 import { createClient } from '@supabase/supabase-js';
-import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import zipcodes from 'zipcodes'; 
 import e from "express";
 
 // =====================================================================
@@ -11,7 +11,7 @@ import e from "express";
 // =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
+const radiusMiles = process.env.RADIUMILE || 20; 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
@@ -24,7 +24,6 @@ const reviewers = alias(users, 'reviewers');
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
   
-  // 🚀 bypass de TypeScript con as any
   const locationInfo = zipcodes.lookup(zip as any);
   
   if (locationInfo) {
@@ -92,7 +91,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL CON BÚSQUEDA POR RADIO ULTRARRÁPIDA
+// 🔍 1. CONSULTA GENERAL CON BÚSQUEDA POR RADIO Y ORDEN VIP
 // =====================================================================
 export const getEntrepreneurships = async (zip?: string, userId?: string) => {
   try {
@@ -124,7 +123,25 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       }
     } 
     
-    query = query.orderBy(desc(entrepreneurship.createdAt));
+    // 🚀 MODO PERRO: ORDENAMIENTO VIP (Yo -> Admins -> Resto) + Fecha Descendente
+    if (userId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${entrepreneurship.userId} = ${userId} THEN 0 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(entrepreneurship.createdAt)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+              ELSE 1 
+            END`,
+        desc(entrepreneurship.createdAt)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];

@@ -2,26 +2,25 @@ import { db } from "../../../../packages/db/src";
 import { jobs, users, rating as ratingTable, reviews as reviewsTable, notifications, tariffs, typeDetail, companies, userDevices } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
-import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import zipcodes from 'zipcodes'; 
 
 // =====================================================================
 // ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
 // =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
+const radiusMiles = process.env.RADIUMILE || 20; 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
 const ANON_UUID = "bb50c6a4-d284-4cdd-8263-cf6b4a74de25";
 
 // =====================================================================
-// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS
 // =====================================================================
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
   
-  // 🚀 bypass de TypeScript con as any
   const locationInfo = zipcodes.lookup(zip as any);
   
   if (locationInfo) {
@@ -118,20 +117,18 @@ const sendTelegramAlert = async (jobTitle: string, companyName: string) => {
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL CON FILTRO DE RADIO Y CANDADO DE EMPRESA
+// 🔍 1. CONSULTA GENERAL
 // =====================================================================
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) : '';
 
-    // 🚀 Lógica Base: Candado de Empresa Aprobada
     let baseConditions = currentUserId 
       ? sql`(${jobs.userId} = ${currentUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)))`
       : sql`(${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL))`;
 
     let finalConditions: any = baseConditions;
 
-    // 🚀 Lógica de Geofencing Súper Rápida
     if (zip && zip.length === 5) {
       const nearbyZips = zipcodes.radius(zip as any, Number(radiusMiles)); 
 
@@ -284,11 +281,10 @@ export const getJobById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR OFERTA DE EMPLEO (ACTUALIZADO CON TELEGRAM)
+// 📥 3. CREAR OFERTA DE EMPLEO (NOTIFICACIONES 100% BLINDADAS)
 // =====================================================================
 export const createJob = async (data: any) => {
   try {
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
     const validUserId = sanitizeText(data.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para publicar un empleo.");
@@ -297,14 +293,21 @@ export const createJob = async (data: any) => {
     let pushNotificationData: any = null;
 
     const newJobResult = await db.transaction(async (tx) => {
-      
       const safeDesc = sanitizeText(data.descriptionJob || data.description);
       const companyId = sanitizeText(data.companyId);
 
       if (!companyId) throw new Error("Debes seleccionar una empresa registrada para publicar un empleo.");
 
-      // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
-      const { lat, lng } = getCoordsFromZip(data.zip || '');
+      // 🚀 SOLUCIÓN: SI EL FRONTEND MANDA EL ZIP VACÍO, USAMOS EL ZIP DEL USUARIO CREADOR
+      let resolvedZip = sanitizeText(data.zip);
+      if (!resolvedZip || resolvedZip.trim() === '') {
+        const [creator] = await tx.select({ zip: users.zip }).from(users).where(eq(users.id, validUserId));
+        resolvedZip = creator?.zip || '';
+        console.log(`⚠️ Zip vacío en la oferta. Usando el Zip del dueño de la empresa: ${resolvedZip}`);
+      }
+
+      // Obtenemos coordenadas basadas en el Zip resuelto
+      const { lat, lng } = getCoordsFromZip(resolvedZip);
 
       const jobPayload: any = {
         nameJobs: sanitizeText(data.nameJobs || data.title) || 'Sin título',
@@ -314,7 +317,7 @@ export const createJob = async (data: any) => {
         category: sanitizeText(data.category) || 'Otros',
         stateCountry: sanitizeText(data.stateCountry || data.state) || 'California',
         city: sanitizeText(data.city),
-        zip: sanitizeText(data.zip),
+        zip: resolvedZip, // 👈 Guardamos el Zip real en la BD
         contactMethod: data.contactMethod === true || data.contactMethod === 'whatsapp',
         phoneCode: sanitizeText(data.phoneCode) || '+1',
         phone: sanitizeText(data.phone),
@@ -332,7 +335,7 @@ export const createJob = async (data: any) => {
 
       const [newJob] = await tx.insert(jobs).values(jobPayload).returning();
 
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL CREAR LA OFERTA
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS)
       console.log("✅ [DEBUG PUSH EMPLEOS] Oferta publicada. Calculando candidatos en zona...");
 
       const titleText = "¡Nueva Oferta de Empleo! 💼";
@@ -346,11 +349,17 @@ export const createJob = async (data: any) => {
         if (nearbyZips && nearbyZips.length > 0) {
           usersToNotify = await tx.select({ id: users.id })
                                   .from(users)
-                                  .where(inArray(users.zip, nearbyZips as string[]));
+                                  .where(and(
+                                    inArray(users.zip, nearbyZips as string[]),
+                                    sql`${users.id} != ${validUserId}` // 👈 No notificar al dueño
+                                  ));
         } else {
           usersToNotify = await tx.select({ id: users.id })
                                   .from(users)
-                                  .where(eq(users.zip, String(jobPayload.zip)));
+                                  .where(and(
+                                    eq(users.zip, String(jobPayload.zip)),
+                                    sql`${users.id} != ${validUserId}` // 👈 No notificar al dueño
+                                  ));
         }
       }
 
@@ -393,7 +402,7 @@ export const createJob = async (data: any) => {
       });
     }
 
-    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO
+    // 🚀 ENVÍO A TELEGRAM
     if (newJobResult) {
       sendTelegramAlert(
         newJobResult.title || 'Sin título',
@@ -447,11 +456,10 @@ export const updateJob = async (id: string, data: any) => {
 };
 
 // =====================================================================
-// 🚀 5. INGRESO DE RATING Y RESEÑA (CORREGIDO PARA FOTO Y NOMBRE)
+// 🚀 5. INGRESO DE RATING Y RESEÑA
 // =====================================================================
 export const createJobReview = async (data: any) => {
   try {
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID (A menos que sea Anónimo voluntario)
     const realUserId = sanitizeText(data.userId);
     if (!realUserId && data.isAnonymous !== true) {
         throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
@@ -527,7 +535,6 @@ export const createJobReview = async (data: any) => {
       savedComment = (reviewRows[0] as any).comment || (reviewRows[0] as any).text || (reviewRows[0] as any).review || '';
     }
 
-    // 🚀 NUEVO: Consultamos los datos reales del usuario si no es anónimo
     let assignedUserName = 'Anónimo';
     let signedImageUrl = null;
 
@@ -555,7 +562,6 @@ export const createJobReview = async (data: any) => {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
-      // 🚀 Se envían los datos listos para el Frontend
       userName: assignedUserName,
       image: signedImageUrl,
       displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -565,7 +571,6 @@ export const createJobReview = async (data: any) => {
     throw new Error(error.message || "Error al crear la calificación");
   }
 };
-
 
 // =====================================================================
 // 🗑️ 6. ELIMINAR OFERTA DE EMPLEO
