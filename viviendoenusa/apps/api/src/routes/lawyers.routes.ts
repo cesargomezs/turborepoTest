@@ -50,10 +50,20 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
 
 // 📥 POST: Crear un nuevo registro de abogado
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
-  // Inyectamos el ID seguro del token directamente en el body
-  req.body.userId = req.user?.id || req.user?.userId || req.body.userId;
-  // Delegamos la petición (con Headers y Body) al controlador
-  return await createLawyer(req as any, res as any);
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const newLawyer = await createLawyer(payload);
+    return res.status(201).json(newLawyer);
+  } catch (error: any) {
+    console.error("❌ Error en POST /lawyers:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
 });
 
 // 🔄 PUT: Actualizar un abogado (Aprobar y calcular tarifa dinámica)
