@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import NodeGeocoder from 'node-geocoder';
 
 // =====================================================================
-// 🌍 CONFIGURACIÓN DE GEOCODER
+// 🌍 CONFIGURACIÓN DE GEOCODER 
 // =====================================================================
 const geocoder = NodeGeocoder({
   provider: 'openstreetmap'
@@ -39,7 +39,7 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail (Se mantiene)
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
 const getCurrentSupportPrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
@@ -305,11 +305,9 @@ export const getSupportById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR CONTACTO DE APOYO (FIX SQL NATIVO PARA VENCIMIENTO)
+// 📥 3. CREAR CONTACTO DE APOYO
 // =====================================================================
-export const createSupport = async (req: any, res: any) => {
-  const data = req.body || {};
-
+export const createSupport = async (data: any) => {
   try {
     let cleanImage = sanitizeText(data.imageSupp) || '';
     if (cleanImage.startsWith('support/')) {
@@ -324,7 +322,6 @@ export const createSupport = async (req: any, res: any) => {
 
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-    // 🚀 EXTRAER EL CÓDIGO REAL LIMPIO
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     let isApproved = false;
@@ -332,7 +329,6 @@ export const createSupport = async (req: any, res: any) => {
 
     const createdSupportResult = await db.transaction(async (tx) => {
       
-      // 🚀 1. VALIDACIÓN ESTRICTA DEL CUPÓN
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
@@ -341,7 +337,6 @@ export const createSupport = async (req: any, res: any) => {
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
-        // Si es válido, se aprueba de una vez
         isApproved = true;
         customMessage = "¡Cupón VIP aplicado! Tu publicación ha sido aprobada por 1 mes.";
       }
@@ -362,15 +357,13 @@ export const createSupport = async (req: any, res: any) => {
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
         couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
-        approved: isApproved, // 👈 Guarda True si usó cupón
-        // 🚀 MAGIA PURA: Postgres suma 1 mes directamente, evitando a Drizzle/JS
+        approved: isApproved, 
         timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
         timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
 
-      // 🚀 2. GUARDAR EL PAGO
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentSupportPrice(); 
 
@@ -391,7 +384,6 @@ export const createSupport = async (req: any, res: any) => {
         await tx.insert(payments).values(paymentPayload);
       }
 
-      // 🚀 3. QUEMAR EL CUPÓN
       if (isCoupon) {
         await tx.update(promoCodes)
         .set({
@@ -406,7 +398,7 @@ export const createSupport = async (req: any, res: any) => {
 
       return {
          ...newSupport,
-         timepostEnd: newSupport.timepostEnd || null,
+         timepostEnd: newSupport.timepostEnd|| null,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
@@ -423,16 +415,14 @@ export const createSupport = async (req: any, res: any) => {
       ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
     }
 
-    return res.status(201).json(createdSupportResult);
+    return createdSupportResult;
 
   } catch (error: any) { 
     console.error("❌ Error en createSupport:", error);
-    
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
-       return res.status(409).json({ error: "El código de referencia de pago ya está en uso." });
+       throw new Error("El código de referencia de pago ya está en uso.");
     }
-
-    return res.status(400).json({ error: error.message || "Error al crear el contacto de apoyo." });
+    throw new Error(error.message || "Error al crear el contacto de apoyo.");
   }
 };
 
@@ -533,7 +523,7 @@ export const updateSupport = async (id: string, data: any) => {
 };
 
 // =====================================================================
-// 🚀 5. INGRESO DE RATING Y RESEÑA (CORREGIDO PARA DEVOLVER NOMBRE Y FOTO)
+// 🚀 5. INGRESO DE RATING Y RESEÑA
 // =====================================================================
 export const createSupportReview = async (data: any) => {
   try {
@@ -634,7 +624,6 @@ export const createSupportReview = async (data: any) => {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
-      // 🚀 Enviamos la información visual al frontend
       name: formattedName,
       image: signedImageUrl,
       displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -646,9 +635,6 @@ export const createSupportReview = async (data: any) => {
   }
 };
 
-// =====================================================================
-// 🗑️ 6. ELIMINAR CONTACTO DE APOYO
-// =====================================================================
 export const deleteSupport = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
@@ -661,9 +647,6 @@ export const deleteSupport = async (id: string) => {
   }
 };
 
-// =====================================================================
-// 🔄 7. RENOVAR CONTACTO DE APOYO
-// =====================================================================
 export const renewSupport = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
