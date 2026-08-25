@@ -305,7 +305,7 @@ export const getSupportById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR CONTACTO DE APOYO (CON CUPÓN LIMPIO Y 1 MES DE VIGENCIA)
+// 📥 3. CREAR CONTACTO DE APOYO (FIX SQL NATIVO PARA VENCIMIENTO)
 // =====================================================================
 export const createSupport = async (req: any, res: any) => {
   const data = req.body || {};
@@ -322,25 +322,20 @@ export const createSupport = async (req: any, res: any) => {
     const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-    // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-    // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO (Quita el 'COUPON-' que envía el front)
+    // 🚀 EXTRAER EL CÓDIGO REAL LIMPIO
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-    // 🚀 VARIABLES DE ESTADO Y FECHA
     let isApproved = false;
-    let expirationDate: Date | null = null;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
-    // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdSupportResult = await db.transaction(async (tx) => {
       
-      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
+      // 🚀 1. VALIDACIÓN ESTRICTA DEL CUPÓN
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
-        // Búsqueda SQL insensible a mayúsculas/minúsculas para evitar errores
         const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
         
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
@@ -348,9 +343,6 @@ export const createSupport = async (req: any, res: any) => {
 
         // Si es válido, se aprueba de una vez
         isApproved = true;
-        const d = new Date();
-        d.setMonth(d.getMonth() + 1); // +1 mes de duración exacta
-        expirationDate = d;
         customMessage = "¡Cupón VIP aplicado! Tu publicación ha sido aprobada por 1 mes.";
       }
 
@@ -370,18 +362,15 @@ export const createSupport = async (req: any, res: any) => {
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
         couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
-        approved: isApproved // 👈 Guarda True si usó cupón
+        approved: isApproved, // 👈 Guarda True si usó cupón
+        // 🚀 MAGIA PURA: Postgres suma 1 mes directamente, evitando a Drizzle/JS
+        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
+        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
-
-      // Inyectar fecha de expiración de forma dinámica
-      if (expirationDate) {
-        if ('timepostEnd' in support) supportPayload.timepostEnd = expirationDate;
-        else if ('timepost_end' in support) supportPayload.timepost_end = expirationDate;
-      }
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Usando `any` para evitar el crash de TS Overload en Drizzle)
+      // 🚀 2. GUARDAR EL PAGO
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentSupportPrice(); 
 
@@ -389,24 +378,20 @@ export const createSupport = async (req: any, res: any) => {
           entityType: 'support',
           entityId: newSupport.id,
           userId: validUserId,
-          referenceCode: realPromoCode || codigoReferencia, // 👈 Cupón limpio
+          referenceCode: realPromoCode || codigoReferencia, 
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
           amount: String(isCoupon ? "0.00" : basePrice), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending"
+          status: isCoupon ? "approved" : "pending",
+          approvedAt: isCoupon ? sql`NOW()` : null,
+          timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
+          timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
         };
-
-        if (isCoupon) paymentPayload.approvedAt = new Date();
-
-        if (expirationDate) {
-          if ('timepostEnd' in payments) paymentPayload.timepostEnd = expirationDate;
-          else if ('timepost_end' in payments) paymentPayload.timepost_end = expirationDate;
-        }
 
         await tx.insert(payments).values(paymentPayload);
       }
 
-      // 🚀 5. QUEMAR EL CUPÓN
+      // 🚀 3. QUEMAR EL CUPÓN
       if (isCoupon) {
         await tx.update(promoCodes)
         .set({
@@ -421,11 +406,12 @@ export const createSupport = async (req: any, res: any) => {
 
       return {
          ...newSupport,
+         timepostEnd: newSupport.timepostEnd || null,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionSupp: safeDesc,
-         message: customMessage // 👈 Mensaje que leerá el frontend
+         message: customMessage 
       };
     });
 
@@ -508,9 +494,9 @@ export const updateSupport = async (id: string, data: any) => {
              status: "approved", 
              approvedAt: new Date(), 
              durationDays: daysToAdd, 
-             amount: totalAmount, 
+             amount: String(totalAmount), 
              timepost_end: expirationDate 
-          })
+          } as any)
           .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'support')));
       }
 
@@ -648,6 +634,7 @@ export const createSupportReview = async (data: any) => {
       id: generatedRatingId,
       stars: Number(newRating[0].rating),
       comment: savedComment,
+      // 🚀 Enviamos la información visual al frontend
       name: formattedName,
       image: signedImageUrl,
       displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

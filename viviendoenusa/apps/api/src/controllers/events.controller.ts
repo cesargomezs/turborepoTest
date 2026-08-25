@@ -263,7 +263,7 @@ export const getEventById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR EVENTO (ACTUALIZADO CON LÓGICA DE CUPONES BLINDADA)
+// 📥 3. CREAR EVENTO (ACTUALIZADO CON FIX MAESTRO PARA DRIZZLE)
 // =====================================================================
 export const createEvent = async (data: any) => {
   try {
@@ -279,6 +279,8 @@ export const createEvent = async (data: any) => {
     const codigoReferencia = cleanData.referenceCode ? String(cleanData.referenceCode).trim() : '';
 
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
+    
+    // 🚀 EXTRAEMOS EL CÓDIGO REAL LIMPIO
     let realPromoCode = cleanData.couponCode ? String(cleanData.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
@@ -302,7 +304,7 @@ export const createEvent = async (data: any) => {
           if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
           isApproved = true;
-          customMessage = "¡Cupón aplicado! Tu evento ha sido publicado con éxito.";
+          customMessage = "¡Cupón aplicado! Tu evento ha sido publicado con éxito por 1 mes.";
         }
 
         const payload: any = {
@@ -326,6 +328,12 @@ export const createEvent = async (data: any) => {
           approved: isApproved, // 👈 Se guarda como aprobado si es un cupón
         };
 
+        // 🚀 EL FIX MAESTRO: Forzamos ambos nombres para Drizzle y Postgres
+        if (isCoupon) {
+          payload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
+          payload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
+        }
+
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
         // 🚀 GUARDAR EL PAGO USANDO EL FIX DE TYPESCRIPT 'any'
@@ -347,12 +355,12 @@ export const createEvent = async (data: any) => {
             };
 
             if (isCoupon) {
-              paymentPayload.approvedAt = new Date();
-            }
-
-            if (eventDate) {
-              if ('timepostEnd' in payments) paymentPayload.timepostEnd = eventDate;
-              else if ('timepost_end' in payments) paymentPayload.timepost_end = eventDate;
+              paymentPayload.approvedAt = sql`NOW()`;
+              paymentPayload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
+              paymentPayload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
+            } else if (eventDate) {
+              paymentPayload.timepostEnd = eventDate;
+              paymentPayload.timepost_end = eventDate;
             }
 
             await tx.insert(payments).values(paymentPayload);
@@ -372,6 +380,8 @@ export const createEvent = async (data: any) => {
 
         return {
            ...newEvent,
+           // Retornamos la fecha parseada
+           timepostEnd: newEvent.timepostEnd || null,
            referenceCode: isCoupon ? realPromoCode : codigoReferencia,
            paymentMethod: isCoupon ? 'Coupon' : metodoPago,
            message: customMessage // Enviamos el mensaje final al Front

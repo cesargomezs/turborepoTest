@@ -140,7 +140,7 @@ export const getCompanyById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 CREAR EMPRESA (CUPÓN LIMPIO + AUTO-APROBACIÓN + 1 MES)
+// 📥 CREAR EMPRESA (FIX SQL NATIVO PARA VENCIMIENTO)
 // =====================================================================
 export const createCompany = async (data: any) => {
   try {
@@ -179,10 +179,9 @@ export const createCompany = async (data: any) => {
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
       let isApproved = false;
-      let expirationDate: Date | null = null;
       let customMessage = "Suscripción en Revisión. Tu empresa ha sido registrada.";
 
-      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
+      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
@@ -194,9 +193,6 @@ export const createCompany = async (data: any) => {
 
         // Nace aprobado por usar cupón
         isApproved = true;
-        const d = new Date();
-        d.setMonth(d.getMonth() + 1); // +1 mes de duración
-        expirationDate = d;
         customMessage = "¡Cupón VIP aplicado! Tu empresa ha sido verificada y activada por 1 mes.";
       }
       
@@ -213,13 +209,10 @@ export const createCompany = async (data: any) => {
         isVerified: isApproved, // 👈 Si es cupón, nace verificada
         premiumPlan: isCoupon ? 'coupon' : selectedPlan, 
         status: isApproved ? 'approved' : 'pending', // 👈 Si es cupón, nace aprobada
+        // 🚀 EL FIX MAESTRO PARA POSTGRES
+        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
+        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
-
-      // Inyectar fecha de expiración dinámicamente
-      if (expirationDate) {
-        if ('timepostEnd' in companies) companyPayload.timepostEnd = expirationDate;
-        else if ('timepost_end' in companies) companyPayload.timepost_end = expirationDate;
-      }
 
       const [newCompany] = await tx.insert(companies).values(companyPayload).returning();
 
@@ -238,15 +231,12 @@ export const createCompany = async (data: any) => {
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
           amount: String(isCoupon ? "0.00" : amountToPay), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending"
+          status: isCoupon ? "approved" : "pending",
+          approvedAt: isCoupon ? sql`NOW()` : null,
+          // 🚀 FIX DE FECHA PARA PAGOS
+          timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
+          timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
         };
-
-        if (isCoupon) paymentPayload.approvedAt = new Date();
-
-        if (expirationDate) {
-          if ('timepostEnd' in payments) paymentPayload.timepostEnd = expirationDate;
-          else if ('timepost_end' in payments) paymentPayload.timepost_end = expirationDate;
-        }
 
         await tx.insert(payments).values(paymentPayload);
       }
@@ -266,6 +256,7 @@ export const createCompany = async (data: any) => {
 
       return {
          ...newCompany,
+         timepostEnd: newCompany.timepostEnd || null,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          message: customMessage // 👈 Mensaje que leerá el frontend

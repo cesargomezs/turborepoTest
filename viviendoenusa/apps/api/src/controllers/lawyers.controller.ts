@@ -337,7 +337,7 @@ const sendTelegramAlert = async (lawyerName: string, refCode: string, method: st
 };
 
 // =====================================================================
-// 📥 3. CREAR ABOGADO (VALIDACIÓN DE CUPÓN Y FECHA BLINDADA)
+// 📥 3. CREAR ABOGADO (EL PARCHE ANTI-VENCIMIENTO INSTANTÁNEO)
 // =====================================================================
 export const createLawyer = async (req: Request, res: Response) => {
   const reqAny = req as any;
@@ -367,21 +367,19 @@ export const createLawyer = async (req: Request, res: Response) => {
       const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
       const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-      // 🚀 1. DETECTAR SI ES CUPÓN
       const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-      // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO
+      // 🚀 EXTRAER EL CÓDIGO REAL LIMPIO
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
       let isApproved = false;
       let expirationDate = null;
       let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
-      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS Y ASIGNACIÓN DE FECHA
+      // 🚀 VALIDACIÓN DEL CUPÓN
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
-        // Búsqueda SQL insensible a mayúsculas/minúsculas para evitar errores tontos
         const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
         
         if (!promo) {
@@ -402,7 +400,6 @@ export const createLawyer = async (req: Request, res: Response) => {
         customMessage = "¡Cupón VIP aplicado! Tu perfil ha sido aprobado y publicado por 1 mes.";
       }
 
-      // Si pasa la validación, armamos el perfil
       const lawyerPayload: any = {
         nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
         area: sanitizeText(data.area) || 'General',
@@ -416,18 +413,21 @@ export const createLawyer = async (req: Request, res: Response) => {
         lng: data.lng ? Number(data.lng) : lng, 
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
         userId: validUserId, 
-        approved: isApproved,             // 👈 Se guarda aprobado
-        timepostEnd: expirationDate,      // 👈 Se guarda la fecha de +1 mes limpia
+        approved: isApproved, 
         estate: finalEstate 
       };
 
+      // 🚀 EL FIX MAESTRO: Forzamos ambos nombres para que Drizzle no ignore la fecha
+      if (expirationDate) {
+        lawyerPayload.timepostEnd = expirationDate;
+        lawyerPayload.timepost_end = expirationDate;
+      }
+
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Usando la Referencia Limpia)
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentLawyerPrice();
         
-        // Armamos el payload base sin mandar "null" para no enojar a Drizzle
         const paymentPayload: any = {
           entityType: 'lawyer',
           entityId: newLawyer.id,
@@ -439,25 +439,17 @@ export const createLawyer = async (req: Request, res: Response) => {
           status: isCoupon ? "approved" : "pending"
         };
 
-        // Asignamos las fechas solo si aplican (Cupón)
-        if (isCoupon) {
-          paymentPayload.approvedAt = new Date();
-        }
+        if (isCoupon) paymentPayload.approvedAt = new Date();
         
-        // Verificamos dinámicamente el nombre de la columna para evitar errores de TS
+        // 🚀 FIX DE FECHA TAMBIÉN PARA PAGOS
         if (expirationDate) {
-          if ('timepostEnd' in payments) {
-            paymentPayload.timepostEnd = expirationDate;
-          } else if ('timepost_end' in payments) {
-            paymentPayload.timepost_end = expirationDate;
-          }
+          paymentPayload.timepostEnd = expirationDate;
+          paymentPayload.timepost_end = expirationDate;
         }
 
-        // Ejecutamos el insert
         await tx.insert(payments).values(paymentPayload);
       }
 
-      // 🚀 5. QUEMAR EL CUPÓN PARA QUE NO SE VUELVA A USAR
       if (isCoupon) {
           await tx.update(promoCodes)
           .set({
@@ -476,11 +468,10 @@ export const createLawyer = async (req: Request, res: Response) => {
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionLawy: safeDesc,
-         message: customMessage // 👈 Enviamos este mensaje al Front
+         message: customMessage 
       };
     });
 
-    // 🚀 6. NOTIFICAR AL ADMIN SOLO SI NO FUE CON CUPÓN
     if (createdLawyerResult && createdLawyerResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdLawyerResult.nameLawy, 
@@ -494,12 +485,10 @@ export const createLawyer = async (req: Request, res: Response) => {
   } catch (error: any) { 
     console.error("❌ Error en createLawyer:", error);
     
-    // Filtramos los errores de Constraint por si acaso
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
        return resAny.status(409).json({ error: "El código de referencia de pago ya está en uso." });
     }
 
-    // Le devolvemos el error exacto al usuario (ej: "El cupón es inválido")
     return resAny.status(400).json({ error: error.message || "Error al crear el abogado." });
   }
 };

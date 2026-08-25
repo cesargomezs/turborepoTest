@@ -2,7 +2,7 @@ import { db } from "../../../../packages/db/src";
 import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
-import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import zipcodes from 'zipcodes'; 
 
 // =====================================================================
 // ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
@@ -11,7 +11,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
-const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
+const radiusMiles = process.env.RADIUMILE || 20; 
 
 // =====================================================================
 // 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
@@ -19,7 +19,6 @@ const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 2
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
   
-  // 🚀 bypass de TypeScript con as any
   const locationInfo = zipcodes.lookup(zip as any);
   
   if (locationInfo) {
@@ -148,14 +147,12 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
 
-    // 🚀 Lógica de Visibilidad 
     let baseConditions = currentUserId
       ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${currentUserId})`
       : sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW())`;
 
     let finalConditions: any = baseConditions;
 
-    // 🚀 Lógica de Geofencing Súper Rápida
     if (zip && zip.length === 5) {
       const nearbyZips = zipcodes.radius(zip as any, Number(radiusMiles)); 
 
@@ -330,11 +327,10 @@ export const getStoreById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR NEGOCIO (ACTUALIZADO CON LÓGICA DE CUPONES BLINDADA)
+// 📥 3. CREAR NEGOCIO (EL PARCHE ANTI-VENCIMIENTO INSTANTÁNEO)
 // =====================================================================
 export const createStore = async (data: any) => {
   try {
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
     const validUserId = sanitizeText(data.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para registrar un negocio.");
@@ -345,41 +341,32 @@ export const createStore = async (data: any) => {
       cleanImage = cleanImage.replace('stores/', '');
     }
 
-    // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP DE FORMA SÍNCRONA
     const { lat, lng } = getCoordsFromZip(data.zip || '');
     const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
     
     const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-    // 🚀 1. MAGIA DEL CUPÓN: Validamos tolerando "coupon" o "cupon"
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-    // 🚀 2. EXTRAER EL CÓDIGO REAL: Quitamos el prefijo si el frontend lo envió
+    // 🚀 EXTRAEMOS EL CÓDIGO REAL LIMPIO
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     let isApproved = false;
-    let expirationDate: Date | null = null;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
-    // 🚀 GUARDAMOS EL RESULTADO DE LA TRANSACCIÓN
     const createdStoreResult = await db.transaction(async (tx) => {
       
-      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS (DENTRO DE LA TRANSACCIÓN)
+      // 🚀 VALIDACIÓN ESTRICTA DEL CUPÓN
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
-        // Búsqueda SQL insensible a mayúsculas/minúsculas para evitar errores
         const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
         
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
         isApproved = true;
-        const d = new Date();
-        d.setMonth(d.getMonth() + 1); // +1 mes
-        expirationDate = d;
-
         customMessage = "¡Cupón aplicado! Tu negocio ha sido publicado con éxito por 1 mes.";
       }
 
@@ -398,19 +385,17 @@ export const createStore = async (data: any) => {
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
         userId: validUserId, 
-        approved: isApproved, // 👈 Si es cupón, nace aprobado
+        approved: isApproved, // 👈 Guarda True si usó cupón
         createdAt: new Date(),
-        premiumPlan: isCoupon ? 'coupon' : planSeleccionado // 👈 Ajuste dinámico del plan
+        premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
+        // 🚀 EL FIX MAESTRO: Forzamos ambos nombres de columna para que Drizzle y Postgres sumen 1 mes nativo
+        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
+        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
 
-      if (expirationDate) {
-        if ('timepostEnd' in stores) storePayload.timepostEnd = expirationDate;
-        else if ('timepost_end' in stores) storePayload.timepost_end = expirationDate;
-      }
-      
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Evitando choque de Unique Constraint y Error Typescript Any)
+      // 🚀 4. GUARDAR EL PAGO (Usando `any` para evitar error de TypeScript)
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentStorePrice();
 
@@ -425,17 +410,15 @@ export const createStore = async (data: any) => {
           status: isCoupon ? "approved" : "pending"
         };
 
-        if (isCoupon) paymentPayload.approvedAt = new Date();
-
-        if (expirationDate) {
-          if ('timepostEnd' in payments) paymentPayload.timepostEnd = expirationDate;
-          else if ('timepost_end' in payments) paymentPayload.timepost_end = expirationDate;
+        if (isCoupon) {
+          paymentPayload.approvedAt = sql`NOW()`;
+          paymentPayload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
+          paymentPayload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
         }
 
         await tx.insert(payments).values(paymentPayload);
       }
 
-      // 🚀 5. QUEMAR EL CUPÓN
       if (isCoupon) {
         await tx.update(promoCodes)
         .set({
@@ -450,15 +433,15 @@ export const createStore = async (data: any) => {
 
       return {
          ...newStore,
+         timepostEnd: newStore.timepostEnd || null,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionStores: safeDesc,
-         message: customMessage // 👈 Enviamos mensaje custom al front
+         message: customMessage 
       };
     });
 
-    // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
     if (createdStoreResult && createdStoreResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdStoreResult.nameStores,
@@ -471,13 +454,9 @@ export const createStore = async (data: any) => {
 
   } catch (error: any) { 
     console.error("❌ Error en createStore:", error);
-    
-    // Filtramos los errores de Constraint
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
        throw new Error("El código de referencia de pago ya está en uso.");
     }
-    
-    // Devolvemos el error exacto (Ej: "El cupón no existe")
     throw new Error(error.message || "Error al crear el negocio.");
   }
 };
@@ -499,7 +478,6 @@ export const updateStore = async (req: Request, res: Response) => {
     const cleanId = sanitizeText(id);
     if (!cleanId) return resAny.status(400).json({ error: "ID inválido" });
 
-    // 🚀 Obtenemos el registro actual para validar si ya había sido aprobado
     const [existingStore] = await db.select().from(stores).where(eq(stores.id, cleanId));
     if (!existingStore) return resAny.status(404).json({ error: "Negocio no encontrado" });
 
@@ -552,7 +530,6 @@ export const updateStore = async (req: Request, res: Response) => {
       const updated = await tx.update(stores).set(updatePayload).where(eq(stores.id, cleanId)).returning();
       const store = updated[0];
 
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
       if (isApproved && !wasApprovedBefore && store) {
         console.log("✅ [DEBUG PUSH NEGOCIOS] Negocio verificado. Calculando usuarios en zona...");
 
