@@ -1,11 +1,12 @@
 import { db } from "../../../../packages/db/src"; 
-import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, promoCodes } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and, ConsoleLogWriter } from "drizzle-orm";
+import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, promoCodes, userDevices } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and, inArray, ConsoleLogWriter } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 import NodeGeocoder from 'node-geocoder';
+import zipcodes from 'zipcodes'; 
 
 // =====================================================================
-// 🌍 CONFIGURACIÓN DE GEOCODER 
+// 🌍 CONFIGURACIÓN DE GEOCODER
 // =====================================================================
 const geocoder = NodeGeocoder({
   provider: 'openstreetmap'
@@ -29,6 +30,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
+const radiusMiles = process.env.RADIUMILE || 20; 
 
 // 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
@@ -39,7 +41,7 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail (Se mantiene)
 const getCurrentSupportPrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
@@ -63,6 +65,54 @@ const getCurrentSupportPrice = async () => {
     console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $50.00 por defecto");
   }
   return "50.00";
+};
+
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// ============================================================================
+const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH MASIVO APOYO] Ningún usuario cercano tiene dispositivos registrados.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "support", referenceId: payload.referenceId },
+    }));
+
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    console.log(`📱 [PUSH MASIVO APOYO] Enviando ${messages.length} notificaciones en la zona...`);
+
+    for (const chunk of chunks) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✅ [PUSH MASIVO APOYO] ¡Envío completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH MASIVO APOYO] Error enviando notificaciones:", error);
+  }
 };
 
 // =====================================================================
@@ -103,7 +153,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
 
     // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP PARA LA BÚSQUEDA
     const { lat, lng } = await getCoordsFromZip(zip || ''); 
-    const radiusMiles = 4; // Rango de búsqueda: 10 millas
+    const radiusMilesForSearch = 4; // Rango de búsqueda para vistas locales
 
     // 🚀 Fórmula de Distancia Haversine (Segura para Drizzle y Postgres)
     const distanceFormula = sql`(
@@ -141,7 +191,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     if (zip && zip.length === 5) {
       query = query.where(
         and(
-          sql`${distanceFormula} <= ${radiusMiles}`,
+          sql`${distanceFormula} <= ${radiusMilesForSearch}`,
           visibilityCondition 
         )
       );
@@ -326,6 +376,7 @@ export const createSupport = async (data: any) => {
 
     let isApproved = false;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
+    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH DE APOYO (CUPÓN)
 
     const createdSupportResult = await db.transaction(async (tx) => {
       
@@ -394,11 +445,41 @@ export const createSupport = async (data: any) => {
           usedAt: new Date() 
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
+
+        // ==============================================================
+        // 🚀 PROGRAMACIÓN DE NOTIFICACIONES PARA APOYO POR CUPÓN
+        // ==============================================================
+        console.log("✅ [DEBUG PUSH APOYO] Contacto creado y aprobado vía Cupón. Buscando usuarios cercanos...");
+        const titleText = "¡Nuevo Apoyo en tu área! 🤝";
+        const bodyText = `El contacto de apoyo ${newSupport.nameSupp} ahora es parte de la red. ¡Visita su perfil!`;
+
+        let usersToNotify: { id: string }[] = [];
+
+        if (newSupport.zip) {
+          const nearbyZips = zipcodes.radius(newSupport.zip as any, Number(radiusMiles)); 
+          if (nearbyZips && nearbyZips.length > 0) {
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
+          } else {
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(newSupport.zip)));
+          }
+        }
+
+        if (usersToNotify.length > 0) {
+          const notificationsToInsert = usersToNotify.map(u => {
+            const payloadNotif: any = { title: titleText, description: bodyText, type: "support", visibleAt: new Date(), userId: u.id, isRead: false };
+            if ('referenceId' in notifications) payloadNotif.referenceId = String(newSupport.id);
+            else if ('reference_id' in notifications) payloadNotif.reference_id = String(newSupport.id);
+            return payloadNotif;
+          });
+
+          await tx.insert(notifications).values(notificationsToInsert);
+          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(newSupport.id), userIds: usersToNotify.map(u => u.id) };
+        }
       }
 
       return {
          ...newSupport,
-         timepostEnd: newSupport.timepostEnd|| null,
+         timepostEnd: newSupport.timepostEnd || null,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
@@ -406,6 +487,13 @@ export const createSupport = async (data: any) => {
          message: customMessage 
       };
     });
+
+    // 🚀 DISPARAR PUSH FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
+    if (pushNotificationData) {
+        sendMassPushNotification(pushNotificationData).catch(err => {
+            console.error("❌ [DEBUG PUSH APOYO] Falló el Push Notification en creación por cupón:", err);
+        });
+    }
 
     if (createdSupportResult && createdSupportResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
@@ -434,7 +522,13 @@ export const updateSupport = async (id: string, data: any) => {
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
-    return await db.transaction(async (tx) => {
+    const [existingSupport] = await db.select().from(support).where(eq(support.id, cleanId));
+    if (!existingSupport) throw new Error("Contacto de apoyo no encontrado");
+
+    const wasApprovedBefore = existingSupport.approved === true;
+    let pushNotificationData: any = null;
+
+    const updatedSupportResult = await db.transaction(async (tx) => {
       
       const allowedFields = ['nameSupp', 'categoryId', 'addressSupp', 'zip', 'phone', 'lat', 'lng', 'imageSupp', 'descriptionSupp', 'premiumPlan', 'couponCode']; 
       const updatePayload: any = {};
@@ -498,23 +592,46 @@ export const updateSupport = async (id: string, data: any) => {
         
       const supportItem = updated[0];
 
-      if (isApproved && supportItem) {
-        const notifPayload: any = {
-            title: "¡Nuevo Contacto de Apoyo Verificado! 🤝",
-            description: `El contacto ${supportItem.nameSupp} ahora es parte de la red de apoyo. ¡Visita su perfil!`,
-            type: "support", 
-            visibleAt: new Date(), 
-            userId: supportItem.userId || TEMP_USER_ID, 
-        };
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
+      if (isApproved && !wasApprovedBefore && supportItem) {
+        console.log("✅ [DEBUG PUSH APOYO] Apoyo verificado manualmente. Calculando usuarios en zona...");
+        const titleText = "¡Nuevo Apoyo en tu área! 🤝";
+        const bodyText = `El contacto de apoyo ${supportItem.nameSupp} ahora es parte de la red. ¡Visita su perfil!`;
 
-        if ('referenceId' in notifications) notifPayload.referenceId = String(supportItem.id);
-        else if ('reference_id' in notifications) notifPayload.reference_id = String(supportItem.id);
+        let usersToNotify: { id: string }[] = [];
 
-        await tx.insert(notifications).values(notifPayload);
+        if (supportItem.zip) {
+          const nearbyZips = zipcodes.radius(supportItem.zip as any, Number(radiusMiles)); 
+          if (nearbyZips && nearbyZips.length > 0) {
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
+          } else {
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(supportItem.zip)));
+          }
+        }
+
+        if (usersToNotify.length > 0) {
+          const notificationsToInsert = usersToNotify.map(u => {
+            const payloadNotif: any = { title: titleText, description: bodyText, type: "support", visibleAt: new Date(), userId: u.id, isRead: false };
+            if ('referenceId' in notifications) payloadNotif.referenceId = String(supportItem.id);
+            else if ('reference_id' in notifications) payloadNotif.reference_id = String(supportItem.id);
+            return payloadNotif;
+          });
+
+          await tx.insert(notifications).values(notificationsToInsert);
+          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(supportItem.id), userIds: usersToNotify.map(u => u.id) };
+        }
       }
 
       return supportItem || null;
     });
+
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH APOYO] Falló el Push Notification:", err);
+      });
+    }
+
+    return updatedSupportResult;
 
   } catch (error: any) { 
     console.error("❌ Error en updateSupport:", error);

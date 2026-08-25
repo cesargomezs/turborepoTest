@@ -314,7 +314,7 @@ export const getStoreById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR NEGOCIO (RESTAURADA A SU FIRMA ORIGINAL `data: any`)
+// 📥 3. CREAR NEGOCIO (AUTO-APROBACIÓN CUPÓN + NOTIFICACIONES MASIVAS)
 // =====================================================================
 export const createStore = async (data: any) => {
   try {
@@ -340,6 +340,7 @@ export const createStore = async (data: any) => {
 
     let isApproved = false;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
+    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH DE NEGOCIOS (CUPÓN)
 
     const createdStoreResult = await db.transaction(async (tx) => {
       
@@ -352,7 +353,7 @@ export const createStore = async (data: any) => {
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
         isApproved = true;
-        customMessage = "¡Cupón aplicado! Tu negocio ha sido publicado con éxito por 1 mes.";
+        customMessage = "¡Cupón VIP aplicado! Tu negocio ha sido verificado y activado por 1 mes.";
       }
 
       const safeDesc = sanitizeText(data.description || data.descriptionStores) || '';
@@ -412,6 +413,36 @@ export const createStore = async (data: any) => {
           usedAt: new Date() 
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
+
+        // ==============================================================
+        // 🚀 PROGRAMACIÓN DE NOTIFICACIONES PARA NEGOCIOS POR CUPÓN
+        // ==============================================================
+        console.log("✅ [DEBUG PUSH NEGOCIOS] Negocio creado y aprobado vía Cupón. Buscando usuarios cercanos...");
+        const titleText = "¡Nuevo Negocio en tu área! 🏪";
+        const bodyText = `El negocio ${newStore.nameStores} ahora es parte de la red. ¡Visita su perfil!`;
+
+        let usersToNotify: { id: string }[] = [];
+
+        if (newStore.zip) {
+          const nearbyZips = zipcodes.radius(newStore.zip as any, Number(radiusMiles)); 
+          if (nearbyZips && nearbyZips.length > 0) {
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
+          } else {
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(newStore.zip)));
+          }
+        }
+
+        if (usersToNotify.length > 0) {
+          const notificationsToInsert = usersToNotify.map(u => {
+            const payloadNotif: any = { title: titleText, description: bodyText, type: "store", visibleAt: new Date(), userId: u.id, isRead: false };
+            if ('referenceId' in notifications) payloadNotif.referenceId = String(newStore.id);
+            else if ('reference_id' in notifications) payloadNotif.reference_id = String(newStore.id);
+            return payloadNotif;
+          });
+
+          await tx.insert(notifications).values(notificationsToInsert);
+          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(newStore.id), userIds: usersToNotify.map(u => u.id) };
+        }
       }
 
       return {
@@ -424,6 +455,13 @@ export const createStore = async (data: any) => {
          message: customMessage 
       };
     });
+
+    // 🚀 DISPARAR PUSH DE NEGOCIOS FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
+    if (pushNotificationData) {
+        sendMassPushNotification(pushNotificationData).catch(err => {
+            console.error("❌ [DEBUG PUSH NEGOCIOS] Falló el Push Notification en creación por cupón:", err);
+        });
+    }
 
     if (createdStoreResult && createdStoreResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
@@ -445,7 +483,7 @@ export const createStore = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR (RESTAURADA A SU FIRMA ORIGINAL `id, data`)
+// 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR 
 // =====================================================================
 export const updateStore = async (id: string, data: any) => {
   try {

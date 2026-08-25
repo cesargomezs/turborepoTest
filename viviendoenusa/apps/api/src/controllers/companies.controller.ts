@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
-import { companies, users, payments, notifications, tariffs, typeDetail, promoCodes } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and } from "drizzle-orm";
+import { companies, users, payments, notifications, tariffs, typeDetail, promoCodes, userDevices } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -13,6 +13,47 @@ const TEMP_USER_ID = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// ============================================================================
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO PUSH DIRECTO AL DUEÑO
+// ============================================================================
+const sendPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
+  try {
+    if (!payload.userIds || payload.userIds.length === 0) return;
+
+    const devices = await db.select()
+      .from(userDevices)
+      .where(inArray(userDevices.userId, payload.userIds)); 
+
+    if (!devices || devices.length === 0) {
+      console.log("🔕 [PUSH EMPRESAS] El usuario no tiene dispositivos registrados para Push.");
+      return;
+    }
+
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "company", referenceId: payload.referenceId },
+    }));
+
+    console.log(`📱 [PUSH EMPRESAS] Enviando notificación al dueño de la empresa...`);
+
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+    console.log(`✅ [PUSH EMPRESAS] ¡Envío completado exitosamente!`);
+  } catch (error) {
+    console.error("❌ [PUSH EMPRESAS] Error enviando notificaciones:", error);
+  }
 };
 
 // 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA EMPRESAS
@@ -140,10 +181,12 @@ export const getCompanyById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 CREAR EMPRESA (FIX SQL NATIVO PARA VENCIMIENTO)
+// 📥 CREAR EMPRESA (CUPÓN DIRECTO + AUTO-APROBACIÓN + PUSH AL DUEÑO)
 // =====================================================================
 export const createCompany = async (data: any) => {
   try {
+    let pushNotificationData: any = null; // 🚀 AQUÍ GUARDAMOS EL PAYLOAD PARA EL PUSH
+
     const createdCompanyResult = await db.transaction(async (tx) => {
       let finalLogoUrl = sanitizeText(data.logoUrl) || '';
 
@@ -175,7 +218,7 @@ export const createCompany = async (data: any) => {
       // 🚀 1. MAGIA DEL CUPÓN
       const isCoupon = selectedPlan === 'coupon' || metodoPago === 'coupon' || selectedPlan === 'cupon' || metodoPago === 'cupon';
 
-      // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO (Quita el 'COUPON-' que pueda mandar el front)
+      // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
       let isApproved = false;
@@ -185,7 +228,6 @@ export const createCompany = async (data: any) => {
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
-        // Búsqueda SQL insensible a mayúsculas/minúsculas
         const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
         
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
@@ -216,7 +258,7 @@ export const createCompany = async (data: any) => {
 
       const [newCompany] = await tx.insert(companies).values(companyPayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Usando `any` para evitar error de TypeScript Overload)
+      // 🚀 4. GUARDAR EL PAGO
       if (codigoReferencia || realPromoCode) {
         const prices = await getCurrentCompanyPrices();
         let amountToPay = prices.basic;
@@ -227,13 +269,12 @@ export const createCompany = async (data: any) => {
           entityType: 'company',
           entityId: newCompany.id,
           userId: validUserId,
-          referenceCode: realPromoCode || codigoReferencia, // 👈 Cupón Limpio
+          referenceCode: realPromoCode || codigoReferencia, 
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
           amount: String(isCoupon ? "0.00" : amountToPay), 
           durationDays: 30, 
           status: isCoupon ? "approved" : "pending",
           approvedAt: isCoupon ? sql`NOW()` : null,
-          // 🚀 FIX DE FECHA PARA PAGOS
           timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
           timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
         };
@@ -241,7 +282,7 @@ export const createCompany = async (data: any) => {
         await tx.insert(payments).values(paymentPayload);
       }
 
-      // 🚀 5. QUEMAR EL CUPÓN
+      // 🚀 5. QUEMAR EL CUPÓN Y CREAR NOTIFICACIONES
       if (isCoupon) {
         await tx.update(promoCodes)
         .set({
@@ -252,6 +293,25 @@ export const createCompany = async (data: any) => {
           usedAt: new Date() 
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
+
+        // 🚀 NOTIFICACIÓN DE BASE DE DATOS (Solo al dueño)
+        if (validUserId) {
+            await tx.insert(notifications).values({
+                title: "¡Empresa Verificada! 🏢",
+                description: `La suscripción de ${newCompany.name} ha sido activada con tu cupón. Ya puedes publicar vacantes.`,
+                type: "alert", 
+                visibleAt: new Date(), 
+                userId: validUserId, 
+            });
+
+            // 🚀 PREPARAMOS EL PAYLOAD PARA EL PUSH NOTIFICATION
+            pushNotificationData = {
+                title: "¡Empresa Verificada! 🏢",
+                body: `La suscripción de ${newCompany.name} ha sido activada con tu cupón. Ya puedes publicar vacantes.`,
+                referenceId: String(newCompany.id),
+                userIds: [validUserId]
+            };
+        }
       }
 
       return {
@@ -259,11 +319,18 @@ export const createCompany = async (data: any) => {
          timepostEnd: newCompany.timepostEnd || null,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
-         message: customMessage // 👈 Mensaje que leerá el frontend
+         message: customMessage 
       };
     });
 
-      // 🚀 NUEVO: DISPARAR ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
+      // 🚀 DISPARAMOS LOS PUSH FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
+      if (pushNotificationData) {
+        sendPushNotification(pushNotificationData).catch(err => {
+           console.error("❌ [DEBUG PUSH EMPRESAS] Falló el Push Notification en creación por cupón:", err);
+        });
+      }
+
+      // 🚀 ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
       if (createdCompanyResult && createdCompanyResult.paymentMethod !== 'Coupon') {
         sendTelegramAlert(
           createdCompanyResult.name,
@@ -276,12 +343,9 @@ export const createCompany = async (data: any) => {
 
   } catch (error: any) { 
     console.error("❌ Error en createCompany:", error);
-
-    // Filtramos los errores de Constraint
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
        throw new Error("Ya existe una empresa registrada con este EIN o referencia de pago duplicada.");
     }
-    
     throw new Error(error.message || `Error al registrar la empresa.`);
   }
 };
@@ -291,7 +355,9 @@ export const updateCompany = async (id: string, data: any) => {
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
-    return await db.transaction(async (tx) => {
+    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH
+
+    const updatedCompanyResult = await db.transaction(async (tx) => {
       const updatePayload: any = { updatedAt: new Date() };
       const allowedFields = ['name', 'ein', 'phoneCode', 'phone', 'contactMethod', 'email', 'website', 'logoUrl', 'premiumPlan'];
       
@@ -309,7 +375,6 @@ export const updateCompany = async (id: string, data: any) => {
         updatePayload.status = 'approved';
         updatePayload.isVerified = true; 
         
-        // Mantener el plan de la empresa
         const compCurrent = await tx.select({ premiumPlan: companies.premiumPlan }).from(companies).where(eq(companies.id, cleanId)).limit(1);
         const planActive = compCurrent.length > 0 ? compCurrent[0].premiumPlan : 'basic';
         
@@ -333,19 +398,38 @@ export const updateCompany = async (id: string, data: any) => {
 
         const comp = await tx.select({ userId: companies.userId, name: companies.name }).from(companies).where(eq(companies.id, cleanId)).limit(1);
         if (comp.length > 0) {
+            const ownerId = comp[0].userId || TEMP_USER_ID;
+            const titleText = "¡Empresa Verificada! 🏢";
+            const bodyText = `La suscripción de ${comp[0].name} ha sido aprobada. Ya puedes publicar vacantes sin límite.`;
+
             await tx.insert(notifications).values({
-                title: "¡Empresa Verificada! 🏢",
-                description: `La suscripción de ${comp[0].name} ha sido aprobada. Ya puedes publicar vacantes sin límite.`,
+                title: titleText,
+                description: bodyText,
                 type: "alert", 
                 visibleAt: new Date(), 
-                userId: comp[0].userId || TEMP_USER_ID, 
+                userId: ownerId, 
             });
+
+            // 🚀 PREPARAMOS EL PUSH PARA LA APROBACIÓN MANUAL
+            pushNotificationData = {
+                title: titleText,
+                body: bodyText,
+                referenceId: String(cleanId),
+                userIds: [ownerId]
+            };
         }
       }
 
       const updated = await tx.update(companies).set(updatePayload).where(eq(companies.id, cleanId)).returning();
       return updated[0] || null;
     });
+
+    // 🚀 DISPARAMOS LOS PUSH FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+      sendPushNotification(pushNotificationData).catch(err => console.error("❌ [DEBUG PUSH EMPRESAS] Falló:", err));
+    }
+
+    return updatedCompanyResult;
 
   } catch (error: any) { 
     throw new Error(`Error al actualizar la empresa: ${error.message}`);

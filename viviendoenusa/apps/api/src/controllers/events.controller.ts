@@ -263,7 +263,7 @@ export const getEventById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR EVENTO (ACTUALIZADO CON FIX MAESTRO PARA DRIZZLE)
+// 📥 3. CREAR EVENTO (AUTO-APROBACIÓN CUPÓN + NOTIFICACIONES MASIVAS)
 // =====================================================================
 export const createEvent = async (data: any) => {
   try {
@@ -280,7 +280,6 @@ export const createEvent = async (data: any) => {
 
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
     
-    // 🚀 EXTRAEMOS EL CÓDIGO REAL LIMPIO
     let realPromoCode = cleanData.couponCode ? String(cleanData.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
@@ -290,6 +289,7 @@ export const createEvent = async (data: any) => {
         cleanImage = cleanImage.replace('events/', '');
     }
 
+    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH DE EVENTOS (CUPÓN)
     let isApproved = false;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
@@ -304,7 +304,7 @@ export const createEvent = async (data: any) => {
           if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
           isApproved = true;
-          customMessage = "¡Cupón aplicado! Tu evento ha sido publicado con éxito por 1 mes.";
+          customMessage = "¡Cupón aplicado! Tu evento ha sido publicado con éxito.";
         }
 
         const payload: any = {
@@ -325,10 +325,9 @@ export const createEvent = async (data: any) => {
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
           premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
           userId: validUserId, 
-          approved: isApproved, // 👈 Se guarda como aprobado si es un cupón
+          approved: isApproved, 
         };
 
-        // 🚀 EL FIX MAESTRO: Forzamos ambos nombres para Drizzle y Postgres
         if (isCoupon) {
           payload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
           payload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
@@ -336,7 +335,6 @@ export const createEvent = async (data: any) => {
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
-        // 🚀 GUARDAR EL PAGO USANDO EL FIX DE TYPESCRIPT 'any'
         if (codigoReferencia || realPromoCode) {
             const today = new Date();
             const eventDate = new Date(payload.dateEvent);
@@ -376,17 +374,119 @@ export const createEvent = async (data: any) => {
             usedAt: new Date() 
           })
           .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
+
+          // ==============================================================
+          // 🚀 PROGRAMACIÓN DE NOTIFICACIONES PARA EVENTOS POR CUPÓN
+          // ==============================================================
+          if (newEvent && newEvent.dateEvent) {
+              const today = new Date();
+              const eventDate = new Date(newEvent.dateEvent);
+              const diffTime = eventDate.getTime() - today.getTime();
+              const totalDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              if (totalDaysLeft >= 0 && newEvent.userId) {
+                  const notifsToInsert = [];
+                  for (let i = 0; i <= totalDaysLeft; i++) {
+                      const daysRemaining = totalDaysLeft - i;
+                      const showDate = new Date(today.getTime() + (i * 24 * 60 * 60 * 1000));
+                      let shouldCreate = false;
+                      let message = "";
+
+                      if (daysRemaining === 0) {
+                          shouldCreate = true;
+                          message = `¡Es hoy! No te pierdas: ${newEvent.title}`;
+                      } else if (daysRemaining > 0 && daysRemaining <= 10) {
+                          shouldCreate = true;
+                          message = `¡Faltan solo ${daysRemaining} días para ${newEvent.title}!`;
+                      } else if (daysRemaining > 10) {
+                          if (daysRemaining % 2 === 0) { 
+                              shouldCreate = true;
+                              message = `Faltan ${daysRemaining} días para el evento: ${newEvent.title}`;
+                          }
+                      }
+
+                      if (shouldCreate) {
+                          const notifObj: any = {
+                              title: "Recordatorio de Evento 📅",
+                              description: message,
+                              type: "event", 
+                              visibleAt: showDate, 
+                              userId: newEvent.userId as string, 
+                          };
+
+                          if ('referenceId' in notifications) notifObj.referenceId = String(newEvent.id);
+                          else if ('reference_id' in notifications) notifObj.reference_id = String(newEvent.id);
+
+                          notifsToInsert.push(notifObj);
+                      }
+                  }
+
+                  if (notifsToInsert.length > 0) {
+                      await tx.insert(notifications).values(notifsToInsert);
+                  }
+              }
+
+              console.log("✅ [DEBUG PUSH EVENTOS] Evento creado y aprobado vía Cupón. Buscando usuarios cercanos...");
+              const titleText = "¡Nuevo Evento en tu área! 🎉";
+              const bodyText = `Se ha publicado: ${newEvent.title}. ¡Revisa los detalles!`;
+              let usersToNotify: { id: string }[] = [];
+
+              if (newEvent.zip) {
+                  const nearbyZips = zipcodes.radius(newEvent.zip as any, Number(radiusMiles)); 
+
+                  if (nearbyZips && nearbyZips.length > 0) {
+                      usersToNotify = await tx.select({ id: users.id })
+                                              .from(users)
+                                              .where(inArray(users.zip, nearbyZips as string[]));
+                  } else {
+                      usersToNotify = await tx.select({ id: users.id })
+                                              .from(users)
+                                              .where(eq(users.zip, String(newEvent.zip)));
+                  }
+              }
+
+              if (usersToNotify.length > 0) {
+                  const massNotifs = usersToNotify.map(u => {
+                      const payloadNotif: any = {
+                          title: titleText,
+                          description: bodyText,
+                          type: "event", 
+                          visibleAt: new Date(), 
+                          userId: u.id,
+                          isRead: false
+                      };
+                      if ('referenceId' in notifications) payloadNotif.referenceId = String(newEvent.id);
+                      else if ('reference_id' in notifications) payloadNotif.reference_id = String(newEvent.id);
+                      return payloadNotif;
+                  });
+
+                  await tx.insert(notifications).values(massNotifs);
+
+                  pushNotificationData = {
+                      title: titleText,
+                      body: bodyText,
+                      referenceId: String(newEvent.id),
+                      userIds: usersToNotify.map(u => u.id) 
+                  };
+              }
+          }
         }
 
         return {
            ...newEvent,
-           // Retornamos la fecha parseada
            timepostEnd: newEvent.timepostEnd || null,
            referenceCode: isCoupon ? realPromoCode : codigoReferencia,
            paymentMethod: isCoupon ? 'Coupon' : metodoPago,
-           message: customMessage // Enviamos el mensaje final al Front
+           message: customMessage 
         };
     });
+
+    // 🚀 DISPARAR PUSH DE EVENTOS FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+        sendMassPushNotification(pushNotificationData).catch(err => {
+            console.error("❌ [DEBUG PUSH EVENTOS] Falló el Push Notification en creación por cupón:", err);
+        });
+    }
 
     if (createdEventResult && createdEventResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(

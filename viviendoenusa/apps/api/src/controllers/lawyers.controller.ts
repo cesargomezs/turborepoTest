@@ -337,19 +337,13 @@ const sendTelegramAlert = async (lawyerName: string, refCode: string, method: st
 };
 
 // =====================================================================
-// 📥 3. CREAR ABOGADO (EL PARCHE ANTI-VENCIMIENTO INSTANTÁNEO)
+// 📥 3. CREAR ABOGADO (CUPÓN DIRECTO + FECHA + NOTIFICACIONES MASIVAS)
 // =====================================================================
-export const createLawyer = async (req: Request, res: Response) => {
-  const reqAny = req as any;
-  const resAny = res as any;
-  const data = reqAny.body || {};
-  
-  const headerEstate = reqAny.headers?.['estate'] || reqAny.headers?.['Estate'];
-
+export const createLawyer = async (data: any) => {
   try {
     const validUserId = sanitizeText(data.userId);
     if (!validUserId) {
-      return resAny.status(400).json({ error: "El ID del usuario es obligatorio para registrar un abogado." });
+      throw new Error("El ID del usuario es obligatorio para registrar un abogado.");
     }
 
     let cleanImage = sanitizeText(data.imageUrl) || '';
@@ -357,12 +351,14 @@ export const createLawyer = async (req: Request, res: Response) => {
       cleanImage = cleanImage.replace('lawyers/', '');
     }
 
+    let pushNotificationData: any = null; // 🚀 AQUÍ GUARDAMOS EL PAYLOAD PARA EL PUSH SI ES CUPÓN
+
     const createdLawyerResult = await db.transaction(async (tx) => {
       const { lat, lng } = getCoordsFromZip(data.zip || '');
       
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
-      const finalEstate = sanitizeText(headerEstate) || 'CA';
+      const finalEstate = sanitizeText(data.estate) || 'CA';
       
       const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
       const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
@@ -373,7 +369,6 @@ export const createLawyer = async (req: Request, res: Response) => {
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
       let isApproved = false;
-      let expirationDate = null;
       let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
       // 🚀 VALIDACIÓN DEL CUPÓN
@@ -389,14 +384,8 @@ export const createLawyer = async (req: Request, res: Response) => {
           throw new Error("Este cupón ya fue utilizado anteriormente.");
         }
 
-        // Si es válido, lo aprobamos de una vez
+        // Lo aprobamos de una vez
         isApproved = true;
-        
-        // 🚀 CALCULAMOS LA FECHA DE VENCIMIENTO (+1 MES)
-        const d = new Date();
-        d.setMonth(d.getMonth() + 1);
-        expirationDate = d;
-
         customMessage = "¡Cupón VIP aplicado! Tu perfil ha sido aprobado y publicado por 1 mes.";
       }
 
@@ -414,14 +403,11 @@ export const createLawyer = async (req: Request, res: Response) => {
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
         userId: validUserId, 
         approved: isApproved, 
-        estate: finalEstate 
+        estate: finalEstate,
+        // 🚀 MAGIA NATIVA POSTGRES
+        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
+        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
-
-      // 🚀 EL FIX MAESTRO: Forzamos ambos nombres para que Drizzle no ignore la fecha
-      if (expirationDate) {
-        lawyerPayload.timepostEnd = expirationDate;
-        lawyerPayload.timepost_end = expirationDate;
-      }
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
@@ -439,12 +425,10 @@ export const createLawyer = async (req: Request, res: Response) => {
           status: isCoupon ? "approved" : "pending"
         };
 
-        if (isCoupon) paymentPayload.approvedAt = new Date();
-        
-        // 🚀 FIX DE FECHA TAMBIÉN PARA PAGOS
-        if (expirationDate) {
-          paymentPayload.timepostEnd = expirationDate;
-          paymentPayload.timepost_end = expirationDate;
+        if (isCoupon) {
+          paymentPayload.approvedAt = sql`NOW()`;
+          paymentPayload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
+          paymentPayload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
         }
 
         await tx.insert(payments).values(paymentPayload);
@@ -460,10 +444,60 @@ export const createLawyer = async (req: Request, res: Response) => {
             usedAt: new Date() 
           })
           .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
+
+          // ==============================================================
+          // 🚀 NOTIFICACIONES MASIVAS PARA APROBACIÓN POR CUPÓN EN CREACIÓN
+          // ==============================================================
+          console.log("✅ [DEBUG PUSH] Abogado creado y aprobado vía Cupón. Calculando usuarios locales...");
+
+          const titleText = "¡Nuevo Abogado en tu área! ⚖️";
+          const bodyText = `El abogado ${newLawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
+
+          let usersToNotify: { id: string }[] = [];
+
+          if (newLawyer.zip) {
+            const nearbyZips = zipcodes.radius(newLawyer.zip as any, Number(radiusMiles)); 
+
+            if (nearbyZips && nearbyZips.length > 0) {
+              usersToNotify = await tx.select({ id: users.id })
+                                      .from(users)
+                                      .where(inArray(users.zip, nearbyZips as string[]));
+            } else {
+              usersToNotify = await tx.select({ id: users.id })
+                                      .from(users)
+                                      .where(eq(users.zip, String(newLawyer.zip)));
+            }
+          }
+
+          if (usersToNotify.length > 0) {
+            const notificationsToInsert = usersToNotify.map(u => {
+              const payloadNotif: any = {
+                title: titleText,
+                description: bodyText,
+                type: "lawyer", 
+                visibleAt: new Date(), 
+                userId: u.id,
+                isRead: false
+              };
+              if ('referenceId' in notifications) payloadNotif.referenceId = String(newLawyer.id);
+              else if ('reference_id' in notifications) payloadNotif.reference_id = String(newLawyer.id);
+              return payloadNotif;
+            });
+
+            await tx.insert(notifications).values(notificationsToInsert);
+
+            pushNotificationData = {
+              title: titleText,
+              body: bodyText,
+              referenceId: String(newLawyer.id),
+              userIds: usersToNotify.map(u => u.id) 
+            };
+          }
       }
 
       return {
          ...newLawyer,
+         timepostEnd: newLawyer.timepostEnd || null,
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
@@ -472,6 +506,14 @@ export const createLawyer = async (req: Request, res: Response) => {
       };
     });
 
+    // 🚀 DISPARAMOS LOS PUSH FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH] Falló el Push Notification en creación por cupón:", err);
+      });
+    }
+
+    // 🚀 ALERTA DE TELEGRAM SOLO SI NO ES CUPÓN
     if (createdLawyerResult && createdLawyerResult.paymentMethod !== 'Coupon') {
       sendTelegramAlert(
         createdLawyerResult.nameLawy, 
@@ -480,37 +522,30 @@ export const createLawyer = async (req: Request, res: Response) => {
       ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
     }
 
-    return resAny.status(201).json(createdLawyerResult);
+    return createdLawyerResult;
 
   } catch (error: any) { 
     console.error("❌ Error en createLawyer:", error);
-    
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
-       return resAny.status(409).json({ error: "El código de referencia de pago ya está en uso." });
+       throw new Error("El código de referencia de pago ya está en uso.");
     }
-
-    return resAny.status(400).json({ error: error.message || "Error al crear el abogado." });
+    throw new Error(error.message || "Error al crear el abogado.");
   }
 };
 
 // =====================================================================
 // 🔄 4. ACTUALIZAR ABOGADO Y NOTIFICAR
 // =====================================================================
-export const updateLawyer = async (req: Request, res: Response) => {
-  const reqAny = req as any;
-  const resAny = res as any;
-  const id = reqAny.params?.id;
-  const data = reqAny.body || {};
-
+export const updateLawyer = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
     if (!cleanId) {
-      return resAny.status(400).json({ error: "ID inválido" });
+      throw new Error("ID inválido");
     }
 
     const [existingLawyer] = await db.select().from(lawyers).where(eq(lawyers.id, cleanId));
     if (!existingLawyer) {
-      return resAny.status(404).json({ error: "Abogado no encontrado" });
+      throw new Error("Abogado no encontrado");
     }
 
     let amount = 0;
@@ -574,9 +609,9 @@ export const updateLawyer = async (req: Request, res: Response) => {
              status: "approved", 
              approvedAt: new Date(), 
              durationDays: daysToAdd, 
-             amount: totalAmount, 
+             amount: String(totalAmount), 
              timepost_end: expirationDate 
-          })
+          } as any)
           .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')));
       }
 
@@ -588,29 +623,11 @@ export const updateLawyer = async (req: Request, res: Response) => {
         
       const lawyer = updated[0];
 
-      const forwarded = reqAny.headers?.['x-forwarded-for'];
-      const ipString = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-      const rawIp = ipString ? ipString.split(',')[0].trim() : reqAny.ip || reqAny.connection?.remoteAddress || '0.0.0.0';
-      const ipAddress = sanitizeText(rawIp);
-
-      logAuditEvent({
-        userId: reqAny.user?.id || lawyer?.userId, 
-        action: 'UPDATE_LAWYER', 
-        entityType: 'lawyers', 
-        entityId: cleanId, 
-        ipAddress: ipAddress,
-        metadata: { 
-          descripcion: "Se actualizó la información o estatus del abogado", 
-          previousState: existingLawyer,
-          newState: lawyer
-        }
-      });
-
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR MANUALMENTE
       const wasApprovedBefore = existingLawyer.approved === true;
 
       if (isApproved && !wasApprovedBefore && lawyer) {
-        console.log("✅ [DEBUG PUSH] Abogado nuevo aprobado. Calculando usuarios locales...");
+        console.log("✅ [DEBUG PUSH] Abogado verificado y aprobado. Calculando usuarios locales...");
 
         const titleText = "¡Nuevo Abogado en tu área! ⚖️";
         const bodyText = `El abogado ${lawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
@@ -666,11 +683,11 @@ export const updateLawyer = async (req: Request, res: Response) => {
       });
     }
 
-    return resAny.status(200).json(updatedLawyerResult);
+    return updatedLawyerResult;
 
   } catch (error: any) { 
     console.error("❌ Error en updateLawyer:", error);
-    return (res as any).status(500).json({ error: `Error al actualizar el abogado: ${error.message}` });
+    throw new Error(`Error al actualizar el abogado: ${error.message}`);
   }
 };
 
@@ -827,10 +844,10 @@ export const renewLawyer = async (id: string, data: any) => {
         userId: validUserId, 
         referenceCode: refCode, 
         paymentMethod: payMethod, 
-        amount: basePrice, 
+        amount: String(basePrice), 
         durationDays: 30, 
         status: "pending"
-      });
+      } as any);
 
       const updated = await tx
         .update(lawyers)
