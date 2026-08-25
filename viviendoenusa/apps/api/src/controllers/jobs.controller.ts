@@ -117,7 +117,7 @@ const sendTelegramAlert = async (jobTitle: string, companyName: string) => {
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL
+// 🔍 1. CONSULTA GENERAL (CON ORDENAMIENTO VIP)
 // =====================================================================
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
   try {
@@ -147,7 +147,27 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
     .leftJoin(users, eq(ratingTable.userId, users.id))
     .leftJoin(companies, eq(jobs.companyId, companies.id))
     .where(finalConditions)
-    .orderBy(desc(jobs.createdAt));
+    .$dynamic();
+
+    // 🚀 MODO PERRO: ORDENAMIENTO VIP (Yo -> Admins -> Resto) + Fecha Descendente
+    if (currentUserId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${jobs.userId} = ${currentUserId} THEN 0 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(jobs.createdAt)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+              ELSE 1 
+            END`,
+        desc(jobs.createdAt)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -281,7 +301,7 @@ export const getJobById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR OFERTA DE EMPLEO (NOTIFICACIONES 100% BLINDADAS)
+// 📥 3. CREAR OFERTA DE EMPLEO
 // =====================================================================
 export const createJob = async (data: any) => {
   try {
@@ -298,7 +318,6 @@ export const createJob = async (data: any) => {
 
       if (!companyId) throw new Error("Debes seleccionar una empresa registrada para publicar un empleo.");
 
-      // 🚀 SOLUCIÓN: SI EL FRONTEND MANDA EL ZIP VACÍO, USAMOS EL ZIP DEL USUARIO CREADOR
       let resolvedZip = sanitizeText(data.zip);
       if (!resolvedZip || resolvedZip.trim() === '') {
         const [creator] = await tx.select({ zip: users.zip }).from(users).where(eq(users.id, validUserId));
@@ -306,7 +325,6 @@ export const createJob = async (data: any) => {
         console.log(`⚠️ Zip vacío en la oferta. Usando el Zip del dueño de la empresa: ${resolvedZip}`);
       }
 
-      // Obtenemos coordenadas basadas en el Zip resuelto
       const { lat, lng } = getCoordsFromZip(resolvedZip);
 
       const jobPayload: any = {
@@ -317,7 +335,7 @@ export const createJob = async (data: any) => {
         category: sanitizeText(data.category) || 'Otros',
         stateCountry: sanitizeText(data.stateCountry || data.state) || 'California',
         city: sanitizeText(data.city),
-        zip: resolvedZip, // 👈 Guardamos el Zip real en la BD
+        zip: resolvedZip, 
         contactMethod: data.contactMethod === true || data.contactMethod === 'whatsapp',
         phoneCode: sanitizeText(data.phoneCode) || '+1',
         phone: sanitizeText(data.phone),
@@ -335,7 +353,6 @@ export const createJob = async (data: any) => {
 
       const [newJob] = await tx.insert(jobs).values(jobPayload).returning();
 
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS)
       console.log("✅ [DEBUG PUSH EMPLEOS] Oferta publicada. Calculando candidatos en zona...");
 
       const titleText = "¡Nueva Oferta de Empleo! 💼";
@@ -351,14 +368,14 @@ export const createJob = async (data: any) => {
                                   .from(users)
                                   .where(and(
                                     inArray(users.zip, nearbyZips as string[]),
-                                    sql`${users.id} != ${validUserId}` // 👈 No notificar al dueño
+                                    sql`${users.id} != ${validUserId}` 
                                   ));
         } else {
           usersToNotify = await tx.select({ id: users.id })
                                   .from(users)
                                   .where(and(
                                     eq(users.zip, String(jobPayload.zip)),
-                                    sql`${users.id} != ${validUserId}` // 👈 No notificar al dueño
+                                    sql`${users.id} != ${validUserId}` 
                                   ));
         }
       }
@@ -395,14 +412,12 @@ export const createJob = async (data: any) => {
       };
     });
 
-    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
     if (pushNotificationData) {
       sendMassPushNotification(pushNotificationData).catch(err => {
          console.error("❌ [DEBUG PUSH] Falló el Push Notification de empleos:", err);
       });
     }
 
-    // 🚀 ENVÍO A TELEGRAM
     if (newJobResult) {
       sendTelegramAlert(
         newJobResult.title || 'Sin título',
