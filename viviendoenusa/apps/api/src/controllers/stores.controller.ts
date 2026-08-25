@@ -18,16 +18,10 @@ const radiusMiles = process.env.RADIUMILE || 20;
 // =====================================================================
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
-  
   const locationInfo = zipcodes.lookup(zip as any);
-  
   if (locationInfo) {
-    return { 
-      lat: locationInfo.latitude, 
-      lng: locationInfo.longitude 
-    };
+    return { lat: locationInfo.latitude, lng: locationInfo.longitude };
   }
-  
   return { lat: 34.0934, lng: -117.5847 };
 };
 
@@ -41,7 +35,6 @@ const sanitizeText = (str: any) => {
 const getCurrentStorePrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
-
     const activeTariff = await db.select({ price: tariffs.priceBasic })
     .from(tariffs)
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
@@ -155,7 +148,6 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
 
     if (zip && zip.length === 5) {
       const nearbyZips = zipcodes.radius(zip as any, Number(radiusMiles)); 
-
       if (nearbyZips && nearbyZips.length > 0) {
         finalConditions = and(baseConditions, inArray(stores.zip, nearbyZips as string[]));
       } else {
@@ -200,9 +192,7 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
 
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
-
-        const { data } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
         storesMap.get(storeId).reviews.push({
            ...row.rating,
@@ -235,8 +225,7 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
           const rutaArchivo = store.imageStores.startsWith('stores/') 
               ? store.imageStores : `stores/${store.imageStores}`;
 
-          const { data } = await supabase
-              .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
 
           if (data) {
               return { ...store, image: data.signedUrl, imageStores: data.signedUrl }; 
@@ -278,8 +267,7 @@ export const getStoreById = async (id: string) => {
     };
 
     for (const row of rows) {
-      const { data } = await supabase
-      .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
@@ -309,8 +297,7 @@ export const getStoreById = async (id: string) => {
         const rutaArchivo = storeFinal.imageStores.startsWith('stores/') 
             ? storeFinal.imageStores : `stores/${storeFinal.imageStores}`;
 
-        const { data, error } = await supabase
-            .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+        const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
             
         if (!error && data) {
             storeFinal.image = data.signedUrl;
@@ -327,7 +314,7 @@ export const getStoreById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR NEGOCIO (EL PARCHE ANTI-VENCIMIENTO INSTANTÁNEO)
+// 📥 3. CREAR NEGOCIO (RESTAURADA A SU FIRMA ORIGINAL `data: any`)
 // =====================================================================
 export const createStore = async (data: any) => {
   try {
@@ -349,7 +336,6 @@ export const createStore = async (data: any) => {
 
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
 
-    // 🚀 EXTRAEMOS EL CÓDIGO REAL LIMPIO
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     let isApproved = false;
@@ -357,7 +343,6 @@ export const createStore = async (data: any) => {
 
     const createdStoreResult = await db.transaction(async (tx) => {
       
-      // 🚀 VALIDACIÓN ESTRICTA DEL CUPÓN
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
@@ -385,17 +370,15 @@ export const createStore = async (data: any) => {
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
         userId: validUserId, 
-        approved: isApproved, // 👈 Guarda True si usó cupón
+        approved: isApproved, 
         createdAt: new Date(),
-        premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
-        // 🚀 EL FIX MAESTRO: Forzamos ambos nombres de columna para que Drizzle y Postgres sumen 1 mes nativo
+        premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
         timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
         timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
-
+      
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO (Usando `any` para evitar error de TypeScript)
       if (codigoReferencia || realPromoCode) {
         const basePrice = await getCurrentStorePrice();
 
@@ -462,24 +445,19 @@ export const createStore = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR
+// 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR (RESTAURADA A SU FIRMA ORIGINAL `id, data`)
 // =====================================================================
-export const updateStore = async (req: Request, res: Response) => {
-  const reqAny = req as any;
-  const resAny = res as any;
-  const id = reqAny.params?.id;
-  const data = reqAny.body || {};
-
+export const updateStore = async (id: string, data: any) => {
   try {
-    const resPay = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/stores/${id}`);
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    const resPay = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/stores/${cleanId}`);
     const responsePay = await resPay.json();
     const amount = Number(responsePay.payments) || 0;
 
-    const cleanId = sanitizeText(id);
-    if (!cleanId) return resAny.status(400).json({ error: "ID inválido" });
-
     const [existingStore] = await db.select().from(stores).where(eq(stores.id, cleanId));
-    if (!existingStore) return resAny.status(404).json({ error: "Negocio no encontrado" });
+    if (!existingStore) throw new Error("Negocio no encontrado");
 
     const wasApprovedBefore = existingStore.approved === true;
     let pushNotificationData: any = null;
@@ -530,6 +508,7 @@ export const updateStore = async (req: Request, res: Response) => {
       const updated = await tx.update(stores).set(updatePayload).where(eq(stores.id, cleanId)).returning();
       const store = updated[0];
 
+      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
       if (isApproved && !wasApprovedBefore && store) {
         console.log("✅ [DEBUG PUSH NEGOCIOS] Negocio verificado. Calculando usuarios en zona...");
 
@@ -567,10 +546,10 @@ export const updateStore = async (req: Request, res: Response) => {
       sendMassPushNotification(pushNotificationData).catch(err => console.error("❌ [DEBUG PUSH] Falló:", err));
     }
 
-    return resAny.status(200).json(updatedStoreResult);
+    return updatedStoreResult;
 
   } catch (error: any) { 
-    return resAny.status(500).json({ error: `Error al actualizar el negocio: ${error.message}` });
+    throw new Error(`Error al actualizar el negocio: ${error.message}`);
   }
 };
 
