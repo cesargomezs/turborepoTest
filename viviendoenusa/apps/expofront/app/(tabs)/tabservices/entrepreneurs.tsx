@@ -1203,7 +1203,7 @@ export default function EntrepreneurshipScreen() {
                                 <View key={r.id} style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                                     <View style={{ flexDirection: 'row', gap: 3 }}>{[1, 2, 3, 4, 5].map(s => ( <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} /> ))}</View>
-                                    <ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime || 'Nuevo'}</ThemedText>
+                                    {/*<ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime || 'Nuevo'}</ThemedText>*/}
                                   </View>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 5 }}>
                                     {r.image ? ( <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/> ) : ( <MaterialCommunityIcons name="account-circle" size={24} color={DC.subtext} /> )}
