@@ -36,7 +36,7 @@
       "versionCode": 1
     },
     "web": {
-      "favicon": "./assets/images/backgroundusa.png",
+      "favicon": "./assets/images/backgroundusa.ico",
       "bundler": "metro",
       "output": "static"
     },
