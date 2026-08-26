@@ -88,7 +88,7 @@ const containsBadWords = (text: string): boolean => {
 };
 
 // 🚀 CREDENCIALES DE SUPABASE DESDE .ENV
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const supabase = supabaseUrl && supabaseAnonKey 
@@ -268,7 +268,7 @@ export default function HomeScreen() {
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID || "1099132751870-9b7fb1f2vfv5v0enr3rkdn5r9p8sregk.apps.googleusercontent.com",
+    iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_ANDROID_CLIENT_ID,
   });
 
@@ -281,7 +281,8 @@ export default function HomeScreen() {
     if (!Notifications) return undefined;
 
     try {
-      const projectId = "486f501f-ae6e-484d-92ab-5a9c40319e6f";
+      const projectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
+      if (!projectId) return undefined;
       
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -325,6 +326,7 @@ export default function HomeScreen() {
     const fetchStats = async () => {
       try {
         const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        if (!API_URL) return;
         const response = await fetch(`${API_URL}/auth/stats`); 
         if (response.ok) {
           const data = await response.json();
@@ -380,7 +382,8 @@ export default function HomeScreen() {
     const verifyGoogle = async (id_token: string) => {
       try {
         const pushTokenReal = await getSafePushToken();
-        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        if (!API_URL) throw new Error("Falta configuración del servidor");
         
         const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
@@ -453,7 +456,8 @@ export default function HomeScreen() {
         } catch(e) {}
 
         const pushTokenReal = await getSafePushToken();
-        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        if (!API_URL) throw new Error("Falta configuración del servidor");
         
         const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
@@ -501,7 +505,8 @@ export default function HomeScreen() {
 
   const registerPushTokenInBackend = async (expoPushToken: string, userJwtToken: string) => {
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      if (!API_URL) return;
       await fetch(`${API_URL}/auth/save-device-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userJwtToken}` },
@@ -545,7 +550,8 @@ export default function HomeScreen() {
   const fetchActiveTerms = async () => {
     setIsLoadingTerms(true);
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      if (!API_URL) return;
       const res = await fetch(`${API_URL}/api/terms/active`);
       if (res.ok) {
         const data = await res.json();
@@ -562,7 +568,8 @@ export default function HomeScreen() {
 
   const recordTermsAcceptance = async (userId: string) => {
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      if (!API_URL) return;
       await fetch(`${API_URL}/api/terms/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -663,7 +670,8 @@ export default function HomeScreen() {
         deviceType: Platform.OS
       };
       
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000'; 
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      if (!API_URL) throw new Error("Falta configuración del servidor"); 
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
@@ -747,7 +755,8 @@ export default function HomeScreen() {
 
     try {
       const pushTokenReal = await getSafePushToken(); 
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      if (!API_URL) throw new Error("Falta configuración del servidor");
       const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
 
       const payload = isRegistering 
@@ -818,7 +827,8 @@ export default function HomeScreen() {
     
     setIsSendingReset(true); 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND || 'http://192.168.1.107:3000';
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      if (!API_URL) throw new Error("Falta configuración del servidor");
       const response = await fetch(`${API_URL}/auth/reset-password`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: resetEmail })
       });
