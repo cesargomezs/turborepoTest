@@ -14,12 +14,14 @@ import {
   TextInput,
   ActivityIndicator,
   Text,
-  FlatList
+  FlatList,
+  Linking
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
@@ -29,11 +31,13 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 // 🚀 IMPORTACIÓN ULTRA SEGURA (EVITA EL CRASH DE PANTALLA ROJA)
 let Notifications: any = null;
 let Device: any = null;
+let StoreReview: any = null; // ✨ Agregamos StoreReview aquí de forma segura
 
 if (Platform.OS !== 'web') {
   try {
     Notifications = require('expo-notifications');
     Device = require('expo-device');
+    StoreReview = require('expo-store-review'); // ✨ Lo requerimos solo si está disponible
   } catch (error) {
     console.log("Faltan los módulos nativos en el binario.");
   }
@@ -64,22 +68,15 @@ try {
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   
-  // 1. Convertimos todo a minúsculas y separamos el texto palabra por palabra usando espacios o signos
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
 
-  // 2. Verificamos si alguna palabra de la frase coincide exactamente (o con plurales/prefijos comunes) con la lista negra
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
 
-      // Comprobación de coincidencia exacta de la palabra aislada
       if (userWord === lowerBanned) return true;
-      
-      // Comprobación de plurales comunes (ej: palabra -> palabras)
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
-
-      // Comprobación con prefijo común (ej: re-palabra)
       if (userWord === `re${lowerBanned}`) return true;
 
       return false;
@@ -226,6 +223,28 @@ export default function HomeScreen() {
   const [mainLogoUrl, setMainLogoUrl] = useState<string>('');
   const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
 
+  // 🚀 ESTADO Y LÓGICA PARA MOSTRAR EL BOTÓN DE CALIFICAR DESPUÉS DE 30 DÍAS
+  const [showRateButton, setShowRateButton] = useState(false);
+
+  useEffect(() => {
+    const checkAppUsageTime = async () => {
+      try {
+        const firstLaunch = await AsyncStorage.getItem('firstLaunchDate');
+        if (!firstLaunch) {
+          await AsyncStorage.setItem('firstLaunchDate', Date.now().toString());
+        } else {
+          const daysPassed = (Date.now() - parseInt(firstLaunch)) / (1000 * 60 * 60 * 24);
+          if (daysPassed >= 30) {
+            setShowRateButton(true); 
+          }
+        }
+      } catch (e) {
+        console.log("Error leyendo AsyncStorage para reseñas", e);
+      }
+    };
+    checkAppUsageTime();
+  }, []);
+
   const orangeGradient: readonly [string, string, ...string[]] = ['#FF5F6D', '#FFC371'];
 
   const cardWidth = loggedIn 
@@ -274,6 +293,34 @@ export default function HomeScreen() {
 
   const scrollToBottom = () => { landingScrollRef.current?.scrollToEnd({ animated: true }); };
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
+
+  // 🚀 FUNCIÓN UNIVERSAL DE CALIFICACIÓN PROTEGIDA
+  const handleRateApp = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        WebBrowser.openBrowserAsync('https://g.page/r/CXrYzP8Yb7XzECE/review');
+        return;
+      }
+
+      // ✨ Validamos que StoreReview exista antes de intentar usarlo
+      if (StoreReview) {
+        const isAvailable = await StoreReview.isAvailableAsync();
+        if (isAvailable) {
+          await StoreReview.requestReview();
+          return;
+        }
+      }
+
+      // Fallback a enlaces manuales
+      if (Platform.OS === 'ios') {
+        Linking.openURL('https://apps.apple.com/app/idTU_APP_ID?action=write-review');
+      } else if (Platform.OS === 'android') {
+        Linking.openURL('market://details?id=com.viviendoenusa.expofront');
+      }
+    } catch (error) {
+      console.log("Error al abrir sistema de reseñas", error);
+    }
+  };
 
   // 🚀 FUNCIÓN SILENCIOSA: OBTENCIÓN DE TOKEN SIN ALERTAS MOLESTAS
   const getSafePushToken = async () => {
@@ -578,13 +625,11 @@ export default function HomeScreen() {
     } catch (error) {}
   };
 
-  // 🚀 ACTUALIZADO: PARCHE DE SEGURIDAD PARA NOMBRE VACÍO EN APPLE SIGN-IN
   const handlePostLoginSuccess = async (userObj: any, token: string, fullDataRes: any = null) => {
     const validToken = (token && typeof token === 'string' && token.trim() !== '') 
       ? token 
       : 'session_token_' + Date.now();
 
-    // Forzamos a que herede lo que hay en el formulario si el backend lo omite
     let finalUser = { ...userObj };
     
     if (!finalUser.firstName && form.firstName) finalUser.firstName = form.firstName;
@@ -1119,6 +1164,45 @@ export default function HomeScreen() {
           </View>
 
           <View style={{ paddingVertical: 40, alignItems: 'center', backgroundColor: '#0B0A1D' }}>
+             
+             {/* 🚀 BOTONES DE REDES SOCIALES AÑADIDOS AQUÍ */}
+             <View style={{ flexDirection: 'row', gap: 25, marginBottom: 25 }}>
+               <TouchableOpacity 
+                 onPress={() => WebBrowser.openBrowserAsync('https://www.facebook.com/groups/1874040306905331/')}
+                 style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 20 }}
+               >
+                 <MaterialCommunityIcons name="facebook" size={28} color="#FFF" />
+               </TouchableOpacity>
+
+               <TouchableOpacity 
+                 onPress={() => WebBrowser.openBrowserAsync('https://www.instagram.com/viviendoenusa.app/')}
+                 style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 20 }}
+               >
+                 <MaterialCommunityIcons name="instagram" size={28} color="#FFF" />
+               </TouchableOpacity>
+
+               <TouchableOpacity 
+                 onPress={() => WebBrowser.openBrowserAsync('https://www.tiktok.com/@viviendoenusaone')}
+                 style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}
+               >
+                 {/* 🚀 SOLUCIÓN TIKTOK: Usamos FontAwesome5 que sí lo trae */}
+                 <FontAwesome5 name="tiktok" size={22} color="#FFF" />
+               </TouchableOpacity>
+             </View>
+
+             {/* 🚀 BOTÓN DE CALIFICAR (Solo visible después de 30 días) */}
+             {showRateButton && (
+               <TouchableOpacity 
+                 onPress={handleRateApp}
+                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginBottom: 25, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
+               >
+                 <MaterialCommunityIcons name="star-outline" size={20} color="#F5A623" />
+                 <Text style={{ color: '#FFF', marginLeft: 8, fontWeight: '600', fontSize: 13 }}>
+                   {isEnglish ? "Rate Us" : "Califícanos"}
+                 </Text>
+               </TouchableOpacity>
+             )}
+
              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 20 }}>
                 {t?.hometab?.copyright || '© 2026 Viviendo en USA. Todos los derechos reservados.'}
              </Text>
@@ -1489,7 +1573,7 @@ export default function HomeScreen() {
 
                                     <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20, width: '100%' }}>
                                       <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
-                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or continue with" : "o continuar con"}</Text>
+                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or continue with" : "o continue con"}</Text>
                                       <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
                                     </View>
 
