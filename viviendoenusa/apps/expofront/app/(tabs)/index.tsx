@@ -229,6 +229,12 @@ export default function HomeScreen() {
   useEffect(() => {
     const checkAppUsageTime = async () => {
       try {
+        // ✨ Si es Web, mostramos el botón siempre sin importar los días[cite: 3]
+        if (Platform.OS === 'web') {
+          setShowRateButton(true);
+          return;
+        }
+
         const firstLaunch = await AsyncStorage.getItem('firstLaunchDate');
         if (!firstLaunch) {
           await AsyncStorage.setItem('firstLaunchDate', Date.now().toString());
@@ -1190,7 +1196,7 @@ export default function HomeScreen() {
                </TouchableOpacity>
              </View>
 
-             {/* 🚀 BOTÓN DE CALIFICAR (Solo visible después de 30 días) */}
+             {/* 🚀 BOTÓN DE CALIFICAR */}
              {showRateButton && (
                <TouchableOpacity 
                  onPress={handleRateApp}
@@ -1573,7 +1579,7 @@ export default function HomeScreen() {
 
                                     <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20, width: '100%' }}>
                                       <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
-                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or continue with" : "o continue con"}</Text>
+                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or continue with" : "o continuar con"}</Text>
                                       <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
                                     </View>
 
