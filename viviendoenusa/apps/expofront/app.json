@@ -3,10 +3,7 @@
     "name": "Viviendo en USA",
     "slug": "viviendoenusa",
     "version": "1.0.0",
-    "scheme": [
-      "viviendoenusa",
-      "com.googleusercontent.apps.1099132751870-9b7fb1f2vfv5v0enr3rkdn5r9p8sregk"
-    ],
+    "scheme": "viviendoenusa",
     "orientation": "portrait",
     "icon": "./assets/images/backgroundusa.png",
     "userInterfaceStyle": "light",

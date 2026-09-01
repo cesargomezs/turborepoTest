@@ -31,13 +31,13 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 // 🚀 IMPORTACIÓN ULTRA SEGURA (EVITA EL CRASH DE PANTALLA ROJA)
 let Notifications: any = null;
 let Device: any = null;
-let StoreReview: any = null; // ✨ Agregamos StoreReview aquí de forma segura
+let StoreReview: any = null; 
 
 if (Platform.OS !== 'web') {
   try {
     Notifications = require('expo-notifications');
     Device = require('expo-device');
-    StoreReview = require('expo-store-review'); // ✨ Lo requerimos solo si está disponible
+    StoreReview = require('expo-store-review'); 
   } catch (error) {
     console.log("Faltan los módulos nativos en el binario.");
   }
@@ -229,7 +229,6 @@ export default function HomeScreen() {
   useEffect(() => {
     const checkAppUsageTime = async () => {
       try {
-        // ✨ Si es Web, mostramos el botón siempre sin importar los días[cite: 3]
         if (Platform.OS === 'web') {
           setShowRateButton(true);
           return;
@@ -308,7 +307,6 @@ export default function HomeScreen() {
         return;
       }
 
-      // ✨ Validamos que StoreReview exista antes de intentar usarlo
       if (StoreReview) {
         const isAvailable = await StoreReview.isAvailableAsync();
         if (isAvailable) {
@@ -317,7 +315,6 @@ export default function HomeScreen() {
         }
       }
 
-      // Fallback a enlaces manuales
       if (Platform.OS === 'ios') {
         Linking.openURL('https://apps.apple.com/app/idTU_APP_ID?action=write-review');
       } else if (Platform.OS === 'android') {
@@ -328,7 +325,6 @@ export default function HomeScreen() {
     }
   };
 
-  // 🚀 FUNCIÓN SILENCIOSA: OBTENCIÓN DE TOKEN SIN ALERTAS MOLESTAS
   const getSafePushToken = async () => {
     if (Platform.OS === 'web') return undefined; 
     if (!Notifications) return undefined;
@@ -1191,12 +1187,11 @@ export default function HomeScreen() {
                  onPress={() => WebBrowser.openBrowserAsync('https://www.tiktok.com/@viviendoenusaone')}
                  style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}
                >
-                 {/* 🚀 SOLUCIÓN TIKTOK: Usamos FontAwesome5 que sí lo trae */}
                  <FontAwesome5 name="tiktok" size={22} color="#FFF" />
                </TouchableOpacity>
              </View>
 
-             {/* 🚀 BOTÓN DE CALIFICAR */}
+             {/* 🚀 BOTÓN DE CALIFICAR (Solo visible después de 30 días o siempre en Web) */}
              {showRateButton && (
                <TouchableOpacity 
                  onPress={handleRateApp}
@@ -1239,6 +1234,7 @@ export default function HomeScreen() {
         )}
 
         <ScrollView 
+          nestedScrollEnabled={true} 
           contentContainerStyle={{ flexGrow: 1, justifyContent: loggedIn ? 'flex-start' : 'center', alignItems: isWebPlatform ? undefined : 'center', paddingVertical: loggedIn ? 0 : (isWebPlatform ? 30 : 50) }} 
           keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
         >
@@ -1293,7 +1289,13 @@ export default function HomeScreen() {
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}><ThemedText style={[styles.sectionTitle, { color: DynamicColors.text, fontSize: 24, fontWeight: '900' }]}>Viviendo en USA</ThemedText></View>
                           <MaterialCommunityIcons name="home-variant" size={40} color={DynamicColors.text} style={{ opacity: 0.2 }} />
                         </View>
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWebPlatform ? 10 : 80 }}>
+                        {/* 🔥 EL FIX ESTÁ SOLO AQUÍ 🔥 */}
+                        <ScrollView 
+                          style={{ flex: 1 }} 
+                          nestedScrollEnabled={true} 
+                          showsVerticalScrollIndicator={false} 
+                          contentContainerStyle={{ paddingBottom: isWebPlatform ? 10 : 80, flexGrow: 1 }}
+                        >
                           <View style={{ alignItems: 'center', marginBottom: 20, marginTop: 10 }}>
                             <View style={{ width: isLargeWeb ? 160 : 140, height: isLargeWeb ? 160 : 140, borderRadius: 100, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.border, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 }}>
                                {mainLogoUrl ? <Image source={{ uri: mainLogoUrl }} style={{ width: '92%', height: '92%', borderRadius: 100 }} resizeMode="cover" /> : <ActivityIndicator size="small" color="#FF5F6D" />}
@@ -1352,6 +1354,7 @@ export default function HomeScreen() {
                           </View>
 
                           <ScrollView 
+                            nestedScrollEnabled={true}
                             showsVerticalScrollIndicator={false} 
                             style={{ flex: 1 }} 
                             contentContainerStyle={{ flexGrow: 1, paddingBottom: 40, paddingTop: 2, justifyContent: !isRegistering ? 'center' : 'flex-start' }}
@@ -1579,7 +1582,7 @@ export default function HomeScreen() {
 
                                     <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20, width: '100%' }}>
                                       <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
-                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or continue with" : "o continuar con"}</Text>
+                                      <Text style={{ marginHorizontal: 15, color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>{isEnglish ? "or continue with" : "o continue con"}</Text>
                                       <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
                                     </View>
 
@@ -1766,7 +1769,7 @@ export default function HomeScreen() {
                     }
                 }} style={{ padding: 5 }}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
               </View>
-              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
+              <ScrollView nestedScrollEnabled={true} style={styles.modalContent} showsVerticalScrollIndicator={true}>
                 {isLoadingTerms ? <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 20 }} /> : <><ThemedText style={{ color: DynamicColors.text, fontWeight: 'bold', marginBottom: 15 }}>{isEnglish ? "Version " : "Versión "}{termsData.version || 'Actual'}</ThemedText><ThemedText style={{ color: DynamicColors.text, marginBottom: 20, lineHeight: 24 }}>{stripHtmlTags(termsData.content_html)}</ThemedText></>}
               </ScrollView>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
@@ -1869,7 +1872,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 50,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: Platform.OS === 'android' ? 'visible' : 'hidden', 
+    backgroundColor: Platform.OS === 'android' ? '#FF5F6D' : 'transparent', 
     shadowColor: '#FF5F6D',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
@@ -1879,11 +1883,16 @@ const styles = StyleSheet.create({
   },
   gradientContainer: {
     flex: 1,
+    width: '100%',
+    height: '100%',
+    borderRadius: Platform.OS === 'android' ? 16 : 0, 
+    overflow: Platform.OS === 'android' ? 'hidden' : 'visible', 
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
+
   primaryText: {
     fontSize: 15,
     fontWeight: '700',

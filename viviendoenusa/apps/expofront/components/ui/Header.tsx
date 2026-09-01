@@ -18,7 +18,8 @@ import {
   PanResponder, 
   Dimensions, 
   ActivityIndicator,
-  AppState // 🚀 IMPORTAMOS AppState
+  AppState, // 🚀 IMPORTAMOS AppState
+  LogBox // ✨ Añadimos LogBox para silenciar alertas
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
@@ -37,6 +38,9 @@ import { useAppTheme } from '@/app/src/context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 import { handleUniversalShare } from '../../utils/shareHelper';
+
+// 🚀 SILENCIAMOS EL LETRERO ROJO DE EXPO GO EN ANDROID
+LogBox.ignoreLogs(['expo-notifications']);
 
 let Notifications: any = null;
 if (Platform.OS !== 'web') {
@@ -738,7 +742,7 @@ export default function Header({ title }: { title?: string }) {
               Lamentamos mucho que te vayas. Para ayudarnos a mejorar, ¿podrías decirnos por qué deseas eliminar tu cuenta?
             </ThemedText>
 
-            <ScrollView style={{ maxHeight: 240, marginBottom: 20 }} showsVerticalScrollIndicator={false}>
+            <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 240, marginBottom: 20 }} showsVerticalScrollIndicator={false}>
               {deleteReasonsList.map((reason, index) => (
                 <TouchableOpacity 
                   key={index}
@@ -853,7 +857,7 @@ export default function Header({ title }: { title?: string }) {
                 <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>{isCreatingUser ? 'Crear Usuario' : 'Configuración'}</ThemedText>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWeb ? 150 : 30 }}>
+              <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: isWeb ? 150 : 30 }}>
                 
                 {isSuperAdmin && (
                   <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 12, padding: 4, marginBottom: 20 }}>
@@ -1110,7 +1114,7 @@ export default function Header({ title }: { title?: string }) {
                 <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>{t.headertab.notification}</ThemedText>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 , flexGrow: 1 }}>
+              <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 , flexGrow: 1 }}>
                 {notifications.length > 0 ? (
                   notifications.map((notif) => {
                     const iconConfig = getNotificationIcon(notif.type);

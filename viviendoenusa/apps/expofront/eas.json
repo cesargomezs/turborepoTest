@@ -20,6 +20,9 @@
       },
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend-production.up.railway.app"
       }
     }
   },
