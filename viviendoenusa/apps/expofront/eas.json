@@ -3,7 +3,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend-production.up.railway.app"
+        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend-production.up.railway.app",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f"
       },
       "android": {
         "buildType": "app-bundle"
@@ -11,7 +12,10 @@
     },
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f"
+      }
     },
     "preview": {
       "distribution": "internal",
@@ -22,7 +26,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend-production.up.railway.app"
+        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend-production.up.railway.app",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f"
       }
     }
   },
