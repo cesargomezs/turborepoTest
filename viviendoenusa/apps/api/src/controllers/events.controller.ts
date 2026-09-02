@@ -159,7 +159,10 @@ export const getEvents = async (zip?: string) => {
   try {
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
     
-    let baseConditions = eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021');
+    let baseConditions = and(
+      eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'),
+                        sql`${events.dateEvent} >= CURRENT_DATE`);
+                        
     let finalConditions: any = baseConditions;
 
     if (cleanZipParam && cleanZipParam.length === 5) {

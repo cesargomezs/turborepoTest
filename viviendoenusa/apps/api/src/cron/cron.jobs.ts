@@ -182,13 +182,20 @@ cron.schedule('0 10 * * *', async () => {
     // B. PROCESAR EVENTOS (events)
     // ----------------------------------------------------
     const activeEvents = await db.select({
-        id: events.id,
-        title: events.title, 
-        premiumPlan: events.premiumPlan,
-        zip: events.zip,
-        daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.timepostEnd})`
-    }).from(events).where(eq(events.approved, true));
-    
+      id: events.id,
+      title: events.title, 
+      premiumPlan: events.premiumPlan,
+      zip: events.zip,
+      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.timepostEnd})`
+      })
+      .from(events)
+      .where(
+          and(
+              eq(events.approved, true),
+              sql`${events.dateEvent} >= CURRENT_DATE` // 🚀 Excluye los eventos viejos
+          )
+      );
+  
     await launchGeoMarketingCampaign(activeEvents, "event", "title");
 
     // ----------------------------------------------------

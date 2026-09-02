@@ -2,16 +2,16 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ActivityIndicator,
-  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, ColorValue, AppState // 🚀 AÑADIDO AppState
+  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, ColorValue, AppState
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect } from 'expo-router'; // 🚀 AÑADIDO useFocusEffect
-import { useIsFocused } from '@react-navigation/native'; // 🚀 AÑADIDO useIsFocused
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { createClient } from '@supabase/supabase-js'; // 🚀 AÑADIDO SUPABASE
+import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -263,12 +263,16 @@ export default function DonationsScreen() {
     });
   };
 
+  // 🚀 FUNCIÓN ACTUALIZADA PARA MANEJAR CORRECTAMENTE LOS ESTADOS UUID Y TEXTO
   const handleToggleStatus = async (id: any) => {
     const currentItem = donations.find(d => d.id === id);
     if (!currentItem) return;
 
-    const newStatus = currentItem.status === 'active' ? 'delivered' : 'active';
-    setDonations(prev => prev.map(d => d.id === id ? { ...d, status: newStatus } : d));
+    const newStatus = currentItem.status === 'active' || currentItem.statusId === '31a06434-8ed8-45d2-b95f-65bd314bc021' ? 'delivered' : 'active';
+    const newStatusId = newStatus === 'delivered' ? '6a226ffa-9edf-4886-931f-64299f8a6f7f' : '31a06434-8ed8-45d2-b95f-65bd314bc021';
+
+    // 🚀 Actualizamos la memoria local para que la UI reaccione instantáneamente
+    setDonations(prev => prev.map(d => d.id === id ? { ...d, status: newStatus, statusId: newStatusId } : d));
 
     try {
       const response = await fetch(`${API_DONATIONS_URL}/${id}/status`, {
@@ -283,7 +287,8 @@ export default function DonationsScreen() {
       if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Fallo en servidor");
     } catch (e) {
-      setDonations(prev => prev.map(d => d.id === id ? { ...d, status: currentItem.status } : d));
+      // 🔄 Si falla, revertimos al estado anterior
+      setDonations(prev => prev.map(d => d.id === id ? { ...d, status: currentItem.status, statusId: currentItem.statusId } : d));
       triggerAlert("Error", "No se pudo actualizar el estado en el servidor.");
     }
   };
@@ -401,11 +406,18 @@ export default function DonationsScreen() {
     }
   };
 
+  // 🚀 LÓGICA DE FILTRADO ACTUALIZADA PARA PERMITIR VER LAS ENTREGADAS
   const filteredDonations = useMemo(() => {
     return donations.filter(item => {
       const title = item.title || '';
-      const isActive = item.status === 'active' || item.statusId === '31a06434-8ed8-45d2-b95f-65bd314bc021';
-      return isActive && 
+      
+      // Permitimos que la UI deje visibles tanto las activas como las entregadas
+      const isVisibleStatus = item.status === 'active' || 
+                              item.statusId === '31a06434-8ed8-45d2-b95f-65bd314bc021' || 
+                              item.status === 'delivered' || 
+                              item.statusId === '6a226ffa-9edf-4886-931f-64299f8a6f7f';
+                              
+      return isVisibleStatus && 
              (selectedCategoryIdx === 0 || Number(item.categoryIdx) === selectedCategoryIdx) && 
              title.toLowerCase().includes(searchQuery.toLowerCase());
     });
@@ -423,7 +435,7 @@ export default function DonationsScreen() {
             {!isAndroid && <BlurView intensity={isDark ? 95 : 65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={stylesUnified.cardContent}>
               
-              {/* 🚀 HEADER LIMPIO: Solo la flecha atrás y el buscador de Zip */}
+              {/* HEADER LIMPIO: Solo la flecha atrás y el buscador de Zip */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
                 
                 <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>

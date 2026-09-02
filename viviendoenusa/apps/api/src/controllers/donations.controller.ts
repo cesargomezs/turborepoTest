@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
 import { donations, users, notifications, userDevices } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
-import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
+import { eq, desc, sql, and, inArray, or } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
 
@@ -290,9 +290,17 @@ export const updateDonationStatus = async (id: string, status: string) => {
 
     if (!cleanId) throw new Error("ID inválido");
 
+    // 🚀 Mapeamos el texto al UUID correspondiente
+    const statusUuid = cleanStatus === 'delivered' 
+        ? '6a226ffa-9edf-4886-931f-64299f8a6f7f' 
+        : '31a06434-8ed8-45d2-b95f-65bd314bc021';
+
     const updated = await db
       .update(donations)
-      .set({ estate: cleanStatus }) 
+      .set({ 
+        statusId: statusUuid, // 🐛 Antes decía "estate", por eso fallaba
+        createdAt: new Date() // 🚀 Reiniciamos la fecha para darle 5 días exactos en pantalla
+      }) 
       .where(eq(donations.id, cleanId)) 
       .returning();
       
