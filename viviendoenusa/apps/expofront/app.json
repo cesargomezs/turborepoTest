@@ -30,7 +30,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.viviendoenusa.expofront",
-      "googleServicesFile": "./google-services.json",
+      "googleServicesFile": "./app/google-services.json",
       "versionCode": 1
     },
     "web": {
