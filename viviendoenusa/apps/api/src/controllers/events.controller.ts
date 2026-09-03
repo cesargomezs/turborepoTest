@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
 import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and, inArray } from "drizzle-orm"; 
+import { eq, desc, asc, sql, and, inArray } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; 
 
@@ -161,7 +161,8 @@ export const getEvents = async (zip?: string) => {
     
     let baseConditions = and(
       eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'),
-                        sql`${events.dateEvent} >= CURRENT_DATE`);
+      sql`${events.dateEvent} >= CURRENT_DATE`
+    );
                         
     let finalConditions: any = baseConditions;
 
@@ -185,7 +186,7 @@ export const getEvents = async (zip?: string) => {
       .leftJoin(users, eq(events.userId, users.id)) 
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .where(finalConditions)
-      .orderBy(desc(events.timepostEnd));
+      .orderBy(asc(events.dateEvent)); // 🚀 Ordenado por la fecha del evento más cercana
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
