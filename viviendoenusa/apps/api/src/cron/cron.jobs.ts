@@ -1,8 +1,7 @@
 import cron from 'node-cron';
 import { db } from "../../../../packages/db/src"; 
-// 🚀 TODAS LAS TABLAS IMPORTADAS SEGÚN EL NUEVO ESQUEMA
-import { lawyers, notifications, users, stores, events, jobs, support, companies } from "../../../../packages/db/src/schema";
-import { sql, eq, and, isNotNull } from 'drizzle-orm';
+import { lawyers, notifications, users, stores, events, jobs, support, companies, userDevices } from "../../../../packages/db/src/schema";
+import { sql, eq, and, isNotNull, inArray } from 'drizzle-orm'; 
 
 // ============================================================================
 // 1. CRON DE VENCIMIENTOS - Corre a la medianoche
@@ -104,20 +103,16 @@ cron.schedule('0 0 * * *', async () => {
 
 
 // ============================================================================
-// 2. CRON DE MARKETING POR CÓDIGO POSTAL - 10:00 AM
+// 2. MOTOR DE MARKETING POR CÓDIGO POSTAL
 // ============================================================================
 
 async function launchGeoMarketingCampaign(activePromotions: any[], type: string, itemNameKey: string) {
-    // 1. Filtrar a quién le toca notificación hoy según su plan
     const promosForToday = activePromotions.filter(promo => {
         const days = promo.daysActive ? Math.floor(promo.daysActive) : 0; 
         const plan = promo.premiumPlan ? promo.premiumPlan.toLowerCase() : 'free';
 
-        // Unlimited (4 al mes): Notifica días 0, 7, 14, 21, 28...
         if (plan === 'unlimited' || plan === 'premium') return days % 7 === 0;       
-        // Basic (2 al mes): Notifica días 0, 15, 30...
         if (plan === 'basic' || plan === 'intermediate') return days % 15 === 0; 
-        // Free / Coupon (1 al mes): Notifica solo el día de creación
         if (plan === 'free' || plan === 'coupon') return days === 0; 
         
         return false;
@@ -126,9 +121,8 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
     if (promosForToday.length === 0) return; 
 
     for (const promo of promosForToday) {
-        if (!promo.zip) continue; // Saltar si el negocio no tiene ZIP 
+        if (!promo.zip) continue; 
 
-        // 2. BÚSQUEDA POR ZIP: Se notifica a los usuarios en el mismo código postal
         const nearbyUsers = await db.select({ id: users.id })
             .from(users)
             .where(
@@ -141,33 +135,70 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
         if (nearbyUsers.length === 0) continue;
 
         const itemName = promo[itemNameKey] || "este servicio";
+        const titleText = `📍 En tu área: ${itemName}`;
+        const bodyText = `¡Este servicio está disponible en tu código postal (${promo.zip})! Aprovecha lo que ofrece hoy.`;
         
-        // 3. Preparar inserción masiva
         const notificationsToInsert = nearbyUsers.map(u => ({
             userId: u.id,
-            title: `📍 En tu área: ${itemName}`,
-            description: `¡Este servicio está disponible en tu código postal (${promo.zip})! Aprovecha lo que ofrece hoy.`,
+            title: titleText,
+            description: bodyText,
             referenceId: promo.id,
             type: type,
             isRead: false
         }));
 
-        // 4. Batch Insert 
         if (notificationsToInsert.length > 0) {
             await db.insert(notifications).values(notificationsToInsert);
-            console.log(`📣 Marketing enviado a ${nearbyUsers.length} usuarios en el ZIP ${promo.zip} para ${itemName}`);
+            console.log(`📣 Marketing guardado para ${nearbyUsers.length} usuarios en el ZIP ${promo.zip} para ${itemName}`);
+        }
+
+        // ====================================================================
+        // 🚀 ENVÍO REAL DE PUSH NOTIFICATIONS A LOS DISPOSITIVOS
+        // ====================================================================
+        const userIds = nearbyUsers.map(u => u.id);
+        const devices = await db.select()
+                                .from(userDevices)
+                                .where(inArray(userDevices.userId, userIds));
+
+        if (devices && devices.length > 0) {
+            const messages = devices.map(device => ({
+                to: device.expoPushToken,
+                sound: 'default',
+                title: titleText,
+                body: bodyText,
+                data: { type: type, referenceId: promo.id },
+            }));
+
+            const chunks = [];
+            for (let i = 0; i < messages.length; i += 100) {
+                chunks.push(messages.slice(i, i + 100));
+            }
+
+            for (const chunk of chunks) {
+                try {
+                    await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Accept-encoding': 'gzip, deflate',
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(chunk),
+                    });
+                } catch (e) {
+                    console.error("❌ Error enviando PUSH en CRON Marketing:", e);
+                }
+            }
+            console.log(`📲 PUSH enviado a ${devices.length} dispositivos para la promo ${promo.id}`);
         }
     }
 }
 
-// ⏰ Ejecutamos el motor de marketing todos los días a las 10:00 AM
-cron.schedule('0 10 * * *', async () => {
+// 🚀 FUNCIÓN PRINCIPAL QUE AGRUPA TODAS LAS CATEGORÍAS
+async function executeMarketingMotor() {
   console.log("🚀 [CRON MARKETING] Iniciando cruce por código postal (ZIP)...");
 
   try {
-    // ----------------------------------------------------
-    // A. PROCESAR TIENDAS (stores)
-    // ----------------------------------------------------
     const activeStores = await db.select({
         id: stores.id,
         name: stores.nameStores,
@@ -178,33 +209,27 @@ cron.schedule('0 10 * * *', async () => {
     
     await launchGeoMarketingCampaign(activeStores, "store", "name");
 
-    // ----------------------------------------------------
-    // B. PROCESAR EVENTOS (events)
-    // ----------------------------------------------------
     const activeEvents = await db.select({
       id: events.id,
       title: events.title, 
       premiumPlan: events.premiumPlan,
       zip: events.zip,
-      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.timepostEnd})`
+      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.dateEvent})` 
       })
       .from(events)
       .where(
           and(
               eq(events.approved, true),
-              sql`${events.dateEvent} >= CURRENT_DATE` // 🚀 Excluye los eventos viejos
+              sql`${events.dateEvent} >= CURRENT_DATE`
           )
       );
   
     await launchGeoMarketingCampaign(activeEvents, "event", "title");
 
-    // ----------------------------------------------------
-    // C. PROCESAR TRABAJOS (jobs) 🚀 JOIN CON COMPANIES
-    // ----------------------------------------------------
     const activeJobs = await db.select({
         id: jobs.id,
         title: jobs.title,
-        premiumPlan: companies.premiumPlan, // Obtenemos el plan de la empresa
+        premiumPlan: companies.premiumPlan,
         zip: jobs.zip,
         daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${jobs.createdAt})`
     })
@@ -214,9 +239,6 @@ cron.schedule('0 10 * * *', async () => {
     
     await launchGeoMarketingCampaign(activeJobs, "job", "title");
 
-    // ----------------------------------------------------
-    // D. PROCESAR APOYO (support)
-    // ----------------------------------------------------
     const activeSupport = await db.select({
         id: support.id,
         name: support.nameSupp,
@@ -227,9 +249,6 @@ cron.schedule('0 10 * * *', async () => {
     
     await launchGeoMarketingCampaign(activeSupport, "support", "name");
 
-    // ----------------------------------------------------
-    // E. PROCESAR ABOGADOS (lawyers)
-    // ----------------------------------------------------
     const activeLawyers = await db.select({
         id: lawyers.id,
         nameLawy: lawyers.nameLawy,
@@ -245,4 +264,19 @@ cron.schedule('0 10 * * *', async () => {
   } catch (error) {
     console.error("❌ [CRON MARKETING] Error ejecutando la tarea:", error);
   }
+}
+
+// ============================================================================
+// ⏰ EJECUCIÓN DIARIA OFICIAL (8:00 AM)
+// ============================================================================
+cron.schedule('0 8 * * *', async () => {
+    await executeMarketingMotor();
 });
+
+// ============================================================================
+// 🧪 PRUEBA TEMPORAL (Se ejecuta 10 minutos después de arrancar el servidor)
+// ============================================================================
+setTimeout(async () => {
+    console.log("🛠️ [TEST] Ejecutando prueba de notificaciones 10 minutos después del despliegue...");
+    await executeMarketingMotor();
+}, 10 * 60 * 1000); // 10 minutos en milisegundos
