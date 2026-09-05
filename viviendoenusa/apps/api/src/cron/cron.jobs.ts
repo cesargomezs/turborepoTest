@@ -166,14 +166,32 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
                                 .where(inArray(userDevices.userId, userIds));
 
         if (devices && devices.length > 0) {
-            const messages = devices.map(device => ({
-                to: device.expoPushToken,
-                sound: 'default',
-                title: titleText,
-                body: bodyText,
-                badge: 1,
-                data: { type: type, referenceId: promo.id },
-            }));
+            const messages = [];
+
+            // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario antes de enviar
+            for (const device of devices) {
+                const [unreadResult] = await db.select({
+                    count: sql<number>`count(*)`
+                })
+                .from(notifications)
+                .where(
+                    and(
+                        eq(notifications.userId, device.userId),
+                        eq(notifications.isRead, false)
+                    )
+                );
+
+                const unreadCount = Number(unreadResult?.count) || 1;
+
+                messages.push({
+                    to: device.expoPushToken,
+                    sound: 'default',
+                    title: titleText,
+                    body: bodyText,
+                    badge: unreadCount, // 🔴 Globito dinámico real
+                    data: { type: type, referenceId: promo.id },
+                });
+            }
 
             const chunks = [];
             for (let i = 0; i < messages.length; i += 100) {

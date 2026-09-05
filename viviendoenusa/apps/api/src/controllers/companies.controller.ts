@@ -16,7 +16,7 @@ const sanitizeText = (str: any) => {
 };
 
 // ============================================================================
-// 🚀 FUNCIÓN LOCAL PARA ENVÍO PUSH DIRECTO AL DUEÑO
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO PUSH DIRECTO AL DUEÑO (+ BADGE DINÁMICO)
 // ============================================================================
 const sendPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
   try {
@@ -31,13 +31,32 @@ const sendPushNotification = async (payload: { title: string, body: string, refe
       return;
     }
 
-    const messages = devices.map(device => ({
-      to: device.expoPushToken,
-      sound: 'default',
-      title: payload.title,
-      body: payload.body,
-      data: { type: "company", referenceId: payload.referenceId },
-    }));
+    const messages = [];
+
+    // 🚀 BUCLE DINÁMICO: Consultamos las no leídas del dueño antes de armar el paquete
+    for (const device of devices) {
+      const [unreadResult] = await db.select({
+        count: sql<number>`count(*)`
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, device.userId),
+          eq(notifications.isRead, false)
+        )
+      );
+
+      const unreadCount = Number(unreadResult?.count) || 1;
+
+      messages.push({
+        to: device.expoPushToken,
+        sound: 'default',
+        title: payload.title,
+        body: payload.body,
+        badge: unreadCount, // 🔴 Globito dinámico real para el dueño
+        data: { type: "company", referenceId: payload.referenceId },
+      });
+    }
 
     console.log(`📱 [PUSH EMPRESAS] Enviando notificación al dueño de la empresa...`);
 

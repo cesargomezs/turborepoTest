@@ -53,7 +53,7 @@ const sanitizePayload = (data: any) => {
 };
 
 // ============================================================================
-// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (COMUNIDAD + BADGE DINÁMICO)
 // ============================================================================
 const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
   try {
@@ -68,13 +68,32 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
       return;
     }
 
-    const messages = devices.map(device => ({
-      to: device.expoPushToken,
-      sound: 'default',
-      title: payload.title,
-      body: payload.body,
-      data: { type: "community", referenceId: payload.referenceId },
-    }));
+    const messages = [];
+
+    // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario de la comunidad
+    for (const device of devices) {
+      const [unreadResult] = await db.select({
+        count: sql<number>`count(*)`
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, device.userId),
+          eq(notifications.isRead, false)
+        )
+      );
+
+      const unreadCount = Number(unreadResult?.count) || 1;
+
+      messages.push({
+        to: device.expoPushToken,
+        sound: 'default',
+        title: payload.title,
+        body: payload.body,
+        badge: unreadCount, // 🔴 Globito dinámico real para comunidad
+        data: { type: "community", referenceId: payload.referenceId },
+      });
+    }
 
     const chunks = [];
     for (let i = 0; i < messages.length; i += 100) {
