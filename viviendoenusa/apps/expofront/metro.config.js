@@ -14,14 +14,15 @@ if (!config.resolver.assetExts.includes('bin')) {
   config.resolver.assetExts.push('bin');
 }
 
-// 2. Configuración del Monorepo (Workspace)
+// 2. Configuración del Monorepo (Workspace con pnpm)
 config.watchFolders = [workspaceRoot];
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// 🚀 ESTA ES LA LÍNEA CRÍTICA PARA QUE PNPM NO ROMPA LA APP EN BLANCO:
+// CRÍTICO PARA PNPM: Permite que Metro resuelva los symlinks del monorepo en EAS
+config.resolver.unstable_enableSymlinks = true;
 config.resolver.disableHierarchicalLookup = true;
 
 // 3. Optimización

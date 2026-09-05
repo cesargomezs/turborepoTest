@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema.js";
-const connectionString = process.env.DATABASE_URL || "postgresql://postgres:PIRAKRspAbsLNRBFixQHibbSwySlLxvR@mainline.proxy.rlwy.net:41428/railway";
+const connectionString = process.env.DATABASE_URL || "postgresql://viviendoenusa_user:ElHUYB7kGtwbRDlEPIGRJGGzr77RIJlL@dpg-d9pqki67bikc738av5j0-a.oregon-postgres.render.com/viviendoenusa?sslmode=require";
 if (!connectionString) {
     throw new Error("❌ DATABASE_URL no está definida en el proceso de Node");
 }
