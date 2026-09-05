@@ -107,7 +107,12 @@ cron.schedule('0 0 * * *', async () => {
 // ============================================================================
 
 async function launchGeoMarketingCampaign(activePromotions: any[], type: string, itemNameKey: string) {
+    // 👇 MODIFICACIÓN TEMPORAL DE PRUEBA 👇
     const promosForToday = activePromotions.filter(promo => {
+        // 🚀 MODO PRUEBA ACTIVO: Dejamos pasar todo ignorando los días
+        return true; 
+        
+        /* CÓDIGO ORIGINAL (Comentado para la prueba):
         const days = promo.daysActive ? Math.floor(promo.daysActive) : 0; 
         const plan = promo.premiumPlan ? promo.premiumPlan.toLowerCase() : 'free';
 
@@ -116,7 +121,10 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
         if (plan === 'free' || plan === 'coupon') return days === 0; 
         
         return false;
+        */
     });
+
+    console.log(`🔍 [DEBUG] Revisando categoría ${type}: Encontramos ${activePromotions.length} activos. Dejando pasar TODOS por modo prueba.`);
 
     if (promosForToday.length === 0) return; 
 
@@ -214,7 +222,7 @@ async function executeMarketingMotor() {
       title: events.title, 
       premiumPlan: events.premiumPlan,
       zip: events.zip,
-      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.dateEvent})` 
+      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.createdAt})` 
       })
       .from(events)
       .where(
@@ -274,9 +282,9 @@ cron.schedule('0 8 * * *', async () => {
 });
 
 // ============================================================================
-// 🧪 PRUEBA TEMPORAL (Se ejecuta 10 minutos después de arrancar el servidor)
+// 🧪 PRUEBA TEMPORAL (Se ejecuta 2 minutos después de arrancar el servidor)
 // ============================================================================
 setTimeout(async () => {
-    console.log("🛠️ [TEST] Ejecutando prueba de notificaciones 10 minutos después del despliegue...");
+    console.log("🛠️ [TEST] Ejecutando prueba de notificaciones 2 minutos después del despliegue...");
     await executeMarketingMotor();
-}, 10 * 60 * 1000); // 10 minutos en milisegundos
+}, 2 * 60 * 1000); // 2 minutos en milisegundos
