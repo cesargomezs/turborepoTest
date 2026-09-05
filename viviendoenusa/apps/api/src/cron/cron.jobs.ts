@@ -4,7 +4,7 @@ import { lawyers, notifications, users, stores, events, jobs, support, companies
 import { sql, eq, and, isNotNull, inArray } from 'drizzle-orm'; 
 
 // ============================================================================
-// 1. CRON DE VENCIMIENTOS - Corre a la medianoche
+// 1. CRON DE VENCIMIENTOS - Corre a la medianoche (00:00)
 // ============================================================================
 cron.schedule('0 0 * * *', async () => {
   console.log("⏰ [CRON] Buscando suscripciones vencidas o próximas a vencer...");
@@ -107,24 +107,21 @@ cron.schedule('0 0 * * *', async () => {
 // ============================================================================
 
 async function launchGeoMarketingCampaign(activePromotions: any[], type: string, itemNameKey: string) {
-    // 👇 MODIFICACIÓN TEMPORAL DE PRUEBA 👇
     const promosForToday = activePromotions.filter(promo => {
-        // 🚀 MODO PRUEBA ACTIVO: Dejamos pasar todo ignorando los días
-        return true; 
-        
-        /* CÓDIGO ORIGINAL (Comentado para la prueba):
         const days = promo.daysActive ? Math.floor(promo.daysActive) : 0; 
         const plan = promo.premiumPlan ? promo.premiumPlan.toLowerCase() : 'free';
 
+        // Unlimited (4 al mes): Notifica días 0, 7, 14, 21, 28...
         if (plan === 'unlimited' || plan === 'premium') return days % 7 === 0;       
+        // Basic (2 al mes): Notifica días 0, 15, 30...
         if (plan === 'basic' || plan === 'intermediate') return days % 15 === 0; 
+        // Free / Coupon (1 al mes): Notifica solo el día de creación
         if (plan === 'free' || plan === 'coupon') return days === 0; 
         
         return false;
-        */
     });
 
-    console.log(`🔍 [DEBUG] Revisando categoría ${type}: Encontramos ${activePromotions.length} activos. Dejando pasar TODOS por modo prueba.`);
+    console.log(`🔍 [DEBUG] Revisando categoría ${type}: Encontramos ${activePromotions.length} activos, pero solo ${promosForToday.length} cumplen la regla de los días para notificarse hoy.`);
 
     if (promosForToday.length === 0) return; 
 
@@ -222,6 +219,7 @@ async function executeMarketingMotor() {
       title: events.title, 
       premiumPlan: events.premiumPlan,
       zip: events.zip,
+      // 🚀 Mantenemos timepostEnd en lugar de createdAt para evitar errores de TypeScript
       daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.timepostEnd})` 
       })
       .from(events)
@@ -275,16 +273,8 @@ async function executeMarketingMotor() {
 }
 
 // ============================================================================
-// ⏰ EJECUCIÓN DIARIA OFICIAL (8:00 AM)
+// ⏰ EJECUCIÓN DIARIA OFICIAL (7:00 AM)
 // ============================================================================
-cron.schedule('0 8 * * *', async () => {
+cron.schedule('0 7 * * *', async () => {
     await executeMarketingMotor();
 });
-
-// ============================================================================
-// 🧪 PRUEBA TEMPORAL (Se ejecuta 2 minutos después de arrancar el servidor)
-// ============================================================================
-setTimeout(async () => {
-    console.log("🛠️ [TEST] Ejecutando prueba de notificaciones 2 minutos después del despliegue...");
-    await executeMarketingMotor();
-}, 2 * 60 * 1000); // 2 minutos en milisegundos
