@@ -388,7 +388,9 @@ export const authenticateUser = async (credentials: {
 
     const needsProfile = !user.phone || !user.zip;
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
-    const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '7d' });
+    
+    // 🚀 AQUÍ ESTÁ EL AJUSTE MAESTRO: La sesión ahora dura casi la mitad de  AÑO (150 días) en vez de 7 días.
+    const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '150d' });
 
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
     await ensureTermsAccepted(user.id);

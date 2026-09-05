@@ -15,7 +15,8 @@ import {
   ActivityIndicator,
   Text,
   FlatList,
-  Linking
+  Linking,
+  AppState // 🚀 IMPORTADO PARA LIMPIAR EL GLOBO DE NOTIFICACIÓN
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -223,7 +224,6 @@ export default function HomeScreen() {
   const [mainLogoUrl, setMainLogoUrl] = useState<string>('');
   const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
 
-  // 🚀 ESTADO Y LÓGICA PARA MOSTRAR EL BOTÓN DE CALIFICAR DESPUÉS DE 30 DÍAS
   const [showRateButton, setShowRateButton] = useState(false);
 
   useEffect(() => {
@@ -248,6 +248,35 @@ export default function HomeScreen() {
       }
     };
     checkAppUsageTime();
+  }, []);
+
+  // ============================================================================
+  // 🚀 NUEVO USE EFFECT: LIMPIA EL GLOBO ROJO (BADGE) AL ABRIR LA APP
+  // ============================================================================
+  useEffect(() => {
+    if (Platform.OS === 'web' || !Notifications) return;
+
+    const clearBadgeCount = async () => {
+      try {
+        await Notifications.setBadgeCountAsync(0);
+      } catch (error) {
+        console.log("No se pudo limpiar el contador del ícono", error);
+      }
+    };
+
+    // Limpia cuando el componente carga (app inicia)
+    clearBadgeCount();
+
+    // Limpia cada vez que la app pasa del fondo a activa
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        clearBadgeCount();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   const orangeGradient: readonly [string, string, ...string[]] = ['#FF5F6D', '#FFC371'];
@@ -299,7 +328,6 @@ export default function HomeScreen() {
   const scrollToBottom = () => { landingScrollRef.current?.scrollToEnd({ animated: true }); };
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
 
-  // 🚀 FUNCIÓN UNIVERSAL DE CALIFICACIÓN PROTEGIDA
   const handleRateApp = async () => {
     try {
       if (Platform.OS === 'web') {

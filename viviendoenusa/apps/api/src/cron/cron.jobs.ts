@@ -171,6 +171,7 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
                 sound: 'default',
                 title: titleText,
                 body: bodyText,
+                badge: 1,
                 data: { type: type, referenceId: promo.id },
             }));
 
