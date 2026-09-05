@@ -26,7 +26,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend-production.up.railway.app",
+        "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend.onrender.com",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f"
       }
     }
