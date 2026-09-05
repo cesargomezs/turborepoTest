@@ -222,7 +222,7 @@ async function executeMarketingMotor() {
       title: events.title, 
       premiumPlan: events.premiumPlan,
       zip: events.zip,
-      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.createdAt})` 
+      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.timepostEnd})` 
       })
       .from(events)
       .where(
