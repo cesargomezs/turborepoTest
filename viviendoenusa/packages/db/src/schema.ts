@@ -347,11 +347,11 @@ export const legalDocuments = pgTable('legal_documents', {
 
 // 17. TABLA: user_terms_acceptance (Terminos y condiciones aceptados por el usuario)
 
-export const userTermsAcceptance = pgTable('user_terms_acceptance', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: "cascade" }).notNull(),
-  acceptedAt: timestamp('accepted_at').defaultNow(),
-  ipAddress: text("ip_address"), 
+export const userTermsAcceptance = pgTable('user_terms_acceptance', { 
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().unique(),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+  ipAddress: text("ip_address"),
 });
 
 // 17. TABLA: audit_logs (auditoria para tener trazabilidad de los registros previos)
