@@ -78,6 +78,7 @@ import {
     estate: text("estate"),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
+    approved: boolean("approved").default(false),
   });
   
   // 4. TABLA: REVIEWS
@@ -136,6 +137,7 @@ import {
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
     contactMethod: text("contact_method"),
+    approved: boolean("approved").default(false),
   });
   
   // 8. TABLA: EVENTS

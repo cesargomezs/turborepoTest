@@ -6,17 +6,17 @@ import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, ActivityIndicator, Image, Linking, Alert,
-  Modal as RNModal, KeyboardAvoidingView, Share, ColorValue, Text, AppState // 🚀 IMPORTAMOS AppState
+  Modal as RNModal, KeyboardAvoidingView, Share, ColorValue, Text, AppState 
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect } from 'expo-router'; // 🚀 IMPORTAMOS useFocusEffect
-import { useIsFocused } from '@react-navigation/native'; // 🚀 IMPORTAMOS useIsFocused
+import { useRouter, useFocusEffect } from 'expo-router'; 
+import { useIsFocused } from '@react-navigation/native'; 
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
-import { createClient } from '@supabase/supabase-js'; // 🚀 IMPORTAMOS SUPABASE
+import { createClient } from '@supabase/supabase-js'; 
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -87,21 +87,16 @@ try {
   console.error("Error cargando badwords.json:", e);
 }
 
-// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
-
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
-
       if (userWord === lowerBanned) return true;
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
       if (userWord === `re${lowerBanned}`) return true;
-
       return false;
     });
   });
@@ -115,9 +110,6 @@ const formatCount = (count: number) => {
   return count.toString();
 };
 
-// =====================================================================
-// 📝 2. TIPOS E INTERFACES (TYPESCRIPT)
-// =====================================================================
 type Review = {
   id: string;
   userId: string;
@@ -148,15 +140,13 @@ type Emprendimiento = {
   contactMethod: 'whatsapp' | 'phone'; 
   zip: string;
   status?: 'pending' | 'approved';
-  estate:string;
+  estate: string;
+  userId?: string;
 };
 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 const ICONS_ARRAY = ['apps', 'sale', 'wrench-outline', 'silverware-fork-knife', 'heart-pulse', 'laptop'];
 
-// =====================================================================
-// 🧩 3. COMPONENTES AUXILIARES AISLADOS
-// =====================================================================
 const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -174,23 +164,15 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
     <View style={{ flex: 1, paddingVertical: 10 }}>
       <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
         <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>
-          {t.entrepreneurshiptab?.backBtn || 'Volver'}
-        </ThemedText>
+        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.entrepreneurshiptab?.backBtn || 'Volver'}</ThemedText>
       </TouchableOpacity>
 
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>
-        {t.entrepreneurshiptab?.viewExpe || 'Tu Experiencia'}
-      </ThemedText>
+      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>{t.entrepreneurshiptab?.viewExpe || 'Tu Experiencia'}</ThemedText>
 
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
         {[1, 2, 3, 4, 5].map(s => (
           <TouchableOpacity key={s} onPress={() => setRating(s)}>
-            <MaterialCommunityIcons 
-              name={s <= rating ? "star" : "star-outline"} 
-              size={40} 
-              color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} 
-            />
+            <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
           </TouchableOpacity>
         ))}
       </View>
@@ -209,26 +191,18 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
           <MaterialCommunityIcons name="send" size={18} color="#FFF" />
-          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>
-            {t.entrepreneurshiptab?.publishReviews || 'Publicar reseña'}
-          </ThemedText>
+          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>{t.entrepreneurshiptab?.publishReviews || 'Publicar reseña'}</ThemedText>
         </LinearGradient>
       </TouchableOpacity>
     </View>
   );
 };
 
-// =====================================================================
-// 🏗️ 4. COMPONENTE PRINCIPAL
-// =====================================================================
 export default function EntrepreneurshipScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   
   const { isDark, toggleTheme } = useAppTheme();
-  const localTheme = isDark ? 'dark' : 'light';
-
-  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
 
   const { t } = useTranslation();
@@ -241,11 +215,10 @@ export default function EntrepreneurshipScreen() {
 
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
   useEffect(() => {
-    if (!userToken) {
-      router.replace('/');
-    }
+    if (!userToken) router.replace('/');
   }, [userToken]);
 
   const handleShare = async (item: Emprendimiento) => {
@@ -320,9 +293,7 @@ export default function EntrepreneurshipScreen() {
     const loadSavedItems = async () => {
       try {
         const storedItems = await AsyncStorage.getItem('@saved_entrepreneurships');
-        if (storedItems) {
-          setSavedItems(JSON.parse(storedItems));
-        }
+        if (storedItems) setSavedItems(JSON.parse(storedItems));
       } catch (error) { console.error(error); }
     };
     loadSavedItems();
@@ -331,7 +302,11 @@ export default function EntrepreneurshipScreen() {
   const fetchEntrepreneurships = async (searchZip: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_ENTREPRENEURSHIP_URL}?zip=${searchZip.trim()}&userId=${userMetadata?.id || ''}`, {
+      const url = isAdminMode 
+        ? `${API_ENTREPRENEURSHIP_URL}` 
+        : `${API_ENTREPRENEURSHIP_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`;
+
+      const res = await fetch(url, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}` }
       });
@@ -340,7 +315,6 @@ export default function EntrepreneurshipScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // 🚀 FIRMA AL VUELO DE IMÁGENES Y REVIEWS
         const mappedData: Emprendimiento[] = await Promise.all(data.map(async (item: any) => {
           const rawImage = item.imageEntrepren || item.image || item.imageUrl;
           const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'entrepreneurship') : '';
@@ -349,6 +323,8 @@ export default function EntrepreneurshipScreen() {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
              return { ...r, image: freshReviewImage };
           })) : [];
+
+          const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
 
           return {
             ...item,
@@ -364,10 +340,18 @@ export default function EntrepreneurshipScreen() {
             saved: false, 
             reviews: parsedReviews,
             image: freshImage,
+            status: isAppr ? 'approved' : 'pending',
+            userId: item.userId || item.user_id
           };
         }));
         
-        setLocalData(mappedData);
+        if (isAdminMode) {
+          setPendingItems(mappedData.filter(i => i.status === 'pending'));
+          setLocalData(mappedData.filter(i => i.status === 'approved' || i.userId === currentUserId));
+        } else {
+          setLocalData(mappedData);
+          setPendingItems([]);
+        }
         return mappedData;
       }
       return [];
@@ -393,14 +377,13 @@ export default function EntrepreneurshipScreen() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${userToken}`
         },
-        body: JSON.stringify({ ids: savedItems, userId: userMetadata?.id || '' })
+        body: JSON.stringify({ ids: savedItems, userId: currentUserId })
       });
       if (res.status === 401) { router.replace('/'); return; }
 
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // 🚀 FIRMA AL VUELO PARA GUARDADOS
         const mappedData: Emprendimiento[] = await Promise.all(data.map(async (item: any) => {
           const rawImage = item.imageEntrepren || item.image || item.imageUrl;
           const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'entrepreneurship') : '';
@@ -409,6 +392,8 @@ export default function EntrepreneurshipScreen() {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
              return { ...r, image: freshReviewImage };
           })) : [];
+
+          const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
 
           return {
             ...item,
@@ -424,9 +409,10 @@ export default function EntrepreneurshipScreen() {
             saved: true, 
             reviews: parsedReviews,
             image: freshImage,
+            status: isAppr ? 'approved' : 'pending',
+            userId: item.userId || item.user_id
           };
         }));
-        
         setLocalData(mappedData);
       } else {
         setLocalData([]);
@@ -438,52 +424,46 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA O CAMBIAR MODO GUARDADO
   useFocusEffect(
     useCallback(() => {
-      if (showSavedOnly) {
+      if (isAdminMode) {
+        fetchEntrepreneurships('');
+      } else if (showSavedOnly) {
         fetchSavedItems();
-      } else {
-        if (isZipValid) {
-          fetchEntrepreneurships(zipCode);
-        }
+      } else if (isZipValid) {
+        fetchEntrepreneurships(zipCode);
       }
-    }, [showSavedOnly, zipCode])
+    }, [showSavedOnly, zipCode, isAdminMode])
   );
 
-  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa
       if (nextAppState === 'active' && isFocused) {
-        console.log("🚀 La app despertó en Emprendimientos. Refrescando...");
-        if (showSavedOnly) {
+        if (isAdminMode) {
+          fetchEntrepreneurships('');
+        } else if (showSavedOnly) {
           fetchSavedItems();
-        } else {
-          if (isZipValid) {
-            fetchEntrepreneurships(zipCode);
-          }
+        } else if (isZipValid) {
+          fetchEntrepreneurships(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, showSavedOnly, zipCode, isZipValid]);
+  }, [isFocused, showSavedOnly, zipCode, isZipValid, isAdminMode]);
 
   const handleSearch = async (forcedCategoryIdx?: number) => {
-    if (!isZipValid) return;
+    if (!isZipValid && !isAdminMode) return;
     if (showSavedOnly) return; 
-    
-    const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
     await fetchEntrepreneurships(zipCode);
   };
 
   const handleZipChange = (text: string) => {
     setZipCode(text);
-    if (text.length < 5) {
+    if (text.length < 5 && !isAdminMode) {
       setResults([]);
       setLocalData([]);
-      if (!isAdminMode) setPendingItems([]);
+      setPendingItems([]);
     }
   };
 
@@ -511,8 +491,6 @@ export default function EntrepreneurshipScreen() {
   };
 
   const handleVote = async (id: string, type: 'like' | 'dislike') => {
-    const currentUserId = userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
-    
     const applyVote = (item: Emprendimiento): Emprendimiento => {
       const isSel = item.userVote === type;
       return {
@@ -551,13 +529,10 @@ export default function EntrepreneurshipScreen() {
       }
       setSavedItems(newSavedList);
       await AsyncStorage.setItem('@saved_entrepreneurships', JSON.stringify(newSavedList));
-    } catch (error) { 
-      console.error(error); 
-    }
+    } catch (error) { console.error(error); }
   };
 
   const handleAddReview = async (targetId: string, stars: number, comment: string) => {
-    const currentUserId = userMetadata?.id || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
     const currentItem = detailItem?.id === targetId ? detailItem : (reviewTarget?.id === targetId ? reviewTarget : results.find(r => r.id === targetId));
 
     if (currentItem?.reviews?.some((r: any) => String(r.userId) === String(currentUserId))) {
@@ -681,7 +656,7 @@ export default function EntrepreneurshipScreen() {
         saved: false, 
         contactMethod: formContactMethod, 
         zip: formZip.trim(),
-        userId: userMetadata?.id || null,
+        userId: currentUserId,
         estate: userMetadata?.estate || ''
       };
 
@@ -717,8 +692,9 @@ export default function EntrepreneurshipScreen() {
         reviews: [],
         contactMethod: savedFromDB.contactMethod, 
         zip: savedFromDB.zip, 
-        status: 'approved',
-        estate:savedFromDB.estate
+        status: 'pending', // 🚀 Nace pendiente
+        userId: currentUserId,
+        estate: savedFromDB.estate
       } as Emprendimiento;
       
       setLocalData(prev => [newEntryLocal, ...prev]);
@@ -727,9 +703,14 @@ export default function EntrepreneurshipScreen() {
       setIsSubmitting(false); setFormVisible(false);
       
       if (!zipCode || zipCode.length < 5) { setZipCode(payload.zip); handleSearch(); }
-      triggerAlert('¡Éxito!', 'Tu emprendimiento ha sido publicado y ya es visible en los resultados.');
+      
+      setTimeout(() => {
+        const msg = savedFromDB.message || "Tu emprendimiento ha sido publicado y está en revisión.";
+        triggerAlert('¡Aviso!', msg);
+      }, 150);
+
     } catch (err: any) {
-      triggerAlert("Error", err.message || "Error conectando con el servidor. Revisa tu conexión.");
+      triggerAlert("Error", err.message || "Error conectando con el servidor.");
       setIsSubmitting(false);
     }
   };
@@ -748,9 +729,8 @@ export default function EntrepreneurshipScreen() {
       if (!response.ok) throw new Error("Error en servidor");
 
       setPendingItems(pendingItems.filter(s => s.id !== item.id));
+      fetchEntrepreneurships(zipCode);
       Alert.alert("Aprobado", "Emprendimiento activado.");
-      
-      if (zipCode.length === 5) handleSearch();
     } catch (error) { Alert.alert("Error", "No se pudo aprobar."); }
   };
 
@@ -794,7 +774,7 @@ export default function EntrepreneurshipScreen() {
           </View>
         )}
         
-        <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', opacity: isPending ? 0.6 : 1 }}>
           <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
             <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
           </View>
@@ -804,7 +784,7 @@ export default function EntrepreneurshipScreen() {
           </View>
         </View>
 
-        <View style={{ width: '100%', height: isLargeWeb ? 200 : 140, position: 'relative' }}>
+        <View style={{ width: '100%', height: isLargeWeb ? 200 : 140, position: 'relative', opacity: isPending ? 0.6 : 1 }}>
           {item.image && item.image.length > 5 ? (
             <Image source={{ uri: item.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           ) : (
@@ -819,7 +799,7 @@ export default function EntrepreneurshipScreen() {
           </View>
         </View>
 
-        <View style={{ padding: 14 }}>
+        <View style={{ padding: 14, opacity: isPending ? 0.6 : 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
             <LinearGradient colors={OG as any} style={S.cardIconWrap}>
               <MaterialCommunityIcons name={categoryIcon as any} size={18} color="#FFF" />
@@ -834,7 +814,6 @@ export default function EntrepreneurshipScreen() {
                 <MaterialCommunityIcons name="map-marker-outline" size={14} color={DC.accent} />
                 <ThemedText style={{ fontSize: 12, marginLeft: 3, fontWeight: '500', color: DC.subtext }} numberOfLines={1}>{item.zip +' '+ item.address}</ThemedText>
               </View>
-              
             </View>
           </View>
 
@@ -848,32 +827,32 @@ export default function EntrepreneurshipScreen() {
           )}
 
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: 4, paddingHorizontal: 4 }}>
-            <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'like'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, backgroundColor: item.userVote === 'like' ? (isDark ? 'rgba(25, 118, 210, 0.35)' : 'rgba(25, 118, 210, 0.25)') : (isDark ? 'rgba(25, 118, 210, 0.15)' : 'rgba(25, 118, 210, 0.1)'), paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}>
+            <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'like'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, backgroundColor: item.userVote === 'like' ? (isDark ? 'rgba(25, 118, 210, 0.35)' : 'rgba(25, 118, 210, 0.25)') : (isDark ? 'rgba(25, 118, 210, 0.15)' : 'rgba(25, 118, 210, 0.1)'), paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, opacity: isPending ? 0.4 : 1 }}>
               <MaterialCommunityIcons name="thumb-up" size={18} color="#1976D2" />
               <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: '#1976D2' }}>{formatCount(item.likes)}</ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'dislike'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: item.userVote === 'dislike' ? (isDark ? 'rgba(250, 128, 114, 0.35)' : 'rgba(250, 128, 114, 0.25)') : (isDark ? 'rgba(250, 128, 114, 0.15)' : 'rgba(250, 128, 114, 0.1)'), paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}>
+            <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); handleVote(item.id, 'dislike'); }} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: item.userVote === 'dislike' ? (isDark ? 'rgba(250, 128, 114, 0.35)' : 'rgba(250, 128, 114, 0.25)') : (isDark ? 'rgba(250, 128, 114, 0.15)' : 'rgba(250, 128, 114, 0.1)'), paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, opacity: isPending ? 0.4 : 1 }}>
               <MaterialCommunityIcons name="thumb-down" size={18} color="#FA8072" />
               <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: '#FA8072' }}>{formatCount(item.dislikes)}</ThemedText>
             </TouchableOpacity>
 
             <View style={{ flex: 1 }} />
 
-            <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleSave(item.id); }} style={{ marginRight: 16 }}>
+            <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); handleSave(item.id); }} style={{ marginRight: 16, opacity: isPending ? 0.4 : 1 }}>
               <MaterialCommunityIcons name={savedItems.includes(item.id) ? 'bookmark' : 'bookmark-outline'} size={24} color={savedItems.includes(item.id) ? (isDark ? '#FFF' : '#111') : DC.subtext} />
             </TouchableOpacity>
 
             {!isWeb && (
-              <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); handleShare(item); }}>
+              <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); handleShare(item); }} style={{ opacity: isPending ? 0.4 : 1 }}>
                 <MaterialCommunityIcons name="share-variant-outline" size={24} color={DC.subtext} />
               </TouchableOpacity>
             )}
           </View>
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingTop: 12, borderTopWidth: 1, borderTopColor: DC.divider }}>
-             <ActionBtnLine onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} icon="comment-text-outline" text={(t.entrepreneurshiptab?.reviews || 'Reseñas') + ` (${formatCount(item.reviews?.length || 0)})`} color={isDark ? '#FFF' : '#444'} bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} />
-             <ActionBtnLine onPress={(e: any) => { e.stopPropagation?.(); if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${item.phone}`); } }} icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} text={item.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || 'Llamar')} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingTop: 12, borderTopWidth: 1, borderTopColor: DC.divider, opacity: isPending ? 0.4 : 1 }}>
+             <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} icon="comment-text-outline" text={(t.entrepreneurshiptab?.reviews || 'Reseñas') + ` (${formatCount(item.reviews?.length || 0)})`} color={isDark ? '#FFF' : '#444'} bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} />
+             <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${item.phone}`); } }} icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} text={item.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || 'Llamar')} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} />
           </View>
         </View>
         {renderAdminControls && renderAdminControls()}
@@ -906,16 +885,10 @@ export default function EntrepreneurshipScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // =====================================================================
-  // 💻 RENDER VISTA
-  // =====================================================================
   return (
     <View style={stylesUnified.container}>
       <Head>
         <title>Emprendimientos - Viviendo en USA</title>
-        <meta property="og:title" content="Emprendimientos Locales en Viviendo en USA" />
-        <meta property="og:description" content="Apoya y descubre los negocios creados por nuestra comunidad." />
-        <meta property="og:image" content="https://tu-servidor.com/imagen-portada.jpg" />
       </Head>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
@@ -942,14 +915,17 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {/* 🚀 CONTROLES DE ADMINISTRADOR EN EL HEADER */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)}>
-                    <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6, marginRight: 8 }} />
+                    <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6 }} />
                   </TouchableOpacity>
                   
-                  <TouchableOpacity >
-                    <MaterialCommunityIcons name="lightbulb-multiple-outline" size={40} color={isAdminMode ? DC.accent : DC.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 2}} />
-                  </TouchableOpacity>
+                  {isAdmin && (
+                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)}>
+                      <MaterialCommunityIcons name="shield-account" size={32} color={isAdminMode ? '#FF5F6D' : DC.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 2}} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 
@@ -1051,6 +1027,8 @@ export default function EntrepreneurshipScreen() {
                   )}
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+                    
+                    {/* 🚀 VISTA DE PENDIENTES PARA EL ADMINISTRADOR */}
                     {isAdminMode && pendingItems.length > 0 && (
                       <View style={{ marginBottom: 20 }}>
                         <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15, fontSize: 16 }}>Pendientes de Revisión ({pendingItems.length})</ThemedText>
@@ -1203,7 +1181,6 @@ export default function EntrepreneurshipScreen() {
                                 <View key={r.id} style={[S.reviewCard, { backgroundColor: DC.inputBg, borderColor: DC.border }]}>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                                     <View style={{ flexDirection: 'row', gap: 3 }}>{[1, 2, 3, 4, 5].map(s => ( <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} /> ))}</View>
-                                    {/*<ThemedText style={{ color: DC.subtext, fontSize: 11 }}>{r.displayTime || 'Nuevo'}</ThemedText>*/}
                                   </View>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 5 }}>
                                     {r.image ? ( <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/> ) : ( <MaterialCommunityIcons name="account-circle" size={24} color={DC.subtext} /> )}
@@ -1245,7 +1222,6 @@ export default function EntrepreneurshipScreen() {
                             <View key={r.id} style={[S.reviewCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderColor: DC.border }]}>
                               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                                 <View style={{ flexDirection: 'row', gap: 3 }}>{[1, 2, 3, 4, 5].map(s => ( <MaterialCommunityIcons key={s} name="star" size={15} color={s <= r.stars ? '#FFB300' : (isDark ? 'rgba(255,255,255,0.2)' : '#DDD')} /> ))}</View>
-                                {/*<ThemedText style={{ color: DC.iconInactive, fontSize: 11, marginLeft: 6, alignContent:'flex-end' ,fontStyle: 'italic' }}>{r.displayTime || 'Nuevo'}</ThemedText>*/}
                               </View>
                               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 5 }}>
                                 {r.image ? ( <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/> ) : ( <MaterialCommunityIcons name="account-circle" size={24} color={DC.subtext} /> )}
@@ -1290,7 +1266,6 @@ export default function EntrepreneurshipScreen() {
 
                 <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.viewcategory || 'CATEGORÍA'}</ThemedText>
                 
-                {/* 🚀 CATEGORÍAS DEL MODAL: FlexWrap para que fluyan en Web */}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                   {CATEGORIES.map((catName, index) => {
                     if (index === 0) return null; 

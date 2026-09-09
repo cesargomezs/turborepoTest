@@ -1,15 +1,15 @@
 import { db } from "../../../../packages/db/src"; 
-import { community, reviews, countlikes, users, notifications, userDevices } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
+import { community, reviews, countlikes, users, notifications, userDevices } from "../../../../packages/db/src/schema"; 
 import { eq, desc, and, sql, inArray } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
-import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import zipcodes from 'zipcodes'; 
 
 // =====================================================================
 // ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
 // =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
+const radiusMiles = process.env.RADIUMILE || 20; 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
@@ -19,7 +19,6 @@ const NOMBRE_BUCKET = 'images';
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
   
-  // 🚀 bypass de TypeScript con as any
   const locationInfo = zipcodes.lookup(zip as any);
   
   if (locationInfo) {
@@ -52,8 +51,31 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
+// =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA COMUNIDAD
+// =====================================================================
+const sendTelegramAlert = async (userId: string, zip: string, textPreview: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) return;
+
+  const shortText = textPreview.length > 50 ? textPreview.substring(0, 50) + '...' : textPreview;
+  const message = `🏘 *NUEVO POST EN COMUNIDAD*\n\n*Usuario ID:* ${userId}\n*ZIP:* ${zip}\n*Mensaje:* "${shortText}"\n\n⚠️ Ingresa al panel para verificar y aprobar.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
+};
+
 // ============================================================================
-// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (COMUNIDAD + BADGE DINÁMICO)
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
 // ============================================================================
 const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
   try {
@@ -68,32 +90,13 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
       return;
     }
 
-    const messages = [];
-
-    // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario de la comunidad
-    for (const device of devices) {
-      const [unreadResult] = await db.select({
-        count: sql<number>`count(*)`
-      })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, device.userId),
-          eq(notifications.isRead, false)
-        )
-      );
-
-      const unreadCount = Number(unreadResult?.count) || 1;
-
-      messages.push({
-        to: device.expoPushToken,
-        sound: 'default',
-        title: payload.title,
-        body: payload.body,
-        badge: unreadCount, // 🔴 Globito dinámico real para comunidad
-        data: { type: "community", referenceId: payload.referenceId },
-      });
-    }
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: { type: "community", referenceId: payload.referenceId },
+    }));
 
     const chunks = [];
     for (let i = 0; i < messages.length; i += 100) {
@@ -120,11 +123,12 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado)
+// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado y Aprobación)
 // =====================================================================
-export const getCommunityPosts = async (zip?: string) => {
+export const getCommunityPosts = async (zip?: string, userId?: string) => {
   try {
     const cleanZip = zip ? sanitizeText(String(zip)) : null;
+    const cleanUserId = userId ? sanitizeText(String(userId)) : null;
 
     if (zip && (!cleanZip || cleanZip.length !== 5)) {
       return []; 
@@ -140,6 +144,13 @@ export const getCommunityPosts = async (zip?: string) => {
       .leftJoin(reviews, eq(reviews.relationshipId, community.id)) 
       .leftJoin(users, eq(reviews.userId, users.id)) 
       .$dynamic(); 
+
+    // 🚀 FILTRO ESTRICTO: Solo aprobados, O los que le pertenecen al usuario actual
+    if (cleanUserId) {
+      query = query.where(sql`(${community.approved} = true OR ${community.userId} = ${cleanUserId})`);
+    } else {
+      query = query.where(eq(community.approved, true));
+    }
 
     // 🚀 Lógica de Geofencing Súper Rápida
     if (cleanZip) {
@@ -165,12 +176,15 @@ export const getCommunityPosts = async (zip?: string) => {
       if (!postsMap.has(postId)) {
         const dbPost = row.community as any;
         const textoNormalizado = dbPost.text || dbPost.textContent || dbPost.text_content || '';
+        const isAppr = String(dbPost.approved) === 'true' || dbPost.approved === 1 || dbPost.approved === true;
 
         postsMap.set(postId, {
           ...row.community,
           text: textoNormalizado,
           textContent: textoNormalizado, 
           zip: row.community.zip ? String(row.community.zip) : null, 
+          approved: isAppr,
+          status: isAppr ? 'approved' : 'pending',
           commentsList: [] 
         });
       }
@@ -263,12 +277,15 @@ export const getCommunityPostById = async (id: string) => {
 
     const dbPostBase = rows[0].community as any;
     const textoNormalizadoBase = dbPostBase.text || dbPostBase.textContent || dbPostBase.text_content || '';
+    const isAppr = String(dbPostBase.approved) === 'true' || dbPostBase.approved === 1 || dbPostBase.approved === true;
 
     const postFinal: any = {
       ...rows[0].community,
       text: textoNormalizadoBase,
       textContent: textoNormalizadoBase,
       zip: rows[0].community.zip ? String(rows[0].community.zip) : null,
+      approved: isAppr,
+      status: isAppr ? 'approved' : 'pending',
       commentsList: commentsArray
     };
 
@@ -303,7 +320,7 @@ export const getCommunityPostById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR POST (CON GEOLOCALIZACIÓN AUTOMÁTICA Y PUSH)
+// 📥 3. CREAR POST (NACE OCULTO + ALERTA TELEGRAM)
 // =====================================================================
 export const createCommunityPost = async (data: any) => {
   try {
@@ -325,72 +342,27 @@ export const createCommunityPost = async (data: any) => {
       cleanPayload.imageUrl = cleanPayload.imageUrl.replace('community/', '');
     }
 
-    let pushNotificationData: any = null;
+    // 🚀 OBLIGAMOS A QUE NAZCA PENDIENTE DE REVISIÓN PARA APPLE
+    cleanPayload.approved = false;
 
     const createdPostResult = await db.transaction(async (tx) => {
       const newPost = await tx.insert(community).values(cleanPayload).returning();
-      const postRecord = newPost[0];
-
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS)
-      console.log("✅ [DEBUG PUSH COMUNIDAD] Post creado. Calculando usuarios en zona...");
-
-      const titleText = "¡Nueva publicación en tu comunidad! 🏘️";
-      
-      const rawText = cleanPayload.text || cleanPayload.textContent || cleanPayload.text_content || 'Alguien ha compartido algo nuevo en tu área.';
-      const bodyText = rawText.length > 40 ? rawText.substring(0, 40) + '...' : rawText;
-      
-      let usersToNotify: { id: string }[] = [];
-
-      if (cleanPayload.zip) {
-        const nearbyZips = zipcodes.radius(cleanPayload.zip as any, Number(radiusMiles)); 
-
-        if (nearbyZips && nearbyZips.length > 0) {
-          usersToNotify = await tx.select({ id: users.id })
-                                  .from(users)
-                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${validUserId}`)); 
-        } else {
-          usersToNotify = await tx.select({ id: users.id })
-                                  .from(users)
-                                  .where(and(eq(users.zip, String(cleanPayload.zip)), sql`${users.id} != ${validUserId}`));
-        }
-      }
-
-      if (usersToNotify.length > 0) {
-        const notificationsToInsert = usersToNotify.map(u => {
-          const payload: any = {
-            title: titleText,
-            description: bodyText,
-            type: "community", 
-            visibleAt: new Date(), 
-            userId: u.id,
-            isRead: false
-          };
-          if ('referenceId' in notifications) payload.referenceId = String(postRecord.id);
-          else if ('reference_id' in notifications) payload.reference_id = String(postRecord.id);
-          return payload;
-        });
-
-        await tx.insert(notifications).values(notificationsToInsert);
-
-        pushNotificationData = {
-          title: titleText,
-          body: bodyText,
-          referenceId: String(postRecord.id),
-          userIds: usersToNotify.map(u => u.id) 
-        };
-      }
-
-      return postRecord;
+      return newPost[0];
     });
 
-    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
-    if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
-         console.error("❌ [DEBUG PUSH] Falló el Push Notification de la comunidad:", err);
-      });
-    }
+    // 🚀 ENVIAMOS ALERTA A TELEGRAM (SIN AVISAR AL PÚBLICO AÚN)
+    sendTelegramAlert(
+      validUserId, 
+      cleanPayload.zip || 'N/A', 
+      cleanPayload.text || cleanPayload.textContent || cleanPayload.text_content || 'Sin texto'
+    ).catch(e => console.log("Telegram alert failed", e));
 
-    return createdPostResult;
+    return {
+      ...createdPostResult,
+      approved: false,
+      status: 'pending',
+      message: "¡Publicación recibida! Nuestro equipo la revisará y estará visible en las próximas 24 horas."
+    };
 
   } catch (error: any) { 
     throw new Error(`Error al crear la publicación: ${error.message}`);
@@ -398,7 +370,7 @@ export const createCommunityPost = async (data: any) => {
 };
 
 // =====================================================================
-// 📥 4. CREAR COMENTARIO (CORREGIDO)
+// 📥 4. CREAR COMENTARIO 
 // =====================================================================
 export const createCommunityReview = async (data: any) => {
   try {
@@ -519,7 +491,7 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
 };
 
 // =====================================================================
-// 🔄 6. ACTUALIZAR POST
+// 🔄 6. ACTUALIZAR POST (Y DISPARAR NOTIFICACIÓN AL APROBAR)
 // =====================================================================
 export const updateCommunityPost = async (id: string, data: any) => {
   try {
@@ -527,9 +499,75 @@ export const updateCommunityPost = async (id: string, data: any) => {
     if (!cleanId) throw new Error("ID inválido");
 
     const cleanPayload = sanitizePayload(data);
+    let pushNotificationData: any = null;
+
+    // Obtener el estado actual antes de actualizar
+    const [existing] = await db.select().from(community).where(eq(community.id, cleanId));
 
     const updated = await db.update(community).set(cleanPayload).where(eq(community.id, cleanId)).returning();
-    return updated[0] || null;
+    const postRecord = updated[0] || null;
+
+    // 🚀 NOTIFICACIONES MASIVAS SE DISPARAN AQUÍ: SOLO AL PASAR A APROBADO
+    const isApprovedNow = String(cleanPayload.approved).toLowerCase() === 'true' || cleanPayload.approved === true || cleanPayload.approved === 1;
+    const wasApprovedBefore = existing && (String(existing.approved).toLowerCase() === 'true' || existing.approved === true );
+
+    if (isApprovedNow && !wasApprovedBefore && postRecord) {
+      console.log("✅ [DEBUG PUSH COMUNIDAD] Post aprobado por admin. Calculando usuarios en zona...");
+
+      const titleText = "¡Nueva publicación en tu comunidad! 🏘️";
+      const rawText = postRecord.textContent || 'Alguien ha compartido algo nuevo en tu área.';
+      const bodyText = rawText.length > 40 ? rawText.substring(0, 40) + '...' : rawText;
+      
+      let usersToNotify: { id: string }[] = [];
+
+      if (postRecord.zip) {
+        const nearbyZips = zipcodes.radius(postRecord.zip as any, Number(radiusMiles)); 
+
+        if (nearbyZips && nearbyZips.length > 0) {
+          usersToNotify = await db.select({ id: users.id })
+                                  .from(users)
+                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${postRecord.userId}`)); 
+        } else {
+          usersToNotify = await db.select({ id: users.id })
+                                  .from(users)
+                                  .where(and(eq(users.zip, String(postRecord.zip)), sql`${users.id} != ${postRecord.userId}`));
+        }
+      }
+
+      if (usersToNotify.length > 0) {
+        const notificationsToInsert = usersToNotify.map(u => {
+          const payload: any = {
+            title: titleText,
+            description: bodyText,
+            type: "community", 
+            visibleAt: new Date(), 
+            userId: u.id,
+            isRead: false
+          };
+          if ('referenceId' in notifications) payload.referenceId = String(postRecord.id);
+          else if ('reference_id' in notifications) payload.reference_id = String(postRecord.id);
+          return payload;
+        });
+
+        await db.insert(notifications).values(notificationsToInsert);
+
+        pushNotificationData = {
+          title: titleText,
+          body: bodyText,
+          referenceId: String(postRecord.id),
+          userIds: usersToNotify.map(u => u.id) 
+        };
+      }
+    }
+
+    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
+    if (pushNotificationData) {
+      sendMassPushNotification(pushNotificationData).catch(err => {
+         console.error("❌ [DEBUG PUSH] Falló el Push Notification de la comunidad:", err);
+      });
+    }
+
+    return postRecord;
   } catch (error: any) { 
     throw new Error(`Error al actualizar la publicación: ${error.message}`);
   }

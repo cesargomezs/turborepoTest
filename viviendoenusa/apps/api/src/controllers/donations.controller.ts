@@ -1,15 +1,15 @@
 import { db } from "../../../../packages/db/src"; 
-import { donations, users, notifications, userDevices } from "../../../../packages/db/src/schema"; // 🚀 Agregado notifications y userDevices
+import { donations, users, notifications, userDevices } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray, or } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
-import zipcodes from 'zipcodes'; // 🚀 IMPORTACIÓN DE LA LIBRERÍA DE GEOLOCALIZACIÓN
+import zipcodes from 'zipcodes'; 
 
 // =====================================================================
 // ☁️ CONFIGURACIÓN DE SUPABASE Y CONSTANTES
 // =====================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const radiusMiles = process.env.RADIUMILE || 20; // 🚀 Radio estandarizado a 20 millas
+const radiusMiles = process.env.RADIUMILE || 20; 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 
@@ -19,7 +19,6 @@ const NOMBRE_BUCKET = 'images';
 const getCoordsFromZip = (zip: string) => {
   if (!zip) return { lat: 34.0934, lng: -117.5847 };
   
-  // 🚀 bypass de TypeScript con as any
   const locationInfo = zipcodes.lookup(zip as any);
   
   if (locationInfo) {
@@ -53,6 +52,29 @@ const sanitizePayload = (data: any) => {
   return sanitizedData;
 };
 
+// =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA DONACIONES
+// =====================================================================
+const sendTelegramAlert = async (userId: string, zip: string, titlePreview: string) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) return;
+
+  const shortTitle = titlePreview.length > 40 ? titlePreview.substring(0, 40) + '...' : titlePreview;
+  const message = `🎁 *NUEVA DONACIÓN REGISTRADA*\n\n*Usuario ID:* ${userId}\n*ZIP:* ${zip}\n*Artículo:* "${shortTitle}"\n\n⚠️ Ingresa al panel para verificar y aprobar.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' })
+    });
+  } catch (err) {
+    console.error("❌ Error enviando alerta a Telegram:", err);
+  }
+};
+
 // ============================================================================
 // 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (DONACIONES + BADGE DINÁMICO)
 // ============================================================================
@@ -71,7 +93,6 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 
     const messages = [];
 
-    // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario en donaciones
     for (const device of devices) {
       const [unreadResult] = await db.select({
         count: sql<number>`count(*)`
@@ -91,7 +112,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         sound: 'default',
         title: payload.title,
         body: payload.body,
-        badge: unreadCount, // 🔴 Globito dinámico real para donaciones
+        badge: unreadCount, 
         data: { type: "donation", referenceId: payload.referenceId },
       });
     }
@@ -121,18 +142,22 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. OBTENER DONACIONES (CON FILTRO DE DISTANCIA ULTRARRÁPIDO)
+// 🔍 1. OBTENER DONACIONES (CON FILTRO DE DISTANCIA Y APROBACIÓN)
 // =====================================================================
-export const getDonations = async (zip?: string) => {
+export const getDonations = async (zip?: string, userId?: string) => {
   try {
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
+    const cleanUserId = userId ? sanitizeText(String(userId)) : null;
 
     if (zip && (!cleanZipParam || cleanZipParam.length !== 5)) return []; 
 
-    let baseConditions = eq(donations.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021');
+    // 🚀 Permitimos ver las aprobadas, O las propias del usuario (aunque estén pendientes)
+    let baseConditions = cleanUserId 
+      ? or(eq(donations.approved, true), eq(donations.userId, cleanUserId))
+      : eq(donations.approved, true);
+
     let finalConditions: any = baseConditions;
 
-    // 🚀 Lógica de Geofencing Súper Rápida
     if (cleanZipParam) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
@@ -174,16 +199,16 @@ export const getDonations = async (zip?: string) => {
             
             if (data?.signedUrl) {
                 publicUrl = data.signedUrl;
-            } else if (error) {
-                console.warn(`⚠️ Error de Supabase al firmar imagen donación ${dbDonation.id}:`, error.message);
             }
         }
+
+        const isAppr = String(dbDonation.approved) === 'true' || dbDonation.approved === true || dbDonation.approved === 1;
 
         return { 
             ...dbDonation, 
             image: publicUrl, 
             imageUrl: publicUrl,
-            status: dbDonation.status_id || 'active',
+            approved: isAppr ? 'approved' : 'pending',
             ownerName: nombreUsuario
         }; 
     }));
@@ -196,19 +221,17 @@ export const getDonations = async (zip?: string) => {
 };
 
 // =====================================================================
-// 📥 2. CREAR DONACIÓN (INCLUYENDO COORDENADAS Y PUSH MASIVO)
+// 📥 2. CREAR DONACIÓN (NACE PENDIENTE + ALERTA TELEGRAM)
 // =====================================================================
 export const createDonation = async (data: any) => {
   try {
     const cleanData = sanitizePayload(data);
 
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID (Eliminada la falla de seguridad)
     const validUserId = sanitizeText(cleanData.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para registrar una donación.");
     }
 
-    // 🚀 Obtenemos las coordenadas a partir del ZIP de forma local y sincrónica
     const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
 
     const dbPayload: any = {
@@ -219,40 +242,102 @@ export const createDonation = async (data: any) => {
       lat: lat, 
       lng: lng, 
       contactMethod: cleanData.contactMethod || 'whatsapp',
-      statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
+      approved: false, // 🚀 Nace pendiente para cumplir con Apple
       estate: cleanData.estate, 
       descriptionDon: cleanData.description || '',
       locationDon: cleanData.location || 'Rancho Cucamonga',
       imageUrl: cleanData.image ? cleanData.image.replace('donations/', '') : '',
-      userId: validUserId // 🚀 SE USA EL ID VALIDADO
+      userId: validUserId 
     };
-
-    let pushNotificationData: any = null;
 
     const createdDonationResult = await db.transaction(async (tx) => {
       const newDonation = await tx.insert(donations).values(dbPayload).returning();
-      const donationRecord = newDonation[0];
+      return newDonation[0];
+    });
 
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS)
-      console.log("✅ [DEBUG PUSH DONACIONES] Donación creada. Calculando usuarios en zona...");
+    // 🚀 ENVIAMOS ALERTA A TELEGRAM (SIN AVISAR AL PÚBLICO AÚN)
+    sendTelegramAlert(
+      validUserId, 
+      cleanData.zip || 'N/A', 
+      cleanData.title || 'Sin título'
+    ).catch(e => console.log("Telegram alert failed", e));
+
+    return {
+      ...createdDonationResult,
+      approved: false,
+      status: 'pending',
+      message: "¡Donación recibida! Nuestro equipo la revisará y estará visible en las próximas 24 horas."
+    };
+
+  } catch (error: any) { 
+    console.error("❌ Error en createDonation:", error);
+    throw new Error(`Error al crear la donación: ${error.message}`);
+  }
+};
+
+// =====================================================================
+// 🔄 3. ACTUALIZAR ESTADO DE LA DONACIÓN (Y DISPARAR PUSH AL APROBAR)
+// =====================================================================
+export const updateDonationStatus = async (id: string, status?: string, approved?: boolean) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    const [existing] = await db.select().from(donations).where(eq(donations.id, cleanId));
+    if (!existing) throw new Error("Donación no encontrada");
+
+    const updatePayload: any = {};
+
+    if (approved !== undefined) {
+      updatePayload.approved = Boolean(approved);
+    }
+
+    if (status) {
+      const cleanStatus = sanitizeText(status);
+      if (cleanStatus === 'delivered') {
+        updatePayload.statusId = '6a226ffa-9edf-4886-931f-64299f8a6f7f';
+      } else if (cleanStatus === 'active') {
+        updatePayload.statusId = '31a06434-8ed8-45d2-b95f-65bd314bc021';
+        updatePayload.approved = true;
+      }
+    }
+
+    if (updatePayload.approved === true) {
+      updatePayload.createdAt = new Date(); // Reinicia fecha para darle vigencia
+    }
+
+    const updated = await db
+      .update(donations)
+      .set(updatePayload) 
+      .where(eq(donations.id, cleanId)) 
+      .returning();
+      
+    const donationRecord = updated[0] || null;
+
+    // 🚀 NOTIFICACIONES MASIVAS SE DISPARAN AQUÍ: SOLO AL PASAR A APROBADO
+    const isApprovedNow = donationRecord && (String(donationRecord.approved) === 'true' || donationRecord.approved === true );
+    const wasApprovedBefore = existing && (String(existing.approved) === 'true' || existing.approved === true );
+
+    if (isApprovedNow && !wasApprovedBefore && donationRecord) {
+      console.log("✅ [DEBUG PUSH DONACIONES] Donación aprobada por admin. Calculando usuarios en zona...");
 
       const titleText = "¡Nueva Donación en tu área! 🎁";
-      const rawText = cleanData.description || 'Alguien está regalando algo cerca de ti. ¡Revisa la app!';
+      const rawText = donationRecord.descriptionDon || 'Alguien está regalando algo cerca de ti. ¡Revisa la app!';
       const bodyText = rawText.length > 40 ? rawText.substring(0, 40) + '...' : rawText;
       
       let usersToNotify: { id: string }[] = [];
 
-      if (cleanData.zip) {
-        const nearbyZips = zipcodes.radius(cleanData.zip as any, Number(radiusMiles)); 
+      if (donationRecord.zip) {
+        const nearbyZips = zipcodes.radius(donationRecord.zip as any, Number(radiusMiles)); 
 
         if (nearbyZips && nearbyZips.length > 0) {
-          usersToNotify = await tx.select({ id: users.id })
+          usersToNotify = await db.select({ id: users.id })
                                   .from(users)
-                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${validUserId}`)); 
+                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${donationRecord.userId}`)); 
         } else {
-          usersToNotify = await tx.select({ id: users.id })
+          usersToNotify = await db.select({ id: users.id })
                                   .from(users)
-                                  .where(and(eq(users.zip, String(cleanData.zip)), sql`${users.id} != ${validUserId}`));
+                                  .where(and(eq(users.zip, String(donationRecord.zip)), sql`${users.id} != ${donationRecord.userId}`));
         }
       }
 
@@ -271,59 +356,22 @@ export const createDonation = async (data: any) => {
           return payload;
         });
 
-        await tx.insert(notifications).values(notificationsToInsert);
+        await db.insert(notifications).values(notificationsToInsert);
 
-        pushNotificationData = {
+        const pushPayload = {
           title: titleText,
           body: bodyText,
           referenceId: String(donationRecord.id),
           userIds: usersToNotify.map(u => u.id) 
         };
+
+        sendMassPushNotification(pushPayload).catch(err => {
+           console.error("❌ [DEBUG PUSH] Falló el Push Notification de donaciones:", err);
+        });
       }
-
-      return donationRecord;
-    });
-
-    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
-    if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
-         console.error("❌ [DEBUG PUSH] Falló el Push Notification de donaciones:", err);
-      });
     }
 
-    return createdDonationResult;
-
-  } catch (error: any) { 
-    console.error("❌ Error en createDonation:", error);
-    throw new Error(`Error al crear la donación: ${error.message}`);
-  }
-};
-
-// =====================================================================
-// 🔄 3. ACTUALIZAR ESTADO DE LA DONACIÓN
-// =====================================================================
-export const updateDonationStatus = async (id: string, status: string) => {
-  try {
-    const cleanId = sanitizeText(id);
-    const cleanStatus = sanitizeText(status) || 'active';
-
-    if (!cleanId) throw new Error("ID inválido");
-
-    // 🚀 Mapeamos el texto al UUID correspondiente
-    const statusUuid = cleanStatus === 'delivered' 
-        ? '6a226ffa-9edf-4886-931f-64299f8a6f7f' 
-        : '31a06434-8ed8-45d2-b95f-65bd314bc021';
-
-    const updated = await db
-      .update(donations)
-      .set({ 
-        statusId: statusUuid, // 🐛 Antes decía "estate", por eso fallaba
-        createdAt: new Date() // 🚀 Reiniciamos la fecha para darle 5 días exactos en pantalla
-      }) 
-      .where(eq(donations.id, cleanId)) 
-      .returning();
-      
-    return updated[0] || null;
+    return donationRecord;
   } catch (error: any) { 
     console.error(`❌ Error al actualizar estado de ${id}:`, error);
     throw new Error(`Error al actualizar estado: ${error.message}`);

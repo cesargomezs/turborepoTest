@@ -3,15 +3,15 @@ import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ActivityIndicator,
   Platform, Modal as RNModal, KeyboardAvoidingView,
-  ColorValue, AppState // 🚀 IMPORTAMOS AppState
+  ColorValue, AppState 
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useSegments, useFocusEffect } from 'expo-router'; // 🚀 IMPORTAMOS useFocusEffect
-import { useIsFocused } from '@react-navigation/native'; // 🚀 IMPORTAMOS useIsFocused
+import { useRouter, useSegments, useFocusEffect } from 'expo-router'; 
+import { useIsFocused } from '@react-navigation/native'; 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createClient } from '@supabase/supabase-js'; // 🚀 IMPORTAMOS SUPABASE
+import { createClient } from '@supabase/supabase-js'; 
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -153,6 +153,12 @@ export default function CommunityScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
+  // 🚀 VARIABLES DE ADMINISTRADOR
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [pendingPosts, setPendingPosts] = useState<any[]>([]);
+
   useEffect(() => {
     if (!userToken) {
       router.replace('/');
@@ -232,12 +238,21 @@ export default function CommunityScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
 
+  // 🚀 OBTENER POSTS (Normales o de Administrador)
   const fetchCommunityPosts = async (searchZip?: string) => {
-    if (!searchZip || searchZip.length !== 5) return;
-
     try {
       setLoadingPosts(true);
-      const url = `${API_COMMUNITY_URL}?zip=${searchZip}`;
+      
+      let url = '';
+      if (isAdminMode) {
+        url = `${API_COMMUNITY_URL}`; // El Admin puede traer todo para filtrar pendientes
+      } else {
+        if (!searchZip || searchZip.length !== 5) {
+          setLoadingPosts(false);
+          return;
+        }
+        url = `${API_COMMUNITY_URL}?zip=${searchZip}&userId=${currentUserId}`;
+      }
 
       const response = await fetch(url, {
         method: 'GET',
@@ -253,6 +268,7 @@ export default function CommunityScreen() {
       
       if (!textResponse) {
         setPosts([]);
+        setPendingPosts([]);
         return;
       }
       
@@ -262,6 +278,7 @@ export default function CommunityScreen() {
         // 🚀 FIRMAMOS TODAS LAS IMÁGENES AL VUELO (POSTS Y COMENTARIOS)
         const formattedPosts = await Promise.all(apiData.map(async (p: any) => {
           const freshImage = p.imageUrl ? await refreshSupabaseUrl(p.imageUrl, 'community') : null;
+          const isAppr = String(p.approved) === 'true' || p.approved === 1 || p.approved === true;
 
           return {
             ...p,
@@ -269,12 +286,23 @@ export default function CommunityScreen() {
             likes: p.likes || 0,
             dislikes: p.dislikes || 0,
             userVote: p.userVote || null, 
+            status: isAppr ? 'approved' : 'pending',
             createdAt: p.createdAt || new Date().toISOString(), 
             displayTime: p.createdAt ? getRelativeTime(p.createdAt) : 'Hace un momento'
           };
         }));
         
-        setPosts(formattedPosts);
+        // 🚀 Lógica de separación: Pendientes vs Aprobados
+        const approvedOrOwned = formattedPosts.filter(p => p.status === 'approved' || p.userId === currentUserId);
+        const purelyPending = formattedPosts.filter(p => p.status === 'pending');
+
+        if (isAdminMode) {
+          setPendingPosts(purelyPending);
+          setPosts(approvedOrOwned.filter(p => searchZip ? p.zip === searchZip : true)); 
+        } else {
+          setPosts(approvedOrOwned);
+          setPendingPosts([]);
+        }
         
         const commentsMap: Record<string, any[]> = {};
         await Promise.all(formattedPosts.map(async (p: any) => {
@@ -296,6 +324,7 @@ export default function CommunityScreen() {
 
       } else {
         setPosts([]);
+        setPendingPosts([]);
       }
     } catch (error) {
       console.error("Error cargando posts de la comunidad:", error);
@@ -304,29 +333,67 @@ export default function CommunityScreen() {
     }
   };
 
-  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
+  // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
   useFocusEffect(
     useCallback(() => {
-      if (zipCode && zipCode.length === 5) {
+      if (isAdminMode) {
+        fetchCommunityPosts(zipCode);
+      } else if (zipCode && zipCode.length === 5) {
         fetchCommunityPosts(zipCode);
       }
-    }, [zipCode])
+    }, [zipCode, isAdminMode])
   );
 
-  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
+  // 🚀 DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       // Solo dispara la consulta si la app despertó Y esta es la pestaña activa en la pantalla
       if (nextAppState === 'active' && isFocused) {
-        console.log("🚀 La app despertó en Comunidad. Refrescando posts...");
-        if (zipCode && zipCode.length === 5) {
+        if (isAdminMode || (zipCode && zipCode.length === 5)) {
           fetchCommunityPosts(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, zipCode]); // Depende de que sea la pestaña actual
+  }, [isFocused, zipCode, isAdminMode]); 
+
+  // =====================================================================
+  // 🚀 FUNCIONES DE ADMINISTRADOR (Aprobar y Rechazar)
+  // =====================================================================
+  const approveCommunityPost = async (id: string) => {
+    try {
+      const response = await fetch(`${API_COMMUNITY_URL}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+        body: JSON.stringify({ approved: true })
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      if (!response.ok) throw new Error("Error al aprobar");
+      
+      setPendingPosts(prev => prev.filter(p => p.id !== id));
+      fetchCommunityPosts(zipCode);
+      Alert.alert("Aprobado", "La publicación ya está visible para la comunidad y se enviaron las notificaciones.");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo aprobar la publicación.");
+    }
+  };
+
+  const rejectCommunityPost = async (id: string) => {
+    try {
+      const response = await fetch(`${API_COMMUNITY_URL}/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      if (!response.ok) throw new Error("Error al rechazar");
+      
+      setPendingPosts(prev => prev.filter(p => p.id !== id));
+      Alert.alert("Rechazado", "La publicación fue eliminada.");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo eliminar la publicación.");
+    }
+  };
 
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) { window.alert(`${title}\n${message}`); } 
@@ -440,6 +507,7 @@ export default function CommunityScreen() {
         dislikes: 0, 
         userVote: null, 
         commentsList: [],
+        status: 'pending',
         createdAt: rawCreatedAt, 
         displayTime: getRelativeTime(rawCreatedAt)
       };
@@ -453,6 +521,12 @@ export default function CommunityScreen() {
         setZipCode(targetZip);
         fetchCommunityPosts(targetZip);
       }
+
+      // 🚀 ALERTA DINÁMICA CON EL MENSAJE DEL BACKEND
+      setTimeout(() => {
+        const msg = responseData.message || "Tu publicación ha sido enviada con éxito y está en revisión.";
+        triggerAlert('¡Aviso!', msg);
+      }, 150);
 
     } catch (err: any) {
       console.error("❌ ERROR EN FETCH:", err.message);
@@ -658,7 +732,7 @@ export default function CommunityScreen() {
                     onChangeText={(text) => {
                       setZipCode(text);
                       if (text.length < 5) {
-                        if (posts.length > 0) setPosts([]); 
+                        if (posts.length > 0) { setPosts([]); setPendingPosts([]); } 
                       } else if (text.length === 5) {
                         fetchCommunityPosts(text); 
                       }
@@ -680,7 +754,17 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <MaterialCommunityIcons name="account-group" size={40} color={Colors.text} style={{ opacity: 0.4, paddingLeft: 15 }} />
+                {/* 🚀 CONTROLES DE ADMINISTRADOR EN EL HEADER */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <TouchableOpacity onPress={() => { setPosts([]); setPendingPosts([]); setZipCode(''); fetchCommunityPosts(zipCode); }}>
+                      <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
+                  </TouchableOpacity>
+                  {isAdmin && (
+                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)}>
+                      <MaterialCommunityIcons name="shield-account" size={32} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
 
               {/* LAYOUT PRINCIPAL DE COLUMNAS (WEB vs MÓVIL) */}
@@ -827,9 +911,51 @@ export default function CommunityScreen() {
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+                      
+                      {/* 🚀 VISTA DE PENDIENTES PARA EL ADMINISTRADOR */}
+                      {isAdminMode && pendingPosts.length > 0 && (
+                        <View style={{ marginBottom: 20 }}>
+                          <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15, fontSize: 16 }}>
+                            Pendientes de Revisión ({pendingPosts.length})
+                          </ThemedText>
+                          {pendingPosts.map(post => (
+                            <View key={post.id} style={[styles.postCard, isLargeWeb ? { width: '48.5%', marginBottom: 20, alignSelf: 'flex-start' } : { marginBottom: 20 }, { borderColor: '#FFB74D', borderWidth: 1 }]}>
+                              <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color="#FFB74D" />
+                                <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 12 }}>
+                                  Esperando aprobación (Admin)
+                                </ThemedText>
+                              </View>
+                              
+                              <View style={styles.postHeaderRow}>
+                                <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
+                                <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
+                              </View>
+                              <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20 }]}>{post.text}</ThemedText>
+                              
+                              {post.image && (
+                                <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
+                                  <Image source={{ uri: post.image }} style={[styles.postImage, isLargeWeb ? { width: '100%', height: 250, resizeMode: 'cover', borderRadius: 16, marginTop: 10 } : {}]} />
+                                </TouchableOpacity>
+                              )}
+
+                              <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15, paddingHorizontal: 15, paddingBottom: 15 }}>
+                                <TouchableOpacity onPress={() => rejectCommunityPost(post.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                  <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => approveCommunityPost(post.id)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                  <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* VISTA NORMAL DE POSTS */}
                       {loadingPosts ? (
                         <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 50 }} />
-                      ) : (!zipCode || zipCode.length < 5) ? (
+                      ) : (!zipCode || zipCode.length < 5) && !isAdminMode ? (
                         <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
                           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
                             <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.subtext} />
@@ -855,91 +981,102 @@ export default function CommunityScreen() {
                         </View>
                       ) : (
                         <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
-                          {filteredPosts.map(post => (
-                            <View 
-                              key={post.id} 
-                              style={[styles.postCard, isLargeWeb ? { width: '48.5%', marginBottom: 20, alignSelf: 'flex-start' } : { marginBottom: 20 }]}
-                            >
-                              <View style={styles.postHeaderRow}>
-                                <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
-                                <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
-                              </View>
-                              
-                              <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20 }]}>{post.text}</ThemedText>
-                              
-                              {post.image && (
-                                <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
-                                  <Image 
-                                    source={{ uri: post.image }} 
-                                    style={[
-                                      styles.postImage, 
-                                      isLargeWeb ? { width: '100%', height: 250, resizeMode: 'cover', borderRadius: 16, marginTop: 10 } : {}
-                                    ]} 
-                                  />
-                                  <View style={{ position: 'absolute', top: 20, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
-                                    <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-                                    <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
-                                      {(t as any)?.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
+                          {filteredPosts.map(post => {
+                            const isPending = post.status === 'pending';
+                            return (
+                              <View 
+                                key={post.id} 
+                                style={[styles.postCard, isLargeWeb ? { width: '48.5%', marginBottom: 20, alignSelf: 'flex-start' } : { marginBottom: 20 }, isPending && { borderColor: '#FFB74D', borderWidth: 1 }]}
+                              >
+                                {isPending && (
+                                  <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+                                    <MaterialCommunityIcons name="clock-outline" size={18} color="#FFB74D" />
+                                    <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 12 }}>
+                                      En revisión. Solo tú puedes ver esto por ahora.
                                     </ThemedText>
                                   </View>
-                                </TouchableOpacity>
-                              )}
-                              
-                              {visibleComments[post.id] && (
-                                <View style={[styles.commentSection, { marginTop: 6, paddingTop: 4 }]}>
-                                  {(comments[post.id] || []).length > 0 ? (
-                                    (comments[post.id] || []).map(c => (
-                                <View key={c.id} style={[styles.commentBubble, { flexDirection: 'row', alignItems: 'center', padding: 4, gap: 8 }]}>
-                                  <Image 
-                                    source={{ uri: c.image }} 
-                                    style={{ width: 28, height: 28, borderRadius: 14 }} 
-                                    resizeMode="cover"
-                                  />
-                                  <ThemedText style={{ flex: 1, lineHeight: 18 }}>
-                                    <ThemedText style={[styles.commentUser, { fontWeight: 'bold' , fontStyle:'italic' }]}>
-                                      {c.userName}{': '}
-                                    </ThemedText>
-                                    <ThemedText style={[styles.commentText, {fontStyle:'italic'}]}>
-                                      {c.text}
-                                    </ThemedText>
-                                  </ThemedText>
+                                )}
+                                
+                                <View style={[styles.postHeaderRow, { opacity: isPending ? 0.6 : 1 }]}>
+                                  <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
+                                  <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
                                 </View>
-                                    ))
-                                  ) : 
-
-                                  <ThemedText style={[styles.noCommentsText, { marginBottom: 4 }]}>{t.communitytab.firtscomment}</ThemedText>}
-                                  
-                                  <TouchableOpacity onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={[styles.replyBtn, { marginTop: 4 }]}>
-                                    <MaterialCommunityIcons name="pencil-outline" size={14} color={Colors.accent} />
-                                    <ThemedText style={[styles.replyBtnText, { color: Colors.accent }]}>{t.communitytab.responsebutton}</ThemedText>
-                                  </TouchableOpacity>
-                                </View>
-                              )}
-                              <View style={[styles.postFooter, { marginTop: 10 }]}>
-                                <View style={styles.reaccionGroup}>
-                                  <TouchableOpacity onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
-                                    <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
-                                    <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes || 0}</ThemedText>
-                                  </TouchableOpacity>
-                                  <TouchableOpacity onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
-                                    <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive} />
-                                    <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive }]}>{(comments[post.id] || []).length}</ThemedText>
-                                  </TouchableOpacity>
-                                  <TouchableOpacity onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
-                                    <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
-                                    <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes || 0}</ThemedText>
-                                  </TouchableOpacity>
-                                </View>
-
-                                {/* 🚀 BOTÓN DE COMPARTIR OCULTO EN LA VERSIÓN WEB */}
-                                {!isWeb && (
-                                  <TouchableOpacity onPress={() => handleShare(post)}>
-                                    <MaterialCommunityIcons name="share-variant" size={18} color={Colors.iconInactive} />
+                                
+                                <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20, opacity: isPending ? 0.6 : 1 }]}>{post.text}</ThemedText>
+                                
+                                {post.image && (
+                                  <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }} style={{ opacity: isPending ? 0.6 : 1 }}>
+                                    <Image 
+                                      source={{ uri: post.image }} 
+                                      style={[
+                                        styles.postImage, 
+                                        isLargeWeb ? { width: '100%', height: 250, resizeMode: 'cover', borderRadius: 16, marginTop: 10 } : {}
+                                      ]} 
+                                    />
+                                    <View style={{ position: 'absolute', top: 20, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
+                                      <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
+                                      <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
+                                        {(t as any)?.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
+                                      </ThemedText>
+                                    </View>
                                   </TouchableOpacity>
                                 )}
+                                
+                                {visibleComments[post.id] && (
+                                  <View style={[styles.commentSection, { marginTop: 6, paddingTop: 4 }]}>
+                                    {(comments[post.id] || []).length > 0 ? (
+                                      (comments[post.id] || []).map(c => (
+                                  <View key={c.id} style={[styles.commentBubble, { flexDirection: 'row', alignItems: 'center', padding: 4, gap: 8 }]}>
+                                    <Image 
+                                      source={{ uri: c.image }} 
+                                      style={{ width: 28, height: 28, borderRadius: 14 }} 
+                                      resizeMode="cover"
+                                    />
+                                    <ThemedText style={{ flex: 1, lineHeight: 18 }}>
+                                      <ThemedText style={[styles.commentUser, { fontWeight: 'bold' , fontStyle:'italic' }]}>
+                                        {c.userName}{': '}
+                                      </ThemedText>
+                                      <ThemedText style={[styles.commentText, {fontStyle:'italic'}]}>
+                                        {c.text}
+                                      </ThemedText>
+                                    </ThemedText>
+                                  </View>
+                                      ))
+                                    ) : 
+
+                                    <ThemedText style={[styles.noCommentsText, { marginBottom: 4 }]}>{t.communitytab.firtscomment}</ThemedText>}
+                                    
+                                    <TouchableOpacity disabled={isPending} onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={[styles.replyBtn, { marginTop: 4, opacity: isPending ? 0.4 : 1 }]}>
+                                      <MaterialCommunityIcons name="pencil-outline" size={14} color={Colors.accent} />
+                                      <ThemedText style={[styles.replyBtnText, { color: Colors.accent }]}>{t.communitytab.responsebutton}</ThemedText>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
+                                <View style={[styles.postFooter, { marginTop: 10, opacity: isPending ? 0.4 : 1 }]}>
+                                  <View style={styles.reaccionGroup}>
+                                    <TouchableOpacity disabled={isPending} onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
+                                      <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
+                                      <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes || 0}</ThemedText>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity disabled={isPending} onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
+                                      <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive} />
+                                      <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive }]}>{(comments[post.id] || []).length}</ThemedText>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity disabled={isPending} onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
+                                      <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
+                                      <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes || 0}</ThemedText>
+                                    </TouchableOpacity>
+                                  </View>
+
+                                  {!isWeb && (
+                                    <TouchableOpacity disabled={isPending} onPress={() => handleShare(post)}>
+                                      <MaterialCommunityIcons name="share-variant" size={18} color={Colors.iconInactive} />
+                                    </TouchableOpacity>
+                                  )}
+                                </View>
                               </View>
-                            </View>
-                          ))}
+                            );
+                          })}
                         </View>
                       )}
                     </ScrollView>

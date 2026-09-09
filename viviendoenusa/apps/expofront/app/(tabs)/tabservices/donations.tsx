@@ -124,6 +124,7 @@ export default function DonationsScreen() {
     }
   }, [userToken]);
 
+  const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
   const currentUserName = userMetadata?.name || 'Usuario';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
   const stylesUnified = useUnifiedCardStyles();
@@ -184,12 +185,12 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
-  // 🚀 FETCH (CON REFRESH AL VUELO DE SUPABASE)
+  // 🚀 FETCH (CON REFRESH AL VUELO DE SUPABASE Y PASANDO EL USER_ID)
   const fetchDonations = async (searchZip?: string) => {
     if (!searchZip || searchZip.trim().length !== 5) return;
     try {
       setIsLoadingPosts(true);
-      const res = await fetch(`${API_DONATIONS_URL}?zip=${searchZip.trim()}`, {
+      const res = await fetch(`${API_DONATIONS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${userToken}`,
@@ -201,11 +202,16 @@ export default function DonationsScreen() {
 
       const data = await res.json();
       if (Array.isArray(data)) {
-        // 🚀 FIRMAMOS TODAS LAS IMÁGENES AL VUELO AQUÍ
         const mappedData = await Promise.all(data.map(async (item: any) => {
           const rawImage = item.image || item.imageUrl;
           const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'donations') : null;
-          return { ...item, image: freshImage };
+          const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
+
+          return { 
+            ...item, 
+            image: freshImage,
+            status: isAppr ? 'approved' : 'pending'
+          };
         }));
         setDonations(mappedData);
       } else {
@@ -218,7 +224,6 @@ export default function DonationsScreen() {
     }
   };
 
-  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
   useFocusEffect(
     useCallback(() => {
       if (zipCode && zipCode.length === 5) {
@@ -227,12 +232,9 @@ export default function DonationsScreen() {
     }, [zipCode])
   );
 
-  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa en la pantalla
       if (nextAppState === 'active' && isFocused) {
-        console.log("🚀 La app despertó en Donaciones. Refrescando donaciones...");
         if (zipCode && zipCode.length === 5) {
           fetchDonations(zipCode);
         }
@@ -263,16 +265,14 @@ export default function DonationsScreen() {
     });
   };
 
-  // 🚀 FUNCIÓN ACTUALIZADA PARA MANEJAR CORRECTAMENTE LOS ESTADOS UUID Y TEXTO
   const handleToggleStatus = async (id: any) => {
     const currentItem = donations.find(d => d.id === id);
     if (!currentItem) return;
 
-    const newStatus = currentItem.status === 'active' || currentItem.statusId === '31a06434-8ed8-45d2-b95f-65bd314bc021' ? 'delivered' : 'active';
-    const newStatusId = newStatus === 'delivered' ? '6a226ffa-9edf-4886-931f-64299f8a6f7f' : '31a06434-8ed8-45d2-b95f-65bd314bc021';
+    const isCurrentlyDelivered = currentItem.statusId === '6a226ffa-9edf-4886-931f-64299f8a6f7f';
+    const newStatus = isCurrentlyDelivered ? 'active' : 'delivered';
 
-    // 🚀 Actualizamos la memoria local para que la UI reaccione instantáneamente
-    setDonations(prev => prev.map(d => d.id === id ? { ...d, status: newStatus, statusId: newStatusId } : d));
+    setDonations(prev => prev.map(d => d.id === id ? { ...d, statusId: newStatus === 'delivered' ? '6a226ffa-9edf-4886-931f-64299f8a6f7f' : '31a06434-8ed8-45d2-b95f-65bd314bc021' } : d));
 
     try {
       const response = await fetch(`${API_DONATIONS_URL}/${id}/status`, {
@@ -287,8 +287,7 @@ export default function DonationsScreen() {
       if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Fallo en servidor");
     } catch (e) {
-      // 🔄 Si falla, revertimos al estado anterior
-      setDonations(prev => prev.map(d => d.id === id ? { ...d, status: currentItem.status, statusId: currentItem.statusId } : d));
+      setDonations(prev => prev.map(d => d.id === id ? { ...d, statusId: currentItem.statusId } : d));
       triggerAlert("Error", "No se pudo actualizar el estado en el servidor.");
     }
   };
@@ -361,7 +360,7 @@ export default function DonationsScreen() {
         phone: fullPhone, 
         ownerName: currentUserName, 
         contactMethod: formContactMethod,
-        userId: userMetadata?.id || userMetadata?.userId || null
+        userId: currentUserId
       };
 
       const response = await fetch(API_DONATIONS_URL, {
@@ -380,7 +379,8 @@ export default function DonationsScreen() {
 
       const newEntryLocal = {
         ...savedFromDB,
-        image: formImage
+        image: formImage,
+        status: 'pending' // Nace pendiente para la vista local
       };
 
       setDonations(prev => [newEntryLocal, ...prev]);
@@ -398,7 +398,11 @@ export default function DonationsScreen() {
         fetchDonations(trimmedZip);
       }
 
-      Alert.alert((t.donationstab as any)?.success || "¡Éxito!", (t.donationstab as any)?.publishedSuccess || "Donación publicada correctamente.");
+      setTimeout(() => {
+        const msg = savedFromDB.message || "Tu donación ha sido enviada y está en revisión.";
+        triggerAlert('¡Aviso!', msg);
+      }, 150);
+
     } catch (err: any) {
       triggerAlert("Error", err.message || "Ocurrió un error.");
     } finally {
@@ -406,22 +410,16 @@ export default function DonationsScreen() {
     }
   };
 
-  // 🚀 LÓGICA DE FILTRADO ACTUALIZADA PARA PERMITIR VER LAS ENTREGADAS
   const filteredDonations = useMemo(() => {
     return donations.filter(item => {
       const title = item.title || '';
-      
-      // Permitimos que la UI deje visibles tanto las activas como las entregadas
-      const isVisibleStatus = item.status === 'active' || 
-                              item.statusId === '31a06434-8ed8-45d2-b95f-65bd314bc021' || 
-                              item.status === 'delivered' || 
-                              item.statusId === '6a226ffa-9edf-4886-931f-64299f8a6f7f';
+      const isApprovedOrOwned = item.status === 'approved' || item.status === 'pending' || item.userId === currentUserId;
                               
-      return isVisibleStatus && 
+      return isApprovedOrOwned && 
              (selectedCategoryIdx === 0 || Number(item.categoryIdx) === selectedCategoryIdx) && 
              title.toLowerCase().includes(searchQuery.toLowerCase());
     });
-  }, [donations, selectedCategoryIdx, searchQuery]);
+  }, [donations, selectedCategoryIdx, searchQuery, currentUserId]);
 
   const isFormValid = !!(formTitle.trim() && formImage && formPhone.trim() && formZip.length === 5);
 
@@ -435,7 +433,6 @@ export default function DonationsScreen() {
             {!isAndroid && <BlurView intensity={isDark ? 95 : 65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={stylesUnified.cardContent}>
               
-              {/* HEADER LIMPIO: Solo la flecha atrás y el buscador de Zip */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
                 
                 <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>
@@ -592,6 +589,7 @@ export default function DonationsScreen() {
                           <DonationCard 
                             key={item.id} 
                             item={item} 
+                            currentUserId={currentUserId}
                             currentUserName={currentUserName} 
                             isLargeWeb={isLargeWeb} 
                             isDark={isDark} 
@@ -738,11 +736,12 @@ export default function DonationsScreen() {
 }
 
 // --- 3. COMPONENTE DE TARJETA DE DONACIÓN ---
-const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels, isWeb, handleShare }: any) => {
+const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels, isWeb, handleShare }: any) => {
   
   const safeOwnerName = item.ownerName || item.userId || 'Usuario';
-  const isOwner = safeOwnerName === currentUserName;
+  const isOwner = item.userId === currentUserId;
   const isDelivered = item.statusId === '6a226ffa-9edf-4886-931f-64299f8a6f7f';
+  const isPending = item.status === 'pending';
   const isWhatsapp = item.contactMethod === 'whatsapp';
 
   const catLabel = categoryLabels[item.categoryIdx] || 'Otros';
@@ -757,9 +756,18 @@ const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orang
       marginBottom: 20, padding: 0, overflow: 'hidden', 
       width: isLargeWeb ? '48.5%' : '100%', 
       backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
-      borderWidth: 1, borderColor: Colors.border, borderRadius: 28
+      borderWidth: 1, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28
     }]}>
-      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center' }}>
+      {isPending && (
+        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="clock-outline" size={18} color="#FFB74D" />
+          <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 12 }}>
+            En revisión. Solo tú puedes ver esto por ahora.
+          </ThemedText>
+        </View>
+      )}
+
+      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', opacity: isPending ? 0.6 : 1 }}>
         <LinearGradient colors={orangeGradient} style={{ width: 32, height: 32, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}>
           <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>
             {safeOwnerName.charAt(0).toUpperCase()}
@@ -775,7 +783,7 @@ const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orang
         </View>
       </View>
 
-      <TouchableOpacity activeOpacity={0.9} onPress={() => onPreview(item.image)}>
+      <TouchableOpacity activeOpacity={0.9} onPress={() => onPreview(item.image)} style={{ opacity: isPending ? 0.6 : 1 }}>
         {item.image && item.image.length > 5 ? (
           <Image 
             source={{ uri: item.image }} 
@@ -803,7 +811,7 @@ const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orang
         )}
       </TouchableOpacity>
 
-      <View style={{ padding: 15 }}>
+      <View style={{ padding: 15, opacity: isPending ? 0.6 : 1 }}>
         <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>{item.title}</ThemedText>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
           <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} />
@@ -813,21 +821,21 @@ const DonationCard = ({ item, currentUserName, isLargeWeb, isDark, Colors, orang
         
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 }}>
           {!isDelivered && (
-            <TouchableOpacity onPress={handleContact} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isWhatsapp ? 'rgba(37,211,102,0.1)' : 'rgba(255, 95, 109, 0.15)' }}>
+            <TouchableOpacity disabled={isPending} onPress={handleContact} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isWhatsapp ? 'rgba(37,211,102,0.1)' : 'rgba(255, 95, 109, 0.15)', opacity: isPending ? 0.4 : 1 }}>
                <MaterialCommunityIcons name={isWhatsapp ? 'whatsapp' : 'phone'} size={18} color={isWhatsapp ? '#25D366' : Colors.accent} />
                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>{(t.genericbtn as any)?.contactme || 'Contactar'}</ThemedText>
             </TouchableOpacity>
           )}
 
           {!isWeb && (
-            <TouchableOpacity onPress={() => handleShare(item)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}>
+            <TouchableOpacity disabled={isPending} onPress={() => handleShare(item)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD', opacity: isPending ? 0.4 : 1 }}>
               <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.genericbtn as any)?.sharingbtn || 'Compartir'}</ThemedText>
             </TouchableOpacity>
           )}
 
           {isOwner && (
-            <TouchableOpacity onPress={() => onToggleStatus(item.id)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDelivered ? 'rgba(76, 175, 80, 0.1)' : (isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0') }}>
+            <TouchableOpacity disabled={isPending} onPress={() => onToggleStatus(item.id)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDelivered ? 'rgba(76, 175, 80, 0.1)' : (isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'), opacity: isPending ? 0.4 : 1 }}>
               <MaterialCommunityIcons name={isDelivered ? "refresh" : "archive-check"} size={18} color={isDelivered ? Colors.success : (isDark ? '#FFF' : '#444')} />
               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDelivered ? Colors.success : (isDark ? '#FFF' : '#444') }}>
                 {isDelivered 

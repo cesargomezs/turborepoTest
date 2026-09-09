@@ -200,7 +200,7 @@ export const getCompanyById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 CREAR EMPRESA (CUPÓN DIRECTO + AUTO-APROBACIÓN + PUSH AL DUEÑO)
+// 📥 CREAR EMPRESA (CUPÓN DIRECTO + MODO PENDIENTE + PUSH AL DUEÑO)
 // =====================================================================
 export const createCompany = async (data: any) => {
   try {
@@ -252,9 +252,9 @@ export const createCompany = async (data: any) => {
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
-        // Nace aprobado por usar cupón
-        isApproved = true;
-        customMessage = "¡Cupón VIP aplicado! Tu empresa ha sido verificada y activada por 1 mes.";
+        // 🚀 Nace pendiente de revisión para cumplir con Apple
+        isApproved = false;
+        customMessage = "¡Cupón VIP aplicado! Tu empresa ha sido registrada y está pendiente de revisión.";
       }
       
       const companyPayload: any = {
@@ -267,9 +267,9 @@ export const createCompany = async (data: any) => {
         email: sanitizeText(data.email) || null,
         website: sanitizeText(data.website) || null,
         logoUrl: finalLogoUrl, 
-        isVerified: isApproved, // 👈 Si es cupón, nace verificada
+        isVerified: isApproved, // 👈 Se controla con la variable de arriba
         premiumPlan: isCoupon ? 'coupon' : selectedPlan, 
-        status: isApproved ? 'approved' : 'pending', // 👈 Si es cupón, nace aprobada
+        status: isApproved ? 'approved' : 'pending', // 👈 Se controla con la variable de arriba
         // 🚀 EL FIX MAESTRO PARA POSTGRES
         timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
         timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
@@ -313,11 +313,11 @@ export const createCompany = async (data: any) => {
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
 
-        // 🚀 NOTIFICACIÓN DE BASE DE DATOS (Solo al dueño)
+        // 🚀 NOTIFICACIÓN DE BASE DE DATOS (Solo al dueño, avisando que está en revisión)
         if (validUserId) {
             await tx.insert(notifications).values({
-                title: "¡Empresa Verificada! 🏢",
-                description: `La suscripción de ${newCompany.name} ha sido activada con tu cupón. Ya puedes publicar vacantes.`,
+                title: "¡Empresa en Revisión! 🏢",
+                description: `El perfil de ${newCompany.name} ha sido recibido y será aprobado pronto.`,
                 type: "alert", 
                 visibleAt: new Date(), 
                 userId: validUserId, 
@@ -325,8 +325,8 @@ export const createCompany = async (data: any) => {
 
             // 🚀 PREPARAMOS EL PAYLOAD PARA EL PUSH NOTIFICATION
             pushNotificationData = {
-                title: "¡Empresa Verificada! 🏢",
-                body: `La suscripción de ${newCompany.name} ha sido activada con tu cupón. Ya puedes publicar vacantes.`,
+                title: "¡Empresa en Revisión! 🏢",
+                body: `El perfil de ${newCompany.name} ha sido recibido y será aprobado pronto.`,
                 referenceId: String(newCompany.id),
                 userIds: [validUserId]
             };
@@ -349,8 +349,8 @@ export const createCompany = async (data: any) => {
         });
       }
 
-      // 🚀 ALERTA DE TELEGRAM SI SE CREÓ CON ÉXITO Y NO ES CUPÓN
-      if (createdCompanyResult && createdCompanyResult.paymentMethod !== 'Coupon') {
+      // 🚀 ALERTA DE TELEGRAM SIEMPRE PARA EL ADMIN
+      if (createdCompanyResult) {
         sendTelegramAlert(
           createdCompanyResult.name,
           createdCompanyResult.referenceCode || 'N/A',

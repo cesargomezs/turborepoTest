@@ -22,7 +22,10 @@ import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+//import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
+import * as SecureStore from 'expo-secure-store';
 
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
@@ -233,10 +236,10 @@ export default function HomeScreen() {
           setShowRateButton(true);
           return;
         }
-
-        const firstLaunch = await AsyncStorage.getItem('firstLaunchDate');
+  
+        const firstLaunch = await SecureStore.getItemAsync('firstLaunchDate');
         if (!firstLaunch) {
-          await AsyncStorage.setItem('firstLaunchDate', Date.now().toString());
+          await SecureStore.setItemAsync('firstLaunchDate', Date.now().toString());
         } else {
           const daysPassed = (Date.now() - parseInt(firstLaunch)) / (1000 * 60 * 60 * 24);
           if (daysPassed >= 30) {
@@ -244,7 +247,7 @@ export default function HomeScreen() {
           }
         }
       } catch (e) {
-        console.log("Error leyendo AsyncStorage para reseñas", e);
+        console.log("Error leyendo SecureStore para reseñas", e);
       }
     };
     checkAppUsageTime();

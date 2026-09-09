@@ -370,8 +370,6 @@ export const createLawyer = async (data: any) => {
       cleanImage = cleanImage.replace('lawyers/', '');
     }
 
-    let pushNotificationData: any = null; // 🚀 AQUÍ GUARDAMOS EL PAYLOAD PARA EL PUSH SI ES CUPÓN
-
     const createdLawyerResult = await db.transaction(async (tx) => {
       const { lat, lng } = getCoordsFromZip(data.zip || '');
       
@@ -403,9 +401,9 @@ export const createLawyer = async (data: any) => {
           throw new Error("Este cupón ya fue utilizado anteriormente.");
         }
 
-        // Lo aprobamos de una vez
-        isApproved = true;
-        customMessage = "¡Cupón VIP aplicado! Tu perfil ha sido aprobado y publicado por 1 mes.";
+        // 🚀 Nace inactivo para pasar revisión Apple
+        isApproved = false;
+        customMessage = "¡Cupón aplicado! Perfil recibido con éxito. Nuestro equipo lo revisará y será publicado en las próximas 24 horas.";
       }
 
       const lawyerPayload: any = {
@@ -463,55 +461,6 @@ export const createLawyer = async (data: any) => {
             usedAt: new Date() 
           })
           .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
-
-          // ==============================================================
-          // 🚀 NOTIFICACIONES MASIVAS PARA APROBACIÓN POR CUPÓN EN CREACIÓN
-          // ==============================================================
-          console.log("✅ [DEBUG PUSH] Abogado creado y aprobado vía Cupón. Calculando usuarios locales...");
-
-          const titleText = "¡Nuevo Abogado en tu área! ⚖️";
-          const bodyText = `El abogado ${newLawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
-
-          let usersToNotify: { id: string }[] = [];
-
-          if (newLawyer.zip) {
-            const nearbyZips = zipcodes.radius(newLawyer.zip as any, Number(radiusMiles)); 
-
-            if (nearbyZips && nearbyZips.length > 0) {
-              usersToNotify = await tx.select({ id: users.id })
-                                      .from(users)
-                                      .where(inArray(users.zip, nearbyZips as string[]));
-            } else {
-              usersToNotify = await tx.select({ id: users.id })
-                                      .from(users)
-                                      .where(eq(users.zip, String(newLawyer.zip)));
-            }
-          }
-
-          if (usersToNotify.length > 0) {
-            const notificationsToInsert = usersToNotify.map(u => {
-              const payloadNotif: any = {
-                title: titleText,
-                description: bodyText,
-                type: "lawyer", 
-                visibleAt: new Date(), 
-                userId: u.id,
-                isRead: false
-              };
-              if ('referenceId' in notifications) payloadNotif.referenceId = String(newLawyer.id);
-              else if ('reference_id' in notifications) payloadNotif.reference_id = String(newLawyer.id);
-              return payloadNotif;
-            });
-
-            await tx.insert(notifications).values(notificationsToInsert);
-
-            pushNotificationData = {
-              title: titleText,
-              body: bodyText,
-              referenceId: String(newLawyer.id),
-              userIds: usersToNotify.map(u => u.id) 
-            };
-          }
       }
 
       return {
@@ -525,15 +474,8 @@ export const createLawyer = async (data: any) => {
       };
     });
 
-    // 🚀 DISPARAMOS LOS PUSH FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
-    if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
-         console.error("❌ [DEBUG PUSH] Falló el Push Notification en creación por cupón:", err);
-      });
-    }
-
-    // 🚀 ALERTA DE TELEGRAM SOLO SI NO ES CUPÓN
-    if (createdLawyerResult && createdLawyerResult.paymentMethod !== 'Coupon') {
+    // 🚀 ALERTA DE TELEGRAM PARA TODOS LOS REGISTROS (CUPÓN O PAGO)
+    if (createdLawyerResult) {
       sendTelegramAlert(
         createdLawyerResult.nameLawy, 
         createdLawyerResult.referenceCode || 'N/A', 

@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
-import { support, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, promoCodes, userDevices } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and, inArray, ConsoleLogWriter } from "drizzle-orm";
+import { support, users, rating as ratingTable, reviews as reviewsTable, payments, tariffs, typeDetail, promoCodes, userDevices, notifications } from "../../../../packages/db/src/schema"; 
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js'; 
 import NodeGeocoder from 'node-geocoder';
 import zipcodes from 'zipcodes'; 
@@ -22,7 +22,7 @@ const getCoordsFromZip = async (zip: string) => {
     console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
   }
   
-  console.warn("⚠️ Usando coordenadas por defecto (Distancia al ID 30 siempre será 0)");
+  console.warn("⚠️ Usando coordenadas por defecto");
   return { lat: 34.0934, lng: -117.5847 };
 };
 
@@ -32,16 +32,15 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 const radiusMiles = process.env.RADIUMILE || 20; 
 
-// 🚀 USUARIO POR DEFECTO MIENTRAS SE IMPLEMENTA SESIÓN
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS: Elimina etiquetas HTML o scripts maliciosos
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any) => {
   if (typeof str !== 'string') return null;
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
-// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD usando un JOIN con typeDetail (Se mantiene)
+// 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
 const getCurrentSupportPrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
@@ -68,7 +67,7 @@ const getCurrentSupportPrice = async () => {
 };
 
 // ============================================================================
-// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (APOYO/SUPPORT + BADGE DINÁMICO)
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
 // ============================================================================
 const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
   try {
@@ -83,32 +82,14 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
       return;
     }
 
-    const messages = [];
-
-    // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario en apoyo
-    for (const device of devices) {
-      const [unreadResult] = await db.select({
-        count: sql<number>`count(*)`
-      })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, device.userId),
-          eq(notifications.isRead, false)
-        )
-      );
-
-      const unreadCount = Number(unreadResult?.count) || 1;
-
-      messages.push({
-        to: device.expoPushToken,
-        sound: 'default',
-        title: payload.title,
-        body: payload.body,
-        badge: unreadCount, // 🔴 Globito dinámico real para apoyo
-        data: { type: "support", referenceId: payload.referenceId },
-      });
-    }
+    const messages = devices.map(device => ({
+      to: device.expoPushToken,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      badge: 1,
+      data: { type: "support", referenceId: payload.referenceId },
+    }));
 
     const chunks = [];
     for (let i = 0; i < messages.length; i += 100) {
@@ -135,7 +116,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA APOYO
+// 📲 ALERTA DE TELEGRAM PARA APOYO
 // =====================================================================
 const sendTelegramAlert = async (supportName: string, refCode: string, method: string) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -164,17 +145,15 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (AQUÍ SE AGREGÓ EL FILTRO DE DISTANCIA)
+// 🔍 1. CONSULTA GENERAL CON FILTRO DE DISTANCIA Y APROBACIÓN
 // =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
 
-    // 🚀 OBTENEMOS LAS COORDENADAS DEL ZIP PARA LA BÚSQUEDA
     const { lat, lng } = await getCoordsFromZip(zip || ''); 
-    const radiusMilesForSearch = 4; // Rango de búsqueda para vistas locales
+    const radiusMilesForSearch = 4; 
 
-    // 🚀 Fórmula de Distancia Haversine (Segura para Drizzle y Postgres)
     const distanceFormula = sql`(
       3959 * acos(
         LEAST(1.0, GREATEST(-1.0,
@@ -184,7 +163,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       )
     )`;
 
-    // 🚀 Definimos explícitamente el select incluyendo la distancia
     let query = db
     .select({
       support: support,
@@ -201,12 +179,10 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(users, eq(ratingTable.userId, users.id))
     .$dynamic();
 
-    // 🚀 Lógica de Visibilidad Original
     const visibilityCondition = currentUserId
-      ? sql`(${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${currentUserId})`
-      : sql`(${support.approved} = false OR ${support.timepostEnd} > NOW())`;
+      ? sql`(${support.approved} = true OR ${support.userId} = ${currentUserId}) AND ${support.timepostEnd} > NOW()`
+      : sql`${support.approved} = true AND ${support.timepostEnd} > NOW()`;
 
-    // 🚀 Aplicamos los filtros condicionalmente
     if (zip && zip.length === 5) {
       query = query.where(
         and(
@@ -214,10 +190,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           visibilityCondition 
         )
       );
-      // Ordenamos para mostrar los más cercanos primero
       query = query.orderBy(distanceFormula);
     } else {
-      // Si no buscaron ZIP, solo aplicamos la visibilidad
       query = query.where(visibilityCondition);
       query = query.orderBy(desc(support.createdAt));
     }
@@ -231,8 +205,11 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       const supportId = row.support.id;
 
       if (!supportsMap.has(supportId)) {
+        const isAppr = String(row.support.approved) === 'true' || row.support.approved === true ;
         supportsMap.set(supportId, {
           ...row.support,
+          approved: isAppr,
+          status: isAppr ? 'approved' : 'pending',
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
           premiumPlan: row.support.premiumPlan || 'basic', 
@@ -243,10 +220,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       }
 
       if (row.rating && row.rating.id) {
-
         const commentText = row.reviews?.comment || '';
 
-        const { data, error } = await supabase
+        const { data } = await supabase
         .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
         supportsMap.get(supportId).reviews.push({
@@ -315,9 +291,14 @@ export const getSupportById = async (id: string) => {
   
     if (!rows || rows.length === 0) return null;
   
+    const dbSupport = rows[0].support;
+    const isAppr = String(dbSupport.approved) === 'true' || dbSupport.approved === true ;
+
     const supportFinal: any = {
-      ...rows[0].support, 
-      premiumPlan: rows[0].support.premiumPlan || 'basic', 
+      ...dbSupport, 
+      approved: isAppr,
+      status: isAppr ? 'approved' : 'pending',
+      premiumPlan: dbSupport.premiumPlan || 'basic', 
       reviews: [],
       totalRating: 0,
       totalReviews: 0           
@@ -325,8 +306,7 @@ export const getSupportById = async (id: string) => {
 
     for (const row of rows) {
       if (row.rating && row.rating.id) {
-
-        const { data, error } = await supabase
+        const { data } = await supabase
         .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
 
         const commentText = row.reviews?.comment || '';
@@ -374,7 +354,7 @@ export const getSupportById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR CONTACTO DE APOYO
+// 📥 3. CREAR CONTACTO DE APOYO (NACE PENDIENTE + ALERTA TELEGRAM)
 // =====================================================================
 export const createSupport = async (data: any) => {
   try {
@@ -384,18 +364,18 @@ export const createSupport = async (data: any) => {
     }
 
     const validUserId = sanitizeText(data.userId) || (typeof TEMP_USER_ID !== 'undefined' ? TEMP_USER_ID : null);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para registrar un contacto de apoyo.");
+    }
+
     const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
-    
     const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
-
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-    let isApproved = false;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
-    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH DE APOYO (CUPÓN)
 
     const createdSupportResult = await db.transaction(async (tx) => {
       
@@ -407,8 +387,7 @@ export const createSupport = async (data: any) => {
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
-        isApproved = true;
-        customMessage = "¡Cupón VIP aplicado! Tu publicación ha sido aprobada por 1 mes.";
+        customMessage = "¡Cupón VIP aplicado! Tu publicación ha sido registrada y está en revisión.";
       }
 
       const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
@@ -427,9 +406,7 @@ export const createSupport = async (data: any) => {
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
         couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
-        approved: isApproved, 
-        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
-        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
+        approved: false, // 👈 Nace pendiente para cumplir con Apple
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
@@ -445,11 +422,14 @@ export const createSupport = async (data: any) => {
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
           amount: String(isCoupon ? "0.00" : basePrice), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending",
-          approvedAt: isCoupon ? sql`NOW()` : null,
-          timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
-          timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
+          status: isCoupon ? "approved" : "pending"
         };
+
+        if (isCoupon) {
+          paymentPayload.approvedAt = sql`NOW()`;
+          paymentPayload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
+          paymentPayload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
+        }
 
         await tx.insert(payments).values(paymentPayload);
       }
@@ -464,41 +444,12 @@ export const createSupport = async (data: any) => {
           usedAt: new Date() 
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
-
-        // ==============================================================
-        // 🚀 PROGRAMACIÓN DE NOTIFICACIONES PARA APOYO POR CUPÓN
-        // ==============================================================
-        console.log("✅ [DEBUG PUSH APOYO] Contacto creado y aprobado vía Cupón. Buscando usuarios cercanos...");
-        const titleText = "¡Nuevo Apoyo en tu área! 🤝";
-        const bodyText = `El contacto de apoyo ${newSupport.nameSupp} ahora es parte de la red. ¡Visita su perfil!`;
-
-        let usersToNotify: { id: string }[] = [];
-
-        if (newSupport.zip) {
-          const nearbyZips = zipcodes.radius(newSupport.zip as any, Number(radiusMiles)); 
-          if (nearbyZips && nearbyZips.length > 0) {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
-          } else {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(newSupport.zip)));
-          }
-        }
-
-        if (usersToNotify.length > 0) {
-          const notificationsToInsert = usersToNotify.map(u => {
-            const payloadNotif: any = { title: titleText, description: bodyText, type: "support", visibleAt: new Date(), userId: u.id, isRead: false };
-            if ('referenceId' in notifications) payloadNotif.referenceId = String(newSupport.id);
-            else if ('reference_id' in notifications) payloadNotif.reference_id = String(newSupport.id);
-            return payloadNotif;
-          });
-
-          await tx.insert(notifications).values(notificationsToInsert);
-          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(newSupport.id), userIds: usersToNotify.map(u => u.id) };
-        }
       }
 
       return {
          ...newSupport,
-         timepostEnd: newSupport.timepostEnd || null,
+         approved: false,
+         status: 'pending',
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
@@ -507,14 +458,7 @@ export const createSupport = async (data: any) => {
       };
     });
 
-    // 🚀 DISPARAR PUSH FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
-    if (pushNotificationData) {
-        sendMassPushNotification(pushNotificationData).catch(err => {
-            console.error("❌ [DEBUG PUSH APOYO] Falló el Push Notification en creación por cupón:", err);
-        });
-    }
-
-    if (createdSupportResult && createdSupportResult.paymentMethod !== 'Coupon') {
+    if (createdSupportResult) {
       sendTelegramAlert(
         createdSupportResult.nameSupp,
         createdSupportResult.referenceCode || 'N/A',
@@ -534,7 +478,7 @@ export const createSupport = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR CONTACTO DE APOYO
+// 🔄 4. ACTUALIZAR CONTACTO DE APOYO (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
 export const updateSupport = async (id: string, data: any) => {
   try {
@@ -567,7 +511,7 @@ export const updateSupport = async (id: string, data: any) => {
         updatePayload.imageSupp = data.imageSupp.replace('support/', '');
       }
 
-      const isApproved = String(data.approved).toLowerCase() === 'true';
+      const isApproved = String(data.approved).toLowerCase() === 'true' || data.approved === true || data.approved === 1;
 
       if (isApproved) {
         updatePayload.approved = true; 

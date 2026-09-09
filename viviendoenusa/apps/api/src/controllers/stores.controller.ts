@@ -74,7 +74,6 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 
     const messages = [];
 
-    // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario en negocios
     for (const device of devices) {
       const [unreadResult] = await db.select({
         count: sql<number>`count(*)`
@@ -94,7 +93,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         sound: 'default',
         title: payload.title,
         body: payload.body,
-        badge: unreadCount, // 🔴 Globito dinámico real para negocios
+        badge: unreadCount, 
         data: { type: "store", referenceId: payload.referenceId },
       });
     }
@@ -124,7 +123,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA NEGOCIOS
+// 📲 ALERTA DE TELEGRAM PARA NEGOCIOS
 // =====================================================================
 const sendTelegramAlert = async (storeName: string, refCode: string, method: string) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -199,8 +198,11 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       const storeId = row.stores.id;
 
       if (!storesMap.has(storeId)) {
+        const isAppr = String(row.stores.approved) === 'true' || row.stores.approved === true ;
         storesMap.set(storeId, {
           ...row.stores,
+          approved: isAppr,
+          status: isAppr ? 'approved' : 'pending',
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
           reviews: [], 
@@ -278,8 +280,13 @@ export const getStoreById = async (id: string) => {
   
     if (!rows || rows.length === 0) return null;
   
+    const dbStore = rows[0].stores;
+    const isAppr = String(dbStore.approved) === 'true' || dbStore.approved === true ;
+
     const storeFinal: any = {
-      ...rows[0].stores, 
+      ...dbStore, 
+      approved: isAppr,
+      status: isAppr ? 'approved' : 'pending',
       reviews: [],
       totalRating: 0,
       totalReviews: 0           
@@ -333,7 +340,7 @@ export const getStoreById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR NEGOCIO (AUTO-APROBACIÓN CUPÓN + NOTIFICACIONES MASIVAS)
+// 📥 3. CREAR NEGOCIO (NACE PENDIENTE + ALERTA TELEGRAM)
 // =====================================================================
 export const createStore = async (data: any) => {
   try {
@@ -354,12 +361,9 @@ export const createStore = async (data: any) => {
     const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
-
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-    let isApproved = false;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
-    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH DE NEGOCIOS (CUPÓN)
 
     const createdStoreResult = await db.transaction(async (tx) => {
       
@@ -371,8 +375,7 @@ export const createStore = async (data: any) => {
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
-        isApproved = true;
-        customMessage = "¡Cupón VIP aplicado! Tu negocio ha sido verificado y activado por 1 mes.";
+        customMessage = "¡Cupón aplicado! Tu negocio ha sido registrado y está en revisión.";
       }
 
       const safeDesc = sanitizeText(data.description || data.descriptionStores) || '';
@@ -390,11 +393,9 @@ export const createStore = async (data: any) => {
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
         userId: validUserId, 
-        approved: isApproved, 
+        approved: false, // 👈 Nace pendiente para cumplir con Apple
         createdAt: new Date(),
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
-        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
-        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
@@ -432,41 +433,12 @@ export const createStore = async (data: any) => {
           usedAt: new Date() 
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
-
-        // ==============================================================
-        // 🚀 PROGRAMACIÓN DE NOTIFICACIONES PARA NEGOCIOS POR CUPÓN
-        // ==============================================================
-        console.log("✅ [DEBUG PUSH NEGOCIOS] Negocio creado y aprobado vía Cupón. Buscando usuarios cercanos...");
-        const titleText = "¡Nuevo Negocio en tu área! 🏪";
-        const bodyText = `El negocio ${newStore.nameStores} ahora es parte de la red. ¡Visita su perfil!`;
-
-        let usersToNotify: { id: string }[] = [];
-
-        if (newStore.zip) {
-          const nearbyZips = zipcodes.radius(newStore.zip as any, Number(radiusMiles)); 
-          if (nearbyZips && nearbyZips.length > 0) {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
-          } else {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(newStore.zip)));
-          }
-        }
-
-        if (usersToNotify.length > 0) {
-          const notificationsToInsert = usersToNotify.map(u => {
-            const payloadNotif: any = { title: titleText, description: bodyText, type: "store", visibleAt: new Date(), userId: u.id, isRead: false };
-            if ('referenceId' in notifications) payloadNotif.referenceId = String(newStore.id);
-            else if ('reference_id' in notifications) payloadNotif.reference_id = String(newStore.id);
-            return payloadNotif;
-          });
-
-          await tx.insert(notifications).values(notificationsToInsert);
-          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(newStore.id), userIds: usersToNotify.map(u => u.id) };
-        }
       }
 
       return {
          ...newStore,
-         timepostEnd: newStore.timepostEnd || null,
+         approved: false,
+         status: 'pending',
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
@@ -475,14 +447,7 @@ export const createStore = async (data: any) => {
       };
     });
 
-    // 🚀 DISPARAR PUSH DE NEGOCIOS FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
-    if (pushNotificationData) {
-        sendMassPushNotification(pushNotificationData).catch(err => {
-            console.error("❌ [DEBUG PUSH NEGOCIOS] Falló el Push Notification en creación por cupón:", err);
-        });
-    }
-
-    if (createdStoreResult && createdStoreResult.paymentMethod !== 'Coupon') {
+    if (createdStoreResult) {
       sendTelegramAlert(
         createdStoreResult.nameStores,
         createdStoreResult.referenceCode || 'N/A',
@@ -537,7 +502,7 @@ export const updateStore = async (id: string, data: any) => {
         updatePayload.imageStores = data.imageStores.replace('stores/', '');
       }
 
-      const isApproved = String(data.approved).toLowerCase() === 'true';
+      const isApproved = String(data.approved).toLowerCase() === 'true' || data.approved === true || data.approved === 1;
 
       if (isApproved) {
         updatePayload.approved = true; 

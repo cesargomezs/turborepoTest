@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
 import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
-import { eq, desc, asc, sql, and, inArray } from "drizzle-orm"; 
+import { eq, desc, asc, sql, and, inArray, or } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; 
 
@@ -93,7 +93,6 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 
     const messages = [];
 
-    // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario en eventos
     for (const device of devices) {
       const [unreadResult] = await db.select({
         count: sql<number>`count(*)`
@@ -113,7 +112,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         sound: 'default',
         title: payload.title,
         body: payload.body,
-        badge: unreadCount, // 🔴 Globito dinámico real para eventos
+        badge: unreadCount, 
         data: { type: "event", referenceId: payload.referenceId },
       });
     }
@@ -145,7 +144,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 // =====================================================================
 // 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA EVENTOS
 // =====================================================================
-const sendTelegramAlert = async (eventName: string, refCode: string, method: string) => {
+const sendTelegramAlert = async (userId: string, zip: string, eventName: string, method: string, refCode: string) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   
@@ -154,7 +153,8 @@ const sendTelegramAlert = async (eventName: string, refCode: string, method: str
     return;
   }
 
-  const message = `🎉 *NUEVO EVENTO REGISTRADO*\n\n*Evento:* ${eventName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
+  const shortName = eventName.length > 40 ? eventName.substring(0, 40) + '...' : eventName;
+  const message = `🎉 *NUEVO EVENTO REGISTRADO*\n\n*Usuario ID:* ${userId}\n*ZIP:* ${zip}\n*Evento:* "${shortName}"\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
 
   try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -172,16 +172,16 @@ const sendTelegramAlert = async (eventName: string, refCode: string, method: str
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (Optimizada con Geofencing Local)
+// 🔍 1. CONSULTA GENERAL (FILTRADA POR APROBACIÓN O DUEÑO)
 // =====================================================================
-export const getEvents = async (zip?: string) => {
+export const getEvents = async (zip?: string, userId?: string) => {
   try {
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
+    const cleanUserId = userId ? sanitizeText(String(userId)) : null;
     
-    let baseConditions = and(
-      eq(events.statusId, '31a06434-8ed8-45d2-b95f-65bd314bc021'),
-      sql`${events.dateEvent} >= CURRENT_DATE`
-    );
+    let baseConditions = cleanUserId 
+      ? and(or(eq(events.approved, true), eq(events.userId, cleanUserId)), sql`${events.dateEvent} >= CURRENT_DATE`)
+      : and(eq(events.approved, true), sql`${events.dateEvent} >= CURRENT_DATE`);
                         
     let finalConditions: any = baseConditions;
 
@@ -205,7 +205,7 @@ export const getEvents = async (zip?: string) => {
       .leftJoin(users, eq(events.userId, users.id)) 
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .where(finalConditions)
-      .orderBy(asc(events.dateEvent)); // 🚀 Ordenado por la fecha del evento más cercana
+      .orderBy(asc(events.dateEvent)); 
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -225,8 +225,12 @@ export const getEvents = async (zip?: string) => {
             if (data?.signedUrl) publicUrl = data.signedUrl;
         }
 
+        const isAppr = String(dbEvent.approved) === 'true' || dbEvent.approved === true || dbEvent.approved === 1;
+
         return { 
             ...dbEvent,
+            approved: isAppr,
+            status: isAppr ? 'approved' : 'pending',
             imageEven: publicUrl, 
             ownerName: nombreUsuario,
             referenceCode: dbPayment?.referenceCode,
@@ -242,7 +246,7 @@ export const getEvents = async (zip?: string) => {
 // =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID CON PAGOS
 // =====================================================================
-export const getEventById = async (id: string) => {
+export const getEventById = async (id: string, userId?: string) => {
   try {
     const cleanId = sanitizeText(id);
     if (!cleanId) return null;
@@ -273,8 +277,12 @@ export const getEventById = async (id: string) => {
         }
     }
 
+    const isAppr = String(dbEvent.approved) === 'true' || dbEvent.approved === true ;
+
     return {
         ...dbEvent,
+        approved: isAppr,
+        status: isAppr ? 'approved' : 'pending',
         imageEven: publicUrl,
         ownerName: nombreUsuario,
         referenceCode: dbPayment?.referenceCode,
@@ -286,7 +294,7 @@ export const getEventById = async (id: string) => {
 };
 
 // =====================================================================
-// 📥 3. CREAR EVENTO (AUTO-APROBACIÓN CUPÓN + NOTIFICACIONES MASIVAS)
+// 📥 3. CREAR EVENTO (NACE PENDIENTE + ALERTA TELEGRAM)
 // =====================================================================
 export const createEvent = async (data: any) => {
   try {
@@ -302,7 +310,6 @@ export const createEvent = async (data: any) => {
     const codigoReferencia = cleanData.referenceCode ? String(cleanData.referenceCode).trim() : '';
 
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
-    
     let realPromoCode = cleanData.couponCode ? String(cleanData.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
     const { lat, lng } = getCoordsFromZip(cleanData.zip || '');
@@ -312,8 +319,6 @@ export const createEvent = async (data: any) => {
         cleanImage = cleanImage.replace('events/', '');
     }
 
-    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH DE EVENTOS (CUPÓN)
-    let isApproved = false;
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
     const createdEventResult = await db.transaction(async (tx) => {
@@ -326,8 +331,7 @@ export const createEvent = async (data: any) => {
           if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
           if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
-          isApproved = true;
-          customMessage = "¡Cupón aplicado! Tu evento ha sido publicado con éxito.";
+          customMessage = "¡Cupón aplicado! Tu evento ha sido registrado y está en revisión.";
         }
 
         const payload: any = {
@@ -348,13 +352,8 @@ export const createEvent = async (data: any) => {
           statusId: '31a06434-8ed8-45d2-b95f-65bd314bc021',
           premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
           userId: validUserId, 
-          approved: isApproved, 
+          approved: false, 
         };
-
-        if (isCoupon) {
-          payload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
-          payload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
-        }
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
 
@@ -397,125 +396,25 @@ export const createEvent = async (data: any) => {
             usedAt: new Date() 
           })
           .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
-
-          // ==============================================================
-          // 🚀 PROGRAMACIÓN DE NOTIFICACIONES PARA EVENTOS POR CUPÓN
-          // ==============================================================
-          if (newEvent && newEvent.dateEvent) {
-              const today = new Date();
-              const eventDate = new Date(newEvent.dateEvent);
-              const diffTime = eventDate.getTime() - today.getTime();
-              const totalDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-              if (totalDaysLeft >= 0 && newEvent.userId) {
-                  const notifsToInsert = [];
-                  for (let i = 0; i <= totalDaysLeft; i++) {
-                      const daysRemaining = totalDaysLeft - i;
-                      const showDate = new Date(today.getTime() + (i * 24 * 60 * 60 * 1000));
-                      let shouldCreate = false;
-                      let message = "";
-
-                      if (daysRemaining === 0) {
-                          shouldCreate = true;
-                          message = `¡Es hoy! No te pierdas: ${newEvent.title}`;
-                      } else if (daysRemaining > 0 && daysRemaining <= 10) {
-                          shouldCreate = true;
-                          message = `¡Faltan solo ${daysRemaining} días para ${newEvent.title}!`;
-                      } else if (daysRemaining > 10) {
-                          if (daysRemaining % 2 === 0) { 
-                              shouldCreate = true;
-                              message = `Faltan ${daysRemaining} días para el evento: ${newEvent.title}`;
-                          }
-                      }
-
-                      if (shouldCreate) {
-                          const notifObj: any = {
-                              title: "Recordatorio de Evento 📅",
-                              description: message,
-                              type: "event", 
-                              visibleAt: showDate, 
-                              userId: newEvent.userId as string, 
-                          };
-
-                          if ('referenceId' in notifications) notifObj.referenceId = String(newEvent.id);
-                          else if ('reference_id' in notifications) notifObj.reference_id = String(newEvent.id);
-
-                          notifsToInsert.push(notifObj);
-                      }
-                  }
-
-                  if (notifsToInsert.length > 0) {
-                      await tx.insert(notifications).values(notifsToInsert);
-                  }
-              }
-
-              console.log("✅ [DEBUG PUSH EVENTOS] Evento creado y aprobado vía Cupón. Buscando usuarios cercanos...");
-              const titleText = "¡Nuevo Evento en tu área! 🎉";
-              const bodyText = `Se ha publicado: ${newEvent.title}. ¡Revisa los detalles!`;
-              let usersToNotify: { id: string }[] = [];
-
-              if (newEvent.zip) {
-                  const nearbyZips = zipcodes.radius(newEvent.zip as any, Number(radiusMiles)); 
-
-                  if (nearbyZips && nearbyZips.length > 0) {
-                      usersToNotify = await tx.select({ id: users.id })
-                                              .from(users)
-                                              .where(inArray(users.zip, nearbyZips as string[]));
-                  } else {
-                      usersToNotify = await tx.select({ id: users.id })
-                                              .from(users)
-                                              .where(eq(users.zip, String(newEvent.zip)));
-                  }
-              }
-
-              if (usersToNotify.length > 0) {
-                  const massNotifs = usersToNotify.map(u => {
-                      const payloadNotif: any = {
-                          title: titleText,
-                          description: bodyText,
-                          type: "event", 
-                          visibleAt: new Date(), 
-                          userId: u.id,
-                          isRead: false
-                      };
-                      if ('referenceId' in notifications) payloadNotif.referenceId = String(newEvent.id);
-                      else if ('reference_id' in notifications) payloadNotif.reference_id = String(newEvent.id);
-                      return payloadNotif;
-                  });
-
-                  await tx.insert(notifications).values(massNotifs);
-
-                  pushNotificationData = {
-                      title: titleText,
-                      body: bodyText,
-                      referenceId: String(newEvent.id),
-                      userIds: usersToNotify.map(u => u.id) 
-                  };
-              }
-          }
         }
 
         return {
            ...newEvent,
-           timepostEnd: newEvent.timepostEnd || null,
+           approved: false,
+           status: 'pending',
            referenceCode: isCoupon ? realPromoCode : codigoReferencia,
            paymentMethod: isCoupon ? 'Coupon' : metodoPago,
            message: customMessage 
         };
     });
 
-    // 🚀 DISPARAR PUSH DE EVENTOS FUERA DE LA TRANSACCIÓN
-    if (pushNotificationData) {
-        sendMassPushNotification(pushNotificationData).catch(err => {
-            console.error("❌ [DEBUG PUSH EVENTOS] Falló el Push Notification en creación por cupón:", err);
-        });
-    }
-
-    if (createdEventResult && createdEventResult.paymentMethod !== 'Coupon') {
+    if (createdEventResult) {
       sendTelegramAlert(
+        validUserId,
+        cleanData.zip || 'N/A',
         createdEventResult.title || 'Sin título',
-        createdEventResult.referenceCode || 'N/A',
-        createdEventResult.paymentMethod || 'N/A'
+        createdEventResult.paymentMethod || 'N/A',
+        createdEventResult.referenceCode || 'N/A'
       ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
     }
 
@@ -531,7 +430,7 @@ export const createEvent = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR EVENTO Y PROGRAMAR NOTIFICACIONES
+// 🔄 4. ACTUALIZAR EVENTO (DISPARA NOTIFICACIONES AL APROBAR)
 // =====================================================================
 export const updateEvent = async (id: string, data: any) => {
   try {
@@ -576,7 +475,9 @@ export const updateEvent = async (id: string, data: any) => {
                 .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));
         }
 
-        if (cleanPayload.approved === true && !wasApprovedBefore && event && event.dateEvent) {
+        const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true' || cleanPayload.approved === 1;
+
+        if (isApprovedNow && !wasApprovedBefore && event && event.dateEvent) {
             const today = new Date();
             const eventDate = new Date(event.dateEvent);
             const diffTime = eventDate.getTime() - today.getTime();
@@ -637,6 +538,7 @@ export const updateEvent = async (id: string, data: any) => {
                                             .from(users)
                                             .where(inArray(users.zip, nearbyZips as string[]));
                 } else {
+                    // 🚀 CORREGIDO: Se agregó el .from(users) que faltaba aquí
                     usersToNotify = await tx.select({ id: users.id })
                                             .from(users)
                                             .where(eq(users.zip, String(event.zip)));

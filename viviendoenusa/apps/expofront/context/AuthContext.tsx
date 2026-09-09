@@ -2,6 +2,9 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
+// 🚀 1. IMPORTAMOS REDUX PARA AVISARLE A LA INTERFAZ QUE HAY SESIÓN
+import { toggleAuth, setUserMetadata, useMockDispatch } from '../redux/slices'; // Ajusta esta ruta si te marca error
+
 interface AuthContextType {
   user: any | null;
   token: string | null;
@@ -17,7 +20,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Al abrir la app, revisamos si ya hay una sesión guardada
+  // 🚀 2. INICIAMOS EL DESPACHADOR
+  const dispatch = useMockDispatch();
+
   useEffect(() => {
     const loadSession = async () => {
       try {
@@ -37,6 +42,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (storedToken && storedUser) {
           setToken(storedToken);
           setUser(storedUser);
+          
+          // 🚀 3. EL FIX MAESTRO: Le pasamos los datos a Redux al arrancar
+          dispatch(setUserMetadata({ ...storedUser, token: storedToken }));
+          dispatch(toggleAuth());
         }
       } catch (error) {
         console.error("Error cargando la sesión", error);
@@ -46,7 +55,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     loadSession();
-  }, []);
+  }, [dispatch]);
 
   const login = async (userData: any, userToken: string) => {
     setToken(userToken);
@@ -81,7 +90,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// Hook personalizado para usar el contexto fácilmente
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
