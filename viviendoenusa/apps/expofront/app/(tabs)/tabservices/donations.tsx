@@ -524,8 +524,8 @@ export default function DonationsScreen() {
                     style={{ position: 'relative', padding: 4, marginLeft: 5 }}
                   >
                     <MaterialCommunityIcons 
-                      name={isAdminMode ? "shield-check" : "shield-account"}
-                      size={32} 
+                      name="hand-heart"
+                      size={40} 
                       color={isAdminMode ? '#FF5F6D' : DynamicColors.text} 
                       style={{ opacity: isAdminMode ? 1 : 0.6 }} 
                     />
