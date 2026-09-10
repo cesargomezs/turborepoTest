@@ -498,7 +498,6 @@ export const createLawyer = async (data: any) => {
 // =====================================================================
 export const updateLawyer = async (idParam: any, dataParam: any) => {
   try {
-    // 🚀 EXTRACCIÓN BLINDADA DEL ID: Si Express pasa el objeto 'req' o un objeto de ruta, lo desenrollamos por la fuerza
     let rawId = idParam;
     let data = dataParam;
 
@@ -539,12 +538,13 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
 
     const updatedLawyerResult = await db.transaction(async (tx) => {
       
-      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description', 'premiumPlan', 'descriptionLawy'];
+      // 🚀 INCLUIMOS 'approved' EXPLICITAMENTE EN LA LISTA DE CAMPOS PERMITIDOS
+      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description', 'premiumPlan', 'descriptionLawy', 'approved'];
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
         if (data && data[key] !== undefined) {
-           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : (key === 'approved' ? Boolean(data[key]) : sanitizeText(data[key]));
         }
       }
 
