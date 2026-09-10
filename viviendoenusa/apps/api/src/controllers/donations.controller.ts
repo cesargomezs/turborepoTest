@@ -150,7 +150,6 @@ export const getDonations = async (rawZip?: string | number, userId?: string) =>
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = userId ? sanitizeText(String(userId)) : null;
 
-    // 🚀 IGUAL QUE EN ABOGADOS Y COMUNIDAD: Enviamos todos los registros (aprobados y pendientes)
     let baseConditions = cleanUserId 
       ? sql`(${donations.approved} = false OR ${donations.approved} = true OR ${donations.userId} = ${cleanUserId})`
       : sql`(${donations.approved} = false OR ${donations.approved} = true)`;
@@ -293,7 +292,6 @@ export const updateDonationStatus = async (idParam: any, statusOrBody?: any, app
     let newStatus = statusOrBody;
     let isApproved = approvedParam;
 
-    // 🚀 SOPORTE COMPLETO SI VIENE UN OBJETO JSON DESDE EL BODY DE EXPRESS
     if (statusOrBody && typeof statusOrBody === 'object') {
       if (statusOrBody.status !== undefined) newStatus = statusOrBody.status;
       if (statusOrBody.approved !== undefined) isApproved = statusOrBody.approved;
