@@ -191,13 +191,17 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
-  // 🚀 FETCH (CON REFRESH AL VUELO DE SUPABASE Y PASANDO EL USER_ID)
+  // 🚀 FETCH (CORREGIDO: PERMITE CONSULTA GLOBAL SI ESTÁ EN MODO ADMIN)
   const fetchDonations = async (searchZip?: string) => {
     try {
       setIsLoadingPosts(true);
       let url = `${API_DONATIONS_URL}?userId=${currentUserId}`;
+      
       if (searchZip && searchZip.trim().length === 5) {
         url += `&zip=${searchZip.trim()}`;
+      } else if (!isAdminMode) {
+        setIsLoadingPosts(false);
+        return;
       }
 
       const res = await fetch(url, {
@@ -242,19 +246,23 @@ export default function DonationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchDonations(zipCode);
-    }, [zipCode])
+      if (isAdminMode || (zipCode && zipCode.length === 5)) {
+        fetchDonations(zipCode);
+      }
+    }, [zipCode, isAdminMode])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        fetchDonations(zipCode);
+        if (isAdminMode || (zipCode && zipCode.length === 5)) {
+          fetchDonations(zipCode);
+        }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, zipCode]);
+  }, [isFocused, zipCode, isAdminMode]);
 
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) window.alert(`${title}\n${message}`); 
@@ -498,9 +506,9 @@ export default function DonationsScreen() {
                     onSubmitEditing={() => zipCode.length === 5 && fetchDonations(zipCode)} 
                     placeholderTextColor={DynamicColors.subtext} 
                   />
-                  <TouchableOpacity onPress={() => fetchDonations(zipCode)} disabled={zipCode.length !== 5} style={{ width: 42, height: 42, marginLeft: 8 }}>
-                    <LinearGradient colors={zipCode.length === 5 ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
-                      {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={zipCode.length === 5 ? "#fff" : DynamicColors.iconInactive} />}
+                  <TouchableOpacity onPress={() => fetchDonations(zipCode)} disabled={zipCode.length !== 5 && !isAdminMode} style={{ width: 42, height: 42, marginLeft: 8 }}>
+                    <LinearGradient colors={(zipCode.length === 5 || isAdminMode) ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={(zipCode.length === 5 || isAdminMode) ? "#fff" : DynamicColors.iconInactive} />}
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
@@ -508,12 +516,16 @@ export default function DonationsScreen() {
                 {/* 🚀 BOTÓN DE ADMINISTRADOR CON CONTADOR FLOTANTE */}
                 {isAdmin && (
                   <TouchableOpacity 
-                    onPress={() => setIsAdminMode(!isAdminMode)} 
+                    onPress={() => {
+                      const nextState = !isAdminMode;
+                      setIsAdminMode(nextState);
+                      if (nextState) fetchDonations(zipCode);
+                    }} 
                     style={{ position: 'relative', padding: 4, marginLeft: 5 }}
                   >
                     <MaterialCommunityIcons 
-                      name="hand-heart"
-                      size={40} 
+                      name={isAdminMode ? "shield-check" : "shield-account"}
+                      size={32} 
                       color={isAdminMode ? '#FF5F6D' : DynamicColors.text} 
                       style={{ opacity: isAdminMode ? 1 : 0.6 }} 
                     />
