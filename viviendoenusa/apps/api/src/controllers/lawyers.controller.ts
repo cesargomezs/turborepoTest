@@ -538,24 +538,32 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
 
     const updatedLawyerResult = await db.transaction(async (tx) => {
       
-      // 🚀 INCLUIMOS 'approved' EXPLICITAMENTE EN LA LISTA DE CAMPOS PERMITIDOS
-      const allowedFields = ['nameLawy', 'area', 'address', 'zip', 'phone', 'lat', 'lng', 'imageUrl', 'description', 'premiumPlan', 'descriptionLawy', 'approved'];
+      // 🚀 CONSTRUCCIÓN DIRECTA DEL PAYLOAD (Sin bucle cerrado que vacíe los datos de aprobación)
       const updatePayload: any = {};
-      
-      for (const key of allowedFields) {
-        if (data && data[key] !== undefined) {
-           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : (key === 'approved' ? Boolean(data[key]) : sanitizeText(data[key]));
+
+      if (data) {
+        if (data.nameLawy !== undefined) updatePayload.nameLawy = sanitizeText(data.nameLawy);
+        if (data.area !== undefined) updatePayload.area = sanitizeText(data.area);
+        if (data.address !== undefined) updatePayload.address = sanitizeText(data.address);
+        if (data.zip !== undefined) updatePayload.zip = sanitizeText(data.zip);
+        if (data.phone !== undefined) updatePayload.phone = sanitizeText(data.phone);
+        if (data.lat !== undefined) updatePayload.lat = Number(data.lat);
+        if (data.lng !== undefined) updatePayload.lng = Number(data.lng);
+        if (data.premiumPlan !== undefined) updatePayload.premiumPlan = sanitizeText(data.premiumPlan);
+        
+        if (data.description !== undefined || data.descriptionLawy !== undefined) {
+          const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionLawy);
+          updatePayload.description = safeDesc;
+          updatePayload.descriptionLawy = safeDesc;
         }
-      }
 
-      if (data && (data.description !== undefined || data.descriptionLawy !== undefined)) {
-        const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionLawy);
-        updatePayload.description = safeDesc;
-        updatePayload.descriptionLawy = safeDesc;
-      }
+        if (data.imageUrl !== undefined && typeof data.imageUrl === 'string') {
+          updatePayload.imageUrl = data.imageUrl.startsWith('lawyers/') ? data.imageUrl.replace('lawyers/', '') : sanitizeText(data.imageUrl);
+        }
 
-      if (data && data.imageUrl && typeof data.imageUrl === 'string' && data.imageUrl.startsWith('lawyers/')) {
-        updatePayload.imageUrl = data.imageUrl.replace('lawyers/', '');
+        if (data.approved !== undefined) {
+          updatePayload.approved = Boolean(data.approved);
+        }
       }
 
       const isApproved = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
