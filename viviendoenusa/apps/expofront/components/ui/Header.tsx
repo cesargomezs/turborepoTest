@@ -18,8 +18,8 @@ import {
   PanResponder, 
   Dimensions, 
   ActivityIndicator,
-  AppState, // 🚀 IMPORTAMOS AppState
-  LogBox // ✨ Añadimos LogBox para silenciar alertas
+  AppState,
+  LogBox
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
@@ -30,7 +30,6 @@ import { Colors } from '../../constants/Colors';
 import { ThemedText } from '../ThemedText';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// 🚀 IMPORTAMOS useFocusEffect PARA EL AUTO-REFRESCO DE PESTAÑAS
 import { useRouter, usePathname, useFocusEffect } from 'expo-router'; 
 import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage, toggleAuth } from '../../redux/slices'; 
 import { useTranslation } from '../../hooks/useTranslation'; 
@@ -39,7 +38,6 @@ import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 import { handleUniversalShare } from '../../utils/shareHelper';
 
-// 🚀 SILENCIAMOS EL LETRERO ROJO DE EXPO GO EN ANDROID
 LogBox.ignoreLogs(['expo-notifications']);
 
 let Notifications: any = null;
@@ -72,7 +70,6 @@ try {
   console.error("Error cargando badwords.json:", e);
 }
 
-// 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS MEJORADA CON LIMITES DE PALABRAS (\b)
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
@@ -151,7 +148,6 @@ export default function Header({ title }: { title?: string }) {
   const { t } = useTranslation();
   const selectedLanguage = useMockSelector((state: any) => state.language.code);
   
-  // 🚀 VARIABLES GLOBALES DE REDUX PARA AUTO-REFRESCO DE TODAS LAS PESTAÑAS
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const globalName = userMetadata?.name || '';
   const globalLastName = userMetadata?.lastName || userMetadata?.last_name || '';
@@ -186,7 +182,7 @@ export default function Header({ title }: { title?: string }) {
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [activeProfileRole, setActiveProfileRole] = useState('User'); 
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null); 
-  const [wakeUpTrigger, setWakeUpTrigger] = useState(0); // 🚀 GATILLO PARA RESUCITAR IMÁGENES AL DESPERTAR
+  const [wakeUpTrigger, setWakeUpTrigger] = useState(0); 
 
   const [profileData, setProfileData] = useState({
     email: '',
@@ -291,7 +287,6 @@ export default function Header({ title }: { title?: string }) {
     }
   };
 
-  // 🚀 GARANTIZA QUE EL HEADER SE ACTUALICE AL CAMBIAR DE PESTAÑA
   useFocusEffect(
     useCallback(() => {
       if (!isCreatingUser) fetchUserData();
@@ -304,20 +299,17 @@ export default function Header({ title }: { title?: string }) {
     }, [REAL_USER_ID, token])
   );
 
-  // 🚀 DETECTOR DE DESPERTAR (APPSTATE) EXCLUSIVO PARA EL HEADER
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        console.log("🚀 La app despertó. Refrescando perfil y notificaciones globales...");
         if (!isCreatingUser) fetchUserData();
         if (REAL_USER_ID && token) fetchNotifications();
-        setWakeUpTrigger(prev => prev + 1); // 🚀 Fuerza re-firma de la imagen
+        setWakeUpTrigger(prev => prev + 1); 
       }
     });
     return () => subscription.remove();
   }, [isCreatingUser, REAL_USER_ID, token]);
 
-  // 🚀 LÓGICA VINCULADA GLOBALMENTE A REDUX PARA LAS FOTOS
   useEffect(() => {
     const getSignedAvatar = async () => {
       let imageUrlToProcess = globalImageUrl || profileData.image_url;
@@ -350,7 +342,7 @@ export default function Header({ title }: { title?: string }) {
     };
 
     getSignedAvatar();
-  }, [globalImageUrl, profileData.image_url, wakeUpTrigger]); // 🚀 DEPENDE DE wakeUpTrigger
+  }, [globalImageUrl, profileData.image_url, wakeUpTrigger]); 
 
   useEffect(() => {
     if (isWeb && typeof window !== 'undefined') {
@@ -373,6 +365,7 @@ export default function Header({ title }: { title?: string }) {
       const routes: Record<string, { path: string, param: string }> = {
         'job': { path: '/jobs', param: 'openJobId' },
         'store': { path: '/tabservices/stores', param: 'id' },
+        'donation': { path: '/tabservices/donations', param: 'id' },
         'community': { path: '/tabservices/community', param: 'openEventId' },
         'event': { path: '/tabservices/events', param: 'openEventId' },
         'lawyer': { path: '/tabservices/lawyers', param: 'id' },
@@ -399,6 +392,7 @@ export default function Header({ title }: { title?: string }) {
     switch (type) {
       case 'job': return { name: 'briefcase', color: '#4CAF50' }; 
       case 'store': return { name: 'store', color: '#FFB300' }; 
+      case 'donation': return { name: 'hand-heart', color: '#FF5F6D' }; 
       case 'alert': return { name: 'alert-circle', color: '#FF5F6D' }; 
       case 'event': return { name: 'calendar', color: '#9C27B0' }; 
       case 'lawyer': return { name: 'scale-balance', color: '#FF5F6D' }; 
@@ -418,6 +412,7 @@ export default function Header({ title }: { title?: string }) {
       const routes: Record<string, { path: string, param: string }> = {
         'job': { path: '/jobs', param: 'openJobId' },
         'store': { path: '/tabservices/stores', param: 'id' },
+        'donation': { path: '/tabservices/donations', param: 'id' },
         'community': { path: '/tabservices/community', param: 'openEventId' },
         'event': { path: '/tabservices/events', param: 'openEventId' },
         'lawyer': { path: '/tabservices/lawyers', param: 'id' },
@@ -669,7 +664,6 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </BlurView>
       
-      {/* 🚀 MODAL PARA GENERAR CUPONES (CENTRADO Y FLOTANTE CON TRANSPARENCIA) */}
       <Modal visible={showCouponModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowCouponModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isGeneratingCoupon && setShowCouponModal(false)} />
@@ -723,7 +717,6 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL DE ENCUESTA PARA ELIMINAR CUENTA (DISEÑO FLOTANTE CENTRADO Y TRANSLÚCIDO) */}
       <Modal visible={showDeleteSurveyModal} transparent animationType="fade" onRequestClose={() => setShowDeleteSurveyModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isDeletingAccount && setShowDeleteSurveyModal(false)} />
@@ -801,7 +794,6 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL PARA SOPORTE TÉCNICO / IT SUPPORT (DISEÑO FLOTANTE CENTRADO Y TRANSLÚCIDO) */}
       <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSendingIT && setShowITSupportModal(false)} />
@@ -841,7 +833,6 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL DE CONFIGURACIÓN */}
       <Modal visible={settingsModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeSettingsModal}>
         <View style={styles.notifModalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSavingProfile && closeSettingsModal()} />
@@ -881,7 +872,6 @@ export default function Header({ title }: { title?: string }) {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🎨 APARIENCIA E IDIOMA */}
                 <View style={{ marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
                   
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
@@ -919,7 +909,6 @@ export default function Header({ title }: { title?: string }) {
                   </View>
                 </View>
 
-                {/* 🚀 BOTÓN PARA GENERAR CUPONES (SOLO SADMIN) */}
                 {isSuperAdmin && (
                   <TouchableOpacity 
                     onPress={() => { closeSettingsModal(); setShowCouponModal(true); }} 
@@ -1066,7 +1055,6 @@ export default function Header({ title }: { title?: string }) {
                   </LinearGradient>
                 </TouchableOpacity>
 
-                {/* 🚀 BOTÓN PARA DAR DE BAJA / ELIMINAR CUENTA */}
                 {!isCreatingUser && (
                   <TouchableOpacity 
                     onPress={handleDeleteAccountPress} 
@@ -1096,7 +1084,6 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL DE NOTIFICACIONES */}
       <Modal animationType="slide" transparent={true} visible={notifModalVisible} onRequestClose={() => setNotifModalVisible(false)}>
         <View style={styles.notifModalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNotifModalVisible(false)} />
