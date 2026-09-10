@@ -196,7 +196,6 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       const itemId = row.entrepreneurship.id;
 
       if (!itemsMap.has(itemId)) {
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isAppr = row.entrepreneurship.approved === true || String(row.entrepreneurship.approved).toLowerCase() === 'true';
         itemsMap.set(itemId, {
           ...row.entrepreneurship,
@@ -308,7 +307,6 @@ export const getEntrepreneurshipById = async (id: string, userId?: string) => {
     if (!rows || rows.length === 0) return null;
   
     const dbItem = rows[0].entrepreneurship;
-    // 🚀 CORRECCIÓN DE TYPESCRIPT
     const isAppr = dbItem.approved === true || String(dbItem.approved).toLowerCase() === 'true';
 
     const itemFinal: any = {
@@ -415,7 +413,7 @@ export const createEntrepreneurship = async (data: any) => {
       lat: lat,
       lng: lng,
       estate: data.estate,
-      approved: false, // 🚀 Nace pendiente de revisión para Apple
+      approved: false, 
       userId: validUserId 
     };
 
@@ -424,7 +422,6 @@ export const createEntrepreneurship = async (data: any) => {
       return newItem[0];
     });
 
-    // 🚀 ENVIAMOS ALERTA A TELEGRAM (SIN AVISAR AL PÚBLICO AÚN)
     sendTelegramAlert(
       validUserId, 
       data.zip || 'N/A', 
@@ -447,12 +444,27 @@ export const createEntrepreneurship = async (data: any) => {
 // =====================================================================
 // 🔄 4. ACTUALIZAR EMPRENDIMIENTO (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
-export const updateEntrepreneurship = async (id: string, data: any) => {
+export const updateEntrepreneurship = async (idParam: any, dataParam: any) => {
   try {
-    const cleanId = sanitizeText(id);
+    let rawId = idParam;
+    let data = dataParam;
+
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const cleanId = sanitizeText(rawId);
     if (!cleanId) throw new Error("ID inválido");
 
-    if (data.imageEntrepren && data.imageEntrepren.startsWith('entrepreneurship/')) {
+    if (!data && idParam && idParam.body) {
+      data = idParam.body;
+    }
+
+    if (data && data.imageEntrepren && typeof data.imageEntrepren === 'string' && data.imageEntrepren.startsWith('entrepreneurship/')) {
         data.imageEntrepren = data.imageEntrepren.replace('entrepreneurship/', '');
     }
 
@@ -460,11 +472,14 @@ export const updateEntrepreneurship = async (id: string, data: any) => {
 
     const [existing] = await db.select().from(entrepreneurship).where(eq(entrepreneurship.id, cleanId));
 
+    if (data && (data.approved === true || String(data.approved).toLowerCase() === 'true')) {
+      data.approved = true;
+    }
+
     const updated = await db.update(entrepreneurship).set(data).where(eq(entrepreneurship.id, cleanId)).returning();
     const record = updated[0] || null;
 
-    // 🚀 NOTIFICACIONES MASIVAS SE DISPARAN AQUÍ: SOLO AL PASAR A APROBADO
-    const isApprovedNow = data.approved === true || String(data.approved).toLowerCase() === 'true';
+    const isApprovedNow = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
     const wasApprovedBefore = existing && (existing.approved === true || String(existing.approved).toLowerCase() === 'true');
 
     if (isApprovedNow && !wasApprovedBefore && record) {
@@ -686,7 +701,6 @@ export const getEntrepreneurshipsByIds = async (ids: string[], userId?: string) 
     for (const row of rows) {
       const itemId = row.entrepreneurship.id;
       if (!itemsMap.has(itemId)) {
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isAppr = row.entrepreneurship.approved === true || String(row.entrepreneurship.approved).toLowerCase() === 'true';
         itemsMap.set(itemId, { 
           ...row.entrepreneurship, 

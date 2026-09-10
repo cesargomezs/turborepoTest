@@ -11,15 +11,17 @@ import { AuthRequest, verifyToken } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// 🔍 GET: Obtener todos los registros de soporte (Soporta ?zip=12345)
-// Nota: verifyToken aquí validará el header si se requiere estrictamente sesión, 
-// o puedes omitirlo si el listado es público. Lo dejamos protegido según la regla solicitada.
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const zipParam = req.query.zip;
     const zipCode = typeof zipParam === 'string' ? zipParam : undefined; 
     
-    const supportList = await getSupports(zipCode);
+    const userIdParam = req.query.userId;
+    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined);
+    
+    const currentUserId = req.user?.id || req.user?.userId || queryUserId;
+
+    const supportList = await getSupports(zipCode, currentUserId);
     res.json(supportList);
   } catch (error: any) {
     console.error("❌ Error en GET /support:", error.message);
@@ -27,11 +29,8 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 📥 POST: Sugerir/Crear nuevo registro de soporte (Requiere Token en Header)
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🛡️ Si el middleware verifyToken falla o no hay usuario, retornará 401 automáticamente desde el middleware.
-    // Extraemos el ID del usuario directamente del token decodificado
     const userIdFromToken = req.user?.id || req.user?.userId;
 
     const payload = {
@@ -49,7 +48,7 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🚀 POST: Crear nueva reseña/opinión para un registro de soporte
+// 📌 Ruta estática colocada antes de /:id para evitar conflictos en Express
 router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const userIdFromToken = req.user?.id || req.user?.userId;
@@ -67,7 +66,6 @@ router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => 
   }
 });
 
-// 🔍 GET: Obtener un registro de soporte específico por ID
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -84,7 +82,6 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 PUT: Actualizar un registro de soporte
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -103,7 +100,6 @@ router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🗑️ DELETE: Eliminar un registro de soporte
 router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;

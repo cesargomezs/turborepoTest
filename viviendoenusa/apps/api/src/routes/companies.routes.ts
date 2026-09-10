@@ -7,18 +7,16 @@ import {
   deleteCompany,
   renewCompany 
 } from '../controllers/companies.controller';
-import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos seguridad
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
 // 🔍 GET: Obtener todas las empresas (Soporta filtro opcional ?userId=...)
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura para evitar string | string[]
     const userIdParam = req.query.userId;
     const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined); 
     
-    // 🚀 Priorizamos el userId validado del token
     const currentUserId = req.user?.id || req.user?.userId || queryUserId;
 
     const companiesList = await getCompanies(currentUserId);
@@ -29,10 +27,9 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 📥 POST: Registrar una nueva empresa (Valida unicidad de EIN corporativo y pago)
+// 📥 POST: Registrar una nueva empresa
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Inyectamos el creador desde el token para evitar suplantaciones
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
       ...req.body,
@@ -44,7 +41,6 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error("❌ Error en POST /companies:", error.message);
     
-    // Blindaje por si el EIN ya existe o hay pago duplicado
     if (error.message.includes("existe") || error.message.includes("unique") || error.message.includes("duplicate")) {
        return res.status(409).json({ error: error.message });
     }
@@ -56,11 +52,9 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
 // 🔄 POST: Renovar Suscripción de Empresa (Pago)
 router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura del ID de la empresa
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
 
-    // 🚀 Inyectamos el usuario desde el token por seguridad
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
       ...req.body,
@@ -81,7 +75,6 @@ router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) =
 // 🔍 GET: Obtener una empresa específica por ID
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura del ID
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
 
@@ -98,7 +91,7 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 PUT: Actualizar perfil de empresa (Ideal para que el Admin cambie planes o verifique)
+// 🔄 PUT: Actualizar perfil de empresa (Ruta corregida con parámetros limpios)
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;

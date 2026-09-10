@@ -226,7 +226,6 @@ export const getEvents = async (zip?: string, userId?: string) => {
             if (data?.signedUrl) publicUrl = data.signedUrl;
         }
 
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isAppr = dbEvent.approved === true || String(dbEvent.approved).toLowerCase() === 'true';
 
         return { 
@@ -279,7 +278,6 @@ export const getEventById = async (id: string, userId?: string) => {
         }
     }
 
-    // 🚀 CORRECCIÓN DE TYPESCRIPT
     const isAppr = dbEvent.approved === true || String(dbEvent.approved).toLowerCase() === 'true';
 
     return {
@@ -433,12 +431,29 @@ export const createEvent = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR EVENTO (DISPARA NOTIFICACIONES AL APROBAR)
+// 🔄 4. ACTUALIZAR EVENTO (DISPARA NOTIFICACIONES AL APROBAR) - BLINDADO
 // =====================================================================
-export const updateEvent = async (id: string, data: any) => {
+export const updateEvent = async (idParam: any, dataParam: any) => {
+  let cleanId: string = "";
   try {
-    const cleanId = sanitizeText(id);
-    if (!cleanId) throw new Error("ID inválido");
+    let rawId = idParam;
+    let data = dataParam;
+
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const sanitized = sanitizeText(rawId);
+    if (!sanitized) throw new Error("ID inválido");
+    cleanId = sanitized;
+
+    if (!data && idParam && idParam.body) {
+      data = idParam.body;
+    }
 
     const cleanPayload = sanitizePayload(data);
     let pushNotificationData: any = null;
@@ -478,7 +493,6 @@ export const updateEvent = async (id: string, data: any) => {
                 .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));
         }
 
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true';
 
         if (isApprovedNow && !wasApprovedBefore && event && event.dateEvent) {
@@ -563,7 +577,7 @@ export const updateEvent = async (id: string, data: any) => {
                     return payload;
                 });
 
-                await tx.insert(notifications).values(massNotifs);
+                await db.insert(notifications).values(massNotifs);
 
                 pushNotificationData = {
                     title: titleText,
@@ -586,6 +600,7 @@ export const updateEvent = async (id: string, data: any) => {
     return eventResult;
 
   } catch (error: any) { 
+    console.error(`❌ Error al actualizar evento ${cleanId}:`, error);
     throw new Error(`Error al actualizar el evento: ${error.message}`);
   }
 };

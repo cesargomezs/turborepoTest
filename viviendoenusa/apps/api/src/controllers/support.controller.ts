@@ -206,7 +206,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       const supportId = row.support.id;
 
       if (!supportsMap.has(supportId)) {
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isAppr = row.support.approved === true || String(row.support.approved).toLowerCase() === 'true';
         supportsMap.set(supportId, {
           ...row.support,
@@ -294,7 +293,6 @@ export const getSupportById = async (id: string) => {
     if (!rows || rows.length === 0) return null;
   
     const dbSupport = rows[0].support;
-    // 🚀 CORRECCIÓN DE TYPESCRIPT
     const isAppr = dbSupport.approved === true || String(dbSupport.approved).toLowerCase() === 'true';
 
     const supportFinal: any = {
@@ -409,7 +407,7 @@ export const createSupport = async (data: any) => {
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
         couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
-        approved: false, // 👈 Nace pendiente para cumplir con Apple
+        approved: false, 
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
@@ -481,12 +479,27 @@ export const createSupport = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR CONTACTO DE APOYO (Y DISPARAR PUSH AL APROBAR)
+// 🔄 4. ACTUALIZAR CONTACTO DE APOYO (Y DISPARAR PUSH AL APROBAR) - BLINDADO
 // =====================================================================
-export const updateSupport = async (id: string, data: any) => {
+export const updateSupport = async (idParam: any, dataParam: any) => {
   try {
-    const cleanId = sanitizeText(id);
+    let rawId = idParam;
+    let data = dataParam;
+
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const cleanId = sanitizeText(rawId);
     if (!cleanId) throw new Error("ID inválido");
+
+    if (!data && idParam && idParam.body) {
+      data = idParam.body;
+    }
 
     const [existingSupport] = await db.select().from(support).where(eq(support.id, cleanId));
     if (!existingSupport) throw new Error("Contacto de apoyo no encontrado");
@@ -500,29 +513,28 @@ export const updateSupport = async (id: string, data: any) => {
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
-        if (data[key] !== undefined) {
+        if (data && data[key] !== undefined) {
            updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
         }
       }
 
-      if (data.description !== undefined || data.descriptionSupp !== undefined) {
+      if (data && (data.description !== undefined || data.descriptionSupp !== undefined)) {
         const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionSupp);
         updatePayload.descriptionSupp = safeDesc;
       }
 
-      if (data.imageSupp && typeof data.imageSupp === 'string' && data.imageSupp.startsWith('support/')) {
+      if (data && data.imageSupp && typeof data.imageSupp === 'string' && data.imageSupp.startsWith('support/')) {
         updatePayload.imageSupp = data.imageSupp.replace('support/', '');
       }
 
-      // 🚀 CORRECCIÓN DE TYPESCRIPT
-      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
+      const isApproved = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
 
       if (isApproved) {
         updatePayload.approved = true; 
         updatePayload.createdAt = new Date();
         
         let monthsToAdd = 1; 
-        if (data.durationMonths) {
+        if (data && data.durationMonths) {
           const parsedMonths = Number(data.durationMonths);
           if (!isNaN(parsedMonths)) {
             monthsToAdd = parsedMonths;
@@ -559,7 +571,6 @@ export const updateSupport = async (id: string, data: any) => {
         
       const supportItem = updated[0];
 
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
       if (isApproved && !wasApprovedBefore && supportItem) {
         console.log("✅ [DEBUG PUSH APOYO] Apoyo verificado manualmente. Calculando usuarios en zona...");
         const titleText = "¡Nuevo Apoyo en tu área! 🤝";
@@ -710,7 +721,7 @@ export const createSupportReview = async (data: any) => {
       comment: savedComment,
       name: formattedName,
       image: signedImageUrl,
-      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      displayTime: new Date(newRating[0].createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
   } catch (error: any) {

@@ -6,14 +6,13 @@ import {
     updateEvent, 
     deleteEvent 
 } from '../controllers/events.controller';
-import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos el middleware de seguridad
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
 // 🔍 GET: Obtener todos los eventos (soporta filtro por código postal)
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura para evitar el error string | string[]
     const zipParam = req.query.zip;
     const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
     
@@ -28,7 +27,6 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
 // 🔍 GET: Obtener un evento específico por ID
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura del ID
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
 
@@ -43,10 +41,9 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 📥 POST: Crear un nuevo evento (valida código de pago único e inyecta userId)
+// 📥 POST: Crear un nuevo evento
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extraemos y aseguramos el ID del usuario desde el token
     const userIdFromToken = req.user?.id || req.user?.userId;
     
     const payload = {
@@ -59,7 +56,6 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error("❌ Error en POST /events:", error.message);
     
-    // 🚀 BLINDAJE: Manejo especial para el código de Zelle/Venmo duplicado
     if (error.message.includes("utilizado") || error.message.includes("unique")) {
        return res.status(409).json({ error: error.message });
     }
@@ -68,7 +64,7 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 PUT: Actualizar un evento (Aprobar y disparar notificaciones/tarifas dinámicas)
+// 🔄 PUT: Actualizar un evento
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;

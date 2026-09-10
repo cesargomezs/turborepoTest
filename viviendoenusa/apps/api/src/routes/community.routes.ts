@@ -8,7 +8,7 @@ import {
   deleteCommunityPost,
   handlePostVote 
 } from '../controllers/community.controller';
-import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos el middleware de seguridad
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
@@ -19,7 +19,6 @@ const router = Router();
 // 🔍 1. OBTENER TODOS LOS POSTS (con filtro opcional de ZIP)
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura para evitar el error de string | string[]
     const zipParam = req.query.zip;
     const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
 
@@ -34,7 +33,6 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
 // 📥 2. CREAR UN NUEVO POST
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extraemos y aseguramos el ID del usuario desde el token
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
       ...req.body,
@@ -52,7 +50,6 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
 // 📥 3. CREAR UN COMENTARIO (REVIEW)
 router.post('/review', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Inyectamos el ID del usuario desde el token
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
       ...req.body,
@@ -69,12 +66,9 @@ router.post('/review', verifyToken, async (req: AuthRequest, res: Response) => {
 
 // 🔄 4. PROCESAR UN VOTO (LIKE / DISLIKE) CON RASTREADORES
 router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
-  //console.log("📥 Petición recibida en /community/vote");
-  
-  // 🚀 Obtenemos el userId validado por el token de forma segura
   const userIdFromToken = req.user?.id || req.user?.userId;
   const { postId, voteType } = req.body;
-  const userId = userIdFromToken || req.body.userId; // Prioriza el token
+  const userId = userIdFromToken || req.body.userId;
   
   if (!postId || !userId || !voteType) {
     console.error("❌ Faltan datos en el body de /vote:", req.body);
@@ -111,7 +105,7 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 6. ACTUALIZAR UN POST EXISTENTE
+// 🔄 6. ACTUALIZAR UN POST EXISTENTE (Ruta corregida con argumentos limpios)
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;

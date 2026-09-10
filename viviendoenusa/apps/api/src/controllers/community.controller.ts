@@ -31,7 +31,7 @@ const getCoordsFromZip = (zip: string) => {
   return { lat: 34.0934, lng: -117.5847 };
 };
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
 const sanitizeText = (str: any) => {
   if (!str) return null;
   if (typeof str !== 'string') str = String(str);
@@ -146,14 +146,12 @@ export const getCommunityPosts = async (zip?: string, userId?: string) => {
       .leftJoin(users, eq(reviews.userId, users.id)) 
       .$dynamic(); 
 
-    // 🚀 FILTRO ESTRICTO: Solo aprobados, O los que le pertenecen al usuario actual
     if (cleanUserId) {
       query = query.where(sql`(${community.approved} = true OR ${community.userId} = ${cleanUserId})`);
     } else {
       query = query.where(eq(community.approved, true));
     }
 
-    // 🚀 Lógica de Geofencing Súper Rápida
     if (cleanZip) {
       const nearbyZips = zipcodes.radius(cleanZip as any, Number(radiusMiles)); 
 
@@ -177,7 +175,6 @@ export const getCommunityPosts = async (zip?: string, userId?: string) => {
       if (!postsMap.has(postId)) {
         const dbPost = row.community as any;
         const textoNormalizado = dbPost.text || dbPost.textContent || dbPost.text_content || '';
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isAppr = dbPost.approved === true || String(dbPost.approved).toLowerCase() === 'true';
 
         postsMap.set(postId, {
@@ -192,7 +189,6 @@ export const getCommunityPosts = async (zip?: string, userId?: string) => {
       }
 
       if (row.reviews && row.reviews.id) {
-        
         const usr = row.users as any;
         const nombreUsuario = usr?.name + ' ' + (usr?.lastName ? usr.lastName.substring(0, 1) : '') || 'Usuario Anónimo';
 
@@ -276,10 +272,8 @@ export const getCommunityPostById = async (id: string) => {
         };
       });
       
-
     const dbPostBase = rows[0].community as any;
     const textoNormalizadoBase = dbPostBase.text || dbPostBase.textContent || dbPostBase.text_content || '';
-    // 🚀 CORRECCIÓN DE TYPESCRIPT
     const isAppr = dbPostBase.approved === true || String(dbPostBase.approved).toLowerCase() === 'true';
 
     const postFinal: any = {
@@ -329,13 +323,11 @@ export const createCommunityPost = async (data: any) => {
   try {
     const cleanPayload = sanitizePayload(data);
 
-    // 🚀 VALIDACIÓN ESTRICTA DEL USER_ID
     const validUserId = sanitizeText(cleanPayload.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para crear una publicación en la comunidad.");
     }
 
-    // 🚀 OBTENEMOS LAS COORDENADAS SÍNCRONAS
     const { lat, lng } = getCoordsFromZip(cleanPayload.zip || '');
     
     cleanPayload.lat = cleanPayload.lat ? Number(cleanPayload.lat) : lat;
@@ -345,7 +337,6 @@ export const createCommunityPost = async (data: any) => {
       cleanPayload.imageUrl = cleanPayload.imageUrl.replace('community/', '');
     }
 
-    // 🚀 OBLIGAMOS A QUE NAZCA PENDIENTE DE REVISIÓN PARA APPLE
     cleanPayload.approved = false;
 
     const createdPostResult = await db.transaction(async (tx) => {
@@ -353,7 +344,6 @@ export const createCommunityPost = async (data: any) => {
       return newPost[0];
     });
 
-    // 🚀 ENVIAMOS ALERTA A TELEGRAM (SIN AVISAR AL PÚBLICO AÚN)
     sendTelegramAlert(
       validUserId, 
       cleanPayload.zip || 'N/A', 
@@ -379,7 +369,6 @@ export const createCommunityReview = async (data: any) => {
   try {
     const cleanPayload = sanitizePayload(data);
 
-    // 🚀 VALIDACIÓN ESTRICTA
     const validUserId = sanitizeText(cleanPayload.userId);
     if (!validUserId) {
         throw new Error("No estás autorizado para comentar. Se requiere iniciar sesión.");
@@ -388,7 +377,6 @@ export const createCommunityReview = async (data: any) => {
     const newReview = await db.insert(reviews).values(cleanPayload).returning();
     const savedComment = newReview[0];
 
-    // 🚀 NUEVO: Consultamos los datos del usuario para devolver la estructura completa al frontend
     const [userRecord] = await db.select({
       name: users.name,
       lastName: users.lastName,
@@ -427,7 +415,6 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
     const cleanPostId = sanitizeText(postId);
     const cleanUserId = sanitizeText(userId);
 
-    // 🚀 VALIDACIÓN ESTRICTA
     if (!cleanUserId) {
       throw new Error("Debes iniciar sesión para votar en una publicación.");
     }
@@ -504,13 +491,11 @@ export const updateCommunityPost = async (id: string, data: any) => {
     const cleanPayload = sanitizePayload(data);
     let pushNotificationData: any = null;
 
-    // Obtener el estado actual antes de actualizar
     const [existing] = await db.select().from(community).where(eq(community.id, cleanId));
 
     const updated = await db.update(community).set(cleanPayload).where(eq(community.id, cleanId)).returning();
     const postRecord = updated[0] || null;
 
-    // 🚀 CORRECCIÓN TYPESCRIPT Y LÓGICA DE APROBACIÓN
     const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true';
     const wasApprovedBefore = existing && (existing.approved === true || String(existing.approved).toLowerCase() === 'true');
 
@@ -563,7 +548,6 @@ export const updateCommunityPost = async (id: string, data: any) => {
       }
     }
 
-    // 🚀 ENVÍO PUSH FUERA DE LA TRANSACCIÓN
     if (pushNotificationData) {
       sendMassPushNotification(pushNotificationData).catch(err => {
          console.error("❌ [DEBUG PUSH] Falló el Push Notification de la comunidad:", err);

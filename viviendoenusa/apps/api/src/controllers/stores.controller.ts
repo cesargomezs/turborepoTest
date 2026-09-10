@@ -199,7 +199,6 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       const storeId = row.stores.id;
 
       if (!storesMap.has(storeId)) {
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isAppr = row.stores.approved === true || String(row.stores.approved).toLowerCase() === 'true';
         storesMap.set(storeId, {
           ...row.stores,
@@ -283,7 +282,6 @@ export const getStoreById = async (id: string) => {
     if (!rows || rows.length === 0) return null;
   
     const dbStore = rows[0].stores;
-    // 🚀 CORRECCIÓN DE TYPESCRIPT
     const isAppr = dbStore.approved === true || String(dbStore.approved).toLowerCase() === 'true';
 
     const storeFinal: any = {
@@ -396,7 +394,7 @@ export const createStore = async (data: any) => {
         lat: data.lat ? Number(data.lat) : lat, 
         lng: data.lng ? Number(data.lng) : lng, 
         userId: validUserId, 
-        approved: false, // 👈 Nace pendiente para cumplir con Apple
+        approved: false, 
         createdAt: new Date(),
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
       };
@@ -470,16 +468,35 @@ export const createStore = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR 
+// 🔄 4. ACTUALIZAR NEGOCIO Y NOTIFICAR (BLINDADO)
 // =====================================================================
-export const updateStore = async (id: string, data: any) => {
+export const updateStore = async (idParam: any, dataParam: any) => {
   try {
-    const cleanId = sanitizeText(id);
+    let rawId = idParam;
+    let data = dataParam;
+
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const cleanId = sanitizeText(rawId);
     if (!cleanId) throw new Error("ID inválido");
 
-    const resPay = await fetch(process.env.EXPO_PUBLIC_URL_BACKEND+`/stores/${cleanId}`);
-    const responsePay = await resPay.json();
-    const amount = Number(responsePay.payments) || 0;
+    if (!data && idParam && idParam.body) {
+      data = idParam.body;
+    }
+
+    let amount = 0;
+    try {
+      const existingPayment = await db.select().from(payments)
+        .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'store')))
+        .limit(1);
+      if (existingPayment.length > 0) amount = Number(existingPayment[0].amount) || 0;
+    } catch (err) {}
 
     const [existingStore] = await db.select().from(stores).where(eq(stores.id, cleanId));
     if (!existingStore) throw new Error("Negocio no encontrado");
@@ -493,27 +510,26 @@ export const updateStore = async (id: string, data: any) => {
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
-        if (data[key] !== undefined) updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+        if (data && data[key] !== undefined) updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
       }
 
-      if (data.description !== undefined || data.descriptionStores !== undefined) {
+      if (data && (data.description !== undefined || data.descriptionStores !== undefined)) {
         const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionStores);
         updatePayload.descriptionStores = safeDesc;
       }
 
-      if (data.imageStores && typeof data.imageStores === 'string' && data.imageStores.startsWith('stores/')) {
+      if (data && data.imageStores && typeof data.imageStores === 'string' && data.imageStores.startsWith('stores/')) {
         updatePayload.imageStores = data.imageStores.replace('stores/', '');
       }
 
-      // 🚀 CORRECCIÓN DE TYPESCRIPT
-      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
+      const isApproved = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
 
       if (isApproved) {
         updatePayload.approved = true; 
         updatePayload.createdAt = new Date();
         
         let monthsToAdd = 1; 
-        if (data.durationMonths) {
+        if (data && data.durationMonths) {
           const parsedMonths = Number(data.durationMonths);
           if (!isNaN(parsedMonths)) monthsToAdd = parsedMonths;
         }
@@ -534,7 +550,6 @@ export const updateStore = async (id: string, data: any) => {
       const updated = await tx.update(stores).set(updatePayload).where(eq(stores.id, cleanId)).returning();
       const store = updated[0];
 
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR
       if (isApproved && !wasApprovedBefore && store) {
         console.log("✅ [DEBUG PUSH NEGOCIOS] Negocio verificado. Calculando usuarios en zona...");
 

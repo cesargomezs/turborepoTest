@@ -371,10 +371,25 @@ export const createCompany = async (data: any) => {
   }
 };
 
-export const updateCompany = async (id: string, data: any) => {
+export const updateCompany = async (idParam: any, dataParam: any) => {
   try {
-    const cleanId = sanitizeText(id);
+    let rawId = idParam;
+    let data = dataParam;
+
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const cleanId = sanitizeText(rawId);
     if (!cleanId) throw new Error("ID inválido");
+
+    if (!data && idParam && idParam.body) {
+      data = idParam.body;
+    }
 
     let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH
 
@@ -383,19 +398,20 @@ export const updateCompany = async (id: string, data: any) => {
       const allowedFields = ['name', 'ein', 'phoneCode', 'phone', 'contactMethod', 'email', 'website', 'logoUrl', 'premiumPlan'];
       
       for (const key of allowedFields) {
-        if (data[key] !== undefined) updatePayload[key] = sanitizeText(data[key]);
+        if (data && data[key] !== undefined) updatePayload[key] = sanitizeText(data[key]);
       }
 
-      if (data.logoUrl && data.logoUrl.startsWith('companies/')) {
+      if (data && data.logoUrl && typeof data.logoUrl === 'string' && data.logoUrl.startsWith('companies/')) {
         updatePayload.logoUrl = data.logoUrl.replace('companies/', '');
       }
 
       // 🚀 CORRECCIÓN TYPESCRIPT
-      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
+      const isApproved = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
 
       if (isApproved) {
         updatePayload.status = 'approved';
         updatePayload.isVerified = true; 
+        updatePayload.approved = true;
         
         const compCurrent = await tx.select({ premiumPlan: companies.premiumPlan }).from(companies).where(eq(companies.id, cleanId)).limit(1);
         const planActive = compCurrent.length > 0 ? compCurrent[0].premiumPlan : 'basic';
@@ -475,7 +491,7 @@ export const renewCompany = async (id: string, data: any) => {
       if (planActive === 'premium') amountToPay = prices.premium;
       if (planActive === 'unlimited') amountToPay = prices.unlimited;
 
-      await tx.insert(payments).values({
+      await db.insert(payments).values({
         entityType: 'company',
         entityId: cleanId,
         userId: sanitizeText(data.userId) || TEMP_USER_ID, 

@@ -152,7 +152,6 @@ export const getDonations = async (zip?: string, userId?: string) => {
 
     if (zip && (!cleanZipParam || cleanZipParam.length !== 5)) return []; 
 
-    // 🚀 Permitimos ver las aprobadas, O las propias del usuario (aunque estén pendientes)
     let baseConditions = cleanUserId 
       ? or(eq(donations.approved, true), eq(donations.userId, cleanUserId))
       : eq(donations.approved, true);
@@ -203,7 +202,6 @@ export const getDonations = async (zip?: string, userId?: string) => {
             }
         }
 
-        // 🚀 CORRECCIÓN DE TYPESCRIPT
         const isAppr = dbDonation.approved === true || String(dbDonation.approved).toLowerCase() === 'true';
 
         return { 
@@ -244,7 +242,7 @@ export const createDonation = async (data: any) => {
       lat: lat, 
       lng: lng, 
       contactMethod: cleanData.contactMethod || 'whatsapp',
-      approved: false, // 🚀 Nace pendiente para cumplir con Apple
+      approved: false, 
       estate: cleanData.estate, 
       descriptionDon: cleanData.description || '',
       locationDon: cleanData.location || 'Rancho Cucamonga',
@@ -257,7 +255,6 @@ export const createDonation = async (data: any) => {
       return newDonation[0];
     });
 
-    // 🚀 ENVIAMOS ALERTA A TELEGRAM (SIN AVISAR AL PÚBLICO AÚN)
     sendTelegramAlert(
       validUserId, 
       cleanData.zip || 'N/A', 
@@ -280,9 +277,15 @@ export const createDonation = async (data: any) => {
 // =====================================================================
 // 🔄 3. ACTUALIZAR ESTADO DE LA DONACIÓN (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
-export const updateDonationStatus = async (id: string, status?: string, approved?: boolean) => {
+export const updateDonationStatus = async (idParam: any, status?: string, approved?: boolean) => {
+  let cleanId: string | null = null;
   try {
-    const cleanId = sanitizeText(id);
+    let rawId = idParam;
+    if (idParam && typeof idParam === 'object') {
+      rawId = idParam.params?.id || idParam.id;
+    }
+
+    cleanId = sanitizeText(rawId);
     if (!cleanId) throw new Error("ID inválido");
 
     const [existing] = await db.select().from(donations).where(eq(donations.id, cleanId));
@@ -305,7 +308,7 @@ export const updateDonationStatus = async (id: string, status?: string, approved
     }
 
     if (updatePayload.approved === true) {
-      updatePayload.createdAt = new Date(); // Reinicia fecha para darle vigencia
+      updatePayload.createdAt = new Date();
     }
 
     const updated = await db
@@ -316,7 +319,6 @@ export const updateDonationStatus = async (id: string, status?: string, approved
       
     const donationRecord = updated[0] || null;
 
-    // 🚀 NOTIFICACIONES MASIVAS SE DISPARAN AQUÍ: SOLO AL PASAR A APROBADO
     const isApprovedNow = donationRecord && (donationRecord.approved === true || String(donationRecord.approved).toLowerCase() === 'true');
     const wasApprovedBefore = existing && (existing.approved === true || String(existing.approved).toLowerCase() === 'true');
 
@@ -375,7 +377,22 @@ export const updateDonationStatus = async (id: string, status?: string, approved
 
     return donationRecord;
   } catch (error: any) { 
-    console.error(`❌ Error al actualizar estado de ${id}:`, error);
+    console.error(`❌ Error al actualizar estado de ${cleanId || idParam}:`, error);
     throw new Error(`Error al actualizar estado: ${error.message}`);
+  }
+};
+
+// =====================================================================
+// 🗑️ 4. ELIMINAR DONACIÓN
+// =====================================================================
+export const deleteDonation = async (id: string) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
+
+    const deleted = await db.delete(donations).where(eq(donations.id, cleanId)).returning();
+    return deleted[0] || null;
+  } catch (error: any) {
+    throw new Error(`Error al eliminar la donación: ${error.message}`);
   }
 };
