@@ -538,7 +538,6 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
 
     const updatedLawyerResult = await db.transaction(async (tx) => {
       
-      // 🚀 CONSTRUCCIÓN DIRECTA DEL PAYLOAD (Sin bucle cerrado que vacíe los datos de aprobación)
       const updatePayload: any = {};
 
       if (data) {
@@ -597,6 +596,10 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
              timepost_end: expirationDate 
           } as any)
           .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')));
+      }
+
+      if (Object.keys(updatePayload).length === 0) {
+        throw new Error("No values to set: El objeto de actualización está vacío.");
       }
 
       const updated = await tx
