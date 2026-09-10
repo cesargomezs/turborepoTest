@@ -25,9 +25,10 @@ const getCoordsFromZip = (zip: string) => {
   return { lat: 34.0934, lng: -117.5847 };
 };
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -198,7 +199,8 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       const storeId = row.stores.id;
 
       if (!storesMap.has(storeId)) {
-        const isAppr = String(row.stores.approved) === 'true' || row.stores.approved === true ;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isAppr = row.stores.approved === true || String(row.stores.approved).toLowerCase() === 'true';
         storesMap.set(storeId, {
           ...row.stores,
           approved: isAppr,
@@ -281,7 +283,8 @@ export const getStoreById = async (id: string) => {
     if (!rows || rows.length === 0) return null;
   
     const dbStore = rows[0].stores;
-    const isAppr = String(dbStore.approved) === 'true' || dbStore.approved === true ;
+    // 🚀 CORRECCIÓN DE TYPESCRIPT
+    const isAppr = dbStore.approved === true || String(dbStore.approved).toLowerCase() === 'true';
 
     const storeFinal: any = {
       ...dbStore, 
@@ -502,7 +505,8 @@ export const updateStore = async (id: string, data: any) => {
         updatePayload.imageStores = data.imageStores.replace('stores/', '');
       }
 
-      const isApproved = String(data.approved).toLowerCase() === 'true' || data.approved === true || data.approved === 1;
+      // 🚀 CORRECCIÓN DE TYPESCRIPT
+      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
 
       if (isApproved) {
         updatePayload.approved = true; 

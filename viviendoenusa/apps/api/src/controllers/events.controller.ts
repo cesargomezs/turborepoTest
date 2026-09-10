@@ -28,9 +28,10 @@ const getCoordsFromZip = (zip: string) => {
   return { lat: 34.0934, lng: -117.5847 };
 };
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
-const sanitizeText = (str: any): string => {
-  if (!str || typeof str !== 'string') return '';
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
+const sanitizeText = (str: any) => {
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -225,7 +226,8 @@ export const getEvents = async (zip?: string, userId?: string) => {
             if (data?.signedUrl) publicUrl = data.signedUrl;
         }
 
-        const isAppr = String(dbEvent.approved) === 'true' || dbEvent.approved === true || dbEvent.approved === 1;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isAppr = dbEvent.approved === true || String(dbEvent.approved).toLowerCase() === 'true';
 
         return { 
             ...dbEvent,
@@ -277,7 +279,8 @@ export const getEventById = async (id: string, userId?: string) => {
         }
     }
 
-    const isAppr = String(dbEvent.approved) === 'true' || dbEvent.approved === true ;
+    // 🚀 CORRECCIÓN DE TYPESCRIPT
+    const isAppr = dbEvent.approved === true || String(dbEvent.approved).toLowerCase() === 'true';
 
     return {
         ...dbEvent,
@@ -475,7 +478,8 @@ export const updateEvent = async (id: string, data: any) => {
                 .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));
         }
 
-        const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true' || cleanPayload.approved === 1;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true';
 
         if (isApprovedNow && !wasApprovedBefore && event && event.dateEvent) {
             const today = new Date();
@@ -538,7 +542,6 @@ export const updateEvent = async (id: string, data: any) => {
                                             .from(users)
                                             .where(inArray(users.zip, nearbyZips as string[]));
                 } else {
-                    // 🚀 CORREGIDO: Se agregó el .from(users) que faltaba aquí
                     usersToNotify = await tx.select({ id: users.id })
                                             .from(users)
                                             .where(eq(users.zip, String(event.zip)));

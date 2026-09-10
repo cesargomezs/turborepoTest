@@ -32,10 +32,11 @@ const getCoordsFromZip = (zip: string) => {
 };
 
 // =====================================================================
-// 🛡️ FUNCIONES DE SEGURIDAD (SANITIZACIÓN)
+// 🛡️ FUNCIONES DE SEGURIDAD (SANITIZACIÓN MEJORADA PARA UUIDs)
 // =====================================================================
 const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -202,7 +203,8 @@ export const getDonations = async (zip?: string, userId?: string) => {
             }
         }
 
-        const isAppr = String(dbDonation.approved) === 'true' || dbDonation.approved === true || dbDonation.approved === 1;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isAppr = dbDonation.approved === true || String(dbDonation.approved).toLowerCase() === 'true';
 
         return { 
             ...dbDonation, 
@@ -315,8 +317,8 @@ export const updateDonationStatus = async (id: string, status?: string, approved
     const donationRecord = updated[0] || null;
 
     // 🚀 NOTIFICACIONES MASIVAS SE DISPARAN AQUÍ: SOLO AL PASAR A APROBADO
-    const isApprovedNow = donationRecord && (String(donationRecord.approved) === 'true' || donationRecord.approved === true );
-    const wasApprovedBefore = existing && (String(existing.approved) === 'true' || existing.approved === true );
+    const isApprovedNow = donationRecord && (donationRecord.approved === true || String(donationRecord.approved).toLowerCase() === 'true');
+    const wasApprovedBefore = existing && (existing.approved === true || String(existing.approved).toLowerCase() === 'true');
 
     if (isApprovedNow && !wasApprovedBefore && donationRecord) {
       console.log("✅ [DEBUG PUSH DONACIONES] Donación aprobada por admin. Calculando usuarios en zona...");

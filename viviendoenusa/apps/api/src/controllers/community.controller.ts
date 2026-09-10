@@ -31,9 +31,10 @@ const getCoordsFromZip = (zip: string) => {
   return { lat: 34.0934, lng: -117.5847 };
 };
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -176,7 +177,8 @@ export const getCommunityPosts = async (zip?: string, userId?: string) => {
       if (!postsMap.has(postId)) {
         const dbPost = row.community as any;
         const textoNormalizado = dbPost.text || dbPost.textContent || dbPost.text_content || '';
-        const isAppr = String(dbPost.approved) === 'true' || dbPost.approved === 1 || dbPost.approved === true;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isAppr = dbPost.approved === true || String(dbPost.approved).toLowerCase() === 'true';
 
         postsMap.set(postId, {
           ...row.community,
@@ -277,7 +279,8 @@ export const getCommunityPostById = async (id: string) => {
 
     const dbPostBase = rows[0].community as any;
     const textoNormalizadoBase = dbPostBase.text || dbPostBase.textContent || dbPostBase.text_content || '';
-    const isAppr = String(dbPostBase.approved) === 'true' || dbPostBase.approved === 1 || dbPostBase.approved === true;
+    // 🚀 CORRECCIÓN DE TYPESCRIPT
+    const isAppr = dbPostBase.approved === true || String(dbPostBase.approved).toLowerCase() === 'true';
 
     const postFinal: any = {
       ...rows[0].community,
@@ -507,9 +510,9 @@ export const updateCommunityPost = async (id: string, data: any) => {
     const updated = await db.update(community).set(cleanPayload).where(eq(community.id, cleanId)).returning();
     const postRecord = updated[0] || null;
 
-    // 🚀 NOTIFICACIONES MASIVAS SE DISPARAN AQUÍ: SOLO AL PASAR A APROBADO
-    const isApprovedNow = String(cleanPayload.approved).toLowerCase() === 'true' || cleanPayload.approved === true || cleanPayload.approved === 1;
-    const wasApprovedBefore = existing && (String(existing.approved).toLowerCase() === 'true' || existing.approved === true );
+    // 🚀 CORRECCIÓN TYPESCRIPT Y LÓGICA DE APROBACIÓN
+    const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true';
+    const wasApprovedBefore = existing && (existing.approved === true || String(existing.approved).toLowerCase() === 'true');
 
     if (isApprovedNow && !wasApprovedBefore && postRecord) {
       console.log("✅ [DEBUG PUSH COMUNIDAD] Post aprobado por admin. Calculando usuarios en zona...");

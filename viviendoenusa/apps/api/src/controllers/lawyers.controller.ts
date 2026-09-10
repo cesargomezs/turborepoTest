@@ -39,9 +39,10 @@ const getCoordsFromZip = (zip: string) => {
   return { lat: 34.0934, lng: -117.5847 };
 };
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -89,7 +90,6 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 
     const messages = [];
 
-    // 🚀 BUCLE DINÁMICO: Consultamos las no leídas de cada usuario antes de armar el paquete
     for (const device of devices) {
       const [unreadResult] = await db.select({
         count: sql<number>`count(*)`
@@ -109,7 +109,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         sound: 'default',
         title: payload.title,
         body: payload.body,
-        badge: unreadCount, // 🔴 ¡Globito dinámico real para abogados!
+        badge: unreadCount, 
         data: { type: "lawyer", referenceId: payload.referenceId },
       });
     }
@@ -183,8 +183,12 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       const lawyerId = row.lawyers.id;
 
       if (!lawyersMap.has(lawyerId)) {
+        // 🚀 CORRECCIÓN DE TYPESCRIPT: Solo booleano o string 'true'
+        const isAppr = row.lawyers.approved === true || String(row.lawyers.approved).toLowerCase() === 'true';
         lawyersMap.set(lawyerId, {
           ...row.lawyers,
+          approved: isAppr,
+          status: isAppr ? 'approved' : 'pending',
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
           reviews: [], 
@@ -267,8 +271,14 @@ export const getLawyerByIdWithReviews = async (id: string) => {
   
     if (!rows || rows.length === 0) return null;
   
+    const dbLawyer = rows[0].lawyers;
+    // 🚀 CORRECCIÓN DE TYPESCRIPT: Solo booleano o string 'true'
+    const isAppr = dbLawyer.approved === true || String(dbLawyer.approved).toLowerCase() === 'true';
+
     const lawyerFinal: any = {
-      ...rows[0].lawyers, 
+      ...dbLawyer, 
+      approved: isAppr,
+      status: isAppr ? 'approved' : 'pending',
       reviews: [],
       payments: rows[0].payments?.amount,
       totalRating: 0,
@@ -356,7 +366,7 @@ const sendTelegramAlert = async (lawyerName: string, refCode: string, method: st
 };
 
 // =====================================================================
-// 📥 3. CREAR ABOGADO (CUPÓN DIRECTO + FECHA + NOTIFICACIONES MASIVAS)
+// 📥 3. CREAR ABOGADO (NACE PENDIENTE + ALERTA TELEGRAM)
 // =====================================================================
 export const createLawyer = async (data: any) => {
   try {
@@ -381,14 +391,10 @@ export const createLawyer = async (data: any) => {
       const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
       const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
-
-      // 🚀 EXTRAER EL CÓDIGO REAL LIMPIO
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-      let isApproved = false;
       let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
-      // 🚀 VALIDACIÓN DEL CUPÓN
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
@@ -401,9 +407,7 @@ export const createLawyer = async (data: any) => {
           throw new Error("Este cupón ya fue utilizado anteriormente.");
         }
 
-        // 🚀 Nace inactivo para pasar revisión Apple
-        isApproved = false;
-        customMessage = "¡Cupón aplicado! Perfil recibido con éxito. Nuestro equipo lo revisará y será publicado en las próximas 24 horas.";
+        customMessage = "¡Cupón aplicado! Perfil recibido con éxito y pendiente de revisión.";
       }
 
       const lawyerPayload: any = {
@@ -419,11 +423,8 @@ export const createLawyer = async (data: any) => {
         lng: data.lng ? Number(data.lng) : lng, 
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
         userId: validUserId, 
-        approved: isApproved, 
+        approved: false, 
         estate: finalEstate,
-        // 🚀 MAGIA NATIVA POSTGRES
-        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
-        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
       };
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
@@ -465,7 +466,8 @@ export const createLawyer = async (data: any) => {
 
       return {
          ...newLawyer,
-         timepostEnd: newLawyer.timepostEnd || null,
+         approved: false,
+         status: 'pending',
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
@@ -474,7 +476,6 @@ export const createLawyer = async (data: any) => {
       };
     });
 
-    // 🚀 ALERTA DE TELEGRAM PARA TODOS LOS REGISTROS (CUPÓN O PAGO)
     if (createdLawyerResult) {
       sendTelegramAlert(
         createdLawyerResult.nameLawy, 
@@ -495,7 +496,7 @@ export const createLawyer = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR ABOGADO Y NOTIFICAR
+// 🔄 4. ACTUALIZAR ABOGADO (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
 export const updateLawyer = async (id: string, data: any) => {
   try {
@@ -543,7 +544,8 @@ export const updateLawyer = async (id: string, data: any) => {
         updatePayload.imageUrl = data.imageUrl.replace('lawyers/', '');
       }
 
-      const isApproved = String(data.approved).toLowerCase() === 'true';
+      // 🚀 CORRECCIÓN DE TYPESCRIPT: Solo booleano o string 'true'
+      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
 
       if (isApproved) {
         updatePayload.approved = true; 
@@ -624,6 +626,7 @@ export const updateLawyer = async (id: string, data: any) => {
             return payload;
           });
 
+          // 🚀 SE INSERTA CORRECTAMENTE USANDO LA IMPORTACIÓN DE NOTIFICATIONS DEL SCHEMA
           await tx.insert(notifications).values(notificationsToInsert);
 
           pushNotificationData = {

@@ -34,9 +34,10 @@ const radiusMiles = process.env.RADIUMILE || 20;
 
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -205,7 +206,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       const supportId = row.support.id;
 
       if (!supportsMap.has(supportId)) {
-        const isAppr = String(row.support.approved) === 'true' || row.support.approved === true ;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isAppr = row.support.approved === true || String(row.support.approved).toLowerCase() === 'true';
         supportsMap.set(supportId, {
           ...row.support,
           approved: isAppr,
@@ -292,7 +294,8 @@ export const getSupportById = async (id: string) => {
     if (!rows || rows.length === 0) return null;
   
     const dbSupport = rows[0].support;
-    const isAppr = String(dbSupport.approved) === 'true' || dbSupport.approved === true ;
+    // 🚀 CORRECCIÓN DE TYPESCRIPT
+    const isAppr = dbSupport.approved === true || String(dbSupport.approved).toLowerCase() === 'true';
 
     const supportFinal: any = {
       ...dbSupport, 
@@ -511,7 +514,8 @@ export const updateSupport = async (id: string, data: any) => {
         updatePayload.imageSupp = data.imageSupp.replace('support/', '');
       }
 
-      const isApproved = String(data.approved).toLowerCase() === 'true' || data.approved === true || data.approved === 1;
+      // 🚀 CORRECCIÓN DE TYPESCRIPT
+      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
 
       if (isApproved) {
         updatePayload.approved = true; 

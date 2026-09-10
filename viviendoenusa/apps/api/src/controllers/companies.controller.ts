@@ -10,8 +10,10 @@ const NOMBRE_BUCKET = 'images';
 
 const TEMP_USER_ID = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -388,7 +390,8 @@ export const updateCompany = async (id: string, data: any) => {
         updatePayload.logoUrl = data.logoUrl.replace('companies/', '');
       }
 
-      const isApproved = String(data.approved).toLowerCase() === 'true';
+      // 🚀 CORRECCIÓN TYPESCRIPT
+      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
 
       if (isApproved) {
         updatePayload.status = 'approved';

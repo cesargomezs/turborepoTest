@@ -34,9 +34,10 @@ const getCoordsFromZip = (zip: string) => {
   return { lat: 34.0934, lng: -117.5847 };
 };
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
-  if (typeof str !== 'string') return null;
+  if (!str) return null;
+  if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
@@ -195,7 +196,8 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       const itemId = row.entrepreneurship.id;
 
       if (!itemsMap.has(itemId)) {
-        const isAppr = String(row.entrepreneurship.approved) === 'true' || row.entrepreneurship.approved === true ;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isAppr = row.entrepreneurship.approved === true || String(row.entrepreneurship.approved).toLowerCase() === 'true';
         itemsMap.set(itemId, {
           ...row.entrepreneurship,
           approved: isAppr,
@@ -306,7 +308,8 @@ export const getEntrepreneurshipById = async (id: string, userId?: string) => {
     if (!rows || rows.length === 0) return null;
   
     const dbItem = rows[0].entrepreneurship;
-    const isAppr = String(dbItem.approved) === 'true' || dbItem.approved === true ;
+    // 🚀 CORRECCIÓN DE TYPESCRIPT
+    const isAppr = dbItem.approved === true || String(dbItem.approved).toLowerCase() === 'true';
 
     const itemFinal: any = {
       ...dbItem, 
@@ -461,7 +464,7 @@ export const updateEntrepreneurship = async (id: string, data: any) => {
     const record = updated[0] || null;
 
     // 🚀 NOTIFICACIONES MASIVAS SE DISPARAN AQUÍ: SOLO AL PASAR A APROBADO
-    const isApprovedNow = data.approved === true || String(data.approved).toLowerCase() === 'true' || data.approved === 1;
+    const isApprovedNow = data.approved === true || String(data.approved).toLowerCase() === 'true';
     const wasApprovedBefore = existing && (existing.approved === true || String(existing.approved).toLowerCase() === 'true');
 
     if (isApprovedNow && !wasApprovedBefore && record) {
@@ -683,7 +686,8 @@ export const getEntrepreneurshipsByIds = async (ids: string[], userId?: string) 
     for (const row of rows) {
       const itemId = row.entrepreneurship.id;
       if (!itemsMap.has(itemId)) {
-        const isAppr = String(row.entrepreneurship.approved) === 'true' || row.entrepreneurship.approved === true ;
+        // 🚀 CORRECCIÓN DE TYPESCRIPT
+        const isAppr = row.entrepreneurship.approved === true || String(row.entrepreneurship.approved).toLowerCase() === 'true';
         itemsMap.set(itemId, { 
           ...row.entrepreneurship, 
           approved: isAppr,
