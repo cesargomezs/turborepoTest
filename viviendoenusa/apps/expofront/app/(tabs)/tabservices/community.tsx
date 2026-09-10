@@ -245,7 +245,7 @@ export default function CommunityScreen() {
       
       let url = '';
       if (isAdminMode) {
-        url = `${API_COMMUNITY_URL}`; // El Admin puede traer todo para filtrar pendientes
+        url = `${API_COMMUNITY_URL}?userId=${currentUserId}`; // El Admin puede traer todo para filtrar pendientes
       } else {
         if (!searchZip || searchZip.length !== 5) {
           setLoadingPosts(false);
@@ -301,7 +301,7 @@ export default function CommunityScreen() {
           setPosts(approvedOrOwned.filter(p => searchZip ? p.zip === searchZip : true)); 
         } else {
           setPosts(approvedOrOwned);
-          setPendingPosts([]);
+          setPendingPosts(purelyPending);
         }
         
         const commentsMap: Record<string, any[]> = {};
@@ -333,7 +333,7 @@ export default function CommunityScreen() {
     }
   };
 
-  // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
+  // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA O MODO
   useFocusEffect(
     useCallback(() => {
       if (isAdminMode) {
@@ -347,7 +347,6 @@ export default function CommunityScreen() {
   // 🚀 DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa en la pantalla
       if (nextAppState === 'active' && isFocused) {
         if (isAdminMode || (zipCode && zipCode.length === 5)) {
           fetchCommunityPosts(zipCode);
@@ -522,7 +521,6 @@ export default function CommunityScreen() {
         fetchCommunityPosts(targetZip);
       }
 
-      // 🚀 ALERTA DINÁMICA CON EL MENSAJE DEL BACKEND
       setTimeout(() => {
         const msg = responseData.message || "Tu publicación ha sido enviada con éxito y está en revisión.";
         triggerAlert('¡Aviso!', msg);
@@ -754,14 +752,16 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 CONTROLES DE ADMINISTRADOR EN EL HEADER */}
+                {/* 🚀 BOTÓN DE ADMINISTRADOR CON CONTADOR FLOTANTE */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <TouchableOpacity onPress={() => { setPosts([]); setPendingPosts([]); setZipCode(''); fetchCommunityPosts(zipCode); }}>
-                      <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
-                  </TouchableOpacity>
                   {isAdmin && (
-                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)}>
-                      <MaterialCommunityIcons name="shield-account" size={32} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
+                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)} style={{ position: 'relative', padding: 4 }}>
+                      <MaterialCommunityIcons name="account-group-outline" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{ opacity: isAdminMode ? 1 : 0.2 }} />
+                      {pendingPosts.length > 0 && (
+                        <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
+                          <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingPosts.length}</ThemedText>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   )}
                 </View>
@@ -912,50 +912,55 @@ export default function CommunityScreen() {
 
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                       
-                      {/* 🚀 VISTA DE PENDIENTES PARA EL ADMINISTRADOR */}
-                      {isAdminMode && pendingPosts.length > 0 && (
-                        <View style={{ marginBottom: 20 }}>
-                          <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15, fontSize: 16 }}>
-                            Pendientes de Revisión ({pendingPosts.length})
-                          </ThemedText>
-                          {pendingPosts.map(post => (
-                            <View key={post.id} style={[styles.postCard, isLargeWeb ? { width: '48.5%', marginBottom: 20, alignSelf: 'flex-start' } : { marginBottom: 20 }, { borderColor: '#FFB74D', borderWidth: 1 }]}>
-                              <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
-                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color="#FFB74D" />
-                                <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 12 }}>
-                                  Esperando aprobación (Admin)
-                                </ThemedText>
-                              </View>
-                              
-                              <View style={styles.postHeaderRow}>
-                                <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
-                                <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
-                              </View>
-                              <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20 }]}>{post.text}</ThemedText>
-                              
-                              {post.image && (
-                                <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
-                                  <Image source={{ uri: post.image }} style={[styles.postImage, isLargeWeb ? { width: '100%', height: 250, resizeMode: 'cover', borderRadius: 16, marginTop: 10 } : {}]} />
-                                </TouchableOpacity>
-                              )}
-
-                              <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15, paddingHorizontal: 15, paddingBottom: 15 }}>
-                                <TouchableOpacity onPress={() => rejectCommunityPost(post.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}>
-                                  <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => approveCommunityPost(post.id)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}>
-                                  <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText>
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
-                      {/* VISTA NORMAL DE POSTS */}
                       {loadingPosts ? (
                         <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 50 }} />
-                      ) : (!zipCode || zipCode.length < 5) && !isAdminMode ? (
+                      ) : isAdminMode ? (
+                        <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
+                          {pendingPosts.length === 0 ? (
+                            <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30, width: '100%' }}>
+                              <MaterialCommunityIcons name="shield-check" size={60} color={Colors.subtext} style={{marginBottom: 15}} />
+                              <ThemedText style={{ textAlign: 'center', color: Colors.text, fontSize: 16, fontWeight: '800' }}>
+                                ¡Todo al día!
+                              </ThemedText>
+                              <ThemedText style={{ textAlign: 'center', color: Colors.subtext, fontSize: 14, marginTop: 8 }}>
+                                No hay publicaciones pendientes de aprobación.
+                              </ThemedText>
+                            </View>
+                          ) : (
+                            pendingPosts.map(post => (
+                              <View key={post.id} style={[styles.postCard, isLargeWeb ? { width: '48.5%', marginBottom: 20, alignSelf: 'flex-start' } : { marginBottom: 20 }, { borderColor: '#FFB74D', borderWidth: 1 }]}>
+                                <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+                                  <MaterialCommunityIcons name="shield-alert-outline" size={18} color="#FFB74D" />
+                                  <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 12 }}>
+                                    Esperando aprobación (Admin)
+                                  </ThemedText>
+                                </View>
+                                
+                                <View style={styles.postHeaderRow}>
+                                  <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
+                                  <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
+                                </View>
+                                <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20 }]}>{post.text}</ThemedText>
+                                
+                                {post.image && (
+                                  <TouchableOpacity onPress={() => { setImageToView(post.image); setViewerVisible(true); }}>
+                                    <Image source={{ uri: post.image }} style={[styles.postImage, isLargeWeb ? { width: '100%', height: 250, resizeMode: 'cover', borderRadius: 16, marginTop: 10 } : {}]} />
+                                  </TouchableOpacity>
+                                )}
+
+                                <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15, paddingHorizontal: 15, paddingBottom: 15 }}>
+                                  <TouchableOpacity onPress={() => rejectCommunityPost(post.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                    <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity onPress={() => approveCommunityPost(post.id)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                    <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+                            ))
+                          )}
+                        </View>
+                      ) : (!zipCode || zipCode.length < 5) ? (
                         <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
                           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
                             <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.subtext} />

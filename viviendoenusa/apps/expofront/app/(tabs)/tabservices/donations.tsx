@@ -124,6 +124,12 @@ export default function DonationsScreen() {
     }
   }, [userToken]);
 
+  // 🚀 VARIABLES DE ADMINISTRADOR
+  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [pendingDonations, setPendingDonations] = useState<any[]>([]);
+
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
   const currentUserName = userMetadata?.name || 'Usuario';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
@@ -187,10 +193,14 @@ export default function DonationsScreen() {
 
   // 🚀 FETCH (CON REFRESH AL VUELO DE SUPABASE Y PASANDO EL USER_ID)
   const fetchDonations = async (searchZip?: string) => {
-    if (!searchZip || searchZip.trim().length !== 5) return;
     try {
       setIsLoadingPosts(true);
-      const res = await fetch(`${API_DONATIONS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`, {
+      let url = `${API_DONATIONS_URL}?userId=${currentUserId}`;
+      if (searchZip && searchZip.trim().length === 5) {
+        url += `&zip=${searchZip.trim()}`;
+      }
+
+      const res = await fetch(url, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${userToken}`,
@@ -213,9 +223,15 @@ export default function DonationsScreen() {
             status: isAppr ? 'approved' : 'pending'
           };
         }));
-        setDonations(mappedData);
+        
+        const approvedOrOwned = mappedData.filter(d => d.status === 'approved' || d.userId === currentUserId);
+        const purelyPending = mappedData.filter(d => d.status === 'pending');
+
+        setDonations(approvedOrOwned);
+        setPendingDonations(purelyPending);
       } else {
         setDonations([]);
+        setPendingDonations([]);
       }
     } catch (e) {
       console.error("Error obteniendo donaciones:", e);
@@ -226,18 +242,14 @@ export default function DonationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (zipCode && zipCode.length === 5) {
-        fetchDonations(zipCode);
-      }
+      fetchDonations(zipCode);
     }, [zipCode])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (zipCode && zipCode.length === 5) {
-          fetchDonations(zipCode);
-        }
+        fetchDonations(zipCode);
       }
     });
 
@@ -247,6 +259,42 @@ export default function DonationsScreen() {
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) window.alert(`${title}\n${message}`); 
     else Alert.alert(title, message);
+  };
+
+  // =====================================================================
+  // 🚀 ACCIONES DE ADMINISTRADOR (Aprobar y Rechazar)
+  // =====================================================================
+  const approveDonation = async (id: string) => {
+    try {
+      const response = await fetch(`${API_DONATIONS_URL}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+        body: JSON.stringify({ approved: true })
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      if (!response.ok) throw new Error("Error al aprobar");
+      
+      fetchDonations(zipCode);
+      Alert.alert("Aprobado", "La donación ya está visible para la comunidad.");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo aprobar la donación.");
+    }
+  };
+
+  const rejectDonation = async (id: string) => {
+    try {
+      const response = await fetch(`${API_DONATIONS_URL}/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      if (!response.ok) throw new Error("Error al rechazar");
+      
+      setPendingDonations(prev => prev.filter(d => d.id !== id));
+      Alert.alert("Rechazado", "La donación fue eliminada.");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo eliminar la donación.");
+    }
   };
 
   const handleCategorySelect = (index: number) => {
@@ -380,7 +428,7 @@ export default function DonationsScreen() {
       const newEntryLocal = {
         ...savedFromDB,
         image: formImage,
-        status: 'pending' // Nace pendiente para la vista local
+        status: 'pending'
       };
 
       setDonations(prev => [newEntryLocal, ...prev]);
@@ -413,13 +461,10 @@ export default function DonationsScreen() {
   const filteredDonations = useMemo(() => {
     return donations.filter(item => {
       const title = item.title || '';
-      const isApprovedOrOwned = item.status === 'approved' || item.status === 'pending' || item.userId === currentUserId;
-                              
-      return isApprovedOrOwned && 
-             (selectedCategoryIdx === 0 || Number(item.categoryIdx) === selectedCategoryIdx) && 
+      return (selectedCategoryIdx === 0 || Number(item.categoryIdx) === selectedCategoryIdx) && 
              title.toLowerCase().includes(searchQuery.toLowerCase());
     });
-  }, [donations, selectedCategoryIdx, searchQuery, currentUserId]);
+  }, [donations, selectedCategoryIdx, searchQuery]);
 
   const isFormValid = !!(formTitle.trim() && formImage && formPhone.trim() && formZip.length === 5);
 
@@ -448,11 +493,7 @@ export default function DonationsScreen() {
                     value={zipCode} 
                     onChangeText={(text) => {
                       setZipCode(text);
-                      if (text.length < 5) {
-                        if (donations.length > 0) setDonations([]); 
-                      } else if (text.length === 5) {
-                        fetchDonations(text); 
-                      }
+                      if (text.length === 5) fetchDonations(text); 
                     }} 
                     onSubmitEditing={() => zipCode.length === 5 && fetchDonations(zipCode)} 
                     placeholderTextColor={DynamicColors.subtext} 
@@ -462,9 +503,27 @@ export default function DonationsScreen() {
                       {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={zipCode.length === 5 ? "#fff" : DynamicColors.iconInactive} />}
                     </LinearGradient>
                   </TouchableOpacity>
-                  
                 </View>
-                <MaterialCommunityIcons name="hand-heart" size={40} color={DynamicColors.text} style={{opacity: 0.15, paddingLeft: 5}} />
+
+                {/* 🚀 BOTÓN DE ADMINISTRADOR CON CONTADOR FLOTANTE */}
+                {isAdmin && (
+                  <TouchableOpacity 
+                    onPress={() => setIsAdminMode(!isAdminMode)} 
+                    style={{ position: 'relative', padding: 4, marginLeft: 5 }}
+                  >
+                    <MaterialCommunityIcons 
+                      name="hand-heart"
+                      size={40} 
+                      color={isAdminMode ? '#FF5F6D' : DynamicColors.text} 
+                      style={{ opacity: isAdminMode ? 1 : 0.6 }} 
+                    />
+                    {pendingDonations.length > 0 && (
+                      <View style={{ position: 'absolute', top: -2, right: -4, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent' }}>
+                        <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingDonations.length}</ThemedText>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
 
               </View>
 
@@ -498,79 +557,108 @@ export default function DonationsScreen() {
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
                   
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, paddingHorizontal: 16, height: 52 }}>
-                    <MaterialCommunityIcons name="magnify" size={22} color={DynamicColors.subtext} style={{ marginRight: 10 }} />
-                    <TextInput 
-                      style={{ flex: 1, color: DynamicColors.text, fontSize: 15, height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                      placeholder={(t.donationstab as any)?.placeholInput || 'Buscar...'} value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={DynamicColors.subtext} 
-                    />
-                  </View>
+                  {!isAdminMode && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, marginBottom: 15, paddingHorizontal: 16, height: 52 }}>
+                      <MaterialCommunityIcons name="magnify" size={22} color={DynamicColors.subtext} style={{ marginRight: 10 }} />
+                      <TextInput 
+                        style={{ flex: 1, color: DynamicColors.text, fontSize: 15, height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                        placeholder={(t.donationstab as any)?.placeholInput || 'Buscar...'} value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={DynamicColors.subtext} 
+                      />
+                    </View>
+                  )}
 
                   {!isLargeWeb && (
                     <View style={{ marginBottom: 15 }}>
-                      {isWeb ? (
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                          {CATEGORY_LABELS.map((catLabel: string, index: number) => {
-                            const isActive = selectedCategoryIdx === index;
-                            const iconName = ICONS_ARRAY[index] || 'tag';
-                            return (
-                              <TouchableOpacity 
-                                key={index} 
-                                onPress={() => handleCategorySelect(index)} 
-                                style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}
-                              >
-                                {isActive ? (
-                                  <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{catLabel}</ThemedText>
-                                  </LinearGradient>
-                                ) : (
-                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                                    <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{catLabel}</ThemedText>
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      ) : (
-                        <ScrollView 
-                          horizontal 
-                          showsHorizontalScrollIndicator={false} 
-                          contentContainerStyle={{ paddingVertical: 2, paddingHorizontal: 2, flexDirection: 'row', gap: 8 }}
-                        >
-                          {CATEGORY_LABELS.map((catLabel: string, index: number) => {
-                            const isActive = selectedCategoryIdx === index;
-                            const iconName = ICONS_ARRAY[index] || 'tag';
-                            return (
-                              <TouchableOpacity 
-                                key={index} 
-                                onPress={() => handleCategorySelect(index)} 
-                                style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}
-                              >
-                                {isActive ? (
-                                  <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
-                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{catLabel}</ThemedText>
-                                  </LinearGradient>
-                                ) : (
-                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
-                                    <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{catLabel}</ThemedText>
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-                      )}
+                      <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        contentContainerStyle={{ paddingVertical: 2, paddingHorizontal: 2, flexDirection: 'row', gap: 8 }}
+                      >
+                        {CATEGORY_LABELS.map((catLabel: string, index: number) => {
+                          const isActive = selectedCategoryIdx === index;
+                          const iconName = ICONS_ARRAY[index] || 'tag';
+                          return (
+                            <TouchableOpacity 
+                              key={index} 
+                              onPress={() => handleCategorySelect(index)} 
+                              style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}
+                            >
+                              {isActive ? (
+                                <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}>
+                                  <MaterialCommunityIcons name={iconName as any} size={14} color="#FFF" style={{ marginRight: 5 }} />
+                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{catLabel}</ThemedText>
+                                </LinearGradient>
+                              ) : (
+                                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: DynamicColors.categoryUnselected }}>
+                                  <MaterialCommunityIcons name={iconName as any} size={14} color={DynamicColors.iconInactive} style={{ marginRight: 5 }} />
+                                  <ThemedText style={{ color: DynamicColors.iconInactive, fontWeight: '600', fontSize: 12 }}>{catLabel}</ThemedText>
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
                     </View>
                   )}
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
                     {isLoadingPosts ? (
                        <ActivityIndicator size="large" color="#FF5F6D" style={{ marginTop: 50 }} />
+                    ) : isAdminMode ? (
+                      /* 🚀 VISTA EXCLUSIVA DE PENDIENTES PARA EL ADMINISTRADOR */
+                      <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
+                        {pendingDonations.length === 0 ? (
+                          <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30, width: '100%' }}>
+                            <MaterialCommunityIcons name="shield-check" size={60} color={DynamicColors.subtext} style={{marginBottom: 15}} />
+                            <ThemedText style={{ textAlign: 'center', color: DynamicColors.text, fontSize: 18, fontWeight: '800' }}>
+                              ¡Todo al día!
+                            </ThemedText>
+                            <ThemedText style={{ textAlign: 'center', color: DynamicColors.subtext, fontSize: 14, marginTop: 8 }}>
+                              No hay donaciones pendientes de aprobación.
+                            </ThemedText>
+                          </View>
+                        ) : (
+                          pendingDonations.map(item => (
+                            <View key={item.id} style={[stylesUnified.postCard, { marginBottom: 20, padding: 0, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: '#FFB74D', borderRadius: 28 }]}>
+                              <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color="#FFB74D" />
+                                <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 12 }}>
+                                  Esperando aprobación (Admin)
+                                </ThemedText>
+                              </View>
+                              
+                              <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center' }}>
+                                <LinearGradient colors={orangeGradient} style={{ width: 32, height: 32, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}>
+                                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>{(item.ownerName || 'U').charAt(0).toUpperCase()}</ThemedText>
+                                </LinearGradient>
+                                <View style={{ marginLeft: 10, flex: 1 }}>
+                                  <ThemedText style={{ fontSize: 14, fontWeight: '800', color: DynamicColors.text }}>{item.ownerName || 'Usuario'}</ThemedText>
+                                </View>
+                              </View>
+
+                              {item.image && (
+                                <TouchableOpacity onPress={() => { setImageToView(item.image); setViewerVisible(true); }}>
+                                  <Image source={{ uri: item.image }} style={{ width: '100%', aspectRatio: 16 / 10 }} resizeMode="cover" />
+                                </TouchableOpacity>
+                              )}
+
+                              <View style={{ padding: 15 }}>
+                                <ThemedText style={{ fontSize: 18, fontWeight: '800', color: DynamicColors.text }}>{item.title}</ThemedText>
+                                <ThemedText style={{ fontSize: 13, color: DynamicColors.text, opacity: 0.7, marginTop: 6 }}>{item.descriptionDon || item.description}</ThemedText>
+                                
+                                <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
+                                  <TouchableOpacity onPress={() => rejectDonation(item.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                    <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity onPress={() => approveDonation(item.id)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                    <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+                            </View>
+                          ))
+                        )}
+                      </View>
                     ) : (!zipCode || zipCode.length < 5) ? (
                       <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
                         <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>

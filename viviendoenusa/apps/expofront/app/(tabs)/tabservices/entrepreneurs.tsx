@@ -302,9 +302,12 @@ export default function EntrepreneurshipScreen() {
   const fetchEntrepreneurships = async (searchZip: string) => {
     try {
       setLoading(true);
-      const url = isAdminMode 
-        ? `${API_ENTREPRENEURSHIP_URL}` 
-        : `${API_ENTREPRENEURSHIP_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`;
+      
+      // 🚀 CORRECCIÓN: Si estamos en modo admin, no exigimos ZIP y traemos todo de golpe
+      let url = `${API_ENTREPRENEURSHIP_URL}?userId=${currentUserId}`;
+      if (!isAdminMode && searchZip && searchZip.trim().length === 5) {
+        url += `&zip=${searchZip.trim()}`;
+      }
 
       const res = await fetch(url, {
         method: 'GET',
@@ -345,13 +348,11 @@ export default function EntrepreneurshipScreen() {
           };
         }));
         
-        if (isAdminMode) {
-          setPendingItems(mappedData.filter(i => i.status === 'pending'));
-          setLocalData(mappedData.filter(i => i.status === 'approved' || i.userId === currentUserId));
-        } else {
-          setLocalData(mappedData);
-          setPendingItems([]);
-        }
+        const approvedOrOwned = mappedData.filter(i => i.status === 'approved' || i.userId === currentUserId);
+        const purelyPending = mappedData.filter(i => i.status === 'pending');
+
+        setLocalData(approvedOrOwned);
+        setPendingItems(purelyPending);
         return mappedData;
       }
       return [];
@@ -439,9 +440,7 @@ export default function EntrepreneurshipScreen() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (isAdminMode) {
-          fetchEntrepreneurships('');
-        } else if (showSavedOnly) {
+        if (showSavedOnly) {
           fetchSavedItems();
         } else if (isZipValid) {
           fetchEntrepreneurships(zipCode);
@@ -450,17 +449,17 @@ export default function EntrepreneurshipScreen() {
     });
 
     return () => subscription.remove();
-  }, [isFocused, showSavedOnly, zipCode, isZipValid, isAdminMode]);
+  }, [isFocused, showSavedOnly, zipCode, isZipValid]);
 
   const handleSearch = async (forcedCategoryIdx?: number) => {
-    if (!isZipValid && !isAdminMode) return;
+    if (!isZipValid) return;
     if (showSavedOnly) return; 
     await fetchEntrepreneurships(zipCode);
   };
 
   const handleZipChange = (text: string) => {
     setZipCode(text);
-    if (text.length < 5 && !isAdminMode) {
+    if (text.length < 5) {
       setResults([]);
       setLocalData([]);
       setPendingItems([]);
@@ -692,7 +691,7 @@ export default function EntrepreneurshipScreen() {
         reviews: [],
         contactMethod: savedFromDB.contactMethod, 
         zip: savedFromDB.zip, 
-        status: 'pending', // 🚀 Nace pendiente
+        status: 'pending',
         userId: currentUserId,
         estate: savedFromDB.estate
       } as Emprendimiento;
@@ -715,7 +714,7 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  const approveItem = async (item: any, durationMonths: number) => {
+  const approveItem = async (item: any) => {
     try {
       const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/${item.id}`, {
         method: 'PUT', 
@@ -723,7 +722,7 @@ export default function EntrepreneurshipScreen() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${userToken}`
         },
-        body: JSON.stringify({ approved: true, durationMonths })
+        body: JSON.stringify({ approved: true })
       });
       if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
@@ -753,7 +752,7 @@ export default function EntrepreneurshipScreen() {
     </TouchableOpacity>
   );
 
-  const EmprendimientoCard = ({ item, renderAdminControls }: { item: Emprendimiento, renderAdminControls?: any }) => {
+  const EmprendimientoCard = ({ item }: { item: Emprendimiento }) => {
     const categoryName = CATEGORIES[item.categoryId] || 'Categoría';
     const categoryIcon = CATEGORY_ICONS_DICT[categoryName] || ICONS_ARRAY[item.categoryId] || 'store';
     const isPending = item.status === 'pending';
@@ -770,7 +769,7 @@ export default function EntrepreneurshipScreen() {
         {isPending && (
           <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" />
-            <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>En revisión. Será publicado pronto.</ThemedText>
+            <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>En revisión. Solo tú puedes ver esto por ahora.</ThemedText>
           </View>
         )}
         
@@ -855,30 +854,8 @@ export default function EntrepreneurshipScreen() {
              <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${item.phone}`); } }} icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} text={item.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || 'Llamar')} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} />
           </View>
         </View>
-        {renderAdminControls && renderAdminControls()}
       </TouchableOpacity>
     );
-  };
-
-  const PendingItemCard = ({ item }: { item: any }) => {
-    const [selectedMonths, setSelectedMonths] = useState(1);
-    
-    const adminControls = () => (
-      <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: DC.border, paddingTop: 15, paddingHorizontal: 15, paddingBottom: 15 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-          {[1, 3, 6, 12].map(m => (
-            <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DC.inputBg }}>
-               <Text style={{color: selectedMonths === m ? '#FFFFFF' : DC.text, fontWeight: 'bold', fontSize: 12}}>{m}M</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 5 }}>
-          <TouchableOpacity onPress={() => rejectItem(item.id)} style={{ flex: 1, backgroundColor: '#FF5252', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}><Text style={{color:'#FFFFFF', fontWeight:'800', fontSize: 15}}>Rechazar</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => approveItem(item, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}><Text style={{color:'#FFFFFF', fontWeight:'800', fontSize: 15}}>Aprobar</Text></TouchableOpacity>
-        </View>
-      </View>
-    );
-    return <EmprendimientoCard item={item} renderAdminControls={adminControls} />;
   };
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
@@ -915,15 +892,20 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 CONTROLES DE ADMINISTRADOR EN EL HEADER */}
+                {/* 🚀 BOTÓN DE ADMINISTRADOR CON CONTADOR FLOTANTE */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)}>
                     <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6 }} />
                   </TouchableOpacity>
                   
                   {isAdmin && (
-                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)}>
-                      <MaterialCommunityIcons name="shield-account" size={32} color={isAdminMode ? '#FF5F6D' : DC.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 2}} />
+                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)} style={{ position: 'relative', padding: 4, marginLeft: 2 }}>
+                      <MaterialCommunityIcons name="lightbulb-multiple-outline" size={40} color={isAdminMode ? '#FF5F6D' : DC.text} style={{ opacity: isAdminMode ? 1 : 0.6 }} />
+                      {pendingItems.length > 0 && (
+                        <View style={{ position: 'absolute', top: -2, right: -4, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent' }}>
+                          <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingItems.length}</ThemedText>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   )}
                 </View>
@@ -958,87 +940,96 @@ export default function EntrepreneurshipScreen() {
                 )}
 
                 <View style={{ flex: 1, paddingLeft: isLargeWeb ? 25 : 0 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DC.inputBg, borderRadius: 16, paddingHorizontal: 14, height: 48, borderWidth: 1, borderColor: DC.border, marginBottom: 8 }}>
-                    <MaterialCommunityIcons name="magnify" size={22} color={DC.iconInactive} style={{ marginRight: 10 }} />
-                    <TextInput value={searchText} onChangeText={setSearchText} placeholder={t.entrepreneurshiptab?.searchentrepre} placeholderTextColor={DC.iconInactive} style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '300', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                    {searchText.length > 0 && ( <TouchableOpacity onPress={() => setSearchText('')} style={{ padding: 4 }}><MaterialCommunityIcons name="close-circle" size={20} color={DC.iconInactive} /></TouchableOpacity> )}
-                  </View>
+                  {!isAdminMode && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DC.inputBg, borderRadius: 16, paddingHorizontal: 14, height: 48, borderWidth: 1, borderColor: DC.border, marginBottom: 8 }}>
+                      <MaterialCommunityIcons name="magnify" size={22} color={DC.iconInactive} style={{ marginRight: 10 }} />
+                      <TextInput value={searchText} onChangeText={setSearchText} placeholder={t.entrepreneurshiptab?.searchentrepre} placeholderTextColor={DC.iconInactive} style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '300', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                      {searchText.length > 0 && ( <TouchableOpacity onPress={() => setSearchText('')} style={{ padding: 4 }}><MaterialCommunityIcons name="close-circle" size={20} color={DC.iconInactive} /></TouchableOpacity> )}
+                    </View>
+                  )}
 
-                  {!isLargeWeb && (
+                  {!isLargeWeb && !isAdminMode && (
                     <View style={{ marginBottom: 12 }}>
-                      {isWeb ? (
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                          {CATEGORIES.map((areaName, index) => {
-                            const isActive = selectedCategoryIdx === index;
-                            const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
-                            return (
-                              <TouchableOpacity 
-                                key={index} 
-                                onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)} 
-                                style={{ borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}
-                              >
-                                {isActive ? (
-                                  <LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
-                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{areaName}</ThemedText>
-                                  </LinearGradient>
-                                ) : (
-                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
-                                    <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{areaName}</ThemedText>
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      ) : (
-                        <ScrollView 
-                          horizontal 
-                          showsHorizontalScrollIndicator={false} 
-                          contentContainerStyle={{ gap: 8, paddingBottom: 6 }}
-                        >
-                          {CATEGORIES.map((areaName, index) => {
-                            const isActive = selectedCategoryIdx === index;
-                            const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
-                            return (
-                              <TouchableOpacity 
-                                key={index} 
-                                onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)} 
-                                style={{ flexShrink: 0, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}
-                              >
-                                {isActive ? (
-                                  <LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
-                                    <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{areaName}</ThemedText>
-                                  </LinearGradient>
-                                ) : (
-                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
-                                    <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
-                                    <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{areaName}</ThemedText>
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-                      )}
+                      <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        contentContainerStyle={{ gap: 8, paddingBottom: 6 }}
+                      >
+                        {CATEGORIES.map((areaName, index) => {
+                          const isActive = selectedCategoryIdx === index;
+                          const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
+                          return (
+                            <TouchableOpacity 
+                              key={index} 
+                              onPress={() => setSelectedCategoryIdx(isActive && index !== 0 ? 0 : index)} 
+                              style={{ flexShrink: 0, borderRadius: 14, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}
+                            >
+                              {isActive ? (
+                                <LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
+                                  <MaterialCommunityIcons name={iconName as any} size={15} color="#FFF" style={{ marginRight: 6 }} />
+                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{areaName}</ThemedText>
+                                </LinearGradient>
+                              ) : (
+                                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, backgroundColor: DC.categoryUnselected }}>
+                                  <MaterialCommunityIcons name={iconName as any} size={15} color={DC.iconInactive} style={{ marginRight: 6 }} />
+                                  <ThemedText style={{ color: DC.iconInactive, fontWeight: '600', fontSize: 13 }}>{areaName}</ThemedText>
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
                     </View>
                   )}
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* 🚀 VISTA DE PENDIENTES PARA EL ADMINISTRADOR */}
-                    {isAdminMode && pendingItems.length > 0 && (
-                      <View style={{ marginBottom: 20 }}>
-                        <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15, fontSize: 16 }}>Pendientes de Revisión ({pendingItems.length})</ThemedText>
-                        <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
-                          {pendingItems.map(item => <PendingItemCard key={item.id} item={item} />)}
-                        </View>
-                      </View>
-                    )}
+                    {/* 🚀 VISTA EXCLUSIVA DE PENDIENTES PARA EL ADMINISTRADOR */}
+                    {isAdminMode ? (
+                      <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
+                        {pendingItems.length === 0 ? (
+                          <View style={{ alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30, width: '100%' }}>
+                            <MaterialCommunityIcons name="shield-check" size={60} color={DC.subtext} style={{marginBottom: 15}} />
+                            <ThemedText style={{ textAlign: 'center', color: DC.text, fontSize: 18, fontWeight: '800' }}>
+                              ¡Todo al día!
+                            </ThemedText>
+                            <ThemedText style={{ textAlign: 'center', color: DC.subtext, fontSize: 14, marginTop: 8 }}>
+                              No hay emprendimientos pendientes de aprobación.
+                            </ThemedText>
+                          </View>
+                        ) : (
+                          pendingItems.map(item => (
+                            <View key={item.id} style={[S.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', borderColor: '#FFB74D', borderWidth: 1, marginBottom: 20 }, isLargeWeb ? { width: '48.5%' } : {}]}>
+                              <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color="#FFB74D" />
+                                <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 12 }}>
+                                  Esperando aprobación (Admin)
+                                </ThemedText>
+                              </View>
 
-                    {results.length > 0 ? (
+                              {item.image && (
+                                <Image source={{ uri: item.image }} style={{ width: '100%', height: 160 }} resizeMode="cover" />
+                              )}
+
+                              <View style={{ padding: 15 }}>
+                                <ThemedText style={{ fontSize: 18, fontWeight: '800', color: DC.text }}>{item.name}</ThemedText>
+                                <ThemedText style={{ fontSize: 13, color: DC.subtext, marginTop: 4 }}>{item.address}</ThemedText>
+                                <ThemedText style={{ fontSize: 13, color: DC.text, opacity: 0.8, marginTop: 8 }} numberOfLines={3}>{item.description}</ThemedText>
+
+                                <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, borderTopWidth: 1, borderTopColor: DC.border, paddingTop: 15 }}>
+                                  <TouchableOpacity onPress={() => rejectItem(item.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                    <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Rechazar</ThemedText>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity onPress={() => approveItem(item)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                                    <ThemedText style={{color:'#FFF', fontWeight:'bold'}}>Aprobar</ThemedText>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+                            </View>
+                          ))
+                        )}
+                      </View>
+                    ) : results.length > 0 ? (
                       <>
                         <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore : t.genericbtn?.resultone)}</ThemedText>
                         <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
@@ -1062,7 +1053,7 @@ export default function EntrepreneurshipScreen() {
                       )
                     )}
 
-                    {showSavedOnly && results.length === 0 && (
+                    {showSavedOnly && results.length === 0 && !isAdminMode && (
                         <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                           <MaterialCommunityIcons name="bookmark-off-outline" size={56} color={DC.subtext} />
                           <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14, textAlign: 'center' }}>No tienes emprendimientos guardados aún.</ThemedText>

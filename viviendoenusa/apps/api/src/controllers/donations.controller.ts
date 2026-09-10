@@ -143,22 +143,21 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. OBTENER DONACIONES (CON FILTRO DE DISTANCIA Y APROBACIÓN)
+// 🔍 1. OBTENER DONACIONES (DEVUELVE TODOS LOS PENDIENTES SIN RESTRICCIONES)
 // =====================================================================
-export const getDonations = async (zip?: string, userId?: string) => {
+export const getDonations = async (rawZip?: string | number, userId?: string) => {
   try {
-    const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
+    const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = userId ? sanitizeText(String(userId)) : null;
 
-    if (zip && (!cleanZipParam || cleanZipParam.length !== 5)) return []; 
-
+    // 🚀 IGUAL QUE EN ABOGADOS Y COMUNIDAD: Enviamos todos los registros (aprobados y pendientes)
     let baseConditions = cleanUserId 
-      ? or(eq(donations.approved, true), eq(donations.userId, cleanUserId))
-      : eq(donations.approved, true);
+      ? sql`(${donations.approved} = false OR ${donations.approved} = true OR ${donations.userId} = ${cleanUserId})`
+      : sql`(${donations.approved} = false OR ${donations.approved} = true)`;
 
     let finalConditions: any = baseConditions;
 
-    if (cleanZipParam) {
+    if (cleanZipParam && cleanZipParam.length === 5) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
@@ -179,7 +178,6 @@ export const getDonations = async (zip?: string, userId?: string) => {
       .orderBy(desc(donations.id)); 
 
     const rows = await query;
-    
     if (!rows || rows.length === 0) return [];
 
     const finalDonations = await Promise.all(rows.map(async (row: any) => {
@@ -208,7 +206,8 @@ export const getDonations = async (zip?: string, userId?: string) => {
             ...dbDonation, 
             image: publicUrl, 
             imageUrl: publicUrl,
-            approved: isAppr ? 'approved' : 'pending',
+            approved: isAppr,
+            status: isAppr ? 'approved' : 'pending',
             ownerName: nombreUsuario
         }; 
     }));

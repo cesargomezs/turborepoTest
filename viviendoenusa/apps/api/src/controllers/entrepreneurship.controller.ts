@@ -131,16 +131,29 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (FILTRADA POR APROBACIÓN O DUEÑO)
+// 🔍 1. CONSULTA GENERAL (DEVUELVE TODOS LOS PENDIENTES SIN RESTRICCIONES)
 // =====================================================================
-export const getEntrepreneurships = async (zip?: string, userId?: string) => {
+export const getEntrepreneurships = async (rawZip?: string | number, userId?: string) => {
   try {
-    const cleanZip = zip ? sanitizeText(String(zip)) : null;
+    const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = userId ? sanitizeText(String(userId)) : null;
 
+    // 🚀 OBTENER TODOS LOS REGISTROS (Aprobados y No Aprobados / Pendientes)
     let baseConditions = cleanUserId 
-      ? or(eq(entrepreneurship.approved, true), eq(entrepreneurship.userId, cleanUserId))
-      : eq(entrepreneurship.approved, true);
+      ? sql`(${entrepreneurship.approved} = false OR ${entrepreneurship.approved} = true OR ${entrepreneurship.userId} = ${cleanUserId})`
+      : sql`(${entrepreneurship.approved} = false OR ${entrepreneurship.approved} = true)`;
+
+    let finalConditions: any = baseConditions;
+
+    if (cleanZipParam && cleanZipParam.length === 5) {
+      const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        finalConditions = and(baseConditions, inArray(entrepreneurship.zip, nearbyZips as string[]));
+      } else {
+        finalConditions = and(baseConditions, eq(entrepreneurship.zip, cleanZipParam));
+      }
+    }
 
     let query = db
       .select({
@@ -155,18 +168,8 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       .leftJoin(ratingTable, eq(ratingTable.referenceId, entrepreneurship.id)) 
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
       .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
-      .where(baseConditions)
+      .where(finalConditions)
       .$dynamic(); 
-
-    if (cleanZip && cleanZip.length === 5) {
-      const nearbyZips = zipcodes.radius(cleanZip as any, Number(radiusMiles)); 
-
-      if (nearbyZips && nearbyZips.length > 0) {
-        query = query.where(inArray(entrepreneurship.zip, nearbyZips as string[]));
-      } else {
-        query = query.where(eq(entrepreneurship.zip, cleanZip));
-      }
-    } 
     
     if (userId) {
       query = query.orderBy(
@@ -196,7 +199,9 @@ export const getEntrepreneurships = async (zip?: string, userId?: string) => {
       const itemId = row.entrepreneurship.id;
 
       if (!itemsMap.has(itemId)) {
-        const isAppr = row.entrepreneurship.approved === true || String(row.entrepreneurship.approved).toLowerCase() === 'true';
+        const dbItem = row.entrepreneurship as any;
+        const isAppr = dbItem.approved === true || String(dbItem.approved).toLowerCase() === 'true';
+
         itemsMap.set(itemId, {
           ...row.entrepreneurship,
           approved: isAppr,

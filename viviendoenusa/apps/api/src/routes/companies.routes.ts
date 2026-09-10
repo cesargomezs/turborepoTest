@@ -1,33 +1,42 @@
 import { Router, Response } from 'express';
-import { 
-  getCompanies, 
-  getCompanyById, 
-  createCompany, 
-  updateCompany, 
-  deleteCompany,
-  renewCompany 
-} from '../controllers/companies.controller';
+import {
+  getCommunityPosts,
+  getCommunityPostById,
+  createCommunityPost,
+  createCommunityReview,
+  updateCommunityPost,
+  deleteCommunityPost,
+  handlePostVote 
+} from '../controllers/community.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
-// 🔍 GET: Obtener todas las empresas (Soporta filtro opcional ?userId=...)
+// ==========================================
+// 📌 RUTAS ESTÁTICAS (Van siempre primero)
+// ==========================================
+
+// 🔍 1. OBTENER TODOS LOS POSTS (con filtro opcional de ZIP e inyección del userId del token)
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
+    const zipParam = req.query.zip;
+    const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
+
     const userIdParam = req.query.userId;
-    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined); 
+    const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined);
     
+    // 🚀 Priorizamos el ID del token autenticado para manejar roles y pendientes correctamente
     const currentUserId = req.user?.id || req.user?.userId || queryUserId;
 
-    const companiesList = await getCompanies(currentUserId);
-    return res.status(200).json(companiesList);
+    const posts = await getCommunityPosts(zip, currentUserId);
+    res.json(posts);
   } catch (error: any) {
-    console.error("❌ Error en GET /companies:", error.message);
-    return res.status(500).json({ error: 'Error interno del servidor al obtener las empresas' });
+    console.error("❌ Error en GET /community:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 📥 POST: Registrar una nueva empresa
+// 📥 2. CREAR UN NUEVO POST
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const userIdFromToken = req.user?.id || req.user?.userId;
@@ -36,96 +45,103 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
       userId: userIdFromToken || req.body.userId
     };
 
-    const newCompany = await createCompany(payload);
-    return res.status(201).json(newCompany);
+    const newPost = await createCommunityPost(payload);
+    res.status(201).json(newPost);
   } catch (error: any) {
-    console.error("❌ Error en POST /companies:", error.message);
-    
-    if (error.message.includes("existe") || error.message.includes("unique") || error.message.includes("duplicate")) {
-       return res.status(409).json({ error: error.message });
-    }
-    
-    return res.status(400).json({ error: error.message });
+    console.error("❌ Error en POST /community:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 🔄 POST: Renovar Suscripción de Empresa (Pago)
-router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) => {
+// 📥 3. CREAR UN COMENTARIO (REVIEW)
+router.post('/review', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const idParam = req.params.id;
-    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
-
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
       ...req.body,
       userId: userIdFromToken || req.body.userId
     };
 
-    const renewedCompany = await renewCompany(id, payload);
-    return res.status(200).json(renewedCompany);
+    const newReview = await createCommunityReview(payload);
+    res.status(201).json(newReview);
   } catch (error: any) {
-    console.error(`❌ Error en POST /companies/${req.params.id}/renew:`, error.message);
-    if (error.message.includes("utilizado") || error.message.includes("unique") || error.message.includes("duplicate")) {
-       return res.status(409).json({ error: error.message });
-    }
-    return res.status(400).json({ error: error.message });
+    console.error("❌ Error en POST /community/review:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 🔍 GET: Obtener una empresa específica por ID
+// 🔄 4. PROCESAR UN VOTO (LIKE / DISLIKE) CON RASTREADORES
+router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
+  const userIdFromToken = req.user?.id || req.user?.userId;
+  const { postId, voteType } = req.body;
+  const userId = userIdFromToken || req.body.userId;
+  
+  if (!postId || !userId || !voteType) {
+    console.error("❌ Faltan datos en el body de /vote:", req.body);
+    return res.status(400).json({ error: "Faltan datos obligatorios (postId, userId, voteType)" });
+  }
+
+  try {
+    const result = await handlePostVote(postId, userId, voteType);
+    res.json(result);
+  } catch (error: any) {
+    console.error("❌ Error en el controlador de votos:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// 📌 RUTAS DINÁMICAS (Con /:id - Van al final)
+// ==========================================
+
+// 🔍 5. OBTENER UN POST POR SU ID
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
 
-    const company = await getCompanyById(id);
-    
-    if (!company) {
-      return res.status(404).json({ error: 'Empresa no encontrada' });
+    const post = await getCommunityPostById(id);
+    if (!post) {
+      return res.status(404).json({ error: 'Publicación no encontrada' });
     }
-    
-    return res.status(200).json(company);
+    res.json(post);
   } catch (error: any) {
-    console.error(`❌ Error en GET /companies/${req.params.id}:`, error.message);
-    return res.status(500).json({ error: 'Error al obtener los detalles de la empresa' });
+    console.error(`❌ Error en GET /community/${req.params.id}:`, error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 🔄 PUT: Actualizar perfil de empresa (Ruta corregida con parámetros limpios)
+// 🔄 6. ACTUALIZAR UN POST EXISTENTE (Ruta corregida con argumentos limpios)
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
 
-    const updatedCompany = await updateCompany(id, req.body);
-    
-    if (!updatedCompany) {
-       return res.status(404).json({ error: 'Empresa no encontrada o no se pudo actualizar' });
+    const updatedPost = await updateCommunityPost(id, req.body);
+    if (!updatedPost) {
+      return res.status(404).json({ error: 'Publicación no encontrada para actualizar' });
     }
-    
-    return res.status(200).json(updatedCompany);
+    res.json(updatedPost);
   } catch (error: any) {
-    console.error(`❌ Error en PUT /companies/${req.params.id}:`, error.message);
-    return res.status(400).json({ error: error.message });
+    console.error(`❌ Error en PUT /community/${req.params.id}:`, error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 🗑️ DELETE: Eliminar perfil corporativo
+// 🗑️ 7. ELIMINAR UN POST
 router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
 
-    const deletedCompany = await deleteCompany(id);
-    
-    if (!deletedCompany) {
-      return res.status(404).json({ error: 'Empresa no encontrada' });
+    const deletedPost = await deleteCommunityPost(id);
+    if (!deletedPost) {
+      return res.status(404).json({ error: 'Publicación no encontrada para eliminar' });
     }
-    
-    return res.status(200).json({ message: 'Empresa eliminada correctamente', company: deletedCompany });
+    res.json({ message: 'Publicación eliminada correctamente', post: deletedPost });
   } catch (error: any) {
-    console.error(`❌ Error en DELETE /companies/${req.params.id}:`, error.message);
-    return res.status(400).json({ error: error.message });
+    console.error(`❌ Error en DELETE /community/${req.params.id}:`, error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

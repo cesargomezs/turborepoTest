@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
-import { community, reviews, countlikes, users, notifications, userDevices } from "../../../../packages/db/src/schema"; 
-import { eq, desc, and, sql, inArray } from "drizzle-orm"; 
+import { community, reviews, countlikes, users, notifications, userDevices, typeDetail } from "../../../../packages/db/src/schema"; 
+import { eq, desc, and, sql, inArray, or } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; 
 
@@ -124,15 +124,29 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (Con filtro de Zip Code optimizado y Aprobación)
+// 🔍 1. CONSULTA GENERAL (Ajustada exactamente como en Abogados)
 // =====================================================================
-export const getCommunityPosts = async (zip?: string, userId?: string) => {
+export const getCommunityPosts = async (rawZip?: string | number, currentUserId?: string) => {
   try {
-    const cleanZip = zip ? sanitizeText(String(zip)) : null;
-    const cleanUserId = userId ? sanitizeText(String(userId)) : null;
+    const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const cleanUserId = currentUserId ? sanitizeText(String(currentUserId)) : null;
 
-    if (zip && (!cleanZip || cleanZip.length !== 5)) {
-      return []; 
+    // 🚀 IGUAL QUE EN ABOGADOS: Mandamos todos los pendientes (approved = false) 
+    // sin validar si es admin ni bloquear la consulta. El front-end los aisla.
+    let baseConditions = cleanUserId 
+      ? sql`(${community.approved} = false OR ${community.approved} = true OR ${community.userId} = ${cleanUserId})`
+      : sql`(${community.approved} = false OR ${community.approved} = true)`;
+
+    let finalConditions: any = baseConditions;
+
+    if (cleanZipParam && cleanZipParam.length === 5) {
+      const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        finalConditions = and(baseConditions, inArray(community.zip, nearbyZips as string[]));
+      } else {
+        finalConditions = and(baseConditions, eq(community.zip, cleanZipParam));
+      }
     }
 
     let query = db
@@ -144,25 +158,8 @@ export const getCommunityPosts = async (zip?: string, userId?: string) => {
       .from(community)
       .leftJoin(reviews, eq(reviews.relationshipId, community.id)) 
       .leftJoin(users, eq(reviews.userId, users.id)) 
-      .$dynamic(); 
-
-    if (cleanUserId) {
-      query = query.where(sql`(${community.approved} = true OR ${community.userId} = ${cleanUserId})`);
-    } else {
-      query = query.where(eq(community.approved, true));
-    }
-
-    if (cleanZip) {
-      const nearbyZips = zipcodes.radius(cleanZip as any, Number(radiusMiles)); 
-
-      if (nearbyZips && nearbyZips.length > 0) {
-        query = query.where(inArray(community.zip, nearbyZips as string[]));
-      } else {
-        query = query.where(eq(community.zip, cleanZip));
-      }
-    } 
-    
-    query = query.orderBy(desc(community.id));
+      .where(finalConditions)
+      .orderBy(desc(community.id)); 
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -481,12 +478,27 @@ export const handlePostVote = async (postId: string, userId: string, voteType: '
 };
 
 // =====================================================================
-// 🔄 6. ACTUALIZAR POST (Y DISPARAR NOTIFICACIÓN AL APROBAR)
+// 🔄 6. ACTUALIZAR POST (Y DISPARAR NOTIFICACIÓN AL APROBAR) - BLINDADO
 // =====================================================================
-export const updateCommunityPost = async (id: string, data: any) => {
+export const updateCommunityPost = async (idParam: any, dataParam: any) => {
   try {
-    const cleanId = sanitizeText(id);
+    let rawId = idParam;
+    let data = dataParam;
+
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const cleanId = sanitizeText(rawId);
     if (!cleanId) throw new Error("ID inválido");
+
+    if (!data && idParam && idParam.body) {
+      data = idParam.body;
+    }
 
     const cleanPayload = sanitizePayload(data);
     let pushNotificationData: any = null;
