@@ -523,15 +523,18 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
       throw new Error("Abogado no encontrado");
     }
 
+    // 🚀 CONSULTA LOCAL DIRECTA A DRIZZLE (Adiós al fetch HTTP interno que causaba el fallo en Render)
     let amount = 0;
     try {
-      const resPayments = await fetch(`${process.env.EXPO_PUBLIC_URL_BACKEND || 'http://localhost:3000'}/lawyers/${cleanId}`);
-      if (resPayments.ok) {
-        const responsePayments = await resPayments.json();
-        amount = Number(responsePayments?.payments) || 0;
+      const existingPayment = await db.select().from(payments)
+        .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')))
+        .limit(1);
+      
+      if (existingPayment && existingPayment.length > 0) {
+        amount = Number(existingPayment[0].amount) || 0;
       }
     } catch (err) {
-      console.warn("No se pudo obtener el pago de la API interna, usando 0 por defecto");
+      console.warn("No se pudo obtener el pago localmente, usando 0 por defecto");
     }
 
     let pushNotificationData: any = null;
