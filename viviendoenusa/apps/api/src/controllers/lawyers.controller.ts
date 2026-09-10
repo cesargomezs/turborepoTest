@@ -496,51 +496,25 @@ export const createLawyer = async (data: any) => {
 // =====================================================================
 // 🔄 4. ACTUALIZAR ABOGADO (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
-export const updateLawyer = async (idParam: any, dataParam: any) => {
+export const updateLawyer = async (id: string, data: any) => {
   try {
-    let rawId = idParam;
-    let data = dataParam;
-
-    if (idParam && typeof idParam === 'object') {
-      if (idParam.params && idParam.params.id) {
-        rawId = idParam.params.id; 
-      } else if (idParam.id) {
-        rawId = idParam.id; 
-      }
-    }
-
-    const cleanId = sanitizeText(rawId);
-    if (!cleanId) {
-      throw new Error(`ID inválido recibido: ${JSON.stringify(idParam)}`);
-    }
-
-    if (!data && idParam && idParam.body) {
-      data = idParam.body;
-    }
+    const cleanId = sanitizeText(id);
+    if (!cleanId) throw new Error("ID inválido");
 
     const [existingLawyer] = await db.select().from(lawyers).where(eq(lawyers.id, cleanId));
-    if (!existingLawyer) {
-      throw new Error("Abogado no encontrado");
-    }
+    if (!existingLawyer) throw new Error("Abogado no encontrado");
 
-    // 🚀 CONSULTA LOCAL DIRECTA A DRIZZLE (Adiós al fetch HTTP interno que causaba el fallo en Render)
     let amount = 0;
     try {
       const existingPayment = await db.select().from(payments)
         .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')))
         .limit(1);
-      
-      if (existingPayment && existingPayment.length > 0) {
-        amount = Number(existingPayment[0].amount) || 0;
-      }
-    } catch (err) {
-      console.warn("No se pudo obtener el pago localmente, usando 0 por defecto");
-    }
+      if (existingPayment.length > 0) amount = Number(existingPayment[0].amount) || 0;
+    } catch (err) {}
 
     let pushNotificationData: any = null;
 
     const updatedLawyerResult = await db.transaction(async (tx) => {
-      
       const updatePayload: any = {};
 
       if (data) {
@@ -577,27 +551,20 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
         let monthsToAdd = 1; 
         if (data && data.durationMonths) {
           const parsedMonths = Number(data.durationMonths);
-          if (!isNaN(parsedMonths)) {
-            monthsToAdd = parsedMonths;
-          }
+          if (!isNaN(parsedMonths)) monthsToAdd = parsedMonths;
         }
         
         const expirationDate = new Date();
         expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
         
         updatePayload.timepostEnd = expirationDate; 
+        if ('timepost_end' in lawyers) updatePayload.timepost_end = expirationDate;
 
         const totalAmount = (monthsToAdd * amount).toFixed(2); 
         const daysToAdd = monthsToAdd * 30; 
 
         await tx.update(payments)
-          .set({ 
-             status: "approved", 
-             approvedAt: new Date(), 
-             durationDays: daysToAdd, 
-             amount: String(totalAmount), 
-             timepost_end: expirationDate 
-          } as any)
+          .set({ status: "approved", approvedAt: new Date(), durationDays: daysToAdd, amount: String(totalAmount), timepost_end: expirationDate } as any)
           .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')));
       }
 
@@ -605,61 +572,37 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
         throw new Error("No values to set: El objeto de actualización está vacío.");
       }
 
-      const updated = await tx
-        .update(lawyers)
-        .set(updatePayload) 
-        .where(eq(lawyers.id, cleanId))
-        .returning();
-        
+      const updated = await tx.update(lawyers).set(updatePayload).where(eq(lawyers.id, cleanId)).returning();
       const lawyer = updated[0];
 
       const wasApprovedBefore = existingLawyer.approved === true;
-
       if (isApproved && !wasApprovedBefore && lawyer) {
-        console.log("✅ [DEBUG PUSH] Abogado verificado y aprobado. Calculando usuarios locales...");
-
         const titleText = "¡Nuevo Abogado en tu área! ⚖️";
         const bodyText = `El abogado ${lawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
 
         let usersToNotify: { id: string }[] = [];
-
         if (lawyer.zip) {
           const nearbyZips = zipcodes.radius(lawyer.zip as any, Number(radiusMiles)); 
-
           if (nearbyZips && nearbyZips.length > 0) {
-            usersToNotify = await tx.select({ id: users.id })
-                                    .from(users)
-                                    .where(inArray(users.zip, nearbyZips as string[]));
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
           } else {
-            usersToNotify = await tx.select({ id: users.id })
-                                    .from(users)
-                                    .where(eq(users.zip, String(lawyer.zip)));
+            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(lawyer.zip)));
           }
         }
 
         if (usersToNotify.length > 0) {
-          const notificationsToInsert = usersToNotify.map(u => {
-            const payload: any = {
-              title: titleText,
-              description: bodyText,
-              type: "lawyer", 
-              visibleAt: new Date(), 
-              userId: u.id,
-              isRead: false
-            };
-            if ('referenceId' in notifications) payload.referenceId = String(lawyer.id);
-            else if ('reference_id' in notifications) payload.reference_id = String(lawyer.id);
-            return payload;
-          });
+          const notificationsToInsert = usersToNotify.map(u => ({
+            title: titleText,
+            description: bodyText,
+            type: "lawyer", 
+            visibleAt: new Date(), 
+            userId: u.id,
+            isRead: false,
+            referenceId: String(lawyer.id)
+          }));
 
           await tx.insert(notifications).values(notificationsToInsert);
-
-          pushNotificationData = {
-            title: titleText,
-            body: bodyText,
-            referenceId: String(lawyer.id),
-            userIds: usersToNotify.map(u => u.id) 
-          };
+          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(lawyer.id), userIds: usersToNotify.map(u => u.id) };
         }
       }
 
@@ -667,13 +610,10 @@ export const updateLawyer = async (idParam: any, dataParam: any) => {
     });
 
     if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
-         console.error("❌ [DEBUG PUSH] Falló el Push Notification:", err);
-      });
+      sendMassPushNotification(pushNotificationData).catch(() => {});
     }
 
     return updatedLawyerResult;
-
   } catch (error: any) { 
     console.error("❌ Error en updateLawyer:", error);
     throw new Error(`Error al actualizar el abogado: ${error.message}`);
@@ -738,7 +678,7 @@ export const createRating = async (data: any) => {
       
       const typeCodeRecord = await db.select({ id: typeDetail.id })
         .from(typeDetail)
-        .where(sql`${typeDetail.typeCode} = 'Lawyers' OR ${typeDetail.typeCode} = 'Lawyers'`)
+        .where(sql`${typeDetail.typeCode} = 'Lawyers'`)
         .limit(1);
 
       if (!typeCodeRecord || typeCodeRecord.length === 0) {

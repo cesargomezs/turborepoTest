@@ -68,8 +68,16 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
 
 // 🔄 PUT: Actualizar un abogado (Aprobar y calcular tarifa dinámica)
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
-  // Delegamos la petición completa al controlador
-  return await updateLawyer(req as any, res as any);
+  try {
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const updatedLawyer = await updateLawyer(id, req.body);
+    return res.status(200).json(updatedLawyer);
+  } catch (error: any) {
+    console.error("❌ Error en PUT /lawyers/:id:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
 });
 
 // ⭐ POST: Crear una reseña
