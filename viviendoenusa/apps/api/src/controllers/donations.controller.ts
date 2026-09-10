@@ -276,7 +276,7 @@ export const createDonation = async (data: any) => {
 // =====================================================================
 // 🔄 3. ACTUALIZAR ESTADO DE LA DONACIÓN (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
-export const updateDonationStatus = async (idParam: any, status?: string, approved?: boolean) => {
+export const updateDonationStatus = async (idParam: any, statusOrBody?: any, approvedParam?: boolean) => {
   let cleanId: string | null = null;
   try {
     let rawId = idParam;
@@ -290,14 +290,23 @@ export const updateDonationStatus = async (idParam: any, status?: string, approv
     const [existing] = await db.select().from(donations).where(eq(donations.id, cleanId));
     if (!existing) throw new Error("Donación no encontrada");
 
-    const updatePayload: any = {};
+    let newStatus = statusOrBody;
+    let isApproved = approvedParam;
 
-    if (approved !== undefined) {
-      updatePayload.approved = Boolean(approved);
+    // 🚀 SOPORTE COMPLETO SI VIENE UN OBJETO JSON DESDE EL BODY DE EXPRESS
+    if (statusOrBody && typeof statusOrBody === 'object') {
+      if (statusOrBody.status !== undefined) newStatus = statusOrBody.status;
+      if (statusOrBody.approved !== undefined) isApproved = statusOrBody.approved;
     }
 
-    if (status) {
-      const cleanStatus = sanitizeText(status);
+    const updatePayload: any = {};
+
+    if (isApproved !== undefined) {
+      updatePayload.approved = Boolean(isApproved);
+    }
+
+    if (newStatus) {
+      const cleanStatus = sanitizeText(newStatus);
       if (cleanStatus === 'delivered') {
         updatePayload.statusId = '6a226ffa-9edf-4886-931f-64299f8a6f7f';
       } else if (cleanStatus === 'active') {
