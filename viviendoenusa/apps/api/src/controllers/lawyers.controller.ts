@@ -183,7 +183,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       const lawyerId = row.lawyers.id;
 
       if (!lawyersMap.has(lawyerId)) {
-        // 🚀 CORRECCIÓN DE TYPESCRIPT: Solo booleano o string 'true'
         const isAppr = row.lawyers.approved === true || String(row.lawyers.approved).toLowerCase() === 'true';
         lawyersMap.set(lawyerId, {
           ...row.lawyers,
@@ -272,7 +271,6 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     if (!rows || rows.length === 0) return null;
   
     const dbLawyer = rows[0].lawyers;
-    // 🚀 CORRECCIÓN DE TYPESCRIPT: Solo booleano o string 'true'
     const isAppr = dbLawyer.approved === true || String(dbLawyer.approved).toLowerCase() === 'true';
 
     const lawyerFinal: any = {
@@ -498,11 +496,27 @@ export const createLawyer = async (data: any) => {
 // =====================================================================
 // 🔄 4. ACTUALIZAR ABOGADO (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
-export const updateLawyer = async (id: string, data: any) => {
+export const updateLawyer = async (idParam: any, dataParam: any) => {
   try {
-    const cleanId = sanitizeText(id);
+    // 🚀 EXTRACCIÓN BLINDADA DEL ID: Si Express pasa el objeto 'req' o un objeto de ruta, lo desenrollamos por la fuerza
+    let rawId = idParam;
+    let data = dataParam;
+
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const cleanId = sanitizeText(rawId);
     if (!cleanId) {
-      throw new Error("ID inválido");
+      throw new Error(`ID inválido recibido: ${JSON.stringify(idParam)}`);
+    }
+
+    if (!data && idParam && idParam.body) {
+      data = idParam.body;
     }
 
     const [existingLawyer] = await db.select().from(lawyers).where(eq(lawyers.id, cleanId));
@@ -529,30 +543,29 @@ export const updateLawyer = async (id: string, data: any) => {
       const updatePayload: any = {};
       
       for (const key of allowedFields) {
-        if (data[key] !== undefined) {
+        if (data && data[key] !== undefined) {
            updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
         }
       }
 
-      if (data.description !== undefined || data.descriptionLawy !== undefined) {
+      if (data && (data.description !== undefined || data.descriptionLawy !== undefined)) {
         const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionLawy);
         updatePayload.description = safeDesc;
         updatePayload.descriptionLawy = safeDesc;
       }
 
-      if (data.imageUrl && typeof data.imageUrl === 'string' && data.imageUrl.startsWith('lawyers/')) {
+      if (data && data.imageUrl && typeof data.imageUrl === 'string' && data.imageUrl.startsWith('lawyers/')) {
         updatePayload.imageUrl = data.imageUrl.replace('lawyers/', '');
       }
 
-      // 🚀 CORRECCIÓN DE TYPESCRIPT: Solo booleano o string 'true'
-      const isApproved = data.approved === true || String(data.approved).toLowerCase() === 'true';
+      const isApproved = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
 
       if (isApproved) {
         updatePayload.approved = true; 
         updatePayload.createdAt = new Date();
         
         let monthsToAdd = 1; 
-        if (data.durationMonths) {
+        if (data && data.durationMonths) {
           const parsedMonths = Number(data.durationMonths);
           if (!isNaN(parsedMonths)) {
             monthsToAdd = parsedMonths;
@@ -586,7 +599,6 @@ export const updateLawyer = async (id: string, data: any) => {
         
       const lawyer = updated[0];
 
-      // 🚀 NOTIFICACIONES MASIVAS (GEOFENCING 20 MILLAS) AL APROBAR MANUALMENTE
       const wasApprovedBefore = existingLawyer.approved === true;
 
       if (isApproved && !wasApprovedBefore && lawyer) {
@@ -626,7 +638,6 @@ export const updateLawyer = async (id: string, data: any) => {
             return payload;
           });
 
-          // 🚀 SE INSERTA CORRECTAMENTE USANDO LA IMPORTACIÓN DE NOTIFICATIONS DEL SCHEMA
           await tx.insert(notifications).values(notificationsToInsert);
 
           pushNotificationData = {
