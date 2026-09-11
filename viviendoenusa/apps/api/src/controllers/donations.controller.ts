@@ -219,6 +219,58 @@ export const getDonations = async (rawZip?: string | number, userId?: string) =>
 };
 
 // =====================================================================
+// 🔍 1.5 OBTENER DONACIÓN POR ID (Para Notificaciones Push)
+// =====================================================================
+export const getDonationById = async (id: string) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) return null;
+
+    const rows = await db
+      .select({
+        donations: donations,
+        users: users,
+      })
+      .from(donations)
+      .leftJoin(users, eq(donations.userId, users.id))
+      .where(eq(donations.id, cleanId));
+
+    if (!rows || rows.length === 0) return null;
+
+    const dbDonation = rows[0].donations as any;
+    const dbUser = rows[0].users as any;
+
+    const fileName = dbDonation.imageUrl || dbDonation.image;
+    const nombreUsuario = dbUser?.name || dbUser?.firstName || dbUser?.first_name || dbUser?.full_name || 'Usuario Anónimo';
+    let publicUrl = fileName; 
+
+    if (fileName && fileName.trim() !== '' && !fileName.startsWith('http')) {
+        const cleanName = fileName.replace('donations/', '');
+        const { data, error } = await supabase.storage
+            .from(NOMBRE_BUCKET)
+            .createSignedUrl(`donations/${cleanName}`, 3600); 
+        
+        if (data?.signedUrl) {
+            publicUrl = data.signedUrl;
+        }
+    }
+
+    const isAppr = dbDonation.approved === true || String(dbDonation.approved).toLowerCase() === 'true';
+
+    return { 
+        ...dbDonation, 
+        image: publicUrl, 
+        imageUrl: publicUrl,
+        approved: isAppr,
+        status: isAppr ? 'approved' : 'pending',
+        ownerName: nombreUsuario
+    }; 
+  } catch (error: any) {
+    throw new Error(`Error al obtener donación por ID: ${error.message}`);
+  }
+};
+
+// =====================================================================
 // 📥 2. CREAR DONACIÓN (NACE PENDIENTE + ALERTA TELEGRAM)
 // =====================================================================
 export const createDonation = async (data: any) => {

@@ -1,20 +1,20 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
-  TextInput, Image, Alert, Share, ActivityIndicator,
+  TextInput, Image, Alert, ActivityIndicator,
   Platform, Modal as RNModal, KeyboardAvoidingView,
   ColorValue, AppState 
 } from 'react-native';
-import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useSegments, useFocusEffect } from 'expo-router'; 
+// 🚀 1. IMPORTAMOS useLocalSearchParams PARA ATRAPAR EL ID DE LA NOTIFICACIÓN
+import { useRouter, useSegments, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
 import { useIsFocused } from '@react-navigation/native'; 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createClient } from '@supabase/supabase-js'; 
 
 import { ThemedText } from '@/components/ThemedText';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMockSelector } from '@/redux/slices';
 
 import * as ImagePicker from 'expo-image-picker';
@@ -143,17 +143,19 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  const { isDark, toggleTheme } = useAppTheme();
+  const { isDark } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
-  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
+  // 🚀 2. EXTRAEMOS EL PARÁMETRO DE LA NOTIFICACIÓN PUSH
+  const { openEventId } = useLocalSearchParams();
 
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
+  // 🚀 3. EXTRAEMOS EL CÓDIGO POSTAL DEL USUARIO LOGUEADO
+  const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
-  // 🚀 VARIABLES DE ADMINISTRADOR
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -238,14 +240,71 @@ export default function CommunityScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
 
-  // 🚀 OBTENER POSTS (Normales o de Administrador)
+  // 🚀 4. FUNCIÓN PARA TRAER UN POST INDIVIDUAL DESDE UNA NOTIFICACIÓN
+  const fetchSinglePost = async (id: string) => {
+    try {
+      setLoadingPosts(true);
+      const response = await fetch(`${API_COMMUNITY_URL}/${id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) throw new Error("No se encontró la publicación");
+      
+      const p = await response.json();
+      
+      const freshImage = p.imageUrl ? await refreshSupabaseUrl(p.imageUrl, 'community') : null;
+      const isAppr = String(p.approved) === 'true' || p.approved === 1 || p.approved === true;
+
+      const formattedPost = {
+        ...p,
+        image: freshImage,
+        likes: p.likes || 0,
+        dislikes: p.dislikes || 0,
+        userVote: p.userVote || null, 
+        status: isAppr ? 'approved' : 'pending',
+        createdAt: p.createdAt || new Date().toISOString(), 
+        displayTime: p.createdAt ? getRelativeTime(p.createdAt) : 'Hace un momento'
+      };
+
+      const commentsMap: Record<string, any[]> = {};
+      if (formattedPost.commentsList && Array.isArray(formattedPost.commentsList)) {
+        commentsMap[formattedPost.id] = await Promise.all(formattedPost.commentsList.map(async (c: any) => {
+          const freshReviewImage = c.image ? await refreshSupabaseUrl(c.image, 'users') : null;
+          return {
+            id: c.id,
+            text: c.comment || c.review || c.text || '',
+            createdAt: c.createdAt || new Date().toISOString(),
+            displayTime: c.createdAt ? getRelativeTime(c.createdAt) : 'Hace un momento',
+            userName: c.userName || 'Usuario Anónimo',
+            image: freshReviewImage
+          };
+        }));
+      }
+      
+      setComments(commentsMap);
+      setPosts([formattedPost]); 
+      setVisibleComments({ [formattedPost.id]: true }); 
+      
+      if (formattedPost.zip) setZipCode(String(formattedPost.zip));
+
+    } catch (error) {
+      console.error("Error cargando post individual:", error);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
   const fetchCommunityPosts = async (searchZip?: string) => {
     try {
       setLoadingPosts(true);
       
       let url = '';
       if (isAdminMode) {
-        url = `${API_COMMUNITY_URL}?userId=${currentUserId}`; // El Admin puede traer todo para filtrar pendientes
+        url = `${API_COMMUNITY_URL}?userId=${currentUserId}`;
       } else {
         if (!searchZip || searchZip.length !== 5) {
           setLoadingPosts(false);
@@ -275,7 +334,6 @@ export default function CommunityScreen() {
       const apiData = JSON.parse(textResponse);
       
       if (Array.isArray(apiData)) {
-        // 🚀 FIRMAMOS TODAS LAS IMÁGENES AL VUELO (POSTS Y COMENTARIOS)
         const formattedPosts = await Promise.all(apiData.map(async (p: any) => {
           const freshImage = p.imageUrl ? await refreshSupabaseUrl(p.imageUrl, 'community') : null;
           const isAppr = String(p.approved) === 'true' || p.approved === 1 || p.approved === true;
@@ -292,13 +350,12 @@ export default function CommunityScreen() {
           };
         }));
         
-        // 🚀 Lógica de separación: Pendientes vs Aprobados
         const approvedOrOwned = formattedPosts.filter(p => p.status === 'approved' || p.userId === currentUserId);
         const purelyPending = formattedPosts.filter(p => p.status === 'pending');
 
         if (isAdminMode) {
           setPendingPosts(purelyPending);
-          setPosts(approvedOrOwned.filter(p => searchZip ? p.zip === searchZip : true)); 
+          setPosts(approvedOrOwned.filter(p => searchZip ? String(p.zip) === searchZip : true)); 
         } else {
           setPosts(approvedOrOwned);
           setPendingPosts(purelyPending);
@@ -333,33 +390,47 @@ export default function CommunityScreen() {
     }
   };
 
+  // 🚀 5. EFECTO INICIAL PARA MANEJAR LA NOTIFICACIÓN O EL ZIP DEL USUARIO
+  useEffect(() => {
+    if (openEventId) {
+      fetchSinglePost(openEventId as string);
+    } else if (!zipCode && userZip && userZip.length === 5) {
+      setZipCode(userZip);
+      fetchCommunityPosts(userZip);
+    }
+  }, [openEventId, userZip]);
+
   // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA O MODO
   useFocusEffect(
     useCallback(() => {
+      if (openEventId) return; // Si vino por notificación, no interrumpimos la consulta de post único
+
       if (isAdminMode) {
         fetchCommunityPosts(zipCode);
       } else if (zipCode && zipCode.length === 5) {
         fetchCommunityPosts(zipCode);
+      } else if (!zipCode && userZip && userZip.length === 5) {
+        setZipCode(userZip);
+        fetchCommunityPosts(userZip);
       }
-    }, [zipCode, isAdminMode])
+    }, [zipCode, isAdminMode, openEventId, userZip])
   );
 
   // 🚀 DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (isAdminMode || (zipCode && zipCode.length === 5)) {
+        if (openEventId) {
+           fetchSinglePost(openEventId as string);
+        } else if (isAdminMode || (zipCode && zipCode.length === 5)) {
           fetchCommunityPosts(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, zipCode, isAdminMode]); 
+  }, [isFocused, zipCode, isAdminMode, openEventId]); 
 
-  // =====================================================================
-  // 🚀 FUNCIONES DE ADMINISTRADOR (Aprobar y Rechazar)
-  // =====================================================================
   const approveCommunityPost = async (id: string) => {
     try {
       const response = await fetch(`${API_COMMUNITY_URL}/${id}`, {
@@ -468,7 +539,7 @@ export default function CommunityScreen() {
         finalImageName = uploadData.identificadorArchivo; 
       }
 
-      const targetZip = zipCode && zipCode.length === 5 ? zipCode : "91730";
+      const targetZip = zipCode && zipCode.length === 5 ? zipCode : (userZip && userZip.length === 5 ? userZip : "91730");
 
       const newPostPayload = {
         textContent: trimmedText, 
@@ -477,7 +548,7 @@ export default function CommunityScreen() {
         subCategory: selectedSubCategory,
         userId: currentUserId,
         zip: targetZip,
-        estate: "CA"
+        estate: userMetadata?.estate || "CA"
       };
       
       const response = await fetch(API_COMMUNITY_URL, {

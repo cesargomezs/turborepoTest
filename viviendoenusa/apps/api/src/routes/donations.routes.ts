@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import {
   getDonations,
+  getDonationById, // 🚀 1. IMPORTAMOS LA NUEVA FUNCIÓN
   createDonation,
   updateDonationStatus,
   deleteDonation
@@ -52,6 +53,24 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
 // ==========================================
 // 📌 RUTAS DINÁMICAS (Con /:id - Van al final)
 // ==========================================
+
+// 🔍 2.5 OBTENER UNA DONACIÓN POR ID (Para Notificaciones Push)
+router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const item = await getDonationById(id);
+    
+    if (!item) {
+      return res.status(404).json({ error: 'Donación no encontrada' });
+    }
+    res.json(item);
+  } catch (error: any) {
+    console.error(`❌ Error en GET /donations/${req.params.id}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // 🔄 3. ACTUALIZAR ESTADO O APROBACIÓN DE LA DONACIÓN
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {

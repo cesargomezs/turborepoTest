@@ -433,6 +433,37 @@ export default function Header({ title }: { title?: string }) {
     } catch (error) {}
   };
 
+  const handleDeleteAllNotifications = async () => {
+    if (notifications.length === 0) return;
+
+    const doDelete = async () => {
+      setNotifications([]);
+      try {
+        await fetch(`${API_NOTIFICATIONS_URL}/all?userId=${REAL_USER_ID}`, { 
+          method: 'DELETE', 
+          headers: { 'Authorization': `Bearer ${token}` } 
+        });
+      } catch (error) {
+        console.error("Error eliminando todas las notificaciones:", error);
+      }
+    };
+
+    if (isWeb) {
+      if (window.confirm("¿Estás seguro de que deseas eliminar todas las notificaciones?")) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        "Eliminar todas",
+        "¿Estás seguro de que deseas eliminar todas las notificaciones?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Eliminar", style: "destructive", onPress: doDelete }
+        ]
+      );
+    }
+  };
+
   const handleGenerateCoupon = async () => {
     setIsGeneratingCoupon(true);
     setGeneratedCoupon('');
@@ -1099,6 +1130,12 @@ export default function Header({ title }: { title?: string }) {
                 </TouchableOpacity>
                 
                 <ThemedText style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: Colors[localTheme].text }}>{t.headertab.notification}</ThemedText>
+
+                {notifications.length > 0 && (
+                  <TouchableOpacity onPress={handleDeleteAllNotifications} style={{ position: 'absolute', right: 0, zIndex: 10, padding: 5 }}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={24} color="#FF5F6D" />
+                  </TouchableOpacity>
+                )}
               </View>
 
               <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 , flexGrow: 1 }}>

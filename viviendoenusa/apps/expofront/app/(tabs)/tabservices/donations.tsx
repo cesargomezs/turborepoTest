@@ -6,7 +6,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect } from 'expo-router';
+// 🚀 1. IMPORTAMOS useLocalSearchParams PARA LAS PUSH
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -114,9 +115,12 @@ export default function DonationsScreen() {
 
   // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
-
+  
+  // 🚀 2. EXTRAEMOS EL ID DE LA NOTIFICACIÓN PUSH Y EL ZIP DEL USUARIO
+  const { id: openDonationId } = useLocalSearchParams();
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
+  const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
   
   useEffect(() => {
     if (!userToken) {
@@ -191,7 +195,43 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
-  // 🚀 FETCH (CORREGIDO: PERMITE CONSULTA GLOBAL SI ESTÁ EN MODO ADMIN)
+  // 🚀 3. FETCH INDIVIDUAL PARA NOTIFICACIONES
+  const fetchSingleDonation = async (id: string) => {
+    try {
+      setIsLoadingPosts(true);
+      const response = await fetch(`${API_DONATIONS_URL}/${id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) throw new Error("No se encontró la donación");
+      
+      const item = await response.json();
+      const rawImage = item.image || item.imageUrl;
+      const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'donations') : null;
+      const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
+
+      const formattedDonation = { 
+        ...item, 
+        image: freshImage,
+        status: isAppr ? 'approved' : 'pending'
+      };
+
+      setDonations([formattedDonation]);
+      setPendingDonations([]);
+      if (formattedDonation.zip) setZipCode(String(formattedDonation.zip));
+
+    } catch (error) {
+      console.error("Error cargando donación individual:", error);
+    } finally {
+      setIsLoadingPosts(false);
+    }
+  };
+
+  // 🚀 FETCH GLOBAL
   const fetchDonations = async (searchZip?: string) => {
     try {
       setIsLoadingPosts(true);
@@ -231,8 +271,13 @@ export default function DonationsScreen() {
         const approvedOrOwned = mappedData.filter(d => d.status === 'approved' || d.userId === currentUserId);
         const purelyPending = mappedData.filter(d => d.status === 'pending');
 
-        setDonations(approvedOrOwned);
-        setPendingDonations(purelyPending);
+        if (isAdminMode) {
+          setPendingDonations(purelyPending);
+          setDonations(approvedOrOwned.filter(d => searchZip ? String(d.zip) === searchZip : true));
+        } else {
+          setDonations(approvedOrOwned);
+          setPendingDonations(purelyPending);
+        }
       } else {
         setDonations([]);
         setPendingDonations([]);
@@ -244,25 +289,44 @@ export default function DonationsScreen() {
     }
   };
 
+  // 🚀 4. EFECTO INICIAL PARA NOTIFICACIONES O ZIP DEL USUARIO
+  useEffect(() => {
+    if (openDonationId) {
+      fetchSingleDonation(openDonationId as string);
+    } else if (!zipCode && userZip && userZip.length === 5) {
+      setZipCode(userZip);
+      fetchDonations(userZip);
+    }
+  }, [openDonationId, userZip]);
+
   useFocusEffect(
     useCallback(() => {
-      if (isAdminMode || (zipCode && zipCode.length === 5)) {
+      if (openDonationId) return; // Si viene de push, no interrumpimos
+
+      if (isAdminMode) {
         fetchDonations(zipCode);
+      } else if (zipCode && zipCode.length === 5) {
+        fetchDonations(zipCode);
+      } else if (!zipCode && userZip && userZip.length === 5) {
+        setZipCode(userZip);
+        fetchDonations(userZip);
       }
-    }, [zipCode, isAdminMode])
+    }, [zipCode, isAdminMode, openDonationId, userZip])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (isAdminMode || (zipCode && zipCode.length === 5)) {
+        if (openDonationId) {
+          fetchSingleDonation(openDonationId as string);
+        } else if (isAdminMode || (zipCode && zipCode.length === 5)) {
           fetchDonations(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, zipCode, isAdminMode]);
+  }, [isFocused, zipCode, isAdminMode, openDonationId]);
 
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) window.alert(`${title}\n${message}`); 
@@ -404,15 +468,17 @@ export default function DonationsScreen() {
       const finalImageName = uploadData.identificadorArchivo; 
       const fullPhone = `${COUNTRIES[countryIdx].code}${trimmedPhone}`;
 
+      const targetZip = trimmedZip && trimmedZip.length === 5 ? trimmedZip : (userZip && userZip.length === 5 ? userZip : "91730");
+
       const newEntryPayload = {
         title: trimmedTitle, 
         categoryIdx: formCategoryIdx,
         status: 'active',
-        estate: userMetadata?.estate,
+        estate: userMetadata?.estate || 'CA',
         description: trimmedDesc, 
         image: finalImageName, 
         location: userMetadata?.city || 'Rancho Cucamonga',
-        zip: trimmedZip, 
+        zip: targetZip, 
         phone: fullPhone, 
         ownerName: currentUserName, 
         contactMethod: formContactMethod,
@@ -450,8 +516,8 @@ export default function DonationsScreen() {
       setModalVisible(false);
       
       if (!zipCode || zipCode.length < 5) {
-        setZipCode(trimmedZip);
-        fetchDonations(trimmedZip);
+        setZipCode(targetZip);
+        fetchDonations(targetZip);
       }
 
       setTimeout(() => {

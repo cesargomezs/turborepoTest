@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useRouter, useFocusEffect } from 'expo-router'; 
+// 🚀 1. IMPORTAMOS useLocalSearchParams PARA LAS PUSH
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
 import { useIsFocused } from '@react-navigation/native'; 
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -209,9 +210,12 @@ export default function EntrepreneurshipScreen() {
   const stylesUnified = useUnifiedCardStyles();
   const router = useRouter();
   
+  // 🚀 2. EXTRAEMOS EL ID DE LA PUSH Y EL ZIP DEL USUARIO
+  const { id: openStoreId } = useLocalSearchParams();
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
+  const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
 
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
@@ -299,11 +303,68 @@ export default function EntrepreneurshipScreen() {
     loadSavedItems();
   }, []);
 
+  // 🚀 3. FUNCIÓN PARA TRAER EL EMPRENDIMIENTO DESDE UNA NOTIFICACIÓN
+  const fetchSingleEntrepreneurship = async (id: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/${id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) throw new Error("No se encontró el negocio");
+
+      const item = await response.json();
+      const rawImage = item.imageEntrepren || item.image || item.imageUrl;
+      const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'entrepreneurship') : '';
+
+      const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
+           const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
+           return { ...r, image: freshReviewImage };
+      })) : [];
+
+      const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
+
+      const formattedItem: Emprendimiento = {
+          ...item,
+          name: item.nameEntrepren || 'Sin nombre',
+          address: item.addressentr || item.address || '',
+          categoryId: Number(item.categoryId) || 0,
+          description: item.descriptionEntrepren || '',
+          rating: Number(item.rating) || 5.0,
+          likes: Number(item.likes) || 0,
+          dislikes: Number(item.dislikes) || 0,
+          userVote: item.userVote || null,
+          estate: item.estate || '',
+          saved: savedItems.includes(item.id),
+          reviews: parsedReviews,
+          image: freshImage,
+          status: isAppr ? 'approved' : 'pending',
+          userId: item.userId || item.user_id
+      };
+
+      setLocalData([formattedItem]);
+      setResults([formattedItem]);
+      setPendingItems([]);
+      if (formattedItem.zip) setZipCode(String(formattedItem.zip));
+
+      // 🚀 Abrimos el modal de detalles automáticamente
+      setDetailItem(formattedItem);
+
+    } catch (error) {
+      console.error("Error cargando emprendimiento individual:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchEntrepreneurships = async (searchZip: string) => {
     try {
       setLoading(true);
       
-      // 🚀 CORRECCIÓN: Si estamos en modo admin, no exigimos ZIP y traemos todo de golpe
       let url = `${API_ENTREPRENEURSHIP_URL}?userId=${currentUserId}`;
       if (!isAdminMode && searchZip && searchZip.trim().length === 5) {
         url += `&zip=${searchZip.trim()}`;
@@ -425,31 +486,48 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
+  // 🚀 4. EFECTO INICIAL PARA NOTIFICACIONES O ZIP DEL USUARIO
+  useEffect(() => {
+    if (openStoreId) {
+      fetchSingleEntrepreneurship(openStoreId as string);
+    } else if (!zipCode && userZip && userZip.length === 5) {
+      setZipCode(userZip);
+      fetchEntrepreneurships(userZip);
+    }
+  }, [openStoreId, userZip]);
+
   useFocusEffect(
     useCallback(() => {
+      if (openStoreId) return; // Si viene de push, no interrumpimos
+
       if (isAdminMode) {
         fetchEntrepreneurships('');
       } else if (showSavedOnly) {
         fetchSavedItems();
-      } else if (isZipValid) {
+      } else if (zipCode && zipCode.length === 5) {
         fetchEntrepreneurships(zipCode);
+      } else if (!zipCode && userZip && userZip.length === 5) {
+        setZipCode(userZip);
+        fetchEntrepreneurships(userZip);
       }
-    }, [showSavedOnly, zipCode, isAdminMode])
+    }, [showSavedOnly, zipCode, isAdminMode, openStoreId, userZip])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (showSavedOnly) {
+        if (openStoreId) {
+          fetchSingleEntrepreneurship(openStoreId as string);
+        } else if (showSavedOnly) {
           fetchSavedItems();
-        } else if (isZipValid) {
+        } else if (isZipValid || isAdminMode) {
           fetchEntrepreneurships(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, showSavedOnly, zipCode, isZipValid]);
+  }, [isFocused, showSavedOnly, zipCode, isZipValid, isAdminMode, openStoreId]);
 
   const handleSearch = async (forcedCategoryIdx?: number) => {
     if (!isZipValid) return;

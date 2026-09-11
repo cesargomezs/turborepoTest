@@ -22,7 +22,6 @@ const formatRelativeTime = (dateInput: any) => {
     if (diffDays === 1) return "ayer";
     if (diffDays < 7) return `hace ${diffDays} días`;
     
-    // Si tiene más de una semana, devuelve "15 oct"
     return notifDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 };
 
@@ -49,7 +48,6 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
               type: notif.type || 'alert',
               referenceId: notif.referenceId || notif.reference_id || null,
               read: notif.isRead !== undefined ? notif.isRead : (notif.is_read || false),
-              // 🚀 APLICAMOS LA FUNCIÓN DE TIEMPO RELATIVO AQUÍ
               time: formatRelativeTime(rawDate)
           };
       });
@@ -87,7 +85,7 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
     }
 };
 
-// 🗑️ ELIMINAR NOTIFICACIÓN (Protegida)
+// 🗑️ ELIMINAR NOTIFICACIÓN INDIVIDUAL (Protegida)
 export const deleteNotification = async (req: AuthRequest, res: Response) => {
     try {
         const userId = String(req.user.id); 
@@ -109,5 +107,21 @@ export const deleteNotification = async (req: AuthRequest, res: Response) => {
         return res.status(200).json(deleted[0]);
     } catch (error: any) {
         return res.status(500).json({ error: `Error al eliminar: ${error.message}` });
+    }
+};
+
+// 🗑️🔥 ELIMINAR TODAS LAS NOTIFICACIONES DEL USUARIO (Protegida)
+export const deleteAllNotifications = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = String(req.user.id);
+
+        const deleted = await db.delete(notifications)
+            .where(eq(notifications.userId, userId))
+            .returning();
+
+        return res.status(200).json({ message: "Todas las notificaciones fueron eliminadas", count: deleted.length });
+    } catch (error: any) {
+        console.error("❌ Error al eliminar todas las notificaciones:", error);
+        return res.status(500).json({ error: `Error al eliminar todas: ${error.message}` });
     }
 };
