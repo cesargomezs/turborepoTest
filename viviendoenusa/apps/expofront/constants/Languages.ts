@@ -169,10 +169,10 @@ export const translations = {
       validatezip: "Código Postal no encontrado.",
       viewallresults: "Ver todos los resultados",
       zipnofound:"ZIP no encontrado.",
-      noReviews: "Aún no hay reseñas.", // <--- Agrega esta
-      addReview: "Danos tu opinión",    // <--- Agrega esta
-      placeholderReview: "Escribe tu experiencia...", // <--- Agrega esta
-      publishBtn: "Publicar reseña" ,     // <--- Agrega esta
+      noReviews: "Aún no hay reseñas.", 
+      addReview: "Danos tu opinión",    
+      placeholderReview: "Escribe tu experiencia...", 
+      publishBtn: "Publicar reseña" ,     
       typeReview: "Escribir mi opinión",
       experience:"¿Cómo fue tu experiencia?",
       backBtn: "Volver",
@@ -308,8 +308,41 @@ export const translations = {
     },
     storestab:{
       label: "Tiendas ",
-      categoriesList: ['Todas', 'Supermercado', 'Panadería', 'Ropa', 'Restaurantes', 'Ferretería', 'Farmacia', 'Envíos y Paquetería', 'Electrónica', 'Automotriz', 'Otros'],
-      categoriesListIcon: ['apps', 'cart', 'baguette', 'tshirt-crew', 'silverware-fork-knife', 'hammer-wrench', 'pill', 'package-variant-closed', 'laptop', 'car', 'dots-horizontal'],
+      categoryentre: [
+        'Todas', 
+        'Odontología', 
+        'Belleza', 
+        'Estética', 
+        'Spa', 
+        'Uñas', 
+        'Barbería', 
+        'Limpieza', 
+        'Comida', 
+        'Reparaciones', 
+        'Construcción', 
+        'Jardinería', 
+        'Taxes y Contabilidad', 
+        'Mudanzas', 
+        'Tecnología'
+      ],
+      
+      categoryentreicon: {
+        'Todas': 'apps',
+        'Odontología': 'tooth',
+        'Belleza': 'face-woman-outline',
+        'Estética': 'face-recognition',
+        'Spa': 'spa',
+        'Uñas': 'hand-back-right-outline',
+        'Barbería': 'content-cut',
+        'Limpieza': 'broom',
+        'Comida': 'silverware-fork-knife',
+        'Reparaciones': 'wrench-outline',
+        'Construcción': 'hammer-wrench',
+        'Jardinería': 'flower-outline',
+        'Taxes y Contabilidad': 'calculator',
+        'Mudanzas': 'truck-delivery-outline',
+        'Tecnología': 'laptop'
+      },
       sharemessage: "Mira este establecimiento en ViviendoEnUSA",
       alertmessage: "Atención, Todos los campos son obligatorios.",
       sendnewsug: "¡Enviado!, Tu sugerencia será revisada.",
@@ -358,13 +391,13 @@ export const translations = {
         categoryentre: ['Todas', 'Venta de garaje', 'Reparaciones', 'Comida', 'Salud', 'Tecnología'],
         viewopinion: "Escribe tu opinión...",
         categoryentreicon: {
-          'Todas':'apps',
-          'Venta de garaje':'sale',
-          'Reparaciones':'wrench-outline',
-          'Comida':'silverware-fork-knife', 
-          'Salud':'heart-pulse', 
-          'Tecnología':'laptop'
-          }
+          'Todas': 'apps',
+          'Venta de garaje': 'sale',
+          'Reparaciones': 'wrench-outline',
+          'Comida': 'silverware-fork-knife', 
+          'Salud': 'heart-pulse', 
+          'Tecnología': 'laptop'
+        }
     },jobstab:{
       label: "Empleos ",
       labeljobs: "Publicar Empleo",
@@ -550,7 +583,7 @@ export const translations = {
       labelnoreject: "Could not be rejected.",
       labelaprovaladmin:"Pending approval (Admin)",
       labelviewdetail:"View details",
-      labelme:" my",
+      labelme:" mi",
       lableplan:"Plan ",
       labelaprovedplan:"Approve Plan",
       labelexperien:"Experiences and Opinions",
@@ -632,10 +665,10 @@ export const translations = {
       messagezip: "ZIP Code",
       validatezip: "ZIP not found.",
       zipnofound:"ZIP not found.",
-      noReviews: "There are no reviews yet.", // <--- Agrega esta
-      addReview: "Give us your opinion",    // <--- Agrega esta
-      placeholderReview: "Write about your experience...", // <--- Agrega esta
-      publishBtn: "Post review",      // <--- Agrega esta
+      noReviews: "There are no reviews yet.", 
+      addReview: "Give us your opinion",    
+      placeholderReview: "Write about your experience...", 
+      publishBtn: "Post review",      
       typeReview: "Write my review",
       experience:"How was your experience?",
       backBtn: "Go back",
@@ -773,8 +806,40 @@ export const translations = {
       },
       storestab:{
         label: "Stores ",
-        categoriesList: ['All', 'Supermarket', 'Bakery', 'Clothing', 'Restaurants', 'Hardware Store', 'Pharmacy', 'Shipping & Courier', 'Electronics', 'Automotive', 'Others'],
-        categoriesListIcon: ['apps', 'cart', 'baguette', 'tshirt-crew', 'silverware-fork-knife', 'hammer-wrench', 'pill', 'package-variant-closed', 'laptop', 'car', 'dots-horizontal'],
+        categoryentre: [
+          'All', 
+          'Dentistry', 
+          'Beauty', 
+          'Aesthetics', 
+          'Spa', 
+          'Nails', 
+          'Barbershop', 
+          'Cleaning', 
+          'Food', 
+          'Repairs', 
+          'Construction', 
+          'Gardening', 
+          'Taxes and Accounting', 
+          'Moving Services', 
+          'Technology'
+        ],
+        categoryentreicon: {
+          'All': 'apps',
+          'Dentistry': 'tooth',
+          'Beauty': 'face-woman-outline',
+          'Aesthetics': 'face-recognition',
+          'Spa': 'spa',
+          'Nails': 'hand-back-right-outline',
+          'Barbershop': 'content-cut',
+          'Cleaning': 'broom',
+          'Food': 'silverware-fork-knife',
+          'Repairs': 'wrench-outline',
+          'Construction': 'hammer-wrench',
+          'Gardening': 'flower-outline',
+          'Taxes and Accounting': 'calculator',
+          'Moving Services': 'truck-delivery-outline',
+          'Technology': 'laptop'
+        },
         sharemessage: "Check out this establishment on LivingInUSA",
         alertmessage: "Attention, all fields are required.",
         sendnewsug: "Sent! Your suggestion will be reviewed.",
@@ -822,13 +887,13 @@ export const translations = {
         categoryentre: ['All', 'Garage Sale', 'Repairs', 'Food', 'Health', 'Technology'],
         viewopinion: "Write your opinion...",
         categoryentreicon: {
-          'All':'apps',
-          'Garage Sale':'sale',
-          'Repairs':'wrench-outline',
-          'Food':'silverware-fork-knife', 
-          'Health':'heart-pulse', 
-          'Technology':'laptop'
-          }
+          'All': 'apps',
+          'Garage Sale': 'sale',
+          'Repairs': 'wrench-outline',
+          'Food': 'silverware-fork-knife', 
+          'Health': 'heart-pulse', 
+          'Technology': 'laptop'
+        }
         
     },jobstab:{
         label: "Jobs ",
@@ -898,7 +963,7 @@ export const translations = {
           namecompanies:"Comercial Name *",
           registrecompanie: "Register your company to access the corporate plan and post job openings.",
           registerlabelcomp:"Register Company",
-          nocompanieregister:"You have no registered companies.",
+          nocompanieregister:"No tienes empresas registradas.",
           yourcompanies:"Your Companies",
           choisecity:"Choose the City in",
           viewreviews:"View Reviews",
@@ -925,7 +990,7 @@ export const translations = {
           
     },supporttab:{  
       label: "Support Network ",
-      description: "Find resources and help in your community.",
+      description: "Encuentra recursos y ayuda en tu comunidad.",
       category: "Category",
       subCategories: ['Health', 'Food', 'Legal Advice', 'Emotional Support', 'Other'],
       contactSupport: "Contact Support Network",

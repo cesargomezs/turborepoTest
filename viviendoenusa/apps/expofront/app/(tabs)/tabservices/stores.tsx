@@ -254,7 +254,6 @@ export default function StoresScreen() {
   const isLargeWeb = isWeb && width > 1000;
   const isIOS = Platform.OS === 'ios';
 
-  // 🚀 HELPER ALERTA COMPATIBLE CON WEB
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) window.alert(`${title}\n${message}`); 
     else Alert.alert(title, message);
@@ -274,11 +273,15 @@ export default function StoresScreen() {
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
   };
 
-  const ICONS_ARRAY =t.storestab.categoriesListIcon;
-  const rawCategories = t.storestab.categoriesList;
-  const CATEGORIES_LIST = Array.isArray(rawCategories) && rawCategories.length > 0
-    ? rawCategories
-    : ['Todas', 'Supermercado', 'Panadería', 'Electrónica', 'Otros'];
+  const ICONS_ARRAY = [
+    'apps', 'tooth', 'face-woman-outline', 'face-recognition', 'spa', 
+    'hand-back-right-outline', 'content-cut', 'broom', 'silverware-fork-knife', 
+    'wrench-outline', 'hammer-wrench', 'flower-outline', 'calculator', 
+    'truck-delivery-outline', 'laptop'
+  ];
+
+  const CATEGORIES_LIST = t.storestab.categoryentre || ['Todas'];
+  const CATEGORY_ICONS_DICT = t.storestab.categoryentreicon || {};
 
   const [zipCode, setZipCode] = useState('');
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
@@ -312,7 +315,6 @@ export default function StoresScreen() {
 
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   
-  // 🚀 CAMUFLAJE: En Web permite suscripción por defecto; en Móvil fuerza a Cupón
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWeb ? 'subscription' : 'coupon');
   const [formPlan, setFormPlan] = useState(isWeb ? 'basic' : 'coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
@@ -407,7 +409,6 @@ export default function StoresScreen() {
              return { ...r, image: freshReviewImage };
           })) : [];
           
-          // 🚀 PARCHE ESTRICTO DE BOOLEANOS
           const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
 
           return {
@@ -790,8 +791,6 @@ export default function StoresScreen() {
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
-      
-      // 🚀 LIMPIEZA TOTAL DEL CUPÓN (Sin "COUPON-")
       const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
       const payload = {
@@ -827,10 +826,8 @@ export default function StoresScreen() {
 
       const savedFromDB = await response.json();
       
-      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando tienda");
 
-      // 🚀 PARCHE BOOLEANO ESTRICTO
       const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEntryLocal = {
@@ -855,7 +852,6 @@ export default function StoresScreen() {
         timepostEnd: savedFromDB.timepostEnd || null
       };
       
-      // 🚀 CERRAMOS EL MODAL PRIMERO
       setModalVisible(false);
       resetForm();
       
@@ -867,7 +863,6 @@ export default function StoresScreen() {
         setPendingStores(prev => [newEntryLocal, ...prev]);
       }
 
-      // 🚀 ALERTA CON DELAY PARA NO BLOQUEAR LA WEB
       setTimeout(() => {
         let successMsg = "";
         if (savedFromDB.message) successMsg = savedFromDB.message;
@@ -948,7 +943,6 @@ export default function StoresScreen() {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
     
-    // 🚀 AHORA IS PENDING FUNCIONA CORRECTAMENTE
     const isPending = store.status === 'pending';
     const isOwner = store.userId === currentUserId;
     
@@ -1369,10 +1363,10 @@ export default function StoresScreen() {
                   {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8,color:DynamicColors.subtext }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
                 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8,textTransform:'none',color:DynamicColors.text}}>{t.storestab?.category || 'Categoría'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none',color:DynamicColors.text}}>{t.storestab?.category || 'Categoría'}</ThemedText>
                 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6, marginBottom: 14 }}>
-                  {CATEGORIES_LIST.map((cat, index) => {
+                  {CATEGORIES_LIST.map((cat: string, index: number) => {
                     if (index === 0) return null; 
                     const isActive = formCategoryIdx === index;
                     const iconName = ICONS_ARRAY[index] || 'storefront'; 
@@ -1626,7 +1620,7 @@ export default function StoresScreen() {
                   <View style={{ marginBottom: 15 }}>
                     {isWeb ? (
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                        {CATEGORIES_LIST.map((area, index) => {
+                        {CATEGORIES_LIST.map((area: string, index: number) => {
                            const iconName = ICONS_ARRAY[index] || 'storefront';
                            const isActive = selectedCategoryIdx === index;
                            return (
@@ -1648,7 +1642,7 @@ export default function StoresScreen() {
                       </View>
                     ) : (
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
-                        {CATEGORIES_LIST.map((area, index) => {
+                        {CATEGORIES_LIST.map((area: string, index: number) => {
                            const iconName = ICONS_ARRAY[index] || 'storefront';
                            const isActive = selectedCategoryIdx === index;
                            return (
@@ -1719,7 +1713,7 @@ export default function StoresScreen() {
                   <View style={stylesUnified.webSidebar}>
                     <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{(t.storestab?.category || 'Categoría') + 's'}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
-                      {CATEGORIES_LIST.map((area, index) => {
+                      {CATEGORIES_LIST.map((area: string, index: number) => {
                         const iconName = ICONS_ARRAY[index] || 'storefront';
                         const isActive = selectedCategoryIdx === index;
                         return (

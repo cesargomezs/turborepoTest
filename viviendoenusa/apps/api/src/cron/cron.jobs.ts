@@ -238,7 +238,6 @@ async function executeMarketingMotor() {
       title: events.title, 
       premiumPlan: events.premiumPlan,
       zip: events.zip,
-      // 🚀 Mantenemos timepostEnd en lugar de createdAt para evitar errores de TypeScript
       daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.timepostEnd})` 
       })
       .from(events)
@@ -292,7 +291,7 @@ async function executeMarketingMotor() {
 }
 
 // ============================================================================
-// ⏰ EJECUCIÓN DIARIA OFICIAL (7:00 AM)
+// ⏰ EJECUCIÓN DIARIA OFICIAL (7:00 AM) - CORRIGE EL HORARIO DE LAS 12
 // ============================================================================
 cron.schedule('0 7 * * *', async () => {
     await executeMarketingMotor();

@@ -62,8 +62,26 @@ const sendTelegramAlert = async (userId: string, zip: string, titlePreview: stri
   
   if (!botToken || !chatId) return;
 
+  // 🚀 Buscamos el correo y nombre del usuario en la base de datos
+  let userEmail = "No disponible";
+  let userName = "Usuario";
+  try {
+    const [userRecord] = await db.select({
+      email: users.email,
+      name: users.name,
+      lastName: users.lastName
+    }).from(users).where(eq(users.id, userId)).limit(1);
+
+    if (userRecord) {
+      userEmail = userRecord.email || "No disponible";
+      userName = `${userRecord.name || ''} ${userRecord.lastName || ''}`.trim() || "Usuario";
+    }
+  } catch (e) {
+    console.warn("⚠️ No se pudo obtener el correo para la alerta de Telegram de donaciones", e);
+  }
+
   const shortTitle = titlePreview.length > 40 ? titlePreview.substring(0, 40) + '...' : titlePreview;
-  const message = `🎁 *NUEVA DONACIÓN REGISTRADA*\n\n*Usuario ID:* ${userId}\n*ZIP:* ${zip}\n*Artículo:* "${shortTitle}"\n\n⚠️ Ingresa al panel para verificar y aprobar.`;
+  const message = `🎁 *NUEVA DONACIÓN REGISTRADA*\n\n*Usuario:* ${userName}\n*Correo:* ${userEmail}\n*ZIP:* ${zip}\n*Artículo:* "${shortTitle}"\n\n⚠️ Ingresa al panel para verificar y aprobar.`;
 
   try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
