@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
 import { community, reviews, countlikes, users, notifications, userDevices, typeDetail } from "../../../../packages/db/src/schema"; 
-import { eq, desc, and, sql, inArray, or } from "drizzle-orm"; 
+import { eq, desc, and, sql, inArray, or, ne } from "drizzle-orm"; 
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; 
 
@@ -359,7 +359,8 @@ export const createCommunityPost = async (data: any) => {
       return newPost[0];
     });
 
-    sendTelegramAlert(
+    // 🚀 AWAIT CRÍTICO PARA SERVERLESS
+    await sendTelegramAlert(
       validUserId, 
       cleanPayload.zip || 'N/A', 
       cleanPayload.text || cleanPayload.textContent || cleanPayload.text_content || 'Sin texto'
@@ -541,14 +542,15 @@ export const updateCommunityPost = async (idParam: any, dataParam: any) => {
       if (postRecord.zip) {
         const nearbyZips = zipcodes.radius(postRecord.zip as any, Number(radiusMiles)); 
 
+        // 🚀 USANDO "ne()" PARA EVITAR ERRORES DE SINTAXIS CON UUID EN POSTGRES
         if (nearbyZips && nearbyZips.length > 0) {
           usersToNotify = await db.select({ id: users.id })
                                   .from(users)
-                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${postRecord.userId}`)); 
+                                  .where(and(inArray(users.zip, nearbyZips as string[]), ne(users.id, postRecord.userId || ''))); 
         } else {
           usersToNotify = await db.select({ id: users.id })
                                   .from(users)
-                                  .where(and(eq(users.zip, String(postRecord.zip)), sql`${users.id} != ${postRecord.userId}`));
+                                  .where(and(eq(users.zip, String(postRecord.zip)), ne(users.id, postRecord.userId || '')));
         }
       }
 
@@ -567,7 +569,12 @@ export const updateCommunityPost = async (idParam: any, dataParam: any) => {
           return payload;
         });
 
-        await db.insert(notifications).values(notificationsToInsert);
+        // 🚀 PROTEGEMOS LA INSERCIÓN INTERNA POR SI VARÍA EL SCHEMA
+        try {
+          await db.insert(notifications).values(notificationsToInsert);
+        } catch (e) {
+          console.error("❌ Error guardando notificaciones en BD:", e);
+        }
 
         pushNotificationData = {
           title: titleText,
@@ -578,8 +585,9 @@ export const updateCommunityPost = async (idParam: any, dataParam: any) => {
       }
     }
 
+    // 🚀 AWAIT CRÍTICO PARA EVITAR QUE SE CANCELE EN SERVERLESS
     if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
+      await sendMassPushNotification(pushNotificationData).catch(err => {
          console.error("❌ [DEBUG PUSH] Falló el Push Notification de la comunidad:", err);
       });
     }

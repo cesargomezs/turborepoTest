@@ -131,6 +131,28 @@ const getRelativeTime = (dateString: string | Date) => {
   return past.toLocaleDateString();
 };
 
+// 🚀 FUNCIÓN PARA TRADUCIR EL TAG DEL BACKEND AL IDIOMA ACTUAL DE MANERA SEGURA
+const getTranslatedTag = (backendTag: string, t: any) => {
+  if (!backendTag) return '';
+  const clean = backendTag.trim().toLowerCase();
+  
+  // Si estamos en español, buscamos su equivalente
+  if (t.communitytab.typepost.includes('Experiencia')) {
+    if (clean === 'experience' || clean === 'experiencia') return t.communitytab.typepost[1] || 'Experiencia';
+    if (clean === 'question' || clean === 'preguntas' || clean === 'pregunta') return t.communitytab.typepost[2] || 'Pregunta';
+    if (clean === 'advice' || clean === 'consejos' || clean === 'consejo') return t.communitytab.typepost[3] || 'Consejo';
+  }
+  
+  // Si estamos en inglés, buscamos su equivalente
+  if (t.communitytab.typepost.includes('Experience')) {
+    if (clean === 'experiencia' || clean === 'experience') return t.communitytab.typepost[1] || 'Experience';
+    if (clean === 'pregunta' || clean === 'preguntas' || clean === 'question') return t.communitytab.typepost[2] || 'Question';
+    if (clean === 'consejo' || clean === 'consejos' || clean === 'advice') return t.communitytab.typepost[3] || 'Advice';
+  }
+  
+  return backendTag;
+};
+
 const API_COMMUNITY_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/community'; 
 
 export default function CommunityScreen() {
@@ -200,24 +222,6 @@ export default function CommunityScreen() {
     'Experience': 'Experience', 'Experiencia': 'Experience',
     'Question': 'Question', 'Pregunta': 'Question',
     'Advice': 'Advice', 'Consejo': 'Advice'
-  };
-
-  // 🚀 FUNCIÓN PARA TRADUCIR EL TAG DEL BACKEND AL IDIOMA ACTUAL
-  const getTranslatedTag = (backendTag: string) => {
-    // Si estamos en español, buscamos su equivalente
-    if (t.communitytab.typepost.includes('Experiencia')) {
-      if (backendTag === 'Experience') return 'Experiencia';
-      if (backendTag === 'Question') return 'Pregunta';
-      if (backendTag === 'Advice') return 'Consejo';
-    }
-    // Si estamos en inglés, buscamos su equivalente (o lo dejamos igual)
-    if (t.communitytab.typepost.includes('Experience')) {
-       if (backendTag === 'Experiencia') return 'Experience';
-       if (backendTag === 'Pregunta') return 'Question';
-       if (backendTag === 'Consejo') return 'Advice';
-    }
-    // Fallback
-    return backendTag;
   };
 
   const subCategories = [
@@ -483,7 +487,7 @@ export default function CommunityScreen() {
 
   const handleShare = async (post: any) => {
     await handleUniversalShare({
-      title: `Comunidad - ${getTranslatedTag(post.tag)} • ${post.subCategory}`,
+      title: `Comunidad - ${getTranslatedTag(post.tag, t)} • ${post.subCategory}`,
       description: post.text,
       image: post.image,
     });
@@ -1019,7 +1023,7 @@ export default function CommunityScreen() {
                                 </View>
                                 
                                 <View style={styles.postHeaderRow}>
-                                  <ThemedText style={styles.tagText}>#{getTranslatedTag(post.tag)} • {post.subCategory}</ThemedText>
+                                  <ThemedText style={styles.tagText}>#{getTranslatedTag(post.tag, t)} • {post.subCategory}</ThemedText>
                                   <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
                                 </View>
                                 <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20 }]}>{post.text}</ThemedText>
@@ -1085,7 +1089,7 @@ export default function CommunityScreen() {
                                 )}
                                 
                                 <View style={[styles.postHeaderRow, { opacity: isPending ? 0.6 : 1 }]}>
-                                  <ThemedText style={styles.tagText}>#{getTranslatedTag(post.tag)} • {post.subCategory}</ThemedText>
+                                  <ThemedText style={styles.tagText}>#{getTranslatedTag(post.tag, t)} • {post.subCategory}</ThemedText>
                                   <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
                                 </View>
                                 

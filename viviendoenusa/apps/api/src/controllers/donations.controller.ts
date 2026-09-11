@@ -323,7 +323,8 @@ export const createDonation = async (data: any) => {
       return newDonation[0];
     });
 
-    sendTelegramAlert(
+    // 🚀 AWAIT CRÍTICO EN SERVERLESS
+    await sendTelegramAlert(
       validUserId, 
       cleanData.zip || 'N/A', 
       cleanData.title || 'Sin título'
@@ -445,7 +446,8 @@ export const updateDonationStatus = async (idParam: any, statusOrBody?: any, app
           userIds: usersToNotify.map(u => u.id) 
         };
 
-        sendMassPushNotification(pushPayload).catch(err => {
+        // 🚀 AWAIT CRÍTICO PARA EVITAR CORTE DE SERVIDOR
+        await sendMassPushNotification(pushPayload).catch(err => {
            console.error("❌ [DEBUG PUSH] Falló el Push Notification de donaciones:", err);
         });
       }

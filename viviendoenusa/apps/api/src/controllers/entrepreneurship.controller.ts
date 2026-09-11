@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
 import { entrepreneurship, users, rating as ratingTable, reviews as reviewsTable, notifications, userDevices, typeDetail } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and, inArray, or } from "drizzle-orm"; 
+import { eq, desc, sql, and, inArray, or, ne } from "drizzle-orm"; 
 import { alias } from "drizzle-orm/pg-core"; 
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; 
@@ -50,7 +50,6 @@ const sendTelegramAlert = async (userId: string, zip: string, namePreview: strin
   
   if (!botToken || !chatId) return;
 
-  // 🚀 Buscamos el correo y nombre del usuario en la base de datos
   let userEmail = "No disponible";
   let userName = "Usuario";
   try {
@@ -156,7 +155,6 @@ export const getEntrepreneurships = async (rawZip?: string | number, userId?: st
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = userId ? sanitizeText(String(userId)) : null;
 
-    // 🚀 OBTENER TODOS LOS REGISTROS (Aprobados y No Aprobados / Pendientes)
     let baseConditions = cleanUserId 
       ? sql`(${entrepreneurship.approved} = false OR ${entrepreneurship.approved} = true OR ${entrepreneurship.userId} = ${cleanUserId})`
       : sql`(${entrepreneurship.approved} = false OR ${entrepreneurship.approved} = true)`;
@@ -445,7 +443,7 @@ export const createEntrepreneurship = async (data: any) => {
       return newItem[0];
     });
 
-    sendTelegramAlert(
+    await sendTelegramAlert(
       validUserId, 
       data.zip || 'N/A', 
       data.nameEntrepren || 'Sin nombre'
@@ -519,11 +517,11 @@ export const updateEntrepreneurship = async (idParam: any, dataParam: any) => {
         if (nearbyZips && nearbyZips.length > 0) {
           usersToNotify = await db.select({ id: users.id })
                                   .from(users)
-                                  .where(and(inArray(users.zip, nearbyZips as string[]), sql`${users.id} != ${record.userId}`)); 
+                                  .where(and(inArray(users.zip, nearbyZips as string[]), ne(users.id, record.userId || ''))); 
         } else {
           usersToNotify = await db.select({ id: users.id })
                                   .from(users)
-                                  .where(and(eq(users.zip, String(record.zip)), sql`${users.id} != ${record.userId}`));
+                                  .where(and(eq(users.zip, String(record.zip)), ne(users.id, record.userId || '')));
         }
       }
 
@@ -542,7 +540,11 @@ export const updateEntrepreneurship = async (idParam: any, dataParam: any) => {
           return notifPayload;
         });
 
-        await db.insert(notifications).values(notificationsToInsert);
+        try {
+          await db.insert(notifications).values(notificationsToInsert);
+        } catch (e) {
+          console.error("❌ Error guardando notificaciones de emprendimiento en BD:", e);
+        }
 
         pushNotificationData = {
           title: titleText,
@@ -554,7 +556,7 @@ export const updateEntrepreneurship = async (idParam: any, dataParam: any) => {
     }
 
     if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
+      await sendMassPushNotification(pushNotificationData).catch(err => {
          console.error("❌ [DEBUG PUSH] Falló el Push Notification:", err);
       });
     }
