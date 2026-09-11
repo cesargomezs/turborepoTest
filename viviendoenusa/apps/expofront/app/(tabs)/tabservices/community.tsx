@@ -202,6 +202,24 @@ export default function CommunityScreen() {
     'Advice': 'Advice', 'Consejo': 'Advice'
   };
 
+  // 🚀 FUNCIÓN PARA TRADUCIR EL TAG DEL BACKEND AL IDIOMA ACTUAL
+  const getTranslatedTag = (backendTag: string) => {
+    // Si estamos en español, buscamos su equivalente
+    if (t.communitytab.typepost.includes('Experiencia')) {
+      if (backendTag === 'Experience') return 'Experiencia';
+      if (backendTag === 'Question') return 'Pregunta';
+      if (backendTag === 'Advice') return 'Consejo';
+    }
+    // Si estamos en inglés, buscamos su equivalente (o lo dejamos igual)
+    if (t.communitytab.typepost.includes('Experience')) {
+       if (backendTag === 'Experiencia') return 'Experience';
+       if (backendTag === 'Pregunta') return 'Question';
+       if (backendTag === 'Consejo') return 'Advice';
+    }
+    // Fallback
+    return backendTag;
+  };
+
   const subCategories = [
     { id: t.communitytab.subCategories[0], icon: 'earth' }, 
     { id: t.communitytab.subCategories[1], icon: 'silverware-fork-knife' },
@@ -234,7 +252,6 @@ export default function CommunityScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
 
-  // 🚀 REF PARA EVITAR BUCLES AL INICIAR
   const hasInitialized = useRef(false);
 
   const fetchSinglePost = async (id: string) => {
@@ -287,7 +304,6 @@ export default function CommunityScreen() {
       
       if (formattedPost.zip) setZipCode(String(formattedPost.zip));
 
-      // 🚀 Limpiamos el parámetro de la URL
       router.setParams({ openEventId: '' }); 
 
     } catch (error) {
@@ -389,7 +405,6 @@ export default function CommunityScreen() {
     }
   };
 
-  // 🚀 EFECTO INICIAL CONTROLADO CON REFERENCIA
   useEffect(() => {
     if (!hasInitialized.current) {
       if (openEventId) {
@@ -405,7 +420,6 @@ export default function CommunityScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Ya no bloqueamos con openEventId
       if (hasInitialized.current) {
         if (isAdminMode) {
           fetchCommunityPosts(zipCode);
@@ -469,7 +483,7 @@ export default function CommunityScreen() {
 
   const handleShare = async (post: any) => {
     await handleUniversalShare({
-      title: `Comunidad - ${post.tag} • ${post.subCategory}`,
+      title: `Comunidad - ${getTranslatedTag(post.tag)} • ${post.subCategory}`,
       description: post.text,
       image: post.image,
     });
@@ -1005,7 +1019,7 @@ export default function CommunityScreen() {
                                 </View>
                                 
                                 <View style={styles.postHeaderRow}>
-                                  <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
+                                  <ThemedText style={styles.tagText}>#{getTranslatedTag(post.tag)} • {post.subCategory}</ThemedText>
                                   <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
                                 </View>
                                 <ThemedText style={[styles.bodyText, { marginBottom: post.image ? 6 : 0, lineHeight: 20 }]}>{post.text}</ThemedText>
@@ -1071,7 +1085,7 @@ export default function CommunityScreen() {
                                 )}
                                 
                                 <View style={[styles.postHeaderRow, { opacity: isPending ? 0.6 : 1 }]}>
-                                  <ThemedText style={styles.tagText}>#{post.tag} • {post.subCategory}</ThemedText>
+                                  <ThemedText style={styles.tagText}>#{getTranslatedTag(post.tag)} • {post.subCategory}</ThemedText>
                                   <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
                                 </View>
                                 
