@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, Share, ActivityIndicator,
@@ -195,6 +195,9 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
+  // 🚀 REF PARA EVITAR BUCLES AL INICIAR
+  const hasInitialized = useRef(false);
+
   // 🚀 3. FETCH INDIVIDUAL PARA NOTIFICACIONES
   const fetchSingleDonation = async (id: string) => {
     try {
@@ -223,6 +226,9 @@ export default function DonationsScreen() {
       setDonations([formattedDonation]);
       setPendingDonations([]);
       if (formattedDonation.zip) setZipCode(String(formattedDonation.zip));
+
+      // 🚀 Limpiamos el parámetro de la URL para que no vuelva a disparar si el usuario cambia el input
+      router.setParams({ id: '' }); 
 
     } catch (error) {
       console.error("Error cargando donación individual:", error);
@@ -289,44 +295,44 @@ export default function DonationsScreen() {
     }
   };
 
-  // 🚀 4. EFECTO INICIAL PARA NOTIFICACIONES O ZIP DEL USUARIO
+  // 🚀 EFECTO INICIAL CONTROLADO CON REFERENCIA
   useEffect(() => {
-    if (openDonationId) {
-      fetchSingleDonation(openDonationId as string);
-    } else if (!zipCode && userZip && userZip.length === 5) {
-      setZipCode(userZip);
-      fetchDonations(userZip);
+    if (!hasInitialized.current) {
+      if (openDonationId) {
+        fetchSingleDonation(openDonationId as string);
+        hasInitialized.current = true;
+      } else if (userZip && userZip.length === 5) {
+        setZipCode(userZip);
+        fetchDonations(userZip);
+        hasInitialized.current = true;
+      }
     }
   }, [openDonationId, userZip]);
 
   useFocusEffect(
     useCallback(() => {
-      if (openDonationId) return; // Si viene de push, no interrumpimos
-
-      if (isAdminMode) {
-        fetchDonations(zipCode);
-      } else if (zipCode && zipCode.length === 5) {
-        fetchDonations(zipCode);
-      } else if (!zipCode && userZip && userZip.length === 5) {
-        setZipCode(userZip);
-        fetchDonations(userZip);
+      // Ya no chequeamos openDonationId aquí para evitar bloqueos
+      if (hasInitialized.current) {
+        if (isAdminMode) {
+          fetchDonations(zipCode);
+        } else if (zipCode && zipCode.length === 5) {
+          fetchDonations(zipCode);
+        }
       }
-    }, [zipCode, isAdminMode, openDonationId, userZip])
+    }, [zipCode, isAdminMode])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (openDonationId) {
-          fetchSingleDonation(openDonationId as string);
-        } else if (isAdminMode || (zipCode && zipCode.length === 5)) {
+        if (isAdminMode || (zipCode && zipCode.length === 5)) {
           fetchDonations(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, zipCode, isAdminMode, openDonationId]);
+  }, [isFocused, zipCode, isAdminMode]);
 
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) window.alert(`${title}\n${message}`); 
@@ -567,7 +573,12 @@ export default function DonationsScreen() {
                     value={zipCode} 
                     onChangeText={(text) => {
                       setZipCode(text);
-                      if (text.length === 5) fetchDonations(text); 
+                      if (text.length < 5) {
+                        setDonations([]);
+                        setPendingDonations([]);
+                      } else if (text.length === 5) {
+                        fetchDonations(text); 
+                      }
                     }} 
                     onSubmitEditing={() => zipCode.length === 5 && fetchDonations(zipCode)} 
                     placeholderTextColor={DynamicColors.subtext} 

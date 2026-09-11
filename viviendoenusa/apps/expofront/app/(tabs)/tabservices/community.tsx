@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Image, Alert, ActivityIndicator,
@@ -7,7 +7,6 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-// 🚀 1. IMPORTAMOS useLocalSearchParams PARA ATRAPAR EL ID DE LA NOTIFICACIÓN
 import { useRouter, useSegments, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
 import { useIsFocused } from '@react-navigation/native'; 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,12 +26,10 @@ import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
 
-// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'community') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
   if (!supabaseClient) return url;
@@ -74,7 +71,6 @@ const refreshSupabaseUrl = async (url: string, fallbackFolder = 'community') => 
   return url; 
 };
 
-// --- LÓGICA DE VALIDACIÓN ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const containsBadWords = (text: string): boolean => {
@@ -147,12 +143,10 @@ export default function CommunityScreen() {
   const localTheme = isDark ? 'dark' : 'light';
 
   const isFocused = useIsFocused();
-  // 🚀 2. EXTRAEMOS EL PARÁMETRO DE LA NOTIFICACIÓN PUSH
   const { openEventId } = useLocalSearchParams();
 
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
-  // 🚀 3. EXTRAEMOS EL CÓDIGO POSTAL DEL USUARIO LOGUEADO
   const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
@@ -240,7 +234,9 @@ export default function CommunityScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
 
-  // 🚀 4. FUNCIÓN PARA TRAER UN POST INDIVIDUAL DESDE UNA NOTIFICACIÓN
+  // 🚀 REF PARA EVITAR BUCLES AL INICIAR
+  const hasInitialized = useRef(false);
+
   const fetchSinglePost = async (id: string) => {
     try {
       setLoadingPosts(true);
@@ -290,6 +286,9 @@ export default function CommunityScreen() {
       setVisibleComments({ [formattedPost.id]: true }); 
       
       if (formattedPost.zip) setZipCode(String(formattedPost.zip));
+
+      // 🚀 Limpiamos el parámetro de la URL
+      router.setParams({ openEventId: '' }); 
 
     } catch (error) {
       console.error("Error cargando post individual:", error);
@@ -390,46 +389,44 @@ export default function CommunityScreen() {
     }
   };
 
-  // 🚀 5. EFECTO INICIAL PARA MANEJAR LA NOTIFICACIÓN O EL ZIP DEL USUARIO
+  // 🚀 EFECTO INICIAL CONTROLADO CON REFERENCIA
   useEffect(() => {
-    if (openEventId) {
-      fetchSinglePost(openEventId as string);
-    } else if (!zipCode && userZip && userZip.length === 5) {
-      setZipCode(userZip);
-      fetchCommunityPosts(userZip);
+    if (!hasInitialized.current) {
+      if (openEventId) {
+        fetchSinglePost(openEventId as string);
+        hasInitialized.current = true;
+      } else if (userZip && userZip.length === 5) {
+        setZipCode(userZip);
+        fetchCommunityPosts(userZip);
+        hasInitialized.current = true;
+      }
     }
   }, [openEventId, userZip]);
 
-  // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA O MODO
   useFocusEffect(
     useCallback(() => {
-      if (openEventId) return; // Si vino por notificación, no interrumpimos la consulta de post único
-
-      if (isAdminMode) {
-        fetchCommunityPosts(zipCode);
-      } else if (zipCode && zipCode.length === 5) {
-        fetchCommunityPosts(zipCode);
-      } else if (!zipCode && userZip && userZip.length === 5) {
-        setZipCode(userZip);
-        fetchCommunityPosts(userZip);
+      // Ya no bloqueamos con openEventId
+      if (hasInitialized.current) {
+        if (isAdminMode) {
+          fetchCommunityPosts(zipCode);
+        } else if (zipCode && zipCode.length === 5) {
+          fetchCommunityPosts(zipCode);
+        }
       }
-    }, [zipCode, isAdminMode, openEventId, userZip])
+    }, [zipCode, isAdminMode])
   );
 
-  // 🚀 DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (openEventId) {
-           fetchSinglePost(openEventId as string);
-        } else if (isAdminMode || (zipCode && zipCode.length === 5)) {
+        if (isAdminMode || (zipCode && zipCode.length === 5)) {
           fetchCommunityPosts(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, zipCode, isAdminMode, openEventId]); 
+  }, [isFocused, zipCode, isAdminMode]); 
 
   const approveCommunityPost = async (id: string) => {
     try {

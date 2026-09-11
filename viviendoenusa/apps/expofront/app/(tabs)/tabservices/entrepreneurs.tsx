@@ -1,7 +1,7 @@
 import Head from 'expo-router/head';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
@@ -293,6 +293,9 @@ export default function EntrepreneurshipScreen() {
   const isZipValid = zipCode.length === 5;
   const triggerAlert = (title: string, msg: string) => Platform.OS === 'web' ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
 
+  // 🚀 REF PARA EVITAR BUCLES AL INICIAR CON EL CÓDIGO POSTAL DE LA PUSH
+  const hasInitialized = useRef(false);
+
   useEffect(() => {
     const loadSavedItems = async () => {
       try {
@@ -353,6 +356,9 @@ export default function EntrepreneurshipScreen() {
 
       // 🚀 Abrimos el modal de detalles automáticamente
       setDetailItem(formattedItem);
+
+      // 🚀 Limpiamos el parámetro de la URL
+      router.setParams({ id: '' });
 
     } catch (error) {
       console.error("Error cargando emprendimiento individual:", error);
@@ -486,48 +492,47 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // 🚀 4. EFECTO INICIAL PARA NOTIFICACIONES O ZIP DEL USUARIO
+  // 🚀 EFECTO INICIAL CONTROLADO CON REFERENCIA
   useEffect(() => {
-    if (openStoreId) {
-      fetchSingleEntrepreneurship(openStoreId as string);
-    } else if (!zipCode && userZip && userZip.length === 5) {
-      setZipCode(userZip);
-      fetchEntrepreneurships(userZip);
+    if (!hasInitialized.current) {
+      if (openStoreId) {
+        fetchSingleEntrepreneurship(openStoreId as string);
+        hasInitialized.current = true;
+      } else if (userZip && userZip.length === 5) {
+        setZipCode(userZip);
+        fetchEntrepreneurships(userZip);
+        hasInitialized.current = true;
+      }
     }
   }, [openStoreId, userZip]);
 
   useFocusEffect(
     useCallback(() => {
-      if (openStoreId) return; // Si viene de push, no interrumpimos
-
-      if (isAdminMode) {
-        fetchEntrepreneurships('');
-      } else if (showSavedOnly) {
-        fetchSavedItems();
-      } else if (zipCode && zipCode.length === 5) {
-        fetchEntrepreneurships(zipCode);
-      } else if (!zipCode && userZip && userZip.length === 5) {
-        setZipCode(userZip);
-        fetchEntrepreneurships(userZip);
+      if (hasInitialized.current) {
+        if (isAdminMode) {
+          fetchEntrepreneurships('');
+        } else if (showSavedOnly) {
+          fetchSavedItems();
+        } else if (zipCode && zipCode.length === 5) {
+          fetchEntrepreneurships(zipCode);
+        }
       }
-    }, [showSavedOnly, zipCode, isAdminMode, openStoreId, userZip])
+    }, [showSavedOnly, zipCode, isAdminMode])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (openStoreId) {
-          fetchSingleEntrepreneurship(openStoreId as string);
-        } else if (showSavedOnly) {
+        if (showSavedOnly) {
           fetchSavedItems();
-        } else if (isZipValid || isAdminMode) {
+        } else if (isAdminMode || (zipCode && zipCode.length === 5)) {
           fetchEntrepreneurships(zipCode);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, showSavedOnly, zipCode, isZipValid, isAdminMode, openStoreId]);
+  }, [isFocused, showSavedOnly, zipCode, isAdminMode]);
 
   const handleSearch = async (forcedCategoryIdx?: number) => {
     if (!isZipValid) return;
@@ -535,12 +540,17 @@ export default function EntrepreneurshipScreen() {
     await fetchEntrepreneurships(zipCode);
   };
 
+  // 🚀 LIMPIEZA DE PANTALLA AL BORRAR EL ZIP 
   const handleZipChange = (text: string) => {
     setZipCode(text);
     if (text.length < 5) {
       setResults([]);
       setLocalData([]);
-      setPendingItems([]);
+      if (!isAdminMode) {
+        setPendingItems([]);
+      }
+    } else if (text.length === 5) {
+      fetchEntrepreneurships(text);
     }
   };
 
@@ -994,7 +1004,7 @@ export default function EntrepreneurshipScreen() {
                   <View style={stylesUnified.webSidebar}>
                     <ThemedText style={[stylesUnified.sideMenuTitle, { color: DC.text }]}>{t.entrepreneurshiptab.viewcategory}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
-                      {CATEGORIES.map((areaName, index) => {
+                      {CATEGORIES.map((areaName: string, index: number) => {
                         const isActive = selectedCategoryIdx === index;
                         const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
                         return (
@@ -1033,7 +1043,7 @@ export default function EntrepreneurshipScreen() {
                         showsHorizontalScrollIndicator={false} 
                         contentContainerStyle={{ gap: 8, paddingBottom: 6 }}
                       >
-                        {CATEGORIES.map((areaName, index) => {
+                        {CATEGORIES.map((areaName: string, index: number) => {
                           const isActive = selectedCategoryIdx === index;
                           const iconName = CATEGORY_ICONS_DICT[areaName] || ICONS_ARRAY[index] || 'store';
                           return (
@@ -1336,10 +1346,10 @@ export default function EntrepreneurshipScreen() {
                 <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.viewcategory || 'CATEGORÍA'}</ThemedText>
                 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-                  {CATEGORIES.map((catName, index) => {
+                  {CATEGORIES.map((catName: string, index: number) => {
                     if (index === 0) return null; 
                     const isActive = formCategoryIdx === index;
-                    const iconName = CATEGORY_ICONS_DICT[catName] || ICONS_ARRAY[index] || 'store';
+                    const iconName = (CATEGORY_ICONS_DICT as Record<string, string>)[catName] || 'store';
                     return (
                       <TouchableOpacity key={index} onPress={() => setFormCategoryIdx(index)} style={{ borderRadius: 12, overflow: 'hidden', height: 36, borderWidth: isActive ? 0 : 1, borderColor: DC.border }}>
                         {isActive ? (
