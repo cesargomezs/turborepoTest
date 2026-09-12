@@ -161,7 +161,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. OBTENER DONACIONES (DEVUELVE TODOS LOS PENDIENTES SIN RESTRICCIONES)
+// 🔍 1. OBTENER DONACIONES CON REGLAS DE ORDENAMIENTO (PROPIAS > ADMIN > TODAS)
 // =====================================================================
 export const getDonations = async (rawZip?: string | number, userId?: string) => {
   try {
@@ -192,7 +192,27 @@ export const getDonations = async (rawZip?: string | number, userId?: string) =>
       .from(donations)
       .leftJoin(users, eq(donations.userId, users.id))
       .where(finalConditions)
-      .orderBy(desc(donations.id)); 
+      .$dynamic(); // 🚀 Permite aplicar ORDER BY dinámico
+
+    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO
+    if (cleanUserId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${donations.userId} = ${cleanUserId} THEN 0 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(donations.id)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+              ELSE 1 
+            END`,
+        desc(donations.id)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];

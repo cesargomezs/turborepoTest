@@ -173,7 +173,7 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (FILTRADA POR APROBACIÓN O DUEÑO)
+// 🔍 1. CONSULTA GENERAL (FILTRADA POR APROBACIÓN O DUEÑO CON ORDENAMIENTO)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
@@ -206,7 +206,27 @@ export const getEvents = async (zip?: string, userId?: string) => {
       .leftJoin(users, eq(events.userId, users.id)) 
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .where(finalConditions)
-      .orderBy(asc(events.dateEvent)); 
+      .$dynamic(); // 🚀 Permite aplicar ORDER BY dinámico
+
+    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
+    if (cleanUserId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${events.userId} = ${cleanUserId} THEN 0 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(events.createdAt)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+              ELSE 1 
+            END`,
+        desc(events.createdAt)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];

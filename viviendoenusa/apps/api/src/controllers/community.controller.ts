@@ -142,15 +142,13 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (Ajustada exactamente como en Abogados)
+// 🔍 1. CONSULTA GENERAL CON REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
 // =====================================================================
 export const getCommunityPosts = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = currentUserId ? sanitizeText(String(currentUserId)) : null;
 
-    // 🚀 IGUAL QUE EN ABOGADOS: Mandamos todos los pendientes (approved = false) 
-    // sin validar si es admin ni bloquear la consulta. El front-end los aisla.
     let baseConditions = cleanUserId 
       ? sql`(${community.approved} = false OR ${community.approved} = true OR ${community.userId} = ${cleanUserId})`
       : sql`(${community.approved} = false OR ${community.approved} = true)`;
@@ -177,7 +175,27 @@ export const getCommunityPosts = async (rawZip?: string | number, currentUserId?
       .leftJoin(reviews, eq(reviews.relationshipId, community.id)) 
       .leftJoin(users, eq(reviews.userId, users.id)) 
       .where(finalConditions)
-      .orderBy(desc(community.id)); 
+      .$dynamic(); // 🚀 Permite aplicar ORDER BY dinámico
+
+    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO
+    if (cleanUserId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${community.userId} = ${cleanUserId} THEN 0 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(community.createdAt)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+              ELSE 1 
+            END`,
+        desc(community.createdAt)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];

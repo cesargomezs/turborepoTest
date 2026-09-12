@@ -1,6 +1,7 @@
 import { db } from "../../../../packages/db/src"; 
 import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { createClient } from '@supabase/supabase-js'; 
 import zipcodes from 'zipcodes'; 
 
@@ -12,6 +13,8 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
 const radiusMiles = process.env.RADIUMILE || 20; 
+
+const reviewers = alias(users, 'reviewers');
 
 // =====================================================================
 // 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
@@ -153,7 +156,7 @@ const sendTelegramAlert = async (storeName: string, refCode: string, method: str
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL CON FILTRO DE RADIO Y VISIBILIDAD
+// 🔍 1. CONSULTA GENERAL CON REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
 // =====================================================================
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
   try {
@@ -180,15 +183,37 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       users: users,
       rating: ratingTable,
       reviews: reviewsTable,
+      reviewers: reviewers,
       payments: payments,
     })
     .from(stores)
+    .leftJoin(users, eq(stores.userId, users.id))
     .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    .leftJoin(users, eq(ratingTable.userId, users.id))
+    .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .leftJoin(payments, and(eq(payments.entityId, stores.id), eq(payments.entityType, 'store')))
     .where(finalConditions)
-    .orderBy(desc(stores.createdAt));
+    .$dynamic();
+
+    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO
+    if (currentUserId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${stores.userId} = ${currentUserId} THEN 0 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(stores.createdAt)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+              ELSE 1 
+            END`,
+        desc(stores.createdAt)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -214,14 +239,19 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
 
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
-        const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        let signedImageUrl = null;
+
+        if (row.reviewers?.imageUrl) {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+          if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        }
 
         storesMap.get(storeId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
-           name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
-           image: data?.signedUrl,
+           name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
+           image: signedImageUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -272,11 +302,18 @@ export const getStoreById = async (id: string) => {
     if (!cleanId) return null;
 
     const rows = await db
-      .select()
+      .select({
+        stores: stores,
+        users: users,
+        rating: ratingTable,
+        reviews: reviewsTable,
+        reviewers: reviewers
+      })
       .from(stores)
+      .leftJoin(users, eq(stores.userId, users.id))
       .leftJoin(ratingTable, eq(ratingTable.referenceId, stores.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .leftJoin(users, eq(ratingTable.userId, users.id))
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .where(eq(stores.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
@@ -294,16 +331,21 @@ export const getStoreById = async (id: string) => {
     };
 
     for (const row of rows) {
-      const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
-
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
+        let signedImageUrl = null;
+
+        if (row.reviewers?.imageUrl) {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+          if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        }
+
         storeFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
-          image: data?.signedUrl,
+          name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
+          image: signedImageUrl,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -449,7 +491,8 @@ export const createStore = async (data: any) => {
     });
 
     if (createdStoreResult) {
-      sendTelegramAlert(
+      // 🚀 AWAIT CRÍTICO PARA SERVERLESS
+      await sendTelegramAlert(
         createdStoreResult.nameStores,
         createdStoreResult.referenceCode || 'N/A',
         createdStoreResult.paymentMethod || 'N/A'
@@ -584,7 +627,8 @@ export const updateStore = async (idParam: any, dataParam: any) => {
     });
 
     if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => console.error("❌ [DEBUG PUSH] Falló:", err));
+      // 🚀 AWAIT CRÍTICO PARA SERVERLESS
+      await sendMassPushNotification(pushNotificationData).catch(err => console.error("❌ [DEBUG PUSH] Falló:", err));
     }
 
     return updatedStoreResult;

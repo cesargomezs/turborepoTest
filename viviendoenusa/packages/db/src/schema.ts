@@ -162,6 +162,7 @@ import {
     premiumPlan: text('premium_plan').default('free'), // 'free', 'basic', 'unlimited'
     timepostEnd: timestamp("timepost_end").defaultNow(),
     approved: boolean("approved").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
   });
   
   // 9. TABLA: STORES

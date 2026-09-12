@@ -57,7 +57,6 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 
     const messages = [];
 
-    // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario en empleos
     for (const device of devices) {
       const [unreadResult] = await db.select({
         count: sql<number>`count(*)`
@@ -77,7 +76,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         sound: 'default',
         title: payload.title,
         body: payload.body,
-        badge: unreadCount, // 🔴 Globito dinámico real para empleos
+        badge: unreadCount, 
         data: { type: "job", referenceId: payload.referenceId },
       });
     }
@@ -136,14 +135,15 @@ const sendTelegramAlert = async (jobTitle: string, companyName: string) => {
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (CON ORDENAMIENTO VIP)
+// 🔍 1. CONSULTA GENERAL (CON REGLAS DE ORDENAMIENTO: PROPIOS > ADMIN > RESTO)
 // =====================================================================
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) : '';
+    const cleanUserId = currentUserId ? sanitizeText(String(currentUserId)) : null;
 
-    let baseConditions = currentUserId 
-      ? sql`(${jobs.userId} = ${currentUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)))`
+    let baseConditions = cleanUserId 
+      ? sql`(${jobs.userId} = ${cleanUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)))`
       : sql`(${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL))`;
 
     let finalConditions: any = baseConditions;
@@ -159,20 +159,26 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
     }
 
     let query = db
-    .select()
+    .select({
+      jobs: jobs,
+      users: users,
+      rating: ratingTable,
+      reviews: reviewsTable,
+      companies: companies
+    })
     .from(jobs)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, jobs.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    .leftJoin(users, eq(ratingTable.userId, users.id))
+    .leftJoin(users, eq(jobs.userId, users.id)) // 👈 Cambiado para evaluar el rol del dueño de la oferta
     .leftJoin(companies, eq(jobs.companyId, companies.id))
     .where(finalConditions)
     .$dynamic();
 
-    // 🚀 MODO PERRO: ORDENAMIENTO VIP (Yo -> Admins -> Resto) + Fecha Descendente
-    if (currentUserId) {
+    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO
+    if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
-              WHEN ${jobs.userId} = ${currentUserId} THEN 0 
+              WHEN ${jobs.userId} = ${cleanUserId} THEN 0 
               WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
               ELSE 2 
             END`,

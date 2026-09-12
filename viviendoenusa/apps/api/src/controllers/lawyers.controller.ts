@@ -1,6 +1,7 @@
 import { db } from "../../../../packages/db/src"; 
 import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core"; 
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
 import { imag } from "@tensorflow/tfjs";
@@ -20,6 +21,8 @@ export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 })
 const NOMBRE_BUCKET = 'images'; 
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
+
+const reviewers = alias(users, 'reviewers');
 
 // =====================================================================
 // 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
@@ -165,14 +168,42 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
     }
 
     let query = db
-      .select()
+      .select({
+        lawyers: lawyers,
+        users: users,
+        rating: ratingTable,
+        reviews: reviewsTable,
+        reviewers: reviewers,
+        payments: payments
+      })
       .from(lawyers)
+      .leftJoin(users, eq(lawyers.userId, users.id))
       .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-      .leftJoin(users, eq(ratingTable.userId, users.id))
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
       .where(finalConditions)
-      .orderBy(desc(lawyers.timepostEnd)); 
+      .$dynamic(); 
+
+    // 🚀 ORDENAMIENTO POR REGLAS (Prioridad Propios, luego Admin, luego Aprobados/Recientes)
+    if (currentUserId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${lawyers.userId} = ${currentUserId} THEN 0 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(lawyers.createdAt)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+              ELSE 1 
+            END`,
+        desc(lawyers.createdAt)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -200,13 +231,13 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         const commentText = row.reviews?.comment || '';
 
         const { data, error } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers?.imageUrl, 3600);
         
         lawyersMap.get(lawyerId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
-           name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
+           name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
            image: data?.signedUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
@@ -260,11 +291,19 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     if (!cleanId) return null;
 
     const rows = await db
-      .select()
+      .select({
+         lawyers: lawyers,
+         users: users,
+         rating: ratingTable,
+         reviews: reviewsTable,
+         reviewers: reviewers,
+         payments: payments
+      })
       .from(lawyers)
+      .leftJoin(users, eq(lawyers.userId, users.id))
       .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .leftJoin(users, eq(ratingTable.userId, users.id))
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
       .where(eq(lawyers.id, cleanId));
   
@@ -284,17 +323,29 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     };
 
     for (const row of rows) {
-      const { data, error } = await supabase
-      .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+      if (row.reviewers && row.reviewers.imageUrl) {
+        const { data, error } = await supabase
+        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
 
-      if (row.rating && row.rating.id) {
+        if (row.rating && row.rating.id) {
+          const commentText = row.reviews?.comment || '';
+          lawyerFinal.reviews.push({
+            ...row.rating,
+            stars: Number(row.rating.rating) || 0,
+            comment: commentText,
+            name: row.reviewers.name + ' ' + (row.reviewers.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
+            image: data?.signedUrl,
+            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          });
+        }
+      } else if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
         lawyerFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          name: row.users?.name + ' ' + (row.users?.lastName ? row.users.lastName.substring(0, 1) : ''),
-          image: data?.signedUrl,
+          name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers?.lastName.substring(0, 1) : ''),
+          image: null,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
       }

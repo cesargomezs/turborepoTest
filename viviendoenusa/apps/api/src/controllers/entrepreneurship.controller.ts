@@ -148,7 +148,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (DEVUELVE TODOS LOS PENDIENTES SIN RESTRICCIONES)
+// 🔍 1. CONSULTA GENERAL (ORDENADA: PROPIOS > ADMIN > TODOS)
 // =====================================================================
 export const getEntrepreneurships = async (rawZip?: string | number, userId?: string) => {
   try {
@@ -187,6 +187,7 @@ export const getEntrepreneurships = async (rawZip?: string | number, userId?: st
       .where(finalConditions)
       .$dynamic(); 
     
+    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
     if (userId) {
       query = query.orderBy(
         sql`CASE 
@@ -495,6 +496,8 @@ export const updateEntrepreneurship = async (idParam: any, dataParam: any) => {
 
     if (data && (data.approved === true || String(data.approved).toLowerCase() === 'true')) {
       data.approved = true;
+      // 🚀 SE ACTUALIZA LA FECHA DE CREACIÓN PARA QUE SUBA DE PRIMERO AL APROBAR (Regla de ordenamiento)
+      data.createdAt = new Date();
     }
 
     const updated = await db.update(entrepreneurship).set(data).where(eq(entrepreneurship.id, cleanId)).returning();

@@ -1,6 +1,7 @@
 import { db } from "../../../../packages/db/src"; 
 import { support, users, rating as ratingTable, reviews as reviewsTable, payments, tariffs, typeDetail, promoCodes, userDevices, notifications } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { createClient } from '@supabase/supabase-js'; 
 import NodeGeocoder from 'node-geocoder';
 import zipcodes from 'zipcodes'; 
@@ -33,6 +34,7 @@ const NOMBRE_BUCKET = 'images';
 const radiusMiles = process.env.RADIUMILE || 20; 
 
 const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
+const reviewers = alias(users, 'reviewers');
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
@@ -146,7 +148,7 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL CON FILTRO DE DISTANCIA Y APROBACIÓN
+// 🔍 1. CONSULTA GENERAL CON REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
 // =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string) => {
   try {
@@ -171,13 +173,15 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       reviews: reviewsTable,
       payments: payments,
       users: users,
+      reviewers: reviewers,
       distance: distanceFormula.as('distance')
     })
     .from(support)
+    .leftJoin(users, eq(support.userId, users.id))
     .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(payments, and(eq(payments.entityId, support.id), eq(payments.entityType, 'support')))
-    .leftJoin(users, eq(ratingTable.userId, users.id))
+    .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .$dynamic();
 
     const visibilityCondition = currentUserId
@@ -191,10 +195,48 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           visibilityCondition 
         )
       );
-      query = query.orderBy(distanceFormula);
+      
+      // 🚀 ORDENAMIENTO POR DISTANCIA + REGLAS DE PRIORIDAD
+      if (currentUserId) {
+        query = query.orderBy(
+          distanceFormula,
+          sql`CASE 
+                WHEN ${support.userId} = ${currentUserId} THEN 0 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+                ELSE 2 
+              END`
+        );
+      } else {
+        query = query.orderBy(
+          distanceFormula,
+          sql`CASE 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+                ELSE 1 
+              END`
+        );
+      }
     } else {
       query = query.where(visibilityCondition);
-      query = query.orderBy(desc(support.createdAt));
+      
+      // 🚀 ORDENAMIENTO POR REGLAS (PROPIOS > ADMIN > TODOS)
+      if (currentUserId) {
+        query = query.orderBy(
+          sql`CASE 
+                WHEN ${support.userId} = ${currentUserId} THEN 0 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+                ELSE 2 
+              END`,
+          desc(support.createdAt)
+        );
+      } else {
+        query = query.orderBy(
+          sql`CASE 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+                ELSE 1 
+              END`,
+          desc(support.createdAt)
+        );
+      }
     }
 
     const rows = await query;
@@ -223,15 +265,18 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
-        const { data } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        let signedReviewerImage = null;
+        if (row.reviewers?.imageUrl) {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+          if (data?.signedUrl) signedReviewerImage = data.signedUrl;
+        }
 
         supportsMap.get(supportId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
-           name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
-           image: data?.signedUrl,
+           name: (row.reviewers?.name || '') + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
+           image: signedReviewerImage,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -283,11 +328,18 @@ export const getSupportById = async (id: string) => {
     if (!cleanId) return null;
 
     const rows = await db
-      .select()
+      .select({
+        support: support,
+        users: users,
+        rating: ratingTable,
+        reviews: reviewsTable,
+        reviewers: reviewers
+      })
       .from(support)
+      .leftJoin(users, eq(support.userId, users.id))
       .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
       .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .leftJoin(users, eq(ratingTable.userId, users.id))
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .where(eq(support.id, cleanId));
   
     if (!rows || rows.length === 0) return null;
@@ -307,16 +359,19 @@ export const getSupportById = async (id: string) => {
 
     for (const row of rows) {
       if (row.rating && row.rating.id) {
-        const { data } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        let signedReviewerImage = null;
+        if (row.reviewers?.imageUrl) {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+          if (data?.signedUrl) signedReviewerImage = data.signedUrl;
+        }
 
         const commentText = row.reviews?.comment || '';
         supportFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          name: row.users?.name + ' ' + row.users?.lastName?.substring(0, 1),
-          image: data?.signedUrl,
+          name: (row.reviewers?.name || '') + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
+          image: signedReviewerImage,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -460,7 +515,7 @@ export const createSupport = async (data: any) => {
     });
 
     if (createdSupportResult) {
-      sendTelegramAlert(
+      await sendTelegramAlert(
         createdSupportResult.nameSupp,
         createdSupportResult.referenceCode || 'N/A',
         createdSupportResult.paymentMethod || 'N/A'
@@ -604,7 +659,7 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
     });
 
     if (pushNotificationData) {
-      sendMassPushNotification(pushNotificationData).catch(err => {
+      await sendMassPushNotification(pushNotificationData).catch(err => {
          console.error("❌ [DEBUG PUSH APOYO] Falló el Push Notification:", err);
       });
     }
