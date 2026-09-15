@@ -952,20 +952,38 @@ export default function HomeScreen() {
     return (
       <>
         <Head>
-          <title>Viviendo en USA | La App de la Comunidad Latina</title>
+          <title>Viviendo en USA | La App de la Comunidad Latina y Migrante</title>
           
-          <meta name="description" content="Únete al proyecto Viviendo en USA, la red principal para la comunidad latina e hispana. Encuentra abogados, médicos, emprendimientos, red de apoyo, empleos y negocios locales." />
-          <meta name="keywords" content="latinos en usa, comunidad latina, hispanos en usa, abogados para latinos, asesoría legal, red de apoyo, emprendimientos latinos, buscar empleo, negocios hispanos, servicios médicos, latinos en estados unidos, directorio latino" />
+          <meta name="description" content="Únete a Viviendo en USA, la red principal para la comunidad latina e hispana. Apoyo esencial para la comunidad migrante: abogados, empleos, eventos y recursos locales." />
+          
+          {/* 🚀 DATOS ESTRUCTURADOS SCHEMA.ORG PARA GOOGLE Y MOTORES DE IA */}
+          <script type="application/ld+json">
+            {JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              "name": "Viviendo en USA",
+              "url": "https://viviendoenusa.app",
+              "description": "La red principal para la comunidad latina, hispana y migrante en Estados Unidos. Directorio de empleos, eventos, abogados y red de apoyo.",
+              "inLanguage": ["es", "en"],
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": "https://viviendoenusa.app/search?q={search_term_string}",
+                "query-input": "required name=search_term_string"
+              }
+            })}
+          </script>
+
+          <meta name="keywords" content="comunidad latina, migrantes en usa, latinos en usa, hispanos en usa, ayuda para migrantes, abogados para latinos, red de apoyo, emprendimientos latinos, buscar empleo, negocios hispanos, servicios médicos, directorio latino" />
           <meta name="robots" content="index, follow" />
           
-          <meta property="og:title" content="Viviendo en USA | Directorio y Comunidad Latina" />
-          <meta property="og:description" content="Encuentra abogados, emprendimientos, red de apoyo y oportunidades para la comunidad latina e hispana en Estados Unidos." />
+          <meta property="og:title" content="Viviendo en USA | Red para la Comunidad Latina y Migrante" />
+          <meta property="og:description" content="Encuentra abogados, emprendimientos, red de apoyo y oportunidades para la comunidad latina y migrante en Estados Unidos." />
           <meta property="og:type" content="website" />
           <meta property="og:url" content="https://viviendoenusa.app" />
           <meta property="og:image" content={mainLogoUrl} />
           
           <meta name="twitter:card" content="summary_large_image" />
-          <meta name="twitter:title" content="Viviendo en USA | Directorio Latino" />
+          <meta name="twitter:title" content="Viviendo en USA | Directorio Latino y Migrante" />
           <meta name="twitter:description" content="Encuentra abogados, emprendimientos, empleos y red de apoyo para latinos e hispanos en USA." />
           <meta name="twitter:image" content={mainLogoUrl} />
         </Head>
