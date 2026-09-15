@@ -952,21 +952,21 @@ export default function HomeScreen() {
     return (
       <>
         <Head>
-          <title>Viviendo en USA | La App de la Comunidad Hispana</title>
+          <title>Viviendo en USA | La App de la Comunidad Latina</title>
           
-          <meta name="description" content="Únete al proyecto real Viviendo en USA, la red principal para la comunidad hispana. Encuentra abogados, médicos, emprendimientos, red de apoyo, empleos y negocios locales." />
-          <meta name="keywords" content="hispanos en usa, comunidad latina, abogados para hispanos, asesoría legal, red de apoyo, emprendimientos latinos, buscar empleo, negocios hispanos, servicios médicos, latinos en estados unidos, directorio hispano" />
+          <meta name="description" content="Únete al proyecto Viviendo en USA, la red principal para la comunidad latina e hispana. Encuentra abogados, médicos, emprendimientos, red de apoyo, empleos y negocios locales." />
+          <meta name="keywords" content="latinos en usa, comunidad latina, hispanos en usa, abogados para latinos, asesoría legal, red de apoyo, emprendimientos latinos, buscar empleo, negocios hispanos, servicios médicos, latinos en estados unidos, directorio latino" />
           <meta name="robots" content="index, follow" />
           
-          <meta property="og:title" content="Viviendo en USA | Directorio y Comunidad Hispana" />
-          <meta property="og:description" content="Encuentra abogados, emprendimientos, red de apoyo y oportunidades para la comunidad hispana en Estados Unidos." />
+          <meta property="og:title" content="Viviendo en USA | Directorio y Comunidad Latina" />
+          <meta property="og:description" content="Encuentra abogados, emprendimientos, red de apoyo y oportunidades para la comunidad latina e hispana en Estados Unidos." />
           <meta property="og:type" content="website" />
           <meta property="og:url" content="https://viviendoenusa.app" />
           <meta property="og:image" content={mainLogoUrl} />
           
           <meta name="twitter:card" content="summary_large_image" />
-          <meta name="twitter:title" content="Viviendo en USA | Directorio Hispano" />
-          <meta name="twitter:description" content="Encuentra abogados, emprendimientos, empleos y red de apoyo para latinos en USA." />
+          <meta name="twitter:title" content="Viviendo en USA | Directorio Latino" />
+          <meta name="twitter:description" content="Encuentra abogados, emprendimientos, empleos y red de apoyo para latinos e hispanos en USA." />
           <meta name="twitter:image" content={mainLogoUrl} />
         </Head>
 
@@ -1163,7 +1163,7 @@ export default function HomeScreen() {
               {isEnglish ? "Living in " : "Viviendo en "}<Text style={{ color: '#FF5F6D' }}>USA</Text>
             </Text>
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#F5A623', marginBottom: 25, textAlign: 'center' }}>
-              {isEnglish ? "The Hispanic Community App" : "La App de la Comunidad Hispana"}
+              {isEnglish ? "The Latino Community App" : "La App de la Comunidad Latina"}
             </Text>
             <Text style={{ color: DynamicColors.subtext, textAlign: 'center', maxWidth: 650, marginBottom: 40, fontSize: 16, lineHeight: 24 }}>
               {isEnglish ? "Choose your preferred platform. Register for free and start discovering and connecting with the community today." : "Elige la plataforma de tu preferencia. Regístrate gratis y comienza a descubrir y conectar con la comunidad hoy mismo."}

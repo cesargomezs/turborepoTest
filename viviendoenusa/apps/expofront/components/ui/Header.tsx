@@ -229,6 +229,20 @@ export default function Header({ title }: { title?: string }) {
       });
       
       if (!res.ok) {
+        // 🔥 FIX: Manejo del Token expirado (401)
+        if (res.status === 401) {
+          if (typeof logout === 'function') await logout();
+          dispatch(setUserMetadata({} as any));
+          dispatch(toggleAuth());
+          
+          if (Platform.OS === 'web') {
+            window.location.replace('/');
+          } else {
+            router.replace('/');
+          }
+          return;
+        }
+
         const errText = await res.text();
         throw new Error(`Error ${res.status}: ${errText}`);
       }
