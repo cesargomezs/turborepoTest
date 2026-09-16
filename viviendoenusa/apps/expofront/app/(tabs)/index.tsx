@@ -16,23 +16,19 @@ import {
   Text,
   FlatList,
   Linking,
-  AppState // 🚀 IMPORTADO PARA LIMPIAR EL GLOBO DE NOTIFICACIÓN
+  AppState
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
-//import AsyncStorage from '@react-native-async-storage/async-storage';
-
 
 import * as SecureStore from 'expo-secure-store';
-
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication'; 
 
-// 🚀 IMPORTACIÓN ULTRA SEGURA (EVITA EL CRASH DE PANTALLA ROJA)
 let Notifications: any = null;
 let Device: any = null;
 let StoreReview: any = null; 
@@ -61,7 +57,6 @@ import { createClient } from '@supabase/supabase-js';
 
 import badWordsData from '../../utils/babwords.json';
 
-// 🚀 LÓGICA DE VALIDACIÓN ANTI-GROSERÍAS
 let BANNED_WORDS: string[] = [];
 try {
   BANNED_WORDS = Array.isArray((badWordsData as any).badWordsList) ? (badWordsData as any).badWordsList : [];
@@ -71,36 +66,27 @@ try {
 
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
-  
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
-
   return wordsInText.some(userWord => {
     return BANNED_WORDS.some(bannedWord => {
       if (!bannedWord) return false;
       const lowerBanned = bannedWord.toLowerCase();
-
       if (userWord === lowerBanned) return true;
       if (userWord === `${lowerBanned}s` || userWord === `${lowerBanned}es`) return true;
       if (userWord === `re${lowerBanned}`) return true;
-
       return false;
     });
   });
 };
 
-// 🚀 CREDENCIALES DE SUPABASE DESDE .ENV
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
-
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const NOMBRE_BUCKET = 'images'; 
 
 WebBrowser.maybeCompleteAuthSession();
 
-// 🚀 HANDLER GLOBAL DE NOTIFICACIONES SEGURO
 if (Platform.OS !== 'web' && Notifications) {
   try {
     Notifications.setNotificationHandler({
@@ -140,7 +126,6 @@ const AnimatedStat = ({ endValue, label, icon, isDark }: { endValue: number, lab
         setCount(Math.floor(start));
       }
     }, 16);
-
     return () => clearInterval(timer);
   }, [endValue]);
 
@@ -220,6 +205,12 @@ export default function HomeScreen() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // 🚀 ESTADOS PARA EL MODAL DE CONTÁCTENOS
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactInfo, setContactInfo] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [isSendingContact, setIsSendingContact] = useState(false);
+
   const [termsData, setTermsData] = useState({ version: '', content_html: '' });
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
 
@@ -236,7 +227,6 @@ export default function HomeScreen() {
           setShowRateButton(true);
           return;
         }
-  
         const firstLaunch = await SecureStore.getItemAsync('firstLaunchDate');
         if (!firstLaunch) {
           await SecureStore.setItemAsync('firstLaunchDate', Date.now().toString());
@@ -253,12 +243,8 @@ export default function HomeScreen() {
     checkAppUsageTime();
   }, []);
 
-  // ============================================================================
-  // 🚀 NUEVO USE EFFECT: LIMPIA EL GLOBO ROJO (BADGE) AL ABRIR LA APP
-  // ============================================================================
   useEffect(() => {
     if (Platform.OS === 'web' || !Notifications) return;
-
     const clearBadgeCount = async () => {
       try {
         await Notifications.setBadgeCountAsync(0);
@@ -266,20 +252,11 @@ export default function HomeScreen() {
         console.log("No se pudo limpiar el contador del ícono", error);
       }
     };
-
-    // Limpia cuando el componente carga (app inicia)
     clearBadgeCount();
-
-    // Limpia cada vez que la app pasa del fondo a activa
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        clearBadgeCount();
-      }
+      if (nextAppState === 'active') clearBadgeCount();
     });
-
-    return () => {
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, []);
 
   const orangeGradient: readonly [string, string, ...string[]] = ['#FF5F6D', '#FFC371'];
@@ -337,7 +314,6 @@ export default function HomeScreen() {
         WebBrowser.openBrowserAsync('https://g.page/r/CXrYzP8Yb7XzECE/review');
         return;
       }
-
       if (StoreReview) {
         const isAvailable = await StoreReview.isAvailableAsync();
         if (isAvailable) {
@@ -345,7 +321,6 @@ export default function HomeScreen() {
           return;
         }
       }
-
       if (Platform.OS === 'ios') {
         Linking.openURL('https://apps.apple.com/app/idTU_APP_ID?action=write-review');
       } else if (Platform.OS === 'android') {
@@ -359,23 +334,17 @@ export default function HomeScreen() {
   const getSafePushToken = async () => {
     if (Platform.OS === 'web') return undefined; 
     if (!Notifications) return undefined;
-
     try {
       const projectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
       if (!projectId) return undefined;
-      
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
-      
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      
       if (finalStatus !== 'granted') return undefined;
-      
       await new Promise(resolve => setTimeout(resolve, 500));
-
       const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
       return tokenData.data;
     } catch (e: any) {
@@ -389,7 +358,6 @@ export default function HomeScreen() {
       try {
         const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
         if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
-
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
             const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
@@ -468,12 +436,7 @@ export default function HomeScreen() {
         const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            idToken: id_token, 
-            isGoogle: true,
-            pushToken: pushTokenReal, 
-            deviceType: Platform.OS 
-          })
+          body: JSON.stringify({ idToken: id_token, isGoogle: true, pushToken: pushTokenReal, deviceType: Platform.OS })
         });
         const dataRes = await res.json();
 
@@ -483,7 +446,6 @@ export default function HomeScreen() {
           let googleEmail = dataRes.user?.email || dataRes.email || ''; 
           let name = dataRes.user?.firstName || '';
           let lastName = dataRes.user?.lastName || '';
-          
           try {
             const base64Url = id_token.split('.')[1];
             const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -505,26 +467,19 @@ export default function HomeScreen() {
         isWebPlatform ? window.alert("Error de conexión.") : Alert.alert("Error", "No se pudo verificar la cuenta.");
       }
     };
-
-    if (response?.type === 'success') {
-      verifyGoogle(response.params.id_token);
-    }
+    if (response?.type === 'success') verifyGoogle(response.params.id_token);
   }, [response]);
 
   const handleAppleLogin = async () => {
     try {
       const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
+        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
       });
 
       if (credential.identityToken) {
         let appleEmail = credential.email || ''; 
         let name = credential.fullName?.givenName || '';
         let lastName = credential.fullName?.familyName || '';
-        
         try {
           if (!appleEmail && typeof atob !== 'undefined') {
             const base64Url = credential.identityToken.split('.')[1];
@@ -542,14 +497,7 @@ export default function HomeScreen() {
         const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            idToken: credential.identityToken, 
-            isApple: true, 
-            isGoogle: false, 
-            email: appleEmail,
-            pushToken: pushTokenReal,
-            deviceType: Platform.OS
-          })
+          body: JSON.stringify({ idToken: credential.identityToken, isApple: true, isGoogle: false, email: appleEmail, pushToken: pushTokenReal, deviceType: Platform.OS })
         });
         const dataRes = await res.json();
 
@@ -561,14 +509,7 @@ export default function HomeScreen() {
           if (!lastName && dataRes.user?.lastName) lastName = dataRes.user.lastName;
 
           const randomPassword = Math.random().toString(36).slice(-12);
-          setForm(prev => ({ 
-            ...prev, 
-            email: appleEmail, 
-            firstName: name, 
-            lastName, 
-            password: randomPassword 
-          }));
-          
+          setForm(prev => ({ ...prev, email: appleEmail, firstName: name, lastName, password: randomPassword }));
           setAuthProvider('apple');
           setSocialToken(credential.identityToken); 
           setAcceptedTerms(false);
@@ -602,13 +543,11 @@ export default function HomeScreen() {
         if (Device && Device.isDevice) {
           const settings = await Notifications.getPermissionsAsync() as any;
           let finalStatus = settings.status || (settings.granted ? 'granted' : 'denied');
-          
           if (finalStatus !== 'granted') {
             const reqSettings = await Notifications.requestPermissionsAsync() as any;
             finalStatus = reqSettings.status || (reqSettings.granted ? 'granted' : 'denied');
           }
           if (finalStatus !== 'granted') return;
-          
           if (Platform.OS === 'android') {
             Notifications.setNotificationChannelAsync('default', {
               name: 'default',
@@ -659,34 +598,23 @@ export default function HomeScreen() {
   };
 
   const handlePostLoginSuccess = async (userObj: any, token: string, fullDataRes: any = null) => {
-    const validToken = (token && typeof token === 'string' && token.trim() !== '') 
-      ? token 
-      : 'session_token_' + Date.now();
-
+    const validToken = (token && typeof token === 'string' && token.trim() !== '') ? token : 'session_token_' + Date.now();
     let finalUser = { ...userObj };
-    
     if (!finalUser.firstName && form.firstName) finalUser.firstName = form.firstName;
     if (!finalUser.lastName && form.lastName) finalUser.lastName = form.lastName;
-
     if (!finalUser || Object.keys(finalUser).length === 0) {
       finalUser = { email: form.email || 'usuario@viviendoenusa.app', firstName: form.firstName, lastName: form.lastName };
     }
-
     await login(finalUser, validToken);
     dispatch(setUserMetadata({ ...finalUser, token: validToken }));
-
     if (Platform.OS !== 'web' && Device && Device.isDevice && Notifications) {
       try {
         const tokenReal = await getSafePushToken();
-        if (tokenReal) {
-          await registerPushTokenInBackend(tokenReal, validToken);
-        }
+        if (tokenReal) await registerPushTokenInBackend(tokenReal, validToken);
       } catch (e) {}
     }
-    
     dispatch(toggleAuth());
     setShowWebLanding(false);
-
     setTimeout(() => {
       const successMsg = `${t?.welcome || '¡Hola, '}${finalUser?.firstName ? finalUser.firstName : ''}!`;
       if (isWebPlatform) window.alert(successMsg);
@@ -696,76 +624,47 @@ export default function HomeScreen() {
 
   const submitProfileCompletion = async () => {
     Keyboard.dismiss();
-    
     if (!form.firstName || !form.lastName) {
       isWebPlatform ? window.alert(isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido") : Alert.alert("Atención", isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido");
       return;
     }
-
     if (!form.phone || !form.zipCode) {
       isWebPlatform ? window.alert(isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code") : Alert.alert("Atención", isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code");
       return;
     }
-
     const contentToValidate = `${form.firstName} ${form.lastName}`;
     if (containsBadWords(contentToValidate)) {
       const errorMsg = isEnglish ? "Inappropriate content detected in your name." : "Se detectó lenguaje inapropiado en tu nombre.";
       isWebPlatform ? window.alert(errorMsg) : Alert.alert(isEnglish ? "Attention" : "Atención", errorMsg);
       return;
     }
-
     const today = new Date();
     const birthDate = form.birthDate;
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDifference = today.getMonth() - birthDate.getMonth();
-    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) { 
-      age--; 
-    }
-
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) age--; 
     if (age < 18) {
       const ageMsg = isEnglish ? "You must be at least 18 years old to register." : "Debes tener al menos 18 años para registrarte.";
       isWebPlatform ? window.alert(ageMsg) : Alert.alert("Acceso denegado", ageMsg);
       return; 
     }
-
     if (isSubmittingProfile) return;
     setIsSubmittingProfile(true);
-
     try {
       const pushTokenReal = await getSafePushToken(); 
-      
-      const finalPayload = { 
-        email: form.email, 
-        firstName: form.firstName, 
-        lastName: form.lastName, 
-        password: form.password, 
-        phone: form.phone, 
-        zip: form.zipCode, 
-        birth: form.birthDate.toISOString(), 
-        isVerified: true, 
-        authProvider: authProvider,
-        pushToken: pushTokenReal,
-        deviceType: Platform.OS
-      };
-      
+      const finalPayload = { email: form.email, firstName: form.firstName, lastName: form.lastName, password: form.password, phone: form.phone, zip: form.zipCode, birth: form.birthDate.toISOString(), isVerified: true, authProvider: authProvider, pushToken: pushTokenReal, deviceType: Platform.OS };
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
       if (!API_URL) throw new Error("Falta configuración del servidor"); 
       const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ data: finalPayload, newImageUri: null, idToken: socialToken })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: finalPayload, newImageUri: null, idToken: socialToken })
       });
-
       const dataRes = await response.json();
-      
       if (!response.ok) {
         if (dataRes.error && dataRes.error.includes("ya está registrado")) {
           setShowCompletionModal(false);
-          
           try {
             const loginRes = await fetch(`${API_URL}/auth/login`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: form.email, idToken: socialToken, isGoogle: authProvider === 'google', isApple: authProvider === 'apple', pushToken: pushTokenReal, deviceType: Platform.OS })
             });
             const loginData = await loginRes.json();
@@ -774,19 +673,16 @@ export default function HomeScreen() {
               return;
             }
           } catch(e) {}
-
           const safeUser = { email: form.email, firstName: form.firstName, lastName: form.lastName };
           await handlePostLoginSuccess(safeUser, "token_generico_bypass");
           return;
         }
         throw new Error(dataRes.error || `Error en el servidor: ${response.status}`);
       }
-
       setShowCompletionModal(false);
       const newUserId = dataRes.user?.id || dataRes.id;
-      if (acceptedTerms && newUserId) { await recordTermsAcceptance(newUserId); }
+      if (acceptedTerms && newUserId) await recordTermsAcceptance(newUserId); 
       await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
-
     } catch (error: any) {
       const msg = error.message || "Ocurrió un error de conexión.";
       isWebPlatform ? window.alert(msg) : Alert.alert("Error", msg);
@@ -821,7 +717,6 @@ export default function HomeScreen() {
       isWebPlatform ? window.alert(isEnglish ? "You must accept the terms and conditions." : "Debes aceptar los términos y condiciones.") : Alert.alert("Atención", isEnglish ? "You must accept the terms and conditions." : "Debes aceptar los términos y condiciones.");
       return;
     }
-
     if (isRegistering) {
       const contentToValidate = `${form.firstName} ${form.lastName}`;
       if (containsBadWords(contentToValidate)) {
@@ -830,44 +725,35 @@ export default function HomeScreen() {
         return;
       }
     }
-
     try {
       const pushTokenReal = await getSafePushToken(); 
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
       if (!API_URL) throw new Error("Falta configuración del servidor");
       const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
-
       const payload = isRegistering 
         ? { data: { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, phone: form.phone, zip: form.zipCode, birth: form.birthDate.toISOString(), isVerified: false, pushToken: pushTokenReal, deviceType: Platform.OS } }
         : { email: form.email, password: form.password, isGoogle: false, pushToken: pushTokenReal, deviceType: Platform.OS }; 
-
       const response = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
-
       const dataRes = await response.json();
       if (!response.ok) throw new Error(dataRes.error || "Error al autenticar");
       
       if (isRegistering) {
         const newUserId = dataRes.user?.id || dataRes.id;
-        if (acceptedTerms && newUserId) { await recordTermsAcceptance(newUserId); }
-        
+        if (acceptedTerms && newUserId) await recordTermsAcceptance(newUserId); 
         setTimeout(() => {
           const successMsg = isEnglish ? "Account created successfully. Please log in." : "Cuenta creada con éxito. Por favor, inicia sesión.";
           if (isWebPlatform) window.alert(successMsg);
           else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
         }, 200);
-        
         setIsRegistering(false); 
         setForm({ ...form, password: '' }); 
         return; 
       }
-
       await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
-
     } catch (error: any) {
       const msg = error.message || "Ocurrió un error al intentar acceder.";
-      
       if (msg.toLowerCase().includes("google") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("credenciales")) {
         const customMsg = isEnglish ? "This account uses Google or Apple to log in. Please use the social buttons below." : "Esta cuenta utiliza Google o Apple para iniciar sesión. Por favor, usa los botones sociales abajo.";
         if (isWebPlatform) {
@@ -877,7 +763,6 @@ export default function HomeScreen() {
         }
         return;
       }
-
       if (msg.includes("bloqueada por múltiples intentos")) {
         if (isWebPlatform) {
           if (window.confirm(`${msg}\n\n${isEnglish ? "Would you like to reset your password now?" : "¿Deseas recuperar tu contraseña ahora?"}`)) {
@@ -900,9 +785,7 @@ export default function HomeScreen() {
       isWebPlatform ? window.alert(isEnglish ? "Invalid email." : "Correo inválido.") : Alert.alert("Atención", isEnglish ? "Invalid email." : "Correo inválido.");
       return;
     }
-    
     if (isSendingReset) return; 
-    
     setIsSendingReset(true); 
     try {
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
@@ -912,7 +795,6 @@ export default function HomeScreen() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Error");
-
       setShowResetModal(false);
       setResetEmail('');
       const successMsg = isEnglish ? "If the email is registered, you will receive a link to reset your password." : "Si el correo está registrado, recibirás un enlace para cambiar tu contraseña.";
@@ -921,6 +803,48 @@ export default function HomeScreen() {
       isWebPlatform ? window.alert(`Error: ${error.message}`) : Alert.alert("Error", error.message);
     } finally {
       setIsSendingReset(false); 
+    }
+  };
+
+  // 🚀 FUNCIÓN PARA ENVIAR EL MENSAJE DE CONTACTO (Se conecta al mismo endpoint de Telegram)
+  const handleSendContact = async () => {
+    if (!contactInfo.trim() || !contactMessage.trim()) {
+       const msg = isEnglish ? "Please provide your contact info and a message." : "Por favor, ingresa tu correo/teléfono y un mensaje.";
+       isWebPlatform ? window.alert(msg) : Alert.alert("Aviso", msg);
+       return;
+    }
+    if (containsBadWords(contactMessage)) {
+       const msg = isEnglish ? "Inappropriate content detected." : "Lenguaje inapropiado detectado.";
+       isWebPlatform ? window.alert(msg) : Alert.alert("Error", msg);
+       return;
+    }
+    
+    setIsSendingContact(true);
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      const response = await fetch(`${API_URL}/admin/it-support`, {
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: contactInfo, 
+          userName: "Usuario Web (Contacto Landing)", 
+          message: contactMessage 
+        })
+      });
+      
+      if (!response.ok) throw new Error("Error al enviar mensaje");
+      
+      const successMsg = isEnglish ? "Message sent successfully! We will contact you soon." : "¡Mensaje enviado con éxito! Nos pondremos en contacto pronto.";
+      isWebPlatform ? window.alert(successMsg) : Alert.alert("Éxito", successMsg);
+      
+      setShowContactModal(false);
+      setContactInfo('');
+      setContactMessage('');
+    } catch (error) {
+       const errMsg = isEnglish ? "Could not send the message. Please try again later." : "No se pudo enviar el mensaje. Inténtalo más tarde.";
+       isWebPlatform ? window.alert(errMsg) : Alert.alert("Error", errMsg);
+    } finally {
+       setIsSendingContact(false);
     }
   };
 
@@ -1010,23 +934,33 @@ export default function HomeScreen() {
 
             <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 }}>Viviendo en USA</Text>
 
-            <TouchableOpacity 
-              onPress={() => {
-                const nextLang = currentLang === 'es' ? 'en' : 'es';
-                setCurrentLang(nextLang); 
-                dispatch({ type: 'language/setLanguage', payload: nextLang });
-              }}
-              style={{ 
-                position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', gap: 6
-              }}
-            >
-              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: currentLang === 'es' ? '#FF5F6D' : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>ES</Text>
-              </View>
-              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: currentLang === 'en' ? '#FF5F6D' : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>EN</Text>
-              </View>
-            </TouchableOpacity>
+            {/* 🚀 BOTONES DERECHOS: CONTACTO (Solo en Header Web) + IDIOMA */}
+            <View style={{ position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              
+              <TouchableOpacity 
+                onPress={() => setShowContactModal(true)}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 95, 109, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#FF5F6D', gap: 6 }}
+              >
+                <MaterialCommunityIcons name="email-edit-outline" size={16} color="#FF5F6D" />
+                {width > 600 && <Text style={{ color: '#FF5F6D', fontSize: 12, fontWeight: '800' }}>{isEnglish ? "Contact" : "Contacto"}</Text>}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => {
+                  const nextLang = currentLang === 'es' ? 'en' : 'es';
+                  setCurrentLang(nextLang); 
+                  dispatch({ type: 'language/setLanguage', payload: nextLang });
+                }}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 6, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', gap: 4 }}
+              >
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: currentLang === 'es' ? '#FF5F6D' : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>ES</Text>
+                </View>
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: currentLang === 'en' ? '#FF5F6D' : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>EN</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={{ width: '100%', minHeight: isLargeWeb ? height * 0.85 : height * 0.9, justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E', position: 'relative', overflow: 'hidden' }}>
@@ -1216,7 +1150,6 @@ export default function HomeScreen() {
 
           <View style={{ paddingVertical: 40, alignItems: 'center', backgroundColor: '#0B0A1D' }}>
              
-             {/* 🚀 BOTONES DE REDES SOCIALES AÑADIDOS AQUÍ */}
              <View style={{ flexDirection: 'row', gap: 25, marginBottom: 25 }}>
                <TouchableOpacity 
                  onPress={() => WebBrowser.openBrowserAsync('https://www.facebook.com/groups/1874040306905331/')}
@@ -1240,7 +1173,6 @@ export default function HomeScreen() {
                </TouchableOpacity>
              </View>
 
-             {/* 🚀 BOTÓN DE CALIFICAR (Solo visible después de 30 días o siempre en Web) */}
              {showRateButton && (
                <TouchableOpacity 
                  onPress={handleRateApp}
@@ -1259,6 +1191,82 @@ export default function HomeScreen() {
              <View style={{ width: 60, height: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
           </View>
         </ScrollView>
+
+        {/* 🚀 BOTÓN FLOTANTE (FAB) PARA CONTACTO WEB */}
+        <TouchableOpacity
+          onPress={() => setShowContactModal(true)}
+          style={{
+            position: 'absolute',
+            bottom: 30,
+            right: 30,
+            width: 60,
+            height: 60,
+            borderRadius: 30,
+            backgroundColor: '#FF5F6D',
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: '#FF5F6D',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.4,
+            shadowRadius: 8,
+            elevation: 5,
+            zIndex: 1000
+          }}
+        >
+          <MaterialCommunityIcons name="email-edit-outline" size={28} color="#FFF" />
+        </TouchableOpacity>
+
+        {/* 🚀 MODAL DE CONTÁCTENOS UI/UX MOVIDO AQUÍ PARA QUE RENDERICE EN LA WEB */}
+        <Modal visible={showContactModal} transparent={true} animationType="fade" onRequestClose={() => setShowContactModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 450) }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: DynamicColors.border }]}>
+                <ThemedText style={[styles.modalTitle, { color: DynamicColors.text }]}>{isEnglish ? "Contact Us" : "Contáctenos"}</ThemedText>
+                <TouchableOpacity onPress={() => setShowContactModal(false)} style={{ padding: 5 }}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
+              </View>
+              <View style={styles.modalContent}>
+                <ThemedText style={{ color: DynamicColors.subtext, marginBottom: 15, fontSize: 14 }}>
+                  {isEnglish ? "Leave us your details and what you need help with. Our team will respond shortly." : "Déjanos tus datos y en qué te podemos ayudar. Nuestro equipo te responderá en breve."}
+                </ThemedText>
+                
+                <ThemedText style={styles.labelDate}>{isEnglish ? "Email or Phone" : "Correo o Teléfono"}</ThemedText>
+                <TextInput 
+                  value={contactInfo} 
+                  onChangeText={setContactInfo} 
+                  placeholder={isEnglish ? "ej: mail@app.com or +1 123..." : "ej: correo@app.com o +1 123..."} 
+                  placeholderTextColor={DynamicColors.subtext} 
+                  style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginBottom: 15 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} 
+                />
+
+                <ThemedText style={styles.labelDate}>{isEnglish ? "Message" : "Mensaje"}</ThemedText>
+                <TextInput 
+                  value={contactMessage} 
+                  onChangeText={setContactMessage} 
+                  placeholder={isEnglish ? "How can we help you?" : "¿En qué te podemos ayudar?"} 
+                  placeholderTextColor={DynamicColors.subtext} 
+                  multiline
+                  numberOfLines={4}
+                  style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginBottom: 10, height: 100, textAlignVertical: 'top', paddingTop: 12 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} 
+                />
+              </View>
+              <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
+                <TouchableOpacity 
+                  style={[styles.primaryWrapper, { width: '100%', height: 45 }, isSendingContact && { opacity: 0.7 }]} 
+                  onPress={handleSendContact}
+                  disabled={isSendingContact}
+                >
+                  <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
+                    {isSendingContact ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <Text style={styles.primaryText}>{isEnglish ? "Send Message" : "Enviar Mensaje"}</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </>
     );
   }
