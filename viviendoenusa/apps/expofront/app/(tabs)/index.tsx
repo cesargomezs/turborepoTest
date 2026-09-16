@@ -806,7 +806,6 @@ export default function HomeScreen() {
     }
   };
 
-  // 🚀 FUNCIÓN PARA ENVIAR EL MENSAJE DE CONTACTO (Se conecta al mismo endpoint de Telegram)
   const handleSendContact = async () => {
     if (!contactInfo.trim() || !contactMessage.trim()) {
        const msg = isEnglish ? "Please provide your contact info and a message." : "Por favor, ingresa tu correo/teléfono y un mensaje.";
@@ -880,7 +879,6 @@ export default function HomeScreen() {
           
           <meta name="description" content="Únete a Viviendo en USA, la red principal para la comunidad latina e hispana. Apoyo esencial para la comunidad migrante: abogados, empleos, eventos y recursos locales." />
           
-          {/* 🚀 DATOS ESTRUCTURADOS SCHEMA.ORG PARA GOOGLE Y MOTORES DE IA */}
           <script type="application/ld+json">
             {JSON.stringify({
               "@context": "https://schema.org",
@@ -934,16 +932,18 @@ export default function HomeScreen() {
 
             <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 }}>Viviendo en USA</Text>
 
-            {/* 🚀 BOTONES DERECHOS: CONTACTO (Solo en Header Web) + IDIOMA */}
-            <View style={{ position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               
-              <TouchableOpacity 
-                onPress={() => setShowContactModal(true)}
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 95, 109, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#FF5F6D', gap: 6 }}
-              >
-                <MaterialCommunityIcons name="email-edit-outline" size={16} color="#FF5F6D" />
-                {width > 600 && <Text style={{ color: '#FF5F6D', fontSize: 12, fontWeight: '800' }}>{isEnglish ? "Contact" : "Contacto"}</Text>}
-              </TouchableOpacity>
+              {/* 🚀 BOTÓN DE CONTACTO SUPERIOR: Visible solo en pantallas anchas (Web de Escritorio) para evitar amontonamiento en móviles */}
+              {width > 768 && (
+                <TouchableOpacity 
+                  onPress={() => setShowContactModal(true)}
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 95, 109, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#FF5F6D', gap: 6 }}
+                >
+                  <MaterialCommunityIcons name="email-edit-outline" size={16} color="#FF5F6D" />
+                  <Text style={{ color: '#FF5F6D', fontSize: 12, fontWeight: '800' }}>{isEnglish ? "Contact" : "Contacto"}</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity 
                 onPress={() => {
@@ -1216,7 +1216,7 @@ export default function HomeScreen() {
           <MaterialCommunityIcons name="email-edit-outline" size={28} color="#FFF" />
         </TouchableOpacity>
 
-        {/* 🚀 MODAL DE CONTÁCTENOS UI/UX MOVIDO AQUÍ PARA QUE RENDERICE EN LA WEB */}
+        {/* 🚀 MODAL DE CONTÁCTENOS UI/UX */}
         <Modal visible={showContactModal} transparent={true} animationType="fade" onRequestClose={() => setShowContactModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 450) }]}>
@@ -1346,7 +1346,6 @@ export default function HomeScreen() {
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}><ThemedText style={[styles.sectionTitle, { color: DynamicColors.text, fontSize: 24, fontWeight: '900' }]}>Viviendo en USA</ThemedText></View>
                           <MaterialCommunityIcons name="home-variant" size={40} color={DynamicColors.text} style={{ opacity: 0.2 }} />
                         </View>
-                        {/* 🔥 EL FIX ESTÁ SOLO AQUÍ 🔥 */}
                         <ScrollView 
                           style={{ flex: 1 }} 
                           nestedScrollEnabled={true} 
@@ -1667,7 +1666,6 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
         
-        {/* 🚀 MODAL DE RECUPERACIÓN DE CONTRASEÑA */}
         <Modal visible={showResetModal} transparent={true} animationType="fade" onRequestClose={() => setShowResetModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 400) }]}>
@@ -1698,7 +1696,6 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* 🚀 MODAL DE COMPLETAR PERFIL */}
         <Modal visible={showCompletionModal} transparent={true} animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: width > 768 ? 500 : width * 0.92 }]}>
