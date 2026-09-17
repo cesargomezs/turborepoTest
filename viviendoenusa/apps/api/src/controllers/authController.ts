@@ -428,6 +428,15 @@ export const sendPasswordResetEmail = async (email: string) => {
     if (!user) throw new Error("No existe una cuenta con este correo.");
     if (!user.password) throw new Error("Cuenta externa. Inicia sesión con Google o Apple.");
 
+    // 🚀 Obtener URL firmada del logo desde Supabase
+    let logoUrl = '';
+    try {
+      const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800);
+      if (logoData?.signedUrl) logoUrl = logoData.signedUrl;
+    } catch (e) {
+      console.warn("No se pudo obtener el logo firmado de Supabase:", e);
+    }
+
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const secret = baseSecret + user.password;
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: '1h' });
@@ -435,7 +444,7 @@ export const sendPasswordResetEmail = async (email: string) => {
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 12px; text-align: center; color: #333;">
-        <img src="https://viviendoenusa.app/assets/images/logo.png" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px;" />
+        ${logoUrl ? `<img src="${logoUrl}" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px; border-radius: 12px;" />` : ''}
         <h2 style="color: #FF5F6D;">Recuperación de Contraseña</h2>
         <p style="font-size: 15px; line-height: 1.5;">Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
         <div style="margin: 30px 0;">
@@ -532,7 +541,7 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. ELIMINAR CUENTA (CON CORREO DE CONFIRMACIÓN Y LOGO)
+// 9. ELIMINAR CUENTA (CON CORREO DE CONFIRMACIÓN Y LOGO DE SUPABASE)
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
@@ -542,6 +551,15 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
     const [userRecord] = await db.select().from(users).where(eq(users.id, userId));
     const userEmail = userRecord?.email;
     const userName = userRecord?.name || 'Usuario';
+
+    // 🚀 Obtener URL firmada del logo desde Supabase
+    let logoUrl = '';
+    try {
+      const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800);
+      if (logoData?.signedUrl) logoUrl = logoData.signedUrl;
+    } catch (e) {
+      console.warn("No se pudo obtener el logo firmado de Supabase:", e);
+    }
 
     await db.delete(userDevices).where(eq(userDevices.userId, userId));
     await db.update(users).set({
@@ -560,7 +578,7 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           subject: 'Cuenta eliminada con éxito - Viviendo en USA',
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 12px; text-align: center; color: #333;">
-              <img src="https://viviendoenusa.app/assets/images/logo.png" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px;" />
+              ${logoUrl ? `<img src="${logoUrl}" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px; border-radius: 12px;" />` : ''}
               <h2 style="color: #FF5F6D;">Cuenta Eliminada</h2>
               <p style="font-size: 15px; line-height: 1.5;">Hola <strong>${userName}</strong>,</p>
               <p style="font-size: 15px; line-height: 1.5;">Te confirmamos que tu cuenta y datos personales asociados en <strong>Viviendo en USA</strong> han sido eliminados correctamente de nuestros sistemas.</p>
