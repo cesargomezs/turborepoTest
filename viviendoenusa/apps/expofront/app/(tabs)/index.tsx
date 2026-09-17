@@ -821,7 +821,7 @@ export default function HomeScreen() {
     setIsSendingContact(true);
     try {
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
-      const response = await fetch(`${API_URL}/admin/it-support`, {
+      const response = await fetch(`${API_URL}/admin/contact`, {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
