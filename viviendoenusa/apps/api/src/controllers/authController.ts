@@ -434,17 +434,21 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetLink = `https://viviendoenusa.app/ResetPassword?token=${resetToken}`;
 
     const htmlContent = `
-      <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-        <h2>Recuperación de Contraseña</h2>
-        <p>Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
-        <a href="${resetLink}" style="padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px;">Restablecer Contraseña</a>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 12px; text-align: center; color: #333;">
+        <img src="https://viviendoenusa.app/assets/images/logo.png" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px;" />
+        <h2 style="color: #FF5F6D;">Recuperación de Contraseña</h2>
+        <p style="font-size: 15px; line-height: 1.5;">Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
+        <div style="margin: 30px 0;">
+          <a href="${resetLink}" style="padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block;">Restablecer Contraseña</a>
+        </div>
+        <p style="font-size: 13px; color: #777;">Si no solicitaste este cambio, puedes ignorar este correo.</p>
       </div>
     `;
 
     const { error } = await resend.emails.send({
       from: 'Viviendo en USA <noreply@viviendoenusa.app>',
       to: [user.email as string],
-      subject: 'Recuperación de Contraseña',
+      subject: 'Recuperación de Contraseña - Viviendo en USA',
       html: htmlContent
     });
 
@@ -528,12 +532,16 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. ELIMINAR CUENTA
+// 9. ELIMINAR CUENTA (CON CORREO DE CONFIRMACIÓN Y LOGO)
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: "No autorizado." });
+
+    const [userRecord] = await db.select().from(users).where(eq(users.id, userId));
+    const userEmail = userRecord?.email;
+    const userName = userRecord?.name || 'Usuario';
 
     await db.delete(userDevices).where(eq(userDevices.userId, userId));
     await db.update(users).set({
@@ -543,6 +551,29 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
       phone: null, zip: null, imageUrl: null, estate: null, password: null,
       isLocked: true, updatedAt: new Date(),
     }).where(eq(users.id, userId));
+
+    if (userEmail && !userEmail.startsWith('deleted_')) {
+      try {
+        await resend.emails.send({
+          from: 'Viviendo en USA <noreply@viviendoenusa.app>',
+          to: [userEmail],
+          subject: 'Cuenta eliminada con éxito - Viviendo en USA',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 12px; text-align: center; color: #333;">
+              <img src="https://viviendoenusa.app/assets/images/logo.png" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px;" />
+              <h2 style="color: #FF5F6D;">Cuenta Eliminada</h2>
+              <p style="font-size: 15px; line-height: 1.5;">Hola <strong>${userName}</strong>,</p>
+              <p style="font-size: 15px; line-height: 1.5;">Te confirmamos que tu cuenta y datos personales asociados en <strong>Viviendo en USA</strong> han sido eliminados correctamente de nuestros sistemas.</p>
+              <p style="font-size: 14px; color: #555;">Lamentamos verte partir. Si en el futuro deseas regresar, serás bienvenido.</p>
+              <br>
+              <p style="color: #777; font-size: 12px;">Atentamente, el equipo de Viviendo en USA.</p>
+            </div>
+          `
+        });
+      } catch (emailErr: any) {
+        console.error("❌ [RESEND] Error enviando correo de eliminación:", emailErr.message);
+      }
+    }
 
     return res.status(200).json({ success: true, message: "Cuenta dada de baja." });
   } catch (error: any) {
