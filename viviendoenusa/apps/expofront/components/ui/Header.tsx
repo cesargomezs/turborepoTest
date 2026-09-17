@@ -867,9 +867,21 @@ export default function Header({ title }: { title?: string }) {
               onChangeText={setItMessage}
               placeholder="¿Qué inconveniente presentas?"
               placeholderTextColor={isDark ? '#666' : '#999'}
-              multiline
+              multiline={true}
+              editable={true}
               style={[
-                { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 14, borderRadius: 16, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
+                { 
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
+                  color: Colors[localTheme].text, 
+                  padding: 14, 
+                  borderRadius: 16, 
+                  height: 120, 
+                  textAlignVertical: 'top', 
+                  marginBottom: 20, 
+                  borderWidth: 1, 
+                  borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
+                  fontSize: 15
+                },
                 ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
               ]}
             />
