@@ -229,7 +229,6 @@ export default function Header({ title }: { title?: string }) {
       });
       
       if (!res.ok) {
-        // 🔥 FIX: Manejo del Token expirado (401)
         if (res.status === 401) {
           if (typeof logout === 'function') await logout();
           dispatch(setUserMetadata({} as any));
@@ -733,7 +732,10 @@ export default function Header({ title }: { title?: string }) {
                 <TextInput 
                   value={generatedCoupon} 
                   editable={false} 
-                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: '#FF5F6D', padding: 16, borderRadius: 16, fontSize: 24, fontWeight: '900', textAlign: 'center', letterSpacing: 2, borderWidth: 1, borderColor: '#FF5F6D', width: '100%', marginBottom: 15 }}
+                  style={[
+                    { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: '#FF5F6D', padding: 16, borderRadius: 16, fontSize: 24, fontWeight: '900', textAlign: 'center', letterSpacing: 2, borderWidth: 1, borderColor: '#FF5F6D', width: '100%', marginBottom: 15 },
+                    ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
+                  ]}
                 />
                 
                 <TouchableOpacity 
@@ -809,7 +811,10 @@ export default function Header({ title }: { title?: string }) {
                   placeholder="Escribe tu motivo aquí..."
                   placeholderTextColor={isDark ? '#666' : '#999'}
                   multiline
-                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 12, borderRadius: 16, height: 80, textAlignVertical: 'top', marginTop: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+                  style={[
+                    { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 12, borderRadius: 16, height: 80, textAlignVertical: 'top', marginTop: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
+                    ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
+                  ]}
                 />
               )}
             </ScrollView>
@@ -863,7 +868,10 @@ export default function Header({ title }: { title?: string }) {
               placeholder="¿Qué inconveniente presentas?"
               placeholderTextColor={isDark ? '#666' : '#999'}
               multiline
-              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 14, borderRadius: 16, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
+              style={[
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: Colors[localTheme].text, padding: 14, borderRadius: 16, height: 120, textAlignVertical: 'top', marginBottom: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
+                ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
+              ]}
             />
 
             <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
@@ -987,16 +995,16 @@ export default function Header({ title }: { title?: string }) {
                 <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text, marginBottom: 10, fontSize: 16 }]}>{t.headertab.labelpersonal}</ThemedText>
                 
                 <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.email}</ThemedText>
-                <TextInput value={profileData.email} onChangeText={(val) => setProfileData({...profileData, email: val})} editable={isCreatingUser} keyboardType="email-address" autoCapitalize="none" style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
+                <TextInput value={profileData.email} onChangeText={(val) => setProfileData({...profileData, email: val})} editable={isCreatingUser} keyboardType="email-address" autoCapitalize="none" style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
 
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.name}</ThemedText>
-                    <TextInput value={profileData.name} onChangeText={(val) => setProfileData({...profileData, name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
+                    <TextInput value={profileData.name} onChangeText={(val) => setProfileData({...profileData, name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.lastName}</ThemedText>
-                    <TextInput value={profileData.last_name} onChangeText={(val) => setProfileData({...profileData, last_name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
+                    <TextInput value={profileData.last_name} onChangeText={(val) => setProfileData({...profileData, last_name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
                   </View>
                 </View>
 
@@ -1020,7 +1028,7 @@ export default function Header({ title }: { title?: string }) {
                           borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', 
                           marginBottom: 0, 
                           paddingRight: 45 
-                        }]} 
+                        }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} 
                       />
                       <TouchableOpacity 
                         style={{ position: 'absolute', right: 15, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} 
@@ -1039,11 +1047,11 @@ export default function Header({ title }: { title?: string }) {
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.phone}</ThemedText>
-                    <TextInput value={profileData.phone} keyboardType="phone-pad" onChangeText={(val) => setProfileData({...profileData, phone: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
+                    <TextInput value={profileData.phone} keyboardType="phone-pad" onChangeText={(val) => setProfileData({...profileData, phone: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.zipCode}</ThemedText>
-                    <TextInput value={profileData.zip} keyboardType="numeric" maxLength={5} onChangeText={(val) => setProfileData({...profileData, zip: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} />
+                    <TextInput value={profileData.zip} keyboardType="numeric" maxLength={5} onChangeText={(val) => setProfileData({...profileData, zip: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
                   </View>
                 </View>
 
@@ -1056,7 +1064,7 @@ export default function Header({ title }: { title?: string }) {
                     autoCapitalize="characters"
                     placeholder="CA"
                     placeholderTextColor={isDark ? '#666' : '#999'}
-                    style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]} 
+                    style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} 
                   />
                 </View>
 
