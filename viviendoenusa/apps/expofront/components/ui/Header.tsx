@@ -862,29 +862,33 @@ export default function Header({ title }: { title?: string }) {
               Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
             </ThemedText>
 
-            <TextInput 
-              value={itMessage}
-              onChangeText={setItMessage}
-              placeholder="¿Qué inconveniente presentas?"
-              placeholderTextColor={isDark ? '#666' : '#999'}
-              multiline={true}
-              editable={true}
-              style={[
-                { 
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
-                  color: Colors[localTheme].text, 
-                  padding: 14, 
-                  borderRadius: 16, 
-                  height: 120, 
-                  textAlignVertical: 'top', 
-                  marginBottom: 20, 
-                  borderWidth: 1, 
-                  borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
-                  fontSize: 15
-                },
-                ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
-              ]}
-            />
+            <View style={{ width: '100%', minHeight: 120, marginBottom: 20 }}>
+              <TextInput 
+                value={itMessage}
+                onChangeText={setItMessage}
+                placeholder="¿Qué inconveniente presentas?"
+                placeholderTextColor={isDark ? '#666' : '#999'}
+                multiline={true}
+                numberOfLines={4}
+                editable={true}
+                style={[
+                  { 
+                    width: '100%',
+                    height: 120,
+                    minHeight: 120,
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', 
+                    color: Colors[localTheme].text, 
+                    padding: 14, 
+                    borderRadius: 16, 
+                    textAlignVertical: 'top', 
+                    borderWidth: 1, 
+                    borderColor: '#FF5F6D',
+                    fontSize: 15
+                  },
+                  ...(isWeb ? [{ outlineStyle: 'none' as any, display: 'block' as any }] : [])
+                ]}
+              />
+            </View>
 
             <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
               <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
