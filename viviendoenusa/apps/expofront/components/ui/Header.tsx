@@ -504,30 +504,41 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const handleSendITSupport = async () => {
-    if (!itMessage.trim()) return isWeb ? window.alert("Por favor escribe tu mensaje o problema técnico.") : Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
-    if (containsBadWords(itMessage)) return isWeb ? window.alert("El mensaje contiene lenguaje inapropiado y no puede ser enviado.") : Alert.alert("Error", "El mensaje contiene lenguaje inapropiado y no puede ser enviado.");
+    if (!itMessage.trim()) {
+      return isWeb ? window.alert("Por favor escribe tu mensaje o problema técnico.") : Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
+    }
+    if (containsBadWords(itMessage)) {
+      return isWeb ? window.alert("El mensaje contiene lenguaje inapropiado y no puede ser enviado.") : Alert.alert("Error", "El mensaje contiene lenguaje inapropiado y no puede ser enviado.");
+    }
     
     setIsSendingIT(true);
     try {
-      // 🚀 CORRECCIÓN DEL FETCH: Retornamos a /admin/it-support como debe ser
+      // 🚀 CORRECCIÓN: La ruta es /admin/it-support como configuraste en admin.routes.ts
       const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ email: profileData.email, userName: `${profileData.name} ${profileData.last_name}`, message: itMessage })
       });
       
       if (!response.ok) throw new Error("No se pudo enviar el mensaje");
       
-      // ✅ Alerta a prueba de web
-      isWeb ? window.alert("¡Enviado! Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.") 
-            : Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
-            
+      if (isWeb) {
+        window.alert("¡Enviado! Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
+      } else {
+        Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
+      }
+      
       setItMessage('');
       setShowITSupportModal(false);
     } catch (error) { 
-      isWeb ? window.alert("Ocurrió un error al enviar el mensaje. Inténtalo de nuevo.") 
-            : Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo."); 
-    } 
-    finally { setIsSendingIT(false); }
+      if (isWeb) {
+        window.alert("Ocurrió un error al enviar el mensaje. Inténtalo de nuevo.");
+      } else {
+        Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo."); 
+      }
+    } finally { 
+      setIsSendingIT(false); 
+    }
   };
 
   const handleDeleteAccountPress = () => {
@@ -871,30 +882,26 @@ export default function Header({ title }: { title?: string }) {
               Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
             </ThemedText>
 
-            {/* 🚀 CAJA DE TEXTO BLINDADA PARA WEB (HEIGHT FIJO Y OUTLINE NONE) */}
+            {/* 🚀 CAJA DE TEXTO CORREGIDA 🚀 */}
             <TextInput 
               value={itMessage}
               onChangeText={setItMessage}
               placeholder="¿Qué inconveniente presentas?"
               placeholderTextColor={isDark ? '#666' : '#999'}
-              multiline={true}
-              numberOfLines={4}
+              multiline
               style={[
                 { 
-                  width: '100%',
-                  minHeight: 120,
-                  height: 120, 
                   backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
                   color: Colors[localTheme].text, 
                   padding: 14, 
                   borderRadius: 16, 
+                  height: 120, 
                   textAlignVertical: 'top', 
+                  marginBottom: 20, 
                   borderWidth: 1, 
-                  borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
-                  fontSize: 15,
-                  marginBottom: 20
+                  borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' 
                 },
-                Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
               ]}
             />
 
