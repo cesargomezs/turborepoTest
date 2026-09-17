@@ -428,7 +428,6 @@ export const sendPasswordResetEmail = async (email: string) => {
     if (!user) throw new Error("No existe una cuenta con este correo.");
     if (!user.password) throw new Error("Cuenta externa. Inicia sesión con Google o Apple.");
 
-    // 🚀 Generar URL firmada desde Supabase con la ruta exacta que usa el sistema
     let logoUrl = '';
     try {
       const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.png', 604800);
@@ -444,17 +443,29 @@ export const sendPasswordResetEmail = async (email: string) => {
 
     const htmlContent = `
       <!DOCTYPE html>
-      <html>
+      <html lang="es">
       <head>
         <meta charset="utf-8">
-        <meta name="color-scheme" content="dark">
+        <meta name="color-scheme" content="dark only">
         <meta name="supported-color-schemes" content="dark">
+        <style>
+          :root {
+            color-scheme: dark only;
+            supported-color-schemes: dark;
+          }
+          @media (prefers-color-scheme: dark) {
+            body, table, td, div {
+              background-color: #121212 !important;
+              color: #ffffff !important;
+            }
+          }
+        </style>
       </head>
-      <body style="margin: 0; padding: 0; background-color: #121212; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #121212;">
+      <body style="margin: 0; padding: 0; background-color: #121212 !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #121212 !important;" bgcolor="#121212">
           <tr>
-            <td align="center" style="padding: 40px 20px;">
-              <table role="presentation" style="width: 100%; max-width: 500px; border-collapse: collapse; background-color: #1e1e1e; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+            <td align="center" style="padding: 40px 20px; background-color: #121212 !important;" bgcolor="#121212">
+              <table role="presentation" style="width: 100%; max-width: 500px; border-collapse: collapse; background-color: #1e1e1e !important; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 24px rgba(0,0,0,0.5);" bgcolor="#1e1e1e">
                 <tr>
                   <td style="padding: 40px 30px; text-align: center;">
                     
@@ -464,23 +475,23 @@ export const sendPasswordResetEmail = async (email: string) => {
                       <img src="${logoUrl}" alt="Viviendo en USA" width="80" height="80" style="width: 80px; height: 80px; object-fit: cover; border-radius: 50%; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
                     </div>` : ''}
 
-                    <h2 style="color: #ffffff; font-size: 24px; font-weight: 700; margin-top: 0; margin-bottom: 15px; letter-spacing: -0.5px;">Recuperación de Contraseña</h2>
+                    <h2 style="color: #ffffff !important; font-size: 24px; font-weight: 700; margin-top: 0; margin-bottom: 15px; letter-spacing: -0.5px;">Recuperación de Contraseña</h2>
                     
-                    <p style="font-size: 15px; line-height: 1.6; color: #9ca3af; margin-bottom: 30px;">
-                      Hola <strong style="color: #ffffff;">${user.name}</strong>,<br>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.
+                    <p style="font-size: 15px; line-height: 1.6; color: #9ca3af !important; margin-bottom: 30px;">
+                      Hola <strong style="color: #ffffff !important;">${user.name}</strong>,<br>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.
                     </p>
 
                     <div style="margin: 35px 0;">
-                      <a href="${resetLink}" target="_blank" style="padding: 14px 32px; background-color: #FF5F6D; color: #ffffff; text-decoration: none; border-radius: 50px; font-weight: 700; display: inline-block; font-size: 15px; box-shadow: 0 4px 14px rgba(255,95,109,0.4);">Restablecer Contraseña</a>
+                      <a href="${resetLink}" target="_blank" style="padding: 14px 32px; background-color: #FF5F6D; color: #ffffff !important; text-decoration: none; border-radius: 50px; font-weight: 700; display: inline-block; font-size: 15px; box-shadow: 0 4px 14px rgba(255,95,109,0.4);">Restablecer Contraseña</a>
                     </div>
 
-                    <p style="font-size: 13px; line-height: 1.5; color: #6b7280; margin-top: 30px; margin-bottom: 0;">
+                    <p style="font-size: 13px; line-height: 1.5; color: #6b7280 !important; margin-top: 30px; margin-bottom: 0;">
                       Este enlace expirará en 1 hora o después de ser utilizado.<br>Si no solicitaste este cambio, por favor ignora este correo. Tu cuenta seguirá segura.
                     </p>
 
                     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 30px 0 20px 0;" />
 
-                    <p style="font-size: 12px; color: #4b5563; margin: 0;">
+                    <p style="font-size: 12px; color: #4b5563 !important; margin: 0;">
                       © 2026 Viviendo en <span style="color: #FF5F6D; font-weight: bold;">USA</span>. Todos los derechos reservados.
                     </p>
 
@@ -581,7 +592,7 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. ELIMINAR CUENTA (CON CORREO DE CONFIRMACIÓN Y ESTILO OSCURO FORZADO)
+// 9. ELIMINAR CUENTA (CON CORREO DE CONFIRMACIÓN Y MODO OSCURO BLINDADO)
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
@@ -617,17 +628,29 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           subject: 'Cuenta eliminada con éxito - Viviendo en USA',
           html: `
             <!DOCTYPE html>
-            <html>
+            <html lang="es">
             <head>
               <meta charset="utf-8">
-              <meta name="color-scheme" content="dark">
+              <meta name="color-scheme" content="dark only">
               <meta name="supported-color-schemes" content="dark">
+              <style>
+                :root {
+                  color-scheme: dark only;
+                  supported-color-schemes: dark;
+                }
+                @media (prefers-color-scheme: dark) {
+                  body, table, td, div {
+                    background-color: #121212 !important;
+                    color: #ffffff !important;
+                  }
+                }
+              </style>
             </head>
-            <body style="margin: 0; padding: 0; background-color: #121212; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-              <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #121212;">
+            <body style="margin: 0; padding: 0; background-color: #121212 !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+              <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #121212 !important;" bgcolor="#121212">
                 <tr>
-                  <td align="center" style="padding: 40px 20px;">
-                    <table role="presentation" style="width: 100%; max-width: 500px; border-collapse: collapse; background-color: #1e1e1e; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+                  <td align="center" style="padding: 40px 20px; background-color: #121212 !important;" bgcolor="#121212">
+                    <table role="presentation" style="width: 100%; max-width: 500px; border-collapse: collapse; background-color: #1e1e1e !important; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 24px rgba(0,0,0,0.5);" bgcolor="#1e1e1e">
                       <tr>
                         <td style="padding: 40px 30px; text-align: center;">
                           
@@ -637,19 +660,19 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
                             <img src="${logoUrl}" alt="Viviendo en USA" width="80" height="80" style="width: 80px; height: 80px; object-fit: cover; border-radius: 50%; border: 2px solid #FF5F6D; display: block; margin: 0 auto;" />
                           </div>` : ''}
 
-                          <h2 style="color: #ffffff; font-size: 24px; font-weight: 700; margin-top: 0; margin-bottom: 15px; letter-spacing: -0.5px;">¡Te extrañaremos, ${userName}!</h2>
+                          <h2 style="color: #ffffff !important; font-size: 24px; font-weight: 700; margin-top: 0; margin-bottom: 15px; letter-spacing: -0.5px;">¡Te extrañaremos, ${userName}!</h2>
                           
-                          <p style="font-size: 15px; line-height: 1.6; color: #9ca3af; margin-bottom: 25px;">
+                          <p style="font-size: 15px; line-height: 1.6; color: #9ca3af !important; margin-bottom: 25px;">
                             Hemos procesado la baja de tu cuenta exitosamente. Tus datos personales y accesos han sido eliminados de nuestros sistemas de acuerdo con tus preferencias.
                           </p>
 
-                          <p style="font-size: 14px; line-height: 1.6; color: #9ca3af; margin-bottom: 30px;">
+                          <p style="font-size: 14px; line-height: 1.6; color: #9ca3af !important; margin-bottom: 30px;">
                             Si en el futuro deseas regresar y ser parte nuevamente de nuestra comunidad hispana, las puertas de Viviendo en <span style="color: #FF5F6D; font-weight: bold;">USA</span> estarán abiertas para ti.
                           </p>
 
                           <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 30px 0 20px 0;" />
 
-                          <p style="font-size: 12px; color: #4b5563; margin: 0;">
+                          <p style="font-size: 12px; color: #4b5563 !important; margin: 0;">
                             © 2026 Viviendo en <span style="color: #FF5F6D; font-weight: bold;">USA</span>. Todos los derechos reservados.
                           </p>
 
