@@ -513,19 +513,21 @@ export default function Header({ title }: { title?: string }) {
     
     setIsSendingIT(true);
     try {
-      // 🚀 CORRECCIÓN: La ruta es /admin/it-support como configuraste en admin.routes.ts
+      const correoSeguro = profileData.email || user?.email || 'admin@viviendoenusa.app';
+      const nombreSeguro = `${profileData.name || 'Admin'} ${profileData.last_name || ''}`.trim();
+
       const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ email: profileData.email, userName: `${profileData.name} ${profileData.last_name}`, message: itMessage })
+        body: JSON.stringify({ email: correoSeguro, userName: nombreSeguro, message: itMessage })
       });
       
       if (!response.ok) throw new Error("No se pudo enviar el mensaje");
       
       if (isWeb) {
-        window.alert("¡Enviado! Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
+        window.alert("¡Enviado! Tu reporte ha sido enviado al equipo de IT.");
       } else {
-        Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
+        Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT.");
       }
       
       setItMessage('');
@@ -864,6 +866,7 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </Modal>
 
+      {/* 🚀 MODAL SOPORTE TÉCNICO IT (CON CONTENEDOR DE ALTURA FIJA PARA WEB) */}
       <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSendingIT && setShowITSupportModal(false)} />
@@ -882,28 +885,32 @@ export default function Header({ title }: { title?: string }) {
               Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
             </ThemedText>
 
-            {/* 🚀 CAJA DE TEXTO CORREGIDA 🚀 */}
-            <TextInput 
-              value={itMessage}
-              onChangeText={setItMessage}
-              placeholder="¿Qué inconveniente presentas?"
-              placeholderTextColor={isDark ? '#666' : '#999'}
-              multiline
-              style={[
-                { 
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
-                  color: Colors[localTheme].text, 
-                  padding: 14, 
-                  borderRadius: 16, 
-                  height: 120, 
-                  textAlignVertical: 'top', 
-                  marginBottom: 20, 
-                  borderWidth: 1, 
-                  borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' 
-                },
-                ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
-              ]}
-            />
+            <View style={{ width: '100%', height: 130, minHeight: 130, marginBottom: 20 }}>
+              <TextInput 
+                value={itMessage}
+                onChangeText={setItMessage}
+                placeholder="¿Qué inconveniente presentas?"
+                placeholderTextColor={isDark ? '#666' : '#999'}
+                multiline={true}
+                numberOfLines={4}
+                style={[
+                  { 
+                    width: '100%',
+                    height: 130,
+                    minHeight: 130,
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', 
+                    color: Colors[localTheme].text, 
+                    padding: 14, 
+                    borderRadius: 16, 
+                    textAlignVertical: 'top', 
+                    borderWidth: 1, 
+                    borderColor: '#FF5F6D',
+                    fontSize: 15
+                  },
+                  ...(isWeb ? [{ outlineStyle: 'none' as any, display: 'block' as any }] : [])
+                ]}
+              />
+            </View>
 
             <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
               <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
