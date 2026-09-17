@@ -504,21 +504,29 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const handleSendITSupport = async () => {
-    if (!itMessage.trim()) return Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
-    if (containsBadWords(itMessage)) return Platform.OS === 'web' ? window.alert("El mensaje contiene lenguaje inapropiado y no puede ser enviado.") : Alert.alert("Error", "El mensaje contiene lenguaje inapropiado y no puede ser enviado.");
+    if (!itMessage.trim()) return isWeb ? window.alert("Por favor escribe tu mensaje o problema técnico.") : Alert.alert("Aviso", "Por favor escribe tu mensaje o problema técnico.");
+    if (containsBadWords(itMessage)) return isWeb ? window.alert("El mensaje contiene lenguaje inapropiado y no puede ser enviado.") : Alert.alert("Error", "El mensaje contiene lenguaje inapropiado y no puede ser enviado.");
     
     setIsSendingIT(true);
     try {
-      // 🚀 AJUSTE CLAVE: Aseguramos que apunte directo a la ruta correcta del backend
-      const response = await fetch(`${API_BASE_URL}/it-support`, {
+      // 🚀 CORRECCIÓN DEL FETCH: Retornamos a /admin/it-support como debe ser
+      const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ email: profileData.email, userName: `${profileData.name} ${profileData.last_name}`, message: itMessage })
       });
+      
       if (!response.ok) throw new Error("No se pudo enviar el mensaje");
-      Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
+      
+      // ✅ Alerta a prueba de web
+      isWeb ? window.alert("¡Enviado! Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.") 
+            : Alert.alert("¡Enviado!", "Tu reporte ha sido enviado al equipo de IT. Te responderemos pronto.");
+            
       setItMessage('');
       setShowITSupportModal(false);
-    } catch (error) { Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo."); } 
+    } catch (error) { 
+      isWeb ? window.alert("Ocurrió un error al enviar el mensaje. Inténtalo de nuevo.") 
+            : Alert.alert("Error", "Ocurrió un error al enviar el mensaje. Inténtalo de nuevo."); 
+    } 
     finally { setIsSendingIT(false); }
   };
 
@@ -863,52 +871,32 @@ export default function Header({ title }: { title?: string }) {
               Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
             </ThemedText>
 
-            {isWeb ? (
-              <textarea
-                value={itMessage}
-                onChange={(e: any) => setItMessage(e.target.value)}
-                placeholder="¿Qué inconveniente presentas?"
-                style={{
+            {/* 🚀 CAJA DE TEXTO BLINDADA PARA WEB (HEIGHT FIJO Y OUTLINE NONE) */}
+            <TextInput 
+              value={itMessage}
+              onChangeText={setItMessage}
+              placeholder="¿Qué inconveniente presentas?"
+              placeholderTextColor={isDark ? '#666' : '#999'}
+              multiline={true}
+              numberOfLines={4}
+              style={[
+                { 
                   width: '100%',
-                  height: '120px',
-                  minHeight: '120px',
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-                  color: isDark ? '#FFFFFF' : '#1A1A1A',
-                  padding: '14px',
-                  borderRadius: '16px',
-                  border: '1px solid #FF5F6D',
-                  fontSize: '15px',
-                  outline: 'none',
-                  resize: 'none',
-                  fontFamily: 'inherit',
-                  boxSizing: 'border-box',
-                  marginBottom: '20px'
-                }}
-              />
-            ) : (
-              <TextInput 
-                value={itMessage}
-                onChangeText={setItMessage}
-                placeholder="¿Qué inconveniente presentas?"
-                placeholderTextColor={isDark ? '#666' : '#999'}
-                multiline={true}
-                numberOfLines={4}
-                editable={true}
-                style={{ 
-                  width: '100%',
-                  height: 120,
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', 
+                  minHeight: 120,
+                  height: 120, 
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
                   color: Colors[localTheme].text, 
                   padding: 14, 
                   borderRadius: 16, 
                   textAlignVertical: 'top', 
                   borderWidth: 1, 
-                  borderColor: '#FF5F6D',
+                  borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
                   fontSize: 15,
                   marginBottom: 20
-                }}
-              />
-            )}
+                },
+                Platform.OS === 'web' && { outlineStyle: 'none' } as any
+              ]}
+            />
 
             <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
               <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
