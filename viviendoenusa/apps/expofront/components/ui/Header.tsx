@@ -862,7 +862,7 @@ export default function Header({ title }: { title?: string }) {
               Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
             </ThemedText>
 
-            <View style={{ width: '100%', minHeight: 120, marginBottom: 20 }}>
+            <View style={{ width: '100%', minHeight: 120, marginBottom: 20, display: 'flex' }}>
               <TextInput 
                 value={itMessage}
                 onChangeText={setItMessage}
