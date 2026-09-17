@@ -509,7 +509,8 @@ export default function Header({ title }: { title?: string }) {
     
     setIsSendingIT(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
+      // 🚀 AJUSTE CLAVE: Aseguramos que apunte directo a la ruta correcta del backend
+      const response = await fetch(`${API_BASE_URL}/it-support`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ email: profileData.email, userName: `${profileData.name} ${profileData.last_name}`, message: itMessage })
       });
@@ -862,7 +863,29 @@ export default function Header({ title }: { title?: string }) {
               Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
             </ThemedText>
 
-            <View style={{ width: '100%', minHeight: 120, marginBottom: 20, display: 'flex' }}>
+            {isWeb ? (
+              <textarea
+                value={itMessage}
+                onChange={(e: any) => setItMessage(e.target.value)}
+                placeholder="¿Qué inconveniente presentas?"
+                style={{
+                  width: '100%',
+                  height: '120px',
+                  minHeight: '120px',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                  color: isDark ? '#FFFFFF' : '#1A1A1A',
+                  padding: '14px',
+                  borderRadius: '16px',
+                  border: '1px solid #FF5F6D',
+                  fontSize: '15px',
+                  outline: 'none',
+                  resize: 'none',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  marginBottom: '20px'
+                }}
+              />
+            ) : (
               <TextInput 
                 value={itMessage}
                 onChangeText={setItMessage}
@@ -871,24 +894,21 @@ export default function Header({ title }: { title?: string }) {
                 multiline={true}
                 numberOfLines={4}
                 editable={true}
-                style={[
-                  { 
-                    width: '100%',
-                    height: 120,
-                    minHeight: 120,
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', 
-                    color: Colors[localTheme].text, 
-                    padding: 14, 
-                    borderRadius: 16, 
-                    textAlignVertical: 'top', 
-                    borderWidth: 1, 
-                    borderColor: '#FF5F6D',
-                    fontSize: 15
-                  },
-                  ...(isWeb ? [{ outlineStyle: 'none' as any, display: 'block' as any }] : [])
-                ]}
+                style={{ 
+                  width: '100%',
+                  height: 120,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', 
+                  color: Colors[localTheme].text, 
+                  padding: 14, 
+                  borderRadius: 16, 
+                  textAlignVertical: 'top', 
+                  borderWidth: 1, 
+                  borderColor: '#FF5F6D',
+                  fontSize: 15,
+                  marginBottom: 20
+                }}
               />
-            </View>
+            )}
 
             <TouchableOpacity disabled={isSendingIT} onPress={handleSendITSupport} style={{ borderRadius: 16, overflow: 'hidden' }}>
               <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
