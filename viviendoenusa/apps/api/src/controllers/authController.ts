@@ -386,7 +386,6 @@ export const authenticateUser = async (credentials: {
       await db.update(users).set({ failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, user.id));
     }
 
-    // 🚀 AQUÍ ESTÁ EL AJUSTE PARA QUE NO BLOQUEE EL LOGIN SI NO HAY TELÉFONO O ZIP CODE
     const needsProfile = !user.name || user.name === "Usuario" || user.name === "Apple" || user.name === "Google" || !user.lastName;
     
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
@@ -394,6 +393,9 @@ export const authenticateUser = async (credentials: {
 
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
     await ensureTermsAccepted(user.id);
+
+    // 🚀 DEVOLUCIÓN CORRECTA BASADA ESTRICTAMENTE EN TYPE_DETAIL DE LA BASE DE DATOS
+    const userRole = user.typeDetail || 'User';
 
     return {
       message: "Autenticación exitosa",
@@ -406,7 +408,8 @@ export const authenticateUser = async (credentials: {
         lastName: user.lastName,
         phone: user.phone, 
         zip: user.zip,
-        role: user.typeDetail || 'User',
+        role: userRole,       // 🚀 Retorna el rol real de la BD
+        typeDetail: userRole, // 🚀 Retorna el type_detail real de la BD
       }
     };
   } catch (error: any) {
@@ -552,15 +555,12 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
 // --------------------------------------------------------
 export const getPlatformStats = async (req: Request, res: Response) => {
   try {
-    // Contamos usuarios directamente desde la BD
     const [usersCount] = await db.select({ value: sql`COUNT(*)` }).from(users);
     let totalUsers = Number(usersCount?.value) || 1250;
 
-    // Inicializamos con los valores de fallback
     let totalCompanies = 180;
     let totalJobs = 340;
 
-    // Importamos dinámicamente los schemas para no romper el compilador si cambian los nombres
     try {
       const schema = require("../../../../packages/db/src/schema");
       
