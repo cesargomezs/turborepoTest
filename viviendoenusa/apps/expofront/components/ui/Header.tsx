@@ -153,6 +153,9 @@ export default function Header({ title }: { title?: string }) {
   const globalLastName = userMetadata?.lastName || userMetadata?.last_name || '';
   const globalImageUrl = userMetadata?.imageUrl || '';
   
+  // 🚀 DETECCIÓN DE MODO INVITADO
+  const isGuest = userMetadata?.typeDetail === 'Guest';
+
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -198,7 +201,7 @@ export default function Header({ title }: { title?: string }) {
     new_image_uri: null as string | null,
   });
 
-  const isSuperAdmin = userMetadata?.role === 'SAdmin' || profileData.typeDetail === 'SAdmin' || profileData.email === 'cesargomez853@gmail.com';
+  const isSuperAdmin = !isGuest && (userMetadata?.role === 'SAdmin' || profileData.typeDetail === 'SAdmin' || profileData.email === 'cesargomez853@gmail.com');
   const [notifications, setNotifications] = useState<any[]>([]);
   
   const languages = [
@@ -216,7 +219,8 @@ export default function Header({ title }: { title?: string }) {
   ];
 
   const fetchUserData = async () => {
-    if (!REAL_USER_ID || !token) return;
+    // 🚀 Evitamos peticiones al servidor si es un invitado
+    if (!REAL_USER_ID || !token || isGuest) return;
 
     try {
       const res = await fetch(`${API_USERS_URL}/${REAL_USER_ID}`, {
@@ -277,7 +281,8 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const fetchNotifications = async () => {
-    if (!REAL_USER_ID || !token) return;
+    // 🚀 Evitamos buscar notificaciones si es invitado
+    if (!REAL_USER_ID || !token || isGuest) return;
 
     try {
       const url = `${API_BASE_URL}/notifications?userId=${REAL_USER_ID}`;
@@ -302,32 +307,32 @@ export default function Header({ title }: { title?: string }) {
 
   useFocusEffect(
     useCallback(() => {
-      if (!isCreatingUser) fetchUserData();
-    }, [isCreatingUser, settingsModalVisible, REAL_USER_ID, token])
+      if (!isCreatingUser && !isGuest) fetchUserData();
+    }, [isCreatingUser, settingsModalVisible, REAL_USER_ID, token, isGuest])
   );
 
   useFocusEffect(
     useCallback(() => {
-      if (REAL_USER_ID && token) fetchNotifications();
-    }, [REAL_USER_ID, token])
+      if (REAL_USER_ID && token && !isGuest) fetchNotifications();
+    }, [REAL_USER_ID, token, isGuest])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        if (!isCreatingUser) fetchUserData();
-        if (REAL_USER_ID && token) fetchNotifications();
+        if (!isCreatingUser && !isGuest) fetchUserData();
+        if (REAL_USER_ID && token && !isGuest) fetchNotifications();
         setWakeUpTrigger(prev => prev + 1); 
       }
     });
     return () => subscription.remove();
-  }, [isCreatingUser, REAL_USER_ID, token]);
+  }, [isCreatingUser, REAL_USER_ID, token, isGuest]);
 
   useEffect(() => {
     const getSignedAvatar = async () => {
       let imageUrlToProcess = globalImageUrl || profileData.image_url;
 
-      if (!supabase || !imageUrlToProcess) {
+      if (!supabase || !imageUrlToProcess || isGuest) {
         setSignedImageUrl(null);
         return;
       }
@@ -355,7 +360,7 @@ export default function Header({ title }: { title?: string }) {
     };
 
     getSignedAvatar();
-  }, [globalImageUrl, profileData.image_url, wakeUpTrigger]); 
+  }, [globalImageUrl, profileData.image_url, wakeUpTrigger, isGuest]); 
 
   useEffect(() => {
     if (isWeb && typeof window !== 'undefined') {
@@ -364,14 +369,14 @@ export default function Header({ title }: { title?: string }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (REAL_USER_ID && token) {
+    if (REAL_USER_ID && token && !isGuest) {
       const interval = setInterval(() => fetchNotifications(), 60000); 
       return () => clearInterval(interval);
     }
-  }, [REAL_USER_ID, token]);
+  }, [REAL_USER_ID, token, isGuest]);
 
   useEffect(() => {
-    if (Platform.OS === 'web' || !Notifications) return;
+    if (Platform.OS === 'web' || !Notifications || isGuest) return;
 
     const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const notificationData = response.notification.request.content.data;
@@ -397,7 +402,7 @@ export default function Header({ title }: { title?: string }) {
     });
 
     return () => subscription.remove();
-  }, [router]);
+  }, [router, isGuest]);
 
   const hasUnread = notifications.some(n => n.read === false || n.isRead === false || n.is_read === false);
 
@@ -514,7 +519,7 @@ export default function Header({ title }: { title?: string }) {
     setIsSendingIT(true);
     try {
       const correoSeguro = profileData.email || user?.email || 'admin@viviendoenusa.app';
-      const nombreSeguro = `${profileData.name || 'Admin'} ${profileData.last_name || ''}`.trim();
+      const nombreSeguro = `${profileData.name || 'Invitado'} ${profileData.last_name || ''}`.trim();
 
       const response = await fetch(`${API_BASE_URL}/admin/it-support`, {
         method: 'POST', 
@@ -582,7 +587,7 @@ export default function Header({ title }: { title?: string }) {
       setProfileData({ email: '', name: '', last_name: '', phone: '', zip: '', birth: '', password: '', typeDetail: 'User', image_url: null, new_image_uri: null ,estate: ''});
       setActiveProfileRole('User');
     } else {
-      fetchUserData(); 
+      if(!isGuest) fetchUserData(); 
     }
   };
 
@@ -593,6 +598,7 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const pickProfileImage = async () => {
+    if (isGuest) return; // Un invitado no puede cambiar foto
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 1, 
     });
@@ -693,11 +699,11 @@ export default function Header({ title }: { title?: string }) {
         <View style={[styles.headerRow, isWeb && { paddingBottom: 15 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity activeOpacity={0.8} onPress={() => setSettingsModalVisible(true)} style={[styles.avatarContainer, { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
-              <Image source={currentDisplayImage} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              <Image source={isGuest ? require('../../assets/images/cesar.webp') : currentDisplayImage} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
             </TouchableOpacity>
             <View style={{ marginLeft: 12 }}>
               <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>
-                {t.welcome + displayNameToRender + ' ' + (displayLastNameToRender ? displayLastNameToRender.substring(0, 1) : '')}
+                {isGuest ? '¡Hola, Invitado!' : t.welcome + displayNameToRender + ' ' + (displayLastNameToRender ? displayLastNameToRender.substring(0, 1) : '')}
               </ThemedText>
               {isSuperAdmin && (
                  <ThemedText style={{ fontSize: 11, color: '#FF5F6D', fontWeight: 'bold' }}>SAdmin Panel</ThemedText>
@@ -714,10 +720,12 @@ export default function Header({ title }: { title?: string }) {
                 <MaterialCommunityIcons size={22} style={{ color: isDark ? '#4FC3F7' : '#007AFF' , fontWeight: 'bold' }} name="headset" />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
-              <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
-              {hasUnread && <View style={styles.unreadBadge} />}
-            </TouchableOpacity>
+            {!isGuest && (
+              <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
+                <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
+                {hasUnread && <View style={styles.unreadBadge} />}
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity onPress={() => setSettingsModalVisible(true)} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
               <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name="cog" />
@@ -882,7 +890,7 @@ export default function Header({ title }: { title?: string }) {
             </View>
 
             <ThemedText style={{ fontSize: 13, marginBottom: 15, color: isDark ? '#B0BEC5' : '#555', lineHeight: 18 }}>
-              Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email}
+              Escribe tu problema técnico o duda. El mensaje llegará directo al equipo de administración y te responderemos a: {profileData.email || 'tu correo'}
             </ThemedText>
 
             <View style={{ width: '100%', height: 130, minHeight: 130, marginBottom: 20 }}>
@@ -955,14 +963,17 @@ export default function Header({ title }: { title?: string }) {
                 <View style={{ alignItems: 'center', marginBottom: 25 }}>
                   <TouchableOpacity onPress={pickProfileImage} activeOpacity={0.8} style={{ position: 'relative' }}>
                     <View style={{ width: 110, height: 110, borderRadius: 55, overflow: 'hidden', borderWidth: 2, borderColor: Colors[localTheme].tint }}>
-                      <Image source={currentDisplayImage} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      <Image source={isGuest ? require('../../assets/images/cesar.webp') : currentDisplayImage} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                     </View>
-                    <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: Colors[localTheme].tint, width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: isDark ? '#1E1E1E' : '#FFF' }}>
-                      <MaterialCommunityIcons name="camera-plus" size={16} color={isDark ? '#888' : '#fff'} />
-                    </View>
+                    {!isGuest && (
+                      <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: Colors[localTheme].tint, width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: isDark ? '#1E1E1E' : '#FFF' }}>
+                        <MaterialCommunityIcons name="camera-plus" size={16} color={isDark ? '#888' : '#fff'} />
+                      </View>
+                    )}
                   </TouchableOpacity>
                 </View>
 
+                {/* 🚀 SETTINGS DE TEMA E IDIOMA DISPONIBLES PARA TODOS (INCLUIDO INVITADO) */}
                 <View style={{ marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
                   
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
@@ -1000,173 +1011,198 @@ export default function Header({ title }: { title?: string }) {
                   </View>
                 </View>
 
-                {isSuperAdmin && (
-                  <TouchableOpacity 
-                    onPress={() => { closeSettingsModal(); setShowCouponModal(true); }} 
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <MaterialCommunityIcons name="ticket-percent-outline" size={22} color="#FFB300" style={{ marginRight: 10 }} />
-                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Generar Cupón VIP</ThemedText>
-                    </View>
-                    <MaterialCommunityIcons name="chevron-right" size={20} color={isDark ? '#B0BEC5' : '#666'} />
-                  </TouchableOpacity>
-                )}
-
-                {isSuperAdmin && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <MaterialCommunityIcons name="shield-account" size={22} color="#FF5F6D" style={{ marginRight: 10 }} />
-                      <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>{t.headertab.rol}</ThemedText>
-                    </View>
-                    <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: 4 }}>
-                      <TouchableOpacity onPress={() => setActiveProfileRole('Admin')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: activeProfileRole === 'Admin' ? (isDark ? '#333' : '#FFF') : 'transparent' }}>
-                        <ThemedText style={{ fontSize: 13, fontWeight: activeProfileRole === 'Admin' ? 'bold' : '600', color: activeProfileRole === 'Admin' ? '#FF5F6D' : '#888' }}>Admin</ThemedText>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => setActiveProfileRole('User')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: activeProfileRole === 'User' ? (isDark ? '#333' : '#FFF') : 'transparent' }}>
-                        <ThemedText style={{ fontSize: 13, fontWeight: activeProfileRole === 'User' ? 'bold' : '600', color: activeProfileRole === 'User' ? Colors[localTheme].tint : '#888' }}>{t.headertab.rolUser}</ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-                <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text, marginBottom: 10, fontSize: 16 }]}>{t.headertab.labelpersonal}</ThemedText>
-                
-                <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.email}</ThemedText>
-                <TextInput value={profileData.email} onChangeText={(val) => setProfileData({...profileData, email: val})} editable={isCreatingUser} keyboardType="email-address" autoCapitalize="none" style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
-
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.name}</ThemedText>
-                    <TextInput value={profileData.name} onChangeText={(val) => setProfileData({...profileData, name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.lastName}</ThemedText>
-                    <TextInput value={profileData.last_name} onChangeText={(val) => setProfileData({...profileData, last_name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
-                  </View>
-                </View>
-
-                <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{isCreatingUser ? "Contraseña" : "Nueva Contraseña (Opcional)"}</ThemedText>
-                
-                {isCreatingUser && (
+                {/* 🚀 FORMULARIO RESTRINGIDO SI ES INVITADO */}
+                {!isGuest ? (
                   <>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>
-                    {t.headertab.labelPassword}
-                    </ThemedText>
-                    <View style={{ width: '100%', position: 'relative', marginBottom: 15 }}>
-                      <TextInput 
-                        value={profileData.password} 
-                        onChangeText={(val) => setProfileData({...profileData, password: val})} 
-                        secureTextEntry={!showPassword}
-                        placeholder="********"
-                        placeholderTextColor={isDark ? '#666' : '#999'}
-                        style={[styles.profileInput, { 
-                          color: Colors[localTheme].text, 
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
-                          borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', 
-                          marginBottom: 0, 
-                          paddingRight: 45 
-                        }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} 
-                      />
+                    {isSuperAdmin && (
                       <TouchableOpacity 
-                        style={{ position: 'absolute', right: 15, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} 
-                        onPress={() => setShowPassword(!showPassword)}
+                        onPress={() => { closeSettingsModal(); setShowCouponModal(true); }} 
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}
                       >
-                        <MaterialCommunityIcons 
-                          name={showPassword ? "eye-outline" : "eye-off-outline"} 
-                          size={22} 
-                          color={isDark ? '#888' : '#AAA'} 
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <MaterialCommunityIcons name="ticket-percent-outline" size={22} color="#FFB300" style={{ marginRight: 10 }} />
+                          <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>Generar Cupón VIP</ThemedText>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={20} color={isDark ? '#B0BEC5' : '#666'} />
+                      </TouchableOpacity>
+                    )}
+
+                    {isSuperAdmin && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <MaterialCommunityIcons name="shield-account" size={22} color="#FF5F6D" style={{ marginRight: 10 }} />
+                          <ThemedText style={{ fontSize: 15, fontWeight: '600', color: Colors[localTheme].text }}>{t.headertab.rol}</ThemedText>
+                        </View>
+                        <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: 4 }}>
+                          <TouchableOpacity onPress={() => setActiveProfileRole('Admin')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: activeProfileRole === 'Admin' ? (isDark ? '#333' : '#FFF') : 'transparent' }}>
+                            <ThemedText style={{ fontSize: 13, fontWeight: activeProfileRole === 'Admin' ? 'bold' : '600', color: activeProfileRole === 'Admin' ? '#FF5F6D' : '#888' }}>Admin</ThemedText>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setActiveProfileRole('User')} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: activeProfileRole === 'User' ? (isDark ? '#333' : '#FFF') : 'transparent' }}>
+                            <ThemedText style={{ fontSize: 13, fontWeight: activeProfileRole === 'User' ? 'bold' : '600', color: activeProfileRole === 'User' ? Colors[localTheme].tint : '#888' }}>{t.headertab.rolUser}</ThemedText>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text, marginBottom: 10, fontSize: 16 }]}>{t.headertab.labelpersonal}</ThemedText>
+                    
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.email}</ThemedText>
+                    <TextInput value={profileData.email} onChangeText={(val) => setProfileData({...profileData, email: val})} editable={isCreatingUser} keyboardType="email-address" autoCapitalize="none" style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
+
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.name}</ThemedText>
+                        <TextInput value={profileData.name} onChangeText={(val) => setProfileData({...profileData, name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.lastName}</ThemedText>
+                        <TextInput value={profileData.last_name} onChangeText={(val) => setProfileData({...profileData, last_name: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
+                      </View>
+                    </View>
+
+                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{isCreatingUser ? "Contraseña" : "Nueva Contraseña (Opcional)"}</ThemedText>
+                    
+                    {isCreatingUser && (
+                      <>
+                        <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>
+                        {t.headertab.labelPassword}
+                        </ThemedText>
+                        <View style={{ width: '100%', position: 'relative', marginBottom: 15 }}>
+                          <TextInput 
+                            value={profileData.password} 
+                            onChangeText={(val) => setProfileData({...profileData, password: val})} 
+                            secureTextEntry={!showPassword}
+                            placeholder="********"
+                            placeholderTextColor={isDark ? '#666' : '#999'}
+                            style={[styles.profileInput, { 
+                              color: Colors[localTheme].text, 
+                              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', 
+                              borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', 
+                              marginBottom: 0, 
+                              paddingRight: 45 
+                            }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} 
+                          />
+                          <TouchableOpacity 
+                            style={{ position: 'absolute', right: 15, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} 
+                            onPress={() => setShowPassword(!showPassword)}
+                          >
+                            <MaterialCommunityIcons 
+                              name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                              size={22} 
+                              color={isDark ? '#888' : '#AAA'} 
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
+
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.phone}</ThemedText>
+                        <TextInput value={profileData.phone} keyboardType="phone-pad" onChangeText={(val) => setProfileData({...profileData, phone: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.zipCode}</ThemedText>
+                        <TextInput value={profileData.zip} keyboardType="numeric" maxLength={5} onChangeText={(val) => setProfileData({...profileData, zip: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
+                      </View>
+                    </View>
+
+                    <View style={{ width: '100%', marginBottom: 15 }}>
+                      <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Estado (Ej: CA)</ThemedText>
+                      <TextInput 
+                        value={profileData.estate} 
+                        onChangeText={(val) => setProfileData({...profileData, estate: val})} 
+                        maxLength={2}
+                        autoCapitalize="characters"
+                        placeholder="CA"
+                        placeholderTextColor={isDark ? '#666' : '#999'}
+                        style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} 
+                      />
+                    </View>
+
+                    <View style={{ width: '100%', marginBottom: 15 }}>
+                      <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.birth}</ThemedText>
+                      <View style={{ position: 'relative' }}>
+                        <View style={[styles.profileInput, { marginBottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
+                          <ThemedText style={{ color: profileData.birth ? Colors[localTheme].text : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)') }}>{profileData.birth || 'yyyy-mm-dd'}</ThemedText>
+                          <MaterialCommunityIcons name="calendar-month" size={20} color={isDark ? '#888' : '#AAA'} />
+                        </View>
+                        {!isWeb && (
+                          <TouchableOpacity activeOpacity={0} onPress={() => { Keyboard.dismiss(); setShowDatePicker(true); }} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} />
+                        )}
+                      </View>
+                    </View>
+
+                    {showDatePicker && !isWeb && (
+                      <View style={isIOS ? styles.iosPickerContainer : null}>
+                        {isIOS && (
+                          <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.iosPickerDoneButton}>
+                            <ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>Listo</ThemedText>
+                          </TouchableOpacity>
+                        )}
+                        <DateTimePicker 
+                          value={profileData.birth ? new Date(`${profileData.birth}T12:00:00`) : new Date()} 
+                          mode="date" display={isIOS ? "spinner" : "default"} 
+                          onChange={(event, selectedDate) => {
+                            if (isAndroid) setShowDatePicker(false);
+                            if (selectedDate) setProfileData({ ...profileData, birth: selectedDate.toISOString().split('T')[0] });
+                          }} 
+                          textColor={Colors[localTheme].text} maximumDate={new Date()}
                         />
+                      </View>
+                    )}
+
+                    <TouchableOpacity disabled={isSavingProfile} onPress={handleSaveProfile} style={{ marginTop: 5, borderRadius: 16, overflow: 'hidden' }}>
+                      <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
+                        <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>
+                          {isSavingProfile ? "Guardando..." : (isCreatingUser ? "Crear Usuario" : "Guardar Cambios")}
+                        </ThemedText>
+                      </LinearGradient>
+                    </TouchableOpacity>
+
+                    {!isCreatingUser && (
+                      <TouchableOpacity 
+                        onPress={handleDeleteAccountPress} 
+                        style={{ 
+                          marginTop: 25, 
+                          paddingVertical: 15, 
+                          paddingHorizontal: 20, 
+                          borderRadius: 16, 
+                          borderWidth: 1, 
+                          borderColor: '#EF4444', 
+                          backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)', 
+                          flexDirection: 'row', 
+                          alignItems: 'center', 
+                          justifyContent: 'center' 
+                        }}
+                      >
+                        <MaterialCommunityIcons name="delete-forever" size={22} color="#EF4444" />
+                        <ThemedText style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 15, marginLeft: 10 }}>
+                          Eliminar mi cuenta y datos
+                        </ThemedText>
                       </TouchableOpacity>
-                    </View>
+                    )}
                   </>
-                )}
-
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.phone}</ThemedText>
-                    <TextInput value={profileData.phone} keyboardType="phone-pad" onChangeText={(val) => setProfileData({...profileData, phone: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.zipCode}</ThemedText>
-                    <TextInput value={profileData.zip} keyboardType="numeric" maxLength={5} onChangeText={(val) => setProfileData({...profileData, zip: val})} style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} />
-                  </View>
-                </View>
-
-                <View style={{ width: '100%', marginBottom: 15 }}>
-                  <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>Estado (Ej: CA)</ThemedText>
-                  <TextInput 
-                    value={profileData.estate} 
-                    onChangeText={(val) => setProfileData({...profileData, estate: val})} 
-                    maxLength={2}
-                    autoCapitalize="characters"
-                    placeholder="CA"
-                    placeholderTextColor={isDark ? '#666' : '#999'}
-                    style={[styles.profileInput, { color: Colors[localTheme].text, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }, ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])]} 
-                  />
-                </View>
-
-                <View style={{ width: '100%', marginBottom: 15 }}>
-                  <ThemedText style={[styles.inputLabel, { color: Colors[localTheme].text }]}>{t.headertab.birth}</ThemedText>
-                  <View style={{ position: 'relative' }}>
-                    <View style={[styles.profileInput, { marginBottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
-                      <ThemedText style={{ color: profileData.birth ? Colors[localTheme].text : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)') }}>{profileData.birth || 'yyyy-mm-dd'}</ThemedText>
-                      <MaterialCommunityIcons name="calendar-month" size={20} color={isDark ? '#888' : '#AAA'} />
-                    </View>
-                    {!isWeb && (
-                      <TouchableOpacity activeOpacity={0} onPress={() => { Keyboard.dismiss(); setShowDatePicker(true); }} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} />
-                    )}
-                  </View>
-                </View>
-
-                {showDatePicker && !isWeb && (
-                  <View style={isIOS ? styles.iosPickerContainer : null}>
-                    {isIOS && (
-                      <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.iosPickerDoneButton}>
-                        <ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>Listo</ThemedText>
-                      </TouchableOpacity>
-                    )}
-                    <DateTimePicker 
-                      value={profileData.birth ? new Date(`${profileData.birth}T12:00:00`) : new Date()} 
-                      mode="date" display={isIOS ? "spinner" : "default"} 
-                      onChange={(event, selectedDate) => {
-                        if (isAndroid) setShowDatePicker(false);
-                        if (selectedDate) setProfileData({ ...profileData, birth: selectedDate.toISOString().split('T')[0] });
-                      }} 
-                      textColor={Colors[localTheme].text} maximumDate={new Date()}
-                    />
-                  </View>
-                )}
-
-                <TouchableOpacity disabled={isSavingProfile} onPress={handleSaveProfile} style={{ marginTop: 5, borderRadius: 16, overflow: 'hidden' }}>
-                  <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
-                    <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>
-                      {isSavingProfile ? "Guardando..." : (isCreatingUser ? "Crear Usuario" : "Guardar Cambios")}
+                ) : (
+                  <View style={{ marginTop: 20, alignItems: 'center', padding: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)', borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+                    <MaterialCommunityIcons name="account-circle-outline" size={48} color={isDark ? '#4FC3F7' : '#007AFF'} style={{ marginBottom: 10 }}/>
+                    <ThemedText style={{ textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: Colors[localTheme].text, marginBottom: 8 }}>
+                      Estás como Invitado
                     </ThemedText>
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                {!isCreatingUser && (
-                  <TouchableOpacity 
-                    onPress={handleDeleteAccountPress} 
-                    style={{ 
-                      marginTop: 25, 
-                      paddingVertical: 15, 
-                      paddingHorizontal: 20, 
-                      borderRadius: 16, 
-                      borderWidth: 1, 
-                      borderColor: '#EF4444', 
-                      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)', 
-                      flexDirection: 'row', 
-                      alignItems: 'center', 
-                      justifyContent: 'center' 
-                    }}
-                  >
-                    <MaterialCommunityIcons name="delete-forever" size={22} color="#EF4444" />
-                    <ThemedText style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 15, marginLeft: 10 }}>
-                      Eliminar mi cuenta y datos
+                    <ThemedText style={{ textAlign: 'center', fontSize: 14, color: isDark ? '#B0BEC5' : '#555', marginBottom: 20 }}>
+                      Regístrate o inicia sesión para configurar tu perfil, publicar en el directorio y mucho más.
                     </ThemedText>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => {
+                        closeSettingsModal();
+                        dispatch(toggleAuth());
+                        router.replace('/');
+                      }}
+                      style={{ backgroundColor: '#FF5F6D', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16 }}
+                    >
+                      <ThemedText style={{ color: '#FFF', fontWeight: 'bold' }}>Iniciar Sesión</ThemedText>
+                    </TouchableOpacity>
+                  </View>
                 )}
 
               </ScrollView>

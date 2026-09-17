@@ -22,6 +22,13 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets(); 
   
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
+  
+  // 🚀 Verificamos si el usuario actual es un Invitado (Guest)
+  const isGuest = useMockSelector((state: any) => 
+    state.mockAuth?.userMetadata?.typeDetail === 'Guest' || 
+    state.mockAuth?.user?.typeDetail === 'Guest'
+  );
+
   const dispatch = useMockDispatch();
 
   // 🚀 LEEMOS EL TEMA DESDE EL CONTEXTO
@@ -94,7 +101,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: t.tabs.home, 
+          title: t?.tabs?.home || 'Inicio', 
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons size={28} name="home" color={color} />
           ),
@@ -104,7 +111,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="services"
         options={{
-          title: t.tabs.services,
+          title: t?.tabs?.services || 'Servicios',
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons 
               size={28} 
@@ -122,7 +129,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="jobs"
         options={{
-          title: t.tabs.jobs,
+          title: t?.tabs?.jobs || 'Empleos',
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons size={28} name="briefcase-search" color={color} />
           ),
@@ -134,19 +141,20 @@ export default function TabLayout() {
         name="support-it"
         options={{
           title: 'Soporte IT',
-          href: Platform.OS === 'web' ? '/support-it' : null, // En web se muestra en la barra, en móvil se mantiene accesible desde el header
+          href: Platform.OS === 'web' ? '/support-it' : null, 
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons size={28} name="headset" color={color} />
           ),
         }}
       />
       
+      {/* 🚀 PESTAÑA DINÁMICA: "Salir" para usuarios, "Entrar" para invitados */}
       <Tabs.Screen
         name="logout"
         options={{
-          title: t.tabs.logout,
+          title: isGuest ? (t?.hometab?.login || 'Entrar') : (t?.tabs?.logout || 'Salir'),
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons size={28} name="logout" color={color}/>
+            <MaterialCommunityIcons size={28} name={isGuest ? "login" : "logout"} color={color}/>
           ),
         }}
         listeners={{
@@ -159,13 +167,13 @@ export default function TabLayout() {
       />
 
       {/* Pantallas ocultas */}
-      <Tabs.Screen name="tabservices/lawyers" options={{ title: t.servicestab.service1, href: null }} />
-      <Tabs.Screen name="tabservices/community" options={{ title: t.servicestab.service2, href: null }} />
-      <Tabs.Screen name="tabservices/donations" options={{ title: t.servicestab.service3, href: null }} />
-      <Tabs.Screen name="tabservices/events" options={{ title: t.servicestab.service4, href: null }} />
-      <Tabs.Screen name="tabservices/stores" options={{ title: t.servicestab.service5, href: null }} />
-      <Tabs.Screen name="tabservices/entrepreneurs" options={{ title: t.servicestab.service6, href: null }} />
-      <Tabs.Screen name="tabservices/support" options={{ title: t.servicestab.service7, href: null }} />
+      <Tabs.Screen name="tabservices/lawyers" options={{ title: t?.servicestab?.service1 || 'Abogados', href: null }} />
+      <Tabs.Screen name="tabservices/community" options={{ title: t?.servicestab?.service2 || 'Comunidad', href: null }} />
+      <Tabs.Screen name="tabservices/donations" options={{ title: t?.servicestab?.service3 || 'Donaciones', href: null }} />
+      <Tabs.Screen name="tabservices/events" options={{ title: t?.servicestab?.service4 || 'Eventos', href: null }} />
+      <Tabs.Screen name="tabservices/stores" options={{ title: t?.servicestab?.service5 || 'Tiendas', href: null }} />
+      <Tabs.Screen name="tabservices/entrepreneurs" options={{ title: t?.servicestab?.service6 || 'Emprendedores', href: null }} />
+      <Tabs.Screen name="tabservices/support" options={{ title: t?.servicestab?.service7 || 'Soporte', href: null }} />
       <Tabs.Screen name="tabservices/post/id" options={{ href: null }} />
       <Tabs.Screen name="ResetPassword" options={{ href: null }} />
     </Tabs>

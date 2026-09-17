@@ -386,10 +386,10 @@ export const authenticateUser = async (credentials: {
       await db.update(users).set({ failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, user.id));
     }
 
-    const needsProfile = !user.phone || !user.zip;
-    const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
+    // 🚀 AQUÍ ESTÁ EL AJUSTE PARA QUE NO BLOQUEE EL LOGIN SI NO HAY TELÉFONO O ZIP CODE
+    const needsProfile = !user.name || user.name === "Usuario" || user.name === "Apple" || user.name === "Google" || !user.lastName;
     
-    // 🚀 AQUÍ ESTÁ EL AJUSTE MAESTRO: La sesión ahora dura casi la mitad de  AÑO (150 días) en vez de 7 días.
+    const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '150d' });
 
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);

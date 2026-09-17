@@ -628,10 +628,9 @@ export default function HomeScreen() {
       isWebPlatform ? window.alert(isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido") : Alert.alert("Atención", isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido");
       return;
     }
-    if (!form.phone || !form.zipCode) {
-      isWebPlatform ? window.alert(isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code") : Alert.alert("Atención", isEnglish ? "Please complete your phone and Zip Code" : "Por favor completa tu teléfono y Zip Code");
-      return;
-    }
+    
+    // Se ha eliminado la validación obligatoria para phone y zipCode para cumplir con la App Store Guideline 5.1.1(v)
+
     const contentToValidate = `${form.firstName} ${form.lastName}`;
     if (containsBadWords(contentToValidate)) {
       const errorMsg = isEnglish ? "Inappropriate content detected in your name." : "Se detectó lenguaje inapropiado en tu nombre.";
@@ -1435,7 +1434,7 @@ export default function HomeScreen() {
                                   {isLargeWeb ? (
                                     <View style={{ flexDirection: 'row', gap: 12 }}>
                                       <View style={{ flex: 1 }}>
-                                        <ThemedText style={styles.labelDate}>{t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono")}</ThemedText>
+                                        <ThemedText style={styles.labelDate}>{t?.headertab?.phone || (isEnglish ? "Phone (Optional)" : "Teléfono (Opcional)")}</ThemedText>
                                         <View style={[styles.phoneInputContainer, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }]}>
                                           <TouchableOpacity style={styles.countryCodeSelector} activeOpacity={0.7}>
                                             <Text style={styles.flagIcon}>🇺🇸</Text>
@@ -1456,13 +1455,13 @@ export default function HomeScreen() {
                                         </View>
                                       </View>
                                       <View style={{ flex: 1 }}>
-                                        <ThemedTextInput label={t?.headertab?.zipCode || "Zip Code"} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                        <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
                                       </View>
                                     </View>
                                   ) : (
                                     <>
                                       <View style={{ width: '100%', marginTop: -4 }}>
-                                        <ThemedText style={[styles.labelDate, { marginLeft: 4, marginTop: 6 }]}>{t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono")}</ThemedText>
+                                        <ThemedText style={[styles.labelDate, { marginLeft: 4, marginTop: 6 }]}>{t?.headertab?.phone || (isEnglish ? "Phone (Optional)" : "Teléfono (Opcional)")}</ThemedText>
                                         <View style={[styles.phoneInputContainer, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }]}>
                                           <TouchableOpacity style={styles.countryCodeSelector} activeOpacity={0.7}>
                                             <Text style={styles.flagIcon}>🇺🇸</Text>
@@ -1482,7 +1481,7 @@ export default function HomeScreen() {
                                           />
                                         </View>
                                       </View>
-                                      <ThemedTextInput label={t?.headertab?.zipCode || "Zip Code"} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                      <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
                                     </>
                                   )}
                                   
@@ -1730,7 +1729,7 @@ export default function HomeScreen() {
                   </View>
 
                   <View style={{ width: '100%' }}>
-                    <ThemedText style={styles.labelDate}>{t?.headertab?.phone || (isEnglish ? "Phone" : "Teléfono")}</ThemedText>
+                    <ThemedText style={styles.labelDate}>{t?.headertab?.phone || (isEnglish ? "Phone (Optional)" : "Teléfono (Opcional)")}</ThemedText>
                     <View style={[styles.phoneInputContainer, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }]}>
                       <TouchableOpacity style={styles.countryCodeSelector} activeOpacity={0.7}>
                         <Text style={styles.flagIcon}>🇺🇸</Text>
@@ -1752,7 +1751,7 @@ export default function HomeScreen() {
                   </View>
 
                   <View style={{ width: '100%' }}>
-                    <ThemedText style={styles.labelDate}>{t?.headertab?.zipCode || "Zip Code"}</ThemedText>
+                    <ThemedText style={styles.labelDate}>{t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}</ThemedText>
                     <TextInput value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType={isWebPlatform ? "default" : "number-pad"} autoComplete="off" />
                   </View>
 

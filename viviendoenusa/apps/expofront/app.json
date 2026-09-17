@@ -21,7 +21,9 @@
       "buildNumber": "22",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación para calcular un radio de 20 millas y enviarte notificaciones precisas sobre ofertas de trabajo, eventos comunitarios y servicios cercanos a ti.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación para calcular un radio de 20 millas y enviarte notificaciones precisas sobre ofertas de trabajo, eventos comunitarios y servicios cercanos a ti."
       }
     },
     "android": {
