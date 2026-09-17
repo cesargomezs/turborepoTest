@@ -428,10 +428,10 @@ export const sendPasswordResetEmail = async (email: string) => {
     if (!user) throw new Error("No existe una cuenta con este correo.");
     if (!user.password) throw new Error("Cuenta externa. Inicia sesión con Google o Apple.");
 
-    // 🚀 Obtener URL firmada del logo desde Supabase
+    // 🚀 Apuntando al .png con bordes redondeados estilo UI/UX
     let logoUrl = '';
     try {
-      const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800);
+      const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.png', 604800);
       if (logoData?.signedUrl) logoUrl = logoData.signedUrl;
     } catch (e) {
       console.warn("No se pudo obtener el logo firmado de Supabase:", e);
@@ -443,12 +443,12 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetLink = `https://viviendoenusa.app/ResetPassword?token=${resetToken}`;
 
     const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 12px; text-align: center; color: #333;">
-        ${logoUrl ? `<img src="${logoUrl}" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px; border-radius: 12px;" />` : ''}
-        <h2 style="color: #FF5F6D;">Recuperación de Contraseña</h2>
-        <p style="font-size: 15px; line-height: 1.5;">Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
-        <div style="margin: 30px 0;">
-          <a href="${resetLink}" style="padding: 14px 28px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block;">Restablecer Contraseña</a>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; background-color: #1a1a1a; border-radius: 16px; text-align: center; color: #ffffff;">
+        ${logoUrl ? `<div style="margin-bottom: 25px;"><img src="${logoUrl}" alt="Viviendo en USA" style="width: 85px; height: 85px; object-fit: cover; border-radius: 50%; border: 2px solid rgba(255,255,255,0.1); box-shadow: 0 4px 10px rgba(0,0,0,0.3);" /></div>` : ''}
+        <h2 style="color: #FF5F6D; font-size: 22px; margin-bottom: 15px;">Recuperación de Contraseña</h2>
+        <p style="font-size: 15px; line-height: 1.6; color: #b0bec5;">Hola <strong>${user.name}</strong>, hemos recibido una solicitud para restablecer tu contraseña.</p>
+        <div style="margin: 35px 0;">
+          <a href="${resetLink}" style="padding: 14px 30px; background-color: #FF5F6D; color: white; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block; font-size: 15px; box-shadow: 0 4px 12px rgba(255,95,109,0.4);">Restablecer Contraseña</a>
         </div>
         <p style="font-size: 13px; color: #777;">Si no solicitaste este cambio, puedes ignorar este correo.</p>
       </div>
@@ -541,7 +541,7 @@ export const saveDeviceToken = async (req: AuthRequest, res: Response) => {
 };
 
 // --------------------------------------------------------
-// 9. ELIMINAR CUENTA (CON CORREO DE CONFIRMACIÓN Y LOGO DE SUPABASE)
+// 9. ELIMINAR CUENTA (CON CORREO DE CONFIRMACIÓN Y LOGO CIRCULAR UI/UX)
 // --------------------------------------------------------
 export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
   try {
@@ -552,10 +552,9 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
     const userEmail = userRecord?.email;
     const userName = userRecord?.name || 'Usuario';
 
-    // 🚀 Obtener URL firmada del logo desde Supabase
     let logoUrl = '';
     try {
-      const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800);
+      const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.png', 604800);
       if (logoData?.signedUrl) logoUrl = logoData.signedUrl;
     } catch (e) {
       console.warn("No se pudo obtener el logo firmado de Supabase:", e);
@@ -577,14 +576,14 @@ export const deleteUserAccount = async (req: AuthRequest, res: Response) => {
           to: [userEmail],
           subject: 'Cuenta eliminada con éxito - Viviendo en USA',
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 12px; text-align: center; color: #333;">
-              ${logoUrl ? `<img src="${logoUrl}" alt="Viviendo en USA" style="width: 120px; height: auto; margin-bottom: 20px; border-radius: 12px;" />` : ''}
-              <h2 style="color: #FF5F6D;">Cuenta Eliminada</h2>
-              <p style="font-size: 15px; line-height: 1.5;">Hola <strong>${userName}</strong>,</p>
-              <p style="font-size: 15px; line-height: 1.5;">Te confirmamos que tu cuenta y datos personales asociados en <strong>Viviendo en USA</strong> han sido eliminados correctamente de nuestros sistemas.</p>
-              <p style="font-size: 14px; color: #555;">Lamentamos verte partir. Si en el futuro deseas regresar, serás bienvenido.</p>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; background-color: #1a1a1a; border-radius: 16px; text-align: center; color: #ffffff;">
+              ${logoUrl ? `<div style="margin-bottom: 25px;"><img src="${logoUrl}" alt="Viviendo en USA" style="width: 85px; height: 85px; object-fit: cover; border-radius: 50%; border: 2px solid rgba(255,255,255,0.1); box-shadow: 0 4px 10px rgba(0,0,0,0.3);" /></div>` : ''}
+              <h2 style="color: #FF5F6D; font-size: 22px; margin-bottom: 15px;">Cuenta Eliminada</h2>
+              <p style="font-size: 15px; line-height: 1.6; color: #b0bec5;">Hola <strong>${userName}</strong>,</p>
+              <p style="font-size: 15px; line-height: 1.6; color: #b0bec5;">Te confirmamos que tu cuenta y datos personales asociados en <strong>Viviendo en USA</strong> han sido eliminados correctamente de nuestros sistemas.</p>
+              <p style="font-size: 14px; color: #777; margin-top: 20px;">Lamentamos verte partir. Si en el futuro deseas regresar, serás bienvenido.</p>
               <br>
-              <p style="color: #777; font-size: 12px;">Atentamente, el equipo de Viviendo en USA.</p>
+              <p style="color: #555; font-size: 12px;">Atentamente, el equipo de Viviendo en USA.</p>
             </div>
           `
         });
