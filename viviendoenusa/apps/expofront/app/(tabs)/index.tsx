@@ -1380,7 +1380,7 @@ export default function HomeScreen() {
                         <View style={{ flex: 1 }}>
                           
                           {isWebPlatform && (
-                            <TouchableOpacity onPress={() => setShowWebLanding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 2 }}>
+                            <TouchableOpacity onPress={() => { setShowWebLanding(true); setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() }); }} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 2 }}>
                               <MaterialCommunityIcons name="arrow-left" size={18} color={DynamicColors.text} />
                               <Text style={{ color: DynamicColors.text, marginLeft: 5, fontWeight: '600', fontSize: 13 }}>{isEnglish ? "Back to Home" : "Volver a la Portada"}</Text>
                             </TouchableOpacity>
