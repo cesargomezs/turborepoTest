@@ -150,7 +150,6 @@ export default function HomeScreen() {
   const { login } = useAuth();
   const { t } = useTranslation();
 
-  // 🚀 Declaramos el hook de montaje sin romper el orden de ejecución
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
@@ -194,7 +193,7 @@ export default function HomeScreen() {
 
   const [showWebLanding, setShowWebLanding] = useState(() => {
     if (isWebPlatform) {
-      if (params?.login === 'true') return false;
+      if (params?.login === 'true' && !window.location.search.includes('forceLanding')) return false;
       return true;
     }
     return false;
@@ -391,14 +390,14 @@ export default function HomeScreen() {
     if (isWebPlatform && showWebLanding && !loggedIn) fetchStats();
   }, [loggedIn, showWebLanding, isWebPlatform]);
 
+  // 🚀 CORRECCIÓN DEL BUCLE INFINITO AL CERRAR SESIÓN:
+  // Hemos limpiado la dependencia para que no escuche el estado de `loggedIn` y 
+  // no entre en bucle infinito al cerrar sesión recuperando los datos del cache.
   useEffect(() => {
-    if (!loggedIn && isWebPlatform) {
-      if (params?.login === 'true') {
-        setShowWebLanding(false);
-        setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() });
-      }
+    if (!loggedIn && isWebPlatform && params?.login === 'true') {
+      setShowWebLanding(false);
     }
-  }, [params, loggedIn, isWebPlatform]);
+  }, [params?.login, isWebPlatform]);
 
   useEffect(() => {
     if (!showWebLanding || loggedIn || servicesData.length === 0 || !servicesData[0].img) return;
@@ -870,7 +869,6 @@ export default function HomeScreen() {
     }
   };
 
-  // 🚀 Renderizado condicional seguro basado en estado (sin alterar el orden de los Hooks)
   if (!isMounted) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -1380,7 +1378,14 @@ export default function HomeScreen() {
                         <View style={{ flex: 1 }}>
                           
                           {isWebPlatform && (
-                            <TouchableOpacity onPress={() => { setShowWebLanding(true); setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() }); }} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 2 }}>
+                            <TouchableOpacity 
+                              onPress={() => { 
+                                setShowWebLanding(true); 
+                                setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() });
+                                router.replace('/');
+                              }} 
+                              style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 2 }}
+                            >
                               <MaterialCommunityIcons name="arrow-left" size={18} color={DynamicColors.text} />
                               <Text style={{ color: DynamicColors.text, marginLeft: 5, fontWeight: '600', fontSize: 13 }}>{isEnglish ? "Back to Home" : "Volver a la Portada"}</Text>
                             </TouchableOpacity>
