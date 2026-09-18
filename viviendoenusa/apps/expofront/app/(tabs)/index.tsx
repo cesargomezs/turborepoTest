@@ -150,6 +150,7 @@ export default function HomeScreen() {
   const { login } = useAuth();
   const { t } = useTranslation();
 
+  // 🚀 Declaramos el hook de montaje sin romper el orden de ejecución
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
@@ -220,10 +221,6 @@ export default function HomeScreen() {
   const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
 
   const [showRateButton, setShowRateButton] = useState(false);
-
-  if (!isMounted) {
-    return null; 
-  }
 
   useEffect(() => {
     const checkAppUsageTime = async () => {
@@ -872,6 +869,15 @@ export default function HomeScreen() {
       default: return originalDesc;
     }
   };
+
+  // 🚀 Renderizado condicional seguro basado en estado (sin alterar el orden de los Hooks)
+  if (!isMounted) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#FF5F6D" />
+      </View>
+    );
+  }
 
   if (isWebPlatform && showWebLanding && !loggedIn) {
     return (
