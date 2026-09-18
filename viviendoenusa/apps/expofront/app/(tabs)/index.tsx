@@ -54,7 +54,6 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 
-// 🚀 Importamos directamente tu cliente de Supabase
 import { supabaseClient } from '../../utils/supabase';
 
 import badWordsData from '../../utils/babwords.json';
@@ -143,15 +142,6 @@ const AnimatedStat = ({ endValue, label, icon, isDark }: { endValue: number, lab
 };
 
 export default function HomeScreen() {
-  // 🚀 Blindaje contra el Hydration Error #418 en la web
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) {
-    return null; // O un contenedor vacío mientras carga el cliente web
-  }
   const router = useRouter(); 
   const params = useLocalSearchParams(); 
   const { width, height } = useWindowDimensions();
@@ -159,6 +149,11 @@ export default function HomeScreen() {
   
   const { login } = useAuth();
   const { t } = useTranslation();
+
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const colorScheme = isDark ? 'dark' : 'light';
 
@@ -212,7 +207,6 @@ export default function HomeScreen() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // 🚀 ESTADOS PARA EL MODAL DE CONTÁCTENOS
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactInfo, setContactInfo] = useState('');
   const [contactMessage, setContactMessage] = useState('');
@@ -226,6 +220,10 @@ export default function HomeScreen() {
   const [servicesData, setServicesData] = useState<any[]>(INITIAL_SERVICES_DATA);
 
   const [showRateButton, setShowRateButton] = useState(false);
+
+  if (!isMounted) {
+    return null; 
+  }
 
   useEffect(() => {
     const checkAppUsageTime = async () => {
@@ -367,7 +365,6 @@ export default function HomeScreen() {
         if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
-            // 🚀 SOLUCIÓN: Agregamos "!" (supabaseClient!) para decirle a TS que no es null aquí
             const { data } = await supabaseClient!.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
             return { ...service, img: data?.signedUrl || '' };
           })
@@ -939,7 +936,6 @@ export default function HomeScreen() {
 
             <View style={{ position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               
-              {/* 🚀 BOTÓN DE CONTACTO SUPERIOR: Visible solo en pantallas anchas (Web de Escritorio) para evitar amontonamiento en móviles */}
               {width > 768 && (
                 <TouchableOpacity 
                   onPress={() => setShowContactModal(true)}
@@ -1197,7 +1193,6 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
 
-        {/* 🚀 BOTÓN FLOTANTE (FAB) PARA CONTACTO WEB */}
         <TouchableOpacity
           onPress={() => setShowContactModal(true)}
           style={{
@@ -1221,7 +1216,6 @@ export default function HomeScreen() {
           <MaterialCommunityIcons name="email-edit-outline" size={28} color="#FFF" />
         </TouchableOpacity>
 
-        {/* 🚀 MODAL DE CONTÁCTENOS UI/UX */}
         <Modal visible={showContactModal} transparent={true} animationType="fade" onRequestClose={() => setShowContactModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, { backgroundColor: DynamicColors.modalBg, width: Math.min(width * 0.92, 450) }]}>
