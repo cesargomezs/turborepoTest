@@ -143,6 +143,15 @@ const AnimatedStat = ({ endValue, label, icon, isDark }: { endValue: number, lab
 };
 
 export default function HomeScreen() {
+  // 🚀 Blindaje contra el Hydration Error #418 en la web
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return null; // O un contenedor vacío mientras carga el cliente web
+  }
   const router = useRouter(); 
   const params = useLocalSearchParams(); 
   const { width, height } = useWindowDimensions();
