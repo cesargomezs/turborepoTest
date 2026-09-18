@@ -16,13 +16,19 @@ export default function LogoutScreen() {
     const procesarCierreSesion = async () => {
       try {
         if (Platform.OS === 'web') {
-          localStorage.setItem('forceLoginView', 'true');
-          // 🚀 Limpiamos cualquier caché o valor guardado de inputs previos en la web
+          // 🚀 Destrucción total del almacenamiento web para evitar sesiones fantasma
           try {
-            localStorage.removeItem('last_email');
-          } catch (e) {}
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Forzamos la bandera de vista de login
+            localStorage.setItem('forceLoginView', 'true');
+          } catch (e) {
+            console.log("Error limpiando almacenamiento web:", e);
+          }
         }
 
+        // Ejecutamos el cierre de sesión del proveedor de autenticación
         if (logout) {
           await logout();
         }
@@ -32,11 +38,20 @@ export default function LogoutScreen() {
           dispatch(toggleAuth()); 
         }
 
-        router.replace('/?login=true');
+        // 🚀 Recarga limpia en web para limpiar cualquier estado en memoria de React
+        if (Platform.OS === 'web') {
+          window.location.replace('/?login=true');
+        } else {
+          router.replace('/?login=true');
+        }
         
       } catch (error) {
         console.error("Error al cerrar sesión:", error);
-        router.replace('/?login=true');
+        if (Platform.OS === 'web') {
+          window.location.replace('/?login=true');
+        } else {
+          router.replace('/?login=true');
+        }
       }
     };
 

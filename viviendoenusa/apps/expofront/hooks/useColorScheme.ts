@@ -1,5 +1,5 @@
 // 🚀 IMPORTAMOS NUESTRO CONTEXTO
-import { useAppTheme } from '@/app/src/context/ThemeContext';
+import { useAppTheme } from '../context/ThemeContext';
 
 export function useColorScheme() {
   const { isDark } = useAppTheme();

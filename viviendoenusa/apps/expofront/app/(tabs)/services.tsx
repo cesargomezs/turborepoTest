@@ -15,7 +15,8 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import AppTutorialModal from '@/components/AppTutorialModal';
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL EN LUGAR DE ASYNCSTORAGE
-import { useAppTheme } from '@/app/src/context/ThemeContext'; 
+import { useAppTheme } from '../../context/ThemeContext';
+
 
 interface ButtonConfig {
   id: number;

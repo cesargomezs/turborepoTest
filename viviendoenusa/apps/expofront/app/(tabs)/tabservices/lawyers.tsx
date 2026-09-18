@@ -22,19 +22,22 @@ import { useMockSelector } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
-import { getContentCardStyles } from 'app/src/styles/contentcommunity';
+import { getContentCardStyles } from '../../../styles/contentcommunity';
 import MapComponent from '@/components/Map';
 
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import { Colors } from 'react-native/Libraries/NewAppScreen';
-import { useAppTheme } from 'app/src/context/ThemeContext';
+import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
+import { supabaseClient } from '../../../utils/supabase';
 
+/*
 // 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+*/
 
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'lawyers') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -1211,7 +1214,7 @@ export default function LawyersScreen() {
       <View style={{ borderRadius: 28, overflow: 'hidden' as 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : Colors.border }}>
         
         {isPending && !isAdminMode && (
-          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
+          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 , pointerEvents: 'none' }]} />
         )}
 
         {isPending && isOwner && (

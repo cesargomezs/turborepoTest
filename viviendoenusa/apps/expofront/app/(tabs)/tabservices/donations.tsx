@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-// 🚀 1. IMPORTAMOS useLocalSearchParams PARA LAS PUSH
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,15 +20,16 @@ import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
-import { useAppTheme } from 'app/src/context/ThemeContext';
+import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
+import { supabaseClient } from '../../../utils/supabase';
 
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+/*
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+*/
 
-// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'donations') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
   if (!supabaseClient) return url;
@@ -71,7 +71,6 @@ const refreshSupabaseUrl = async (url: string, fallbackFolder = 'donations') => 
   return url; 
 };
 
-// --- 1. LÓGICA DE VALIDACIÓN GLOBAL ---
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 
 const containsBadWords = (text: string): boolean => {
@@ -100,10 +99,8 @@ const COUNTRIES = [
   { code: '+1', flag: '🇺🇸', name: 'USA' }
 ];
 
-// 📡 URL BASE PARA LAS DONACIONES
 const API_DONATIONS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/donations';
 
-// --- 2. COMPONENTE PRINCIPAL ---
 export default function DonationsScreen() {
   const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
@@ -113,10 +110,8 @@ export default function DonationsScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
-  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
   
-  // 🚀 2. EXTRAEMOS EL ID DE LA NOTIFICACIÓN PUSH Y EL ZIP DEL USUARIO
   const { id: openDonationId } = useLocalSearchParams();
   const userMetadata = useMockSelector((state) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
@@ -128,9 +123,11 @@ export default function DonationsScreen() {
     }
   }, [userToken]);
 
-  // 🚀 VARIABLES DE ADMINISTRADOR
-  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
-  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  // 🚀 ADMIN CHECK SEGURO
+  const userEmailClean = userMetadata?.email || '';
+  const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
+
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [pendingDonations, setPendingDonations] = useState<any[]>([]);
 
@@ -144,8 +141,9 @@ export default function DonationsScreen() {
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
 
-  const INTERNAL_IDS = t.donationstab.subCategories;
-  const ICONS_ARRAY = t.donationstab.subCategoriesIcon ;
+  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
+  const INTERNAL_IDS = t?.donationstab?.subCategories || [];
+  const ICONS_ARRAY = t?.donationstab?.subCategoriesIcon || [];
 
   const orangeGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = ['#FF5F6D', '#FFC371'] as const;
   const disabledGradient: readonly [ColorValue, ColorValue] = isDark ? ['#333333', '#444444'] : ['#dddddd', '#cccccc'];
@@ -169,12 +167,12 @@ export default function DonationsScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  const rawCategories = (t.donationstab as any)?.subCategories || (t.donationstab as any)?.categories;
+  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
+  const rawCategories = (t?.donationstab as any)?.subCategories || (t?.donationstab as any)?.categories;
   const CATEGORY_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_IDS.length
       ? rawCategories 
-      : t.donationstab.subCategories;
+      : (t?.donationstab?.subCategories || ['General']);
 
-  // 🚀 ESTADOS
   const [zipCode, setZipCode] = useState('');
   const [donations, setDonations] = useState<any[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
@@ -195,10 +193,8 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
-  // 🚀 REF PARA EVITAR BUCLES AL INICIAR
   const hasInitialized = useRef(false);
 
-  // 🚀 3. FETCH INDIVIDUAL PARA NOTIFICACIONES
   const fetchSingleDonation = async (id: string) => {
     try {
       setIsLoadingPosts(true);
@@ -227,7 +223,6 @@ export default function DonationsScreen() {
       setPendingDonations([]);
       if (formattedDonation.zip) setZipCode(String(formattedDonation.zip));
 
-      // 🚀 Limpiamos el parámetro de la URL para que no vuelva a disparar si el usuario cambia el input
       router.setParams({ id: '' }); 
 
     } catch (error) {
@@ -237,7 +232,6 @@ export default function DonationsScreen() {
     }
   };
 
-  // 🚀 FETCH GLOBAL
   const fetchDonations = async (searchZip?: string) => {
     try {
       setIsLoadingPosts(true);
@@ -295,7 +289,6 @@ export default function DonationsScreen() {
     }
   };
 
-  // 🚀 EFECTO INICIAL CONTROLADO CON REFERENCIA
   useEffect(() => {
     if (!hasInitialized.current) {
       if (openDonationId) {
@@ -311,7 +304,6 @@ export default function DonationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Ya no chequeamos openDonationId aquí para evitar bloqueos
       if (hasInitialized.current) {
         if (isAdminMode) {
           fetchDonations(zipCode);
@@ -339,9 +331,6 @@ export default function DonationsScreen() {
     else Alert.alert(title, message);
   };
 
-  // =====================================================================
-  // 🚀 ACCIONES DE ADMINISTRADOR (Aprobar y Rechazar)
-  // =====================================================================
   const approveDonation = async (id: string) => {
     try {
       const response = await fetch(`${API_DONATIONS_URL}/${id}`, {
@@ -382,7 +371,7 @@ export default function DonationsScreen() {
 
   const handleShare = async (item: any) => {
     await handleUniversalShare({
-      title: t.donationstab.label+item.title,
+      title: (t?.donationstab?.label || 'Donación: ') + item.title,
       description: item.descriptionDon || item.description,
       phone: item.phone,
       address: item.locationDon || item.location,
@@ -425,13 +414,13 @@ export default function DonationsScreen() {
     const trimmedZip = formZip.trim();
 
     if (!trimmedTitle || !formImage || !trimmedPhone || trimmedZip.length !== 5 || isPublishing) {
-      triggerAlert((t.donationstab as any)?.error || "Error", (t.donationstab as any)?.missingFields || "Faltan campos o el Zip Code es inválido.");
+      triggerAlert((t?.donationstab as any)?.error || "Error", (t?.donationstab as any)?.missingFields || "Faltan campos o el Zip Code es inválido.");
       return;
     }
 
     const contentToValidate = `${trimmedTitle} ${trimmedDesc}`;
     if (containsBadWords(contentToValidate)) {
-      triggerAlert((t.communitytab as any)?.textInappropriateTittle || "Atención", (t.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado detectado.");
+      triggerAlert((t?.communitytab as any)?.textInappropriateTittle || "Atención", (t?.communitytab as any)?.textInappropriateDescription || "Contenido inapropiado detectado.");
       return; 
     }
 
@@ -440,7 +429,7 @@ export default function DonationsScreen() {
       const esSegura = await validarImagenEnServidor(formImage);
       if (!esSegura) {
         setIsPublishing(false);
-        triggerAlert((t.communitytab as any)?.imageInappropriateTittle || "Imagen bloqueada", (t.communitytab as any)?.imageInappropriateDescription || "La imagen no cumple nuestras normas.");
+        triggerAlert((t?.communitytab as any)?.imageInappropriateTittle || "Imagen bloqueada", (t?.communitytab as any)?.imageInappropriateDescription || "La imagen no cumple nuestras normas.");
         return;
       }
 
@@ -590,36 +579,37 @@ export default function DonationsScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 BOTÓN DE ADMINISTRADOR CON CONTADOR FLOTANTE */}
-                {isAdmin && (
-                  <TouchableOpacity 
-                    onPress={() => {
+                {/* 🚀 BOTÓN DE ADMINISTRADOR SIEMPRE VISIBLE */}
+                <TouchableOpacity 
+                  activeOpacity={isAdmin ? 0.7 : 1}
+                  onPress={() => {
+                    if (isAdmin) {
                       const nextState = !isAdminMode;
                       setIsAdminMode(nextState);
                       if (nextState) fetchDonations(zipCode);
-                    }} 
-                    style={{ position: 'relative', padding: 4, marginLeft: 5 }}
-                  >
-                    <MaterialCommunityIcons 
-                      name="hand-heart"
-                      size={40} 
-                      color={isAdminMode ? '#FF5F6D' : DynamicColors.text} 
-                      style={{ opacity: isAdminMode ? 1 : 0.6 }} 
-                    />
-                    {pendingDonations.length > 0 && (
-                      <View style={{ position: 'absolute', top: -2, right: -4, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent' }}>
-                        <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingDonations.length}</ThemedText>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                )}
+                    }
+                  }} 
+                  style={{ position: 'relative', padding: 4, marginLeft: 5 }}
+                >
+                  <MaterialCommunityIcons 
+                    name="hand-heart"
+                    size={40} 
+                    color={isAdminMode ? '#FF5F6D' : DynamicColors.text} 
+                    style={{ opacity: isAdminMode ? 1 : (isAdmin ? 0.6 : 0.2) }} 
+                  />
+                  {isAdmin && pendingDonations.length > 0 && (
+                    <View style={{ position: 'absolute', top: -2, right: -4, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent' }}>
+                      <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingDonations.length}</ThemedText>
+                    </View>
+                  )}
+                </TouchableOpacity>
 
               </View>
 
               <View style={{ flex: 1, flexDirection: 'row' }}>
                 {isLargeWeb && (
                   <View style={stylesUnified.webSidebar}>
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{(t.donationstab as any)?.category || 'Categorías'}</ThemedText>
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DynamicColors.text }]}>{(t?.donationstab as any)?.category || 'Categorías'}</ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {CATEGORY_LABELS.map((catLabel: string, index: number) => {
                         const isActive = selectedCategoryIdx === index;
@@ -651,7 +641,7 @@ export default function DonationsScreen() {
                       <MaterialCommunityIcons name="magnify" size={22} color={DynamicColors.subtext} style={{ marginRight: 10 }} />
                       <TextInput 
                         style={{ flex: 1, color: DynamicColors.text, fontSize: 15, height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-                        placeholder={(t.donationstab as any)?.placeholInput || 'Buscar...'} value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={DynamicColors.subtext} 
+                        placeholder={(t?.donationstab as any)?.placeholInput || 'Buscar...'} value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={DynamicColors.subtext} 
                       />
                     </View>
                   )}
@@ -783,7 +773,7 @@ export default function DonationsScreen() {
                         )) : (
                           <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                             <MaterialCommunityIcons name="package-variant" size={48} color={DynamicColors.text} />
-                            <ThemedText style={{ marginTop: 10, color: DynamicColors.text }}>{(t.donationstab as any)?.messagenotdonnations || 'No hay donaciones en este código postal.'}</ThemedText>
+                            <ThemedText style={{ marginTop: 10, color: DynamicColors.text }}>{(t?.donationstab as any)?.messagenotdonnations || 'No hay donaciones en este código postal.'}</ThemedText>
                           </View>
                         )}
                       </View>
@@ -813,17 +803,17 @@ export default function DonationsScreen() {
               
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
                 <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
-                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: DynamicColors.text }}>{(t.donationstab as any)?.messageMessageDonation || 'Nueva Donación'}</ThemedText>
+                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: DynamicColors.text }}>{(t?.donationstab as any)?.messageMessageDonation || 'Nueva Donación'}</ThemedText>
                 <View style={{ width: 24 }} />
               </View>
 
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 70 }}>
                 <TouchableOpacity onPress={async () => { let r = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 }); if(!r.canceled) setFormImage(r.assets[0].uri); }} 
                   style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus"  size={32} color={DynamicColors.text} /><ThemedText style={{ fontSize: 11, fontWeight: '800', marginTop: 5, color:DynamicColors.subtext }}>{(t.donationstab as any)?.choisephoto || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus"  size={32} color={DynamicColors.text} /><ThemedText style={{ fontSize: 11, fontWeight: '800', marginTop: 5, color:DynamicColors.subtext }}>{(t?.donationstab as any)?.choisephoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, color:DynamicColors.text  }}>{(t.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, color:DynamicColors.text  }}>{(t?.donationstab as any)?.category || 'CATEGORÍA'}</ThemedText>
                 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                   {CATEGORY_LABELS.map((catLabel: string, index: number) => {
@@ -854,7 +844,7 @@ export default function DonationsScreen() {
                   })}
                 </View>
 
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 , color:DynamicColors.text }}>{(t.donationstab as any)?.typeContact || 'Contacto'}</ThemedText>
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8 , color:DynamicColors.text }}>{(t?.donationstab as any)?.typeContact || 'Contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : DynamicColors.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : DynamicColors.subtext} style={{ marginRight: 8 }} />
@@ -862,7 +852,7 @@ export default function DonationsScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? '#FF5F6D' : DynamicColors.border,backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : DynamicColors.inputBg }}>
                     <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? '#FF5F6D' : DynamicColors.iconInactive} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '900', color: formContactMethod === 'phone' ? '#FF5F6D' : DynamicColors.subtext }}>{(t.donationstab as any)?.callbton || 'Llamada'}</ThemedText>
+                    <ThemedText style={{ fontSize: 12, fontWeight: '900', color: formContactMethod === 'phone' ? '#FF5F6D' : DynamicColors.subtext }}>{(t?.donationstab as any)?.callbton || 'Llamada'}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -884,13 +874,13 @@ export default function DonationsScreen() {
                 </View>
 
                 <TextInput value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} placeholder="Código Postal" placeholderTextColor={DynamicColors.subtext} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
-                <TextInput value={formTitle} onChangeText={(val) => setFormTitle(toSentenceCase(val))} autoCapitalize="sentences" placeholder={(t.donationstab as any)?.newdonnationTittle || 'Título'} placeholderTextColor={DynamicColors.subtext} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }}  />
-                <TextInput value={formDescription} onChangeText={(val) => setFormDescription(toSentenceCase(val))} autoCapitalize="sentences" placeholder={(t.donationstab as any)?.newdonnationdescription || 'Descripción'} placeholderTextColor={DynamicColors.subtext} multiline numberOfLines={4} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, height: 90, marginBottom: 20, color: DynamicColors.text, textAlignVertical: 'top', borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                <TextInput value={formTitle} onChangeText={(val) => setFormTitle(toSentenceCase(val))} autoCapitalize="sentences" placeholder={(t?.donationstab as any)?.newdonnationTittle || 'Título'} placeholderTextColor={DynamicColors.subtext} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }}  />
+                <TextInput value={formDescription} onChangeText={(val) => setFormDescription(toSentenceCase(val))} autoCapitalize="sentences" placeholder={(t?.donationstab as any)?.newdonnationdescription || 'Descripción'} placeholderTextColor={DynamicColors.subtext} multiline numberOfLines={4} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, height: 90, marginBottom: 20, color: DynamicColors.text, textAlignVertical: 'top', borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
 
                 <TouchableOpacity onPress={handlePublish} disabled={isPublishing || !isFormValid} style={{ alignSelf: 'center' }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : ['#CFD8DC', '#B0BEC5']} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
-                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t.donationstab as any)?.savebutton || 'Guardar'}</ThemedText>
+                    <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>{(t?.donationstab as any)?.savebutton || 'Guardar'}</ThemedText>
                   </LinearGradient>
                 </TouchableOpacity>
               </ScrollView>
@@ -952,7 +942,7 @@ const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark
         </LinearGradient>
         <View style={{ marginLeft: 10, flex: 1 }}>
           <ThemedText style={{ fontSize: 14, fontWeight: '800', color: Colors.text }}>
-            {isOwner ? ((t.donationstab as any)?.username || 'Mío') : safeOwnerName}
+            {isOwner ? ((t?.donationstab as any)?.username || 'Mío') : safeOwnerName}
           </ThemedText>
         </View>
         <View style={{ backgroundColor: 'rgba(255,95,109,0.12)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
@@ -976,14 +966,14 @@ const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark
         <View style={{ position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
           <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
           <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
-            {(t.entrepreneurshiptab as any)?.viewdetail || 'Ver detalle'}
+            {(t?.entrepreneurshiptab as any)?.viewdetail || 'Ver detalle'}
           </ThemedText>
         </View>
 
         {isDelivered && (
           <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: Colors.success, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="check-circle" size={14} color="#FFF" style={{ marginRight: 4 }} />
-            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>{(t.donationstab as any)?.deliveredBadge || 'Entregado'}</ThemedText>
+            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>{(t?.donationstab as any)?.deliveredBadge || 'Entregado'}</ThemedText>
           </View>
         )}
       </TouchableOpacity>
@@ -1000,14 +990,14 @@ const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark
           {!isDelivered && (
             <TouchableOpacity disabled={isPending} onPress={handleContact} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isWhatsapp ? 'rgba(37,211,102,0.1)' : 'rgba(255, 95, 109, 0.15)', opacity: isPending ? 0.4 : 1 }}>
                <MaterialCommunityIcons name={isWhatsapp ? 'whatsapp' : 'phone'} size={18} color={isWhatsapp ? '#25D366' : Colors.accent} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>{(t.genericbtn as any)?.contactme || 'Contactar'}</ThemedText>
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isWhatsapp ? '#25D366' : Colors.accent }}>{(t?.genericbtn as any)?.contactme || 'Contactar'}</ThemedText>
             </TouchableOpacity>
           )}
 
           {!isWeb && (
             <TouchableOpacity disabled={isPending} onPress={() => handleShare(item)} style={{ flexGrow: 1, minWidth: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD', opacity: isPending ? 0.4 : 1 }}>
               <MaterialCommunityIcons name="share-variant" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} />
-              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t.genericbtn as any)?.sharingbtn || 'Compartir'}</ThemedText>
+              <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{(t?.genericbtn as any)?.sharingbtn || 'Compartir'}</ThemedText>
             </TouchableOpacity>
           )}
 
@@ -1016,8 +1006,8 @@ const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark
               <MaterialCommunityIcons name={isDelivered ? "refresh" : "archive-check"} size={18} color={isDelivered ? Colors.success : (isDark ? '#FFF' : '#444')} />
               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDelivered ? Colors.success : (isDark ? '#FFF' : '#444') }}>
                 {isDelivered 
-                  ? (t.donationstab?.activateBtn || t?.activateBtn || 'Activar') 
-                  : (t.donationstab?.deliverBtn || t?.deliverBtn || 'Entregar')}
+                  ? (t?.donationstab?.activateBtn || t?.activateBtn || 'Activar') 
+                  : (t?.donationstab?.deliverBtn || t?.deliverBtn || 'Entregar')}
               </ThemedText>
             </TouchableOpacity>
           )}

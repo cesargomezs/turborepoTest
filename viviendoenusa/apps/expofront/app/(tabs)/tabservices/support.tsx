@@ -19,14 +19,17 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import MapComponent from '@/components/Map';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
-import { useAppTheme } from 'app/src/context/ThemeContext';
+import { useAppTheme } from '../../../context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
+import { supabaseClient } from '../../../utils/supabase';
 
+/*
 // 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+*/
 
 // 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'support') => {
@@ -857,7 +860,7 @@ export default function SupportScreen() {
         
         {/* 🚀 EFECTO OFUSCAR PARA PENDIENTES */}
         {isPending && !isAdminMode && (
-          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
+          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 , pointerEvents: 'none' }]} />
         )}
         
         {isPending && isOwner && ( <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" /><ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>{t.genericlabel.labelaprovaladmin}</ThemedText></View> )}

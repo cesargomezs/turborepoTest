@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, TextInput, TextInputProps, StyleSheet } from 'react-native';
 import { ThemedText } from './ThemedText';
-import { useAppTheme } from '../../expofront/app/src/context/ThemeContext'; // Verifica que la ruta de tu contexto sea correcta
+import { useAppTheme } from '../context/ThemeContext'; // Verifica que la ruta de tu contexto sea correcta
 
 interface ThemedTextInputProps extends TextInputProps {
   label?: string;

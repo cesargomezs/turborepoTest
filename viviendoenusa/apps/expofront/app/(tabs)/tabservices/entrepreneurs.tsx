@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-// 🚀 1. IMPORTAMOS useLocalSearchParams PARA LAS PUSH
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
 import { useIsFocused } from '@react-navigation/native'; 
 import * as ImagePicker from 'expo-image-picker';
@@ -26,18 +25,21 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '../../../utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
-import { useAppTheme } from 'app/src/context/ThemeContext';
+import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
+import { supabaseClient } from '../../../utils/supabase';
 
 // =====================================================================
 // 📡 1. CONFIGURACIONES GLOBALES, URLS Y CONSTANTES
 // =====================================================================
 const API_ENTREPRENEURSHIP_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/entrepreneurship';
 
+/*
 // 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+*/
 
 // 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'entrepreneurship') => {
@@ -154,7 +156,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 
   const handlePrePublish = () => {
     if (containsBadWords(comment)) {
-      const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
+      const errorMsg = t?.communitytab?.textInappropriateDescription || "Comentario inapropiado";
       Platform.OS === 'web' ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
       return;
     }
@@ -165,10 +167,12 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
     <View style={{ flex: 1, paddingVertical: 10 }}>
       <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
         <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.entrepreneurshiptab?.backBtn || 'Volver'}</ThemedText>
+        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t?.entrepreneurshiptab?.backBtn || 'Volver'}</ThemedText>
       </TouchableOpacity>
 
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>{t.entrepreneurshiptab?.viewExpe || 'Tu Experiencia'}</ThemedText>
+      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>
+        {t?.entrepreneurshiptab?.viewExpe || 'Tu Experiencia'}
+      </ThemedText>
 
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
         {[1, 2, 3, 4, 5].map(s => (
@@ -182,7 +186,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
         <TextInput 
           value={comment} 
           onChangeText={setComment} 
-          placeholder={t.entrepreneurshiptab?.viewopinion || "Escribe tu opinión..."} 
+          placeholder={t?.entrepreneurshiptab?.viewopinion || "Escribe tu opinión..."} 
           placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
           multiline 
           style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
@@ -192,7 +196,9 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
       <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
         <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
           <MaterialCommunityIcons name="send" size={18} color="#FFF" />
-          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>{t.entrepreneurshiptab?.publishReviews || 'Publicar reseña'}</ThemedText>
+          <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>
+            {t?.entrepreneurshiptab?.publishReviews || 'Publicar reseña'}
+          </ThemedText>
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -217,8 +223,11 @@ export default function EntrepreneurshipScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
 
-  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
-  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  // 🚀 ADMIN CHECK SEGURO
+  const userEmailClean = userMetadata?.email || '';
+  const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
+  
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
   useEffect(() => {
@@ -227,7 +236,7 @@ export default function EntrepreneurshipScreen() {
 
   const handleShare = async (item: Emprendimiento) => {
     await handleUniversalShare({
-      title: t.entrepreneurshiptab.label+item.name,
+      title: (t?.entrepreneurshiptab?.label || 'Emprendimiento: ') + item.name,
       description: item.description,
       phone: item.phone,
       address: item.address,
@@ -241,8 +250,9 @@ export default function EntrepreneurshipScreen() {
   const isAndroid  = Platform.OS === 'android';
   const isIOS      = Platform.OS === 'ios';
 
-  const CATEGORIES = t.entrepreneurshiptab.categoryentre;
-  const CATEGORY_ICONS_DICT: Record<string, string> = t.entrepreneurshiptab.categoryentreicon;
+  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN (?. || [])
+  const CATEGORIES = t?.entrepreneurshiptab?.categoryentre || ['General'];
+  const CATEGORY_ICONS_DICT: Record<string, string> = t?.entrepreneurshiptab?.categoryentreicon || {};
 
   const DC = {
     text:               isDark ? '#FFFFFF'                  : '#1A1A1A',
@@ -293,7 +303,6 @@ export default function EntrepreneurshipScreen() {
   const isZipValid = zipCode.length === 5;
   const triggerAlert = (title: string, msg: string) => Platform.OS === 'web' ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
 
-  // 🚀 REF PARA EVITAR BUCLES AL INICIAR CON EL CÓDIGO POSTAL DE LA PUSH
   const hasInitialized = useRef(false);
 
   useEffect(() => {
@@ -306,7 +315,6 @@ export default function EntrepreneurshipScreen() {
     loadSavedItems();
   }, []);
 
-  // 🚀 3. FUNCIÓN PARA TRAER EL EMPRENDIMIENTO DESDE UNA NOTIFICACIÓN
   const fetchSingleEntrepreneurship = async (id: string) => {
     try {
       setLoading(true);
@@ -354,10 +362,7 @@ export default function EntrepreneurshipScreen() {
       setPendingItems([]);
       if (formattedItem.zip) setZipCode(String(formattedItem.zip));
 
-      // 🚀 Abrimos el modal de detalles automáticamente
       setDetailItem(formattedItem);
-
-      // 🚀 Limpiamos el parámetro de la URL
       router.setParams({ id: '' });
 
     } catch (error) {
@@ -492,7 +497,6 @@ export default function EntrepreneurshipScreen() {
     }
   };
 
-  // 🚀 EFECTO INICIAL CONTROLADO CON REFERENCIA
   useEffect(() => {
     if (!hasInitialized.current) {
       if (openStoreId) {
@@ -540,7 +544,6 @@ export default function EntrepreneurshipScreen() {
     await fetchEntrepreneurships(zipCode);
   };
 
-  // 🚀 LIMPIEZA DE PANTALLA AL BORRAR EL ZIP 
   const handleZipChange = (text: string) => {
     setZipCode(text);
     if (text.length < 5) {
@@ -690,8 +693,8 @@ export default function EntrepreneurshipScreen() {
     const contentToValidate = `${formName} ${formDesc} ${formAddress} ${formPromo}`;
     if (containsBadWords(contentToValidate)) {
       triggerAlert(
-        t.communitytab?.textInappropriateTittle || "Atención", 
-        t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado."
+        t?.communitytab?.textInappropriateTittle || "Atención", 
+        t?.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado."
       );
       return; 
     }
@@ -712,7 +715,8 @@ export default function EntrepreneurshipScreen() {
 
         if (Platform.OS === 'web') {
           const responseBlob = await fetch(formImage);
-          formData.append('imagen', await responseBlob.blob() as any, filename);
+          const blob = await responseBlob.blob();
+          formData.append('imagen', blob as any, filename);
         } else {
           formData.append('imagen', { uri: formImage, name: filename, type } as any);
         }
@@ -882,7 +886,9 @@ export default function EntrepreneurshipScreen() {
           
           <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
             <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>Ver detalle</ThemedText>
+            <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
+              {t?.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
+            </ThemedText>
           </View>
         </View>
 
@@ -938,8 +944,8 @@ export default function EntrepreneurshipScreen() {
           </View>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingTop: 12, borderTopWidth: 1, borderTopColor: DC.divider, opacity: isPending ? 0.4 : 1 }}>
-             <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} icon="comment-text-outline" text={(t.entrepreneurshiptab?.reviews || 'Reseñas') + ` (${formatCount(item.reviews?.length || 0)})`} color={isDark ? '#FFF' : '#444'} bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} />
-             <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${item.phone}`); } }} icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} text={item.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || 'Llamar')} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} />
+             <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} icon="comment-text-outline" text={(t?.entrepreneurshiptab?.reviews || 'Reseñas') + ` (${formatCount(item.reviews?.length || 0)})`} color={isDark ? '#FFF' : '#444'} bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} />
+             <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${item.phone}`); } }} icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} text={item.contactMethod === 'whatsapp' ? "WhatsApp" : (t?.entrepreneurshiptab?.call || 'Llamar')} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} />
           </View>
         </View>
       </TouchableOpacity>
@@ -980,29 +986,38 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 BOTÓN DE ADMINISTRADOR CON CONTADOR FLOTANTE */}
+                {/* 🚀 BOTÓN DE ADMINISTRADOR SIEMPRE VISIBLE */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity onPress={() => setShowSavedOnly(!showSavedOnly)}>
                     <MaterialCommunityIcons name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={30} color={showSavedOnly ? DC.accent : DC.text} style={{ opacity: showSavedOnly ? 1 : 0.6 }} />
                   </TouchableOpacity>
                   
-                  {isAdmin && (
-                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)} style={{ position: 'relative', padding: 4, marginLeft: 2 }}>
-                      <MaterialCommunityIcons name="lightbulb-multiple-outline" size={40} color={isAdminMode ? '#FF5F6D' : DC.text} style={{ opacity: isAdminMode ? 1 : 0.6 }} />
-                      {pendingItems.length > 0 && (
-                        <View style={{ position: 'absolute', top: -2, right: -4, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent' }}>
-                          <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingItems.length}</ThemedText>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity 
+                    activeOpacity={isAdmin ? 0.7 : 1}
+                    onPress={() => { if (isAdmin) setIsAdminMode(!isAdminMode); }} 
+                    style={{ position: 'relative', padding: 4, marginLeft: 2 }}
+                  >
+                    <MaterialCommunityIcons 
+                      name="lightbulb-multiple-outline" 
+                      size={40} 
+                      color={isAdminMode ? '#FF5F6D' : DC.text} 
+                      style={{ opacity: isAdminMode ? 1 : (isAdmin ? 0.6 : 0.2) }} 
+                    />
+                    {isAdmin && pendingItems.length > 0 && (
+                      <View style={{ position: 'absolute', top: -2, right: -4, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent' }}>
+                        <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingItems.length}</ThemedText>
+                      </View>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
 
               <View style={{ flex: 1, flexDirection: isLargeWeb ? 'row' : 'column' }}>
                 {isLargeWeb && (
                   <View style={stylesUnified.webSidebar}>
-                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DC.text }]}>{t.entrepreneurshiptab.viewcategory}</ThemedText>
+                    <ThemedText style={[stylesUnified.sideMenuTitle, { color: DC.text }]}>
+                      {t?.entrepreneurshiptab?.viewcategory || 'Categorías'}
+                    </ThemedText>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {CATEGORIES.map((areaName: string, index: number) => {
                         const isActive = selectedCategoryIdx === index;
@@ -1031,7 +1046,13 @@ export default function EntrepreneurshipScreen() {
                   {!isAdminMode && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: DC.inputBg, borderRadius: 16, paddingHorizontal: 14, height: 48, borderWidth: 1, borderColor: DC.border, marginBottom: 8 }}>
                       <MaterialCommunityIcons name="magnify" size={22} color={DC.iconInactive} style={{ marginRight: 10 }} />
-                      <TextInput value={searchText} onChangeText={setSearchText} placeholder={t.entrepreneurshiptab?.searchentrepre} placeholderTextColor={DC.iconInactive} style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '300', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
+                      <TextInput 
+                        value={searchText} 
+                        onChangeText={setSearchText} 
+                        placeholder={t?.entrepreneurshiptab?.searchentrepre || 'Buscar...'} 
+                        placeholderTextColor={DC.iconInactive} 
+                        style={{ flex: 1, color: DC.text, fontSize: 15, fontWeight: '300', height: '100%', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                      />
                       {searchText.length > 0 && ( <TouchableOpacity onPress={() => setSearchText('')} style={{ padding: 4 }}><MaterialCommunityIcons name="close-circle" size={20} color={DC.iconInactive} /></TouchableOpacity> )}
                     </View>
                   )}
@@ -1119,7 +1140,9 @@ export default function EntrepreneurshipScreen() {
                       </View>
                     ) : results.length > 0 ? (
                       <>
-                        <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' +(results.length > 1 ? t.genericbtn?.resultdomore : t.genericbtn?.resultone)}</ThemedText>
+                        <ThemedText style={{ fontSize: 13, color: DC.subtext, fontWeight: '700', marginBottom: 10 }}>
+                          {results.length + ' ' +(results.length > 1 ? (t?.genericbtn?.resultdomore || 'resultados') : (t?.genericbtn?.resultone || 'resultado'))}
+                        </ThemedText>
                         <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
                           {results.map(item => <EmprendimientoCard key={item.id} item={item} />)}
                         </View>
@@ -1128,14 +1151,22 @@ export default function EntrepreneurshipScreen() {
                       (!loading && zipCode.length === 5) ? (
                         <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                           <MaterialCommunityIcons name="store-off-outline" size={56} color={DC.subtext} />
-                          <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14 }}>{t.entrepreneurshiptab?.nofoundresults || 'No hay resultados'}</ThemedText>
+                          <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14 }}>
+                            {t?.entrepreneurshiptab?.nofoundresults || 'No hay resultados'}
+                          </ThemedText>
                         </View>
                       ) : (
                         (!zipCode || zipCode.length < 5) && !isAdminMode && !showSavedOnly && (
                           <View style={{ flex: 1, alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
-                            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: DC.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}><MaterialCommunityIcons name="map-marker-radius" size={40} color={DC.subtext} /></View>
-                            <ThemedText style={{ textAlign: 'center', color: DC.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }}>Descubre Emprendimientos</ThemedText>
-                            <ThemedText style={{ textAlign: 'center', color: DC.subtext, fontSize: 14, lineHeight: 20 }}>Ingresa un código postal para apoyar a emprendedores en tu zona.</ThemedText>
+                            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: DC.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+                              <MaterialCommunityIcons name="map-marker-radius" size={40} color={DC.subtext} />
+                            </View>
+                            <ThemedText style={{ textAlign: 'center', color: DC.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }}>
+                              Descubre Emprendimientos
+                            </ThemedText>
+                            <ThemedText style={{ textAlign: 'center', color: DC.subtext, fontSize: 14, lineHeight: 20 }}>
+                              Ingresa un código postal para apoyar a emprendedores en tu zona.
+                            </ThemedText>
                           </View>
                         )
                       )
@@ -1144,7 +1175,9 @@ export default function EntrepreneurshipScreen() {
                     {showSavedOnly && results.length === 0 && !isAdminMode && (
                         <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
                           <MaterialCommunityIcons name="bookmark-off-outline" size={56} color={DC.subtext} />
-                          <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14, textAlign: 'center' }}>No tienes emprendimientos guardados aún.</ThemedText>
+                          <ThemedText style={{ color: DC.subtext, marginTop: 14, fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
+                            No tienes emprendimientos guardados aún.
+                          </ThemedText>
                         </View>
                     )}
 
@@ -1158,7 +1191,9 @@ export default function EntrepreneurshipScreen() {
 
       {/* FAB */}
       <TouchableOpacity onPress={() => setFormVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
-        <LinearGradient colors={OG as any} style={{ flex: 1, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}><MaterialCommunityIcons name="lightbulb-multiple-outline" size={30} color="#fff" /></LinearGradient>
+        <LinearGradient colors={OG as any} style={{ flex: 1, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="lightbulb-multiple-outline" size={30} color="#fff" />
+        </LinearGradient>
       </TouchableOpacity>
 
       {/* MODAL DETALLE */}
@@ -1200,13 +1235,13 @@ export default function EntrepreneurshipScreen() {
                   </View>
                   {detailItem.promo && ( <View style={[S.promoBadge, { marginBottom: 16 }]}><MaterialCommunityIcons name="tag-outline" size={14} color="#FFF" style={{ marginRight: 6 }} /><ThemedText style={{ color: '#FFF', fontSize: 13, fontWeight: '800' }}>{detailItem.promo}</ThemedText></View> )}
                   <View style={[S.detailSection, { borderColor: DC.border, backgroundColor: DC.sectionBg }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><MaterialCommunityIcons name="text-box-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} /><ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.aboutBussines || 'Sobre el negocio'}</ThemedText></View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><MaterialCommunityIcons name="text-box-outline" size={17} color={DC.accent} style={{ marginRight: 8 }} /><ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t?.entrepreneurshiptab?.aboutBussines || 'Sobre el negocio'}</ThemedText></View>
                     <ThemedText style={{ color: DC.subtext, fontSize: 14, lineHeight: 22 }}>{detailItem.description}</ThemedText>
                   </View>
                   <View style={[S.contactRow, { marginBottom: 16, flexWrap: 'wrap' }]}>
                     <TouchableOpacity onPress={() => { if(detailItem.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${detailItem.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${detailItem.phone}`); } }} style={[S.contactBtn, { backgroundColor: detailItem.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)'), flexGrow: 1, minWidth: 130 }]}>
                       <MaterialCommunityIcons name={detailItem.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={18} color={detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} />
-                      <ThemedText style={[S.contactBtnText, { color: detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D", fontSize: 14 }]}>{detailItem.contactMethod === 'whatsapp' ? "WhatsApp" : (t.entrepreneurshiptab?.call || "Llamar")}</ThemedText>
+                      <ThemedText style={[S.contactBtnText, { color: detailItem.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D", fontSize: 14 }]}>{detailItem.contactMethod === 'whatsapp' ? "WhatsApp" : (t?.entrepreneurshiptab?.call || "Llamar")}</ThemedText>
                     </TouchableOpacity>
                   </View>
                   
@@ -1242,18 +1277,18 @@ export default function EntrepreneurshipScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <MaterialCommunityIcons name="comment-text-multiple-outline" size={18} color={DC.accent} style={{ marginRight: 8 }} />
-                        <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t.entrepreneurshiptab?.reviews || 'Reseñas'}</ThemedText>
+                        <ThemedText style={{ fontWeight: '800', fontSize: 14, color: DC.text }}>{t?.entrepreneurshiptab?.reviews || 'Reseñas'}</ThemedText>
                         {detailItem.reviews.length > 0 && ( <View style={[S.reviewCountBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}><ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '800' }}>{formatCount(detailItem.reviews.length)}</ThemedText></View> )}
                       </View>
                       {!showReviewInput && (
                           <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 12, overflow: 'hidden' }}>
-                            <LinearGradient colors={OG as any} style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}><MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t.entrepreneurshiptab?.writing || 'Escribir'}</ThemedText></LinearGradient>
+                            <LinearGradient colors={OG as any} style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}><MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t?.entrepreneurshiptab?.writing || 'Escribir'}</ThemedText></LinearGradient>
                           </TouchableOpacity>
                       )}
                     </View>
                     {showReviewInput ? ( <ReviewForm isDark={isDark} t={t} onCancel={() => setShowReviewInput(false)} onPublish={(stars: number, comment: string) => handleAddReview(detailItem.id, stars, comment)} />
                     ) : ( detailItem.reviews.length === 0 ? (
-                          <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}><MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.iconInactive} /><ThemedText style={{ color: DC.iconInactive, marginTop: 10, fontSize: 13 }}>{t.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}</ThemedText></View>
+                          <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}><MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.iconInactive} /><ThemedText style={{ color: DC.iconInactive, marginTop: 10, fontSize: 13 }}>{t?.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}</ThemedText></View>
                         ) : (
                           <>
                               {detailItem.reviews.slice(0, 2).map((r: any) => (
@@ -1268,7 +1303,7 @@ export default function EntrepreneurshipScreen() {
                                   <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
                                 </View>
                               ))}
-                              {detailItem.reviews.length > 2 && ( <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}><ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t.entrepreneurshiptab?.viewAllreviews || 'Ver todas las reseñas'}</ThemedText></TouchableOpacity> )}
+                              {detailItem.reviews.length > 2 && ( <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}><ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t?.entrepreneurshiptab?.viewAllreviews || 'Ver todas las reseñas'}</ThemedText></TouchableOpacity> )}
                           </>
                         )
                     )}
@@ -1289,12 +1324,12 @@ export default function EntrepreneurshipScreen() {
               {!isAndroid && ( <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> )}
               <View style={{ padding: 25, flex: 1 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-                  <View style={{ flex: 1 }}><ThemedText style={{ fontSize: 20, fontWeight: '900', color: DC.text }}>{reviewTarget?.name}</ThemedText><ThemedText style={{ color: DC.text, fontWeight: '700' }}>{t.entrepreneurshiptab?.communityopinions || 'Opiniones de la comunidad'}</ThemedText></View>
+                  <View style={{ flex: 1 }}><ThemedText style={{ fontSize: 20, fontWeight: '900', color: DC.text }}>{reviewTarget?.name}</ThemedText><ThemedText style={{ color: DC.text, fontWeight: '700' }}>{t?.entrepreneurshiptab?.communityopinions || 'Opiniones de la comunidad'}</ThemedText></View>
                   <TouchableOpacity onPress={() => { setReviewTarget(null); setShowReviewInput(false); }}><MaterialCommunityIcons name="close" size={28} color={DC.text} /></TouchableOpacity>
                 </View>
                 {!showReviewInput ? (
                   <View style={{ flex: 1 }}>
-                    <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}><LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.entrepreneurshiptab?.writingReviews || 'Escribir reseña'}</ThemedText></LinearGradient></TouchableOpacity>
+                    <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}><LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t?.entrepreneurshiptab?.writingReviews || 'Escribir reseña'}</ThemedText></LinearGradient></TouchableOpacity>
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {(reviewTarget?.reviews ?? []).length > 0
                         ? (reviewTarget?.reviews ?? []).map((r: any) => (
@@ -1309,7 +1344,7 @@ export default function EntrepreneurshipScreen() {
                               <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
                             </View>
                           ))
-                        : ( <View style={{ alignItems: 'center', marginTop: 30, opacity: 0.5 }}><MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.iconInactive} /><ThemedText style={{ color: DC.iconInactive, marginTop: 10 }}>{t.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}</ThemedText></View> )
+                        : ( <View style={{ alignItems: 'center', marginTop: 30, opacity: 0.5 }}><MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.iconInactive} /><ThemedText style={{ color: DC.iconInactive, marginTop: 10 }}>{t?.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}</ThemedText></View> )
                       }
                     </ScrollView>
                   </View>
@@ -1334,16 +1369,16 @@ export default function EntrepreneurshipScreen() {
               
               <View style={[S.modalHeader, { paddingHorizontal: 25, marginTop: isLargeWeb ? 25 : 0 }]}>
                 <TouchableOpacity onPress={() => setFormVisible(false)} disabled={isSubmitting}><MaterialCommunityIcons name="close" size={24} color={DC.text} /></TouchableOpacity>
-                <ThemedText style={[S.modalTitle, { color: DC.text }]}>{t.entrepreneurshiptab?.newentrepreneurship || 'Nuevo Emprendimiento'}</ThemedText>
+                <ThemedText style={[S.modalTitle, { color: DC.text }]}>{t?.entrepreneurshiptab?.newentrepreneurship || 'Nuevo Emprendimiento'}</ThemedText>
                 <View style={{ width: 24 }} />
               </View>
 
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={[S.imagePicker, { borderColor: DC.border, backgroundColor: DC.inputBg }]}>
-                  {formImage ? <Image source={{ uri: formImage }} style={S.formImagePreview} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} color={DC.text} /><ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'none', color:DC.iconInactive }}>{t.entrepreneurshiptab?.businessphoto || 'FOTO'}</ThemedText></View> }
+                  {formImage ? <Image source={{ uri: formImage }} style={S.formImagePreview} /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} color={DC.text} /><ThemedText style={{  marginTop: 1, fontWeight: '800', fontSize: 11 ,textTransform:'none', color:DC.iconInactive }}>{t?.entrepreneurshiptab?.businessphoto || 'FOTO'}</ThemedText></View> }
                 </TouchableOpacity>
 
-                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.viewcategory || 'CATEGORÍA'}</ThemedText>
+                <ThemedText style={[S.label, { color: DC.text }]}>{t?.entrepreneurshiptab?.viewcategory || 'CATEGORÍA'}</ThemedText>
                 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                   {CATEGORIES.map((catName: string, index: number) => {
@@ -1368,14 +1403,14 @@ export default function EntrepreneurshipScreen() {
                   })}
                 </View>
 
-                <TextInput value={formName} onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formName} onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t?.entrepreneurshiptab?.namebussinesplac || 'Nombre del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
                 
                 <TextInput value={formAddress} onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={'Dirección del negocio'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TextInput value={formZip} onChangeText={setFormZip} placeholder="Código Postal (Zip)" keyboardType="numeric" maxLength={5} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
-                <TextInput value={formDesc} onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} multiline autoCapitalize="sentences" placeholder={t.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} numberOfLines={3} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <TextInput value={formDesc} onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} multiline autoCapitalize="sentences" placeholder={t?.entrepreneurshiptab?.descripservicesplace || 'Descripción de servicios...'} placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} numberOfLines={3} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, minHeight: 80, textAlignVertical: 'top', paddingTop: 14, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
-                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.contactMethod || 'Método de contacto'}</ThemedText>
+                <ThemedText style={[S.label, { color: DC.text }]}>{t?.entrepreneurshiptab?.contactMethod || 'Método de contacto'}</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   <TouchableOpacity onPress={() => setFormContactMethod('whatsapp')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'whatsapp' ? '#25D366' : DC.border, backgroundColor: formContactMethod === 'whatsapp' ? 'rgba(37,211,102,0.1)' : DC.inputBg }}>
                     <MaterialCommunityIcons name="whatsapp" size={20} color={formContactMethod === 'whatsapp' ? '#25D366' : DC.subtext} style={{ marginRight: 8 }} />
@@ -1383,7 +1418,7 @@ export default function EntrepreneurshipScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setFormContactMethod('phone')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 15, borderWidth: 1, borderColor: formContactMethod === 'phone' ? '#FF5F6D' : DC.border, backgroundColor: formContactMethod === 'phone' ? 'rgba(255,95,109,0.1)' : DC.inputBg }}>
                     <MaterialCommunityIcons name="phone" size={20} color={formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext} style={{ marginRight: 8 }} />
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext }}>{t.entrepreneurshiptab?.call || 'Llamar'}</ThemedText>
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: formContactMethod === 'phone' ? '#FF5F6D' : DC.subtext }}>{t?.entrepreneurshiptab?.call || 'Llamar'}</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -1396,12 +1431,12 @@ export default function EntrepreneurshipScreen() {
                   <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={isDark ? '#B0BEC5' : '#364045'} keyboardType="phone-pad" style={{ flex: 1, color: DC.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                <ThemedText style={[S.label, { color: DC.text }]}>{t.entrepreneurshiptab?.promotion || 'Promoción'}</ThemedText>
-                <TextInput value={formPromo}  onChangeText={(text) => setFormPromo(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t.entrepreneurshiptab?.exampleoffet || 'Ej: 10% de descuento'} placeholderTextColor={isDark ? '#B0BEC5' : '#364045'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
+                <ThemedText style={[S.label, { color: DC.text }]}>{t?.entrepreneurshiptab?.promotion || 'Promoción'}</ThemedText>
+                <TextInput value={formPromo}  onChangeText={(text) => setFormPromo(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t?.entrepreneurshiptab?.exampleoffet || 'Ej: 10% de descuento'} placeholderTextColor={isDark ? '#B0BEC5' : '#364045'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
                 <TouchableOpacity onPress={handlePublish} disabled={!formName.trim() || !formAddress.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5 || isSubmitting}>
                   <LinearGradient colors={(formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? OG as any : DG as any} style={[S.publishBtn, { opacity: (formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? 1 : 0.55 }]}>
-                    {isSubmitting ? <ActivityIndicator color="#fff" /> : <><MaterialCommunityIcons name="store-plus-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.entrepreneurshiptab?.publishEntrepre || 'Publicar'}</ThemedText></>}
+                    {isSubmitting ? <ActivityIndicator color="#fff" /> : <><MaterialCommunityIcons name="store-plus-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t?.entrepreneurshiptab?.publishEntrepre || 'Publicar'}</ThemedText></>}
                   </LinearGradient>
                 </TouchableOpacity>
               </ScrollView>

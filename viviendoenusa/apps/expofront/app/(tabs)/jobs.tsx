@@ -23,13 +23,17 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
 import badWordsData from '@/utils/babwords.json';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
-import { useAppTheme } from 'app/src/context/ThemeContext';
-import { handleUniversalShare } from '../../utils/shareHelper';
+import { useAppTheme } from '../../context/ThemeContext';
 
+import { handleUniversalShare } from '../../utils/shareHelper';
+import { supabaseClient } from '../../utils/supabase';
+
+/*
 // 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+*/
 
 // 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'companies') => {

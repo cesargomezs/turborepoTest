@@ -33,7 +33,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname, useFocusEffect } from 'expo-router'; 
 import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage, toggleAuth } from '../../redux/slices'; 
 import { useTranslation } from '../../hooks/useTranslation'; 
-import { useAppTheme } from '@/app/src/context/ThemeContext'; 
+//import { useAppTheme } from '@/app/src/context/ThemeContext'; 
+import { useAppTheme } from '../../context/ThemeContext';
+
 import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 import { handleUniversalShare } from '../../utils/shareHelper';
@@ -60,6 +62,8 @@ const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`;
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+// ⚠️ Nota para después: Este createClient causa el warning naranja en consola. 
+// Lo ideal es moverlo a un archivo utils/supabase.ts e importarlo aquí.
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const NOMBRE_BUCKET = 'images';
 
@@ -219,16 +223,14 @@ export default function Header({ title }: { title?: string }) {
   ];
 
   const fetchUserData = async () => {
-    // 🚀 Evitamos peticiones al servidor si es un invitado
-    if (!REAL_USER_ID || !token || isGuest) return;
+    if (!REAL_USER_ID || !token) return;
 
     try {
       const res = await fetch(`${API_USERS_URL}/${REAL_USER_ID}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`, 
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
+          'Content-Type': 'application/json'
         }
       });
       
@@ -247,7 +249,12 @@ export default function Header({ title }: { title?: string }) {
         }
 
         const errText = await res.text();
-        throw new Error(`Error ${res.status}: ${errText}`);
+        // 🚀 FIX: Si el backend devuelve una página HTML de error, no la imprimas toda
+        const cleanError = errText.trim().startsWith('<') 
+          ? 'El servidor backend devolvió un HTML (posible error 404, 502 o Render está dormido).' 
+          : errText;
+          
+        throw new Error(`Error ${res.status}: ${cleanError}`);
       }
       
       const userData = await res.json();
@@ -277,7 +284,10 @@ export default function Header({ title }: { title?: string }) {
           estate: userData.estate || userData.state || userMetadata.estate || ''
         }));
       }
-    } catch (error) { console.error("Error al obtener datos:", error); }
+    } catch (error: any) { 
+      // 🚀 Muestra un error limpio en la consola en vez de un código gigante
+      console.warn("Advertencia al obtener datos de usuario:", error.message); 
+    }
   };
 
   const fetchNotifications = async () => {
@@ -692,6 +702,16 @@ export default function Header({ title }: { title?: string }) {
 
   const displayNameToRender = globalName || profileData.name || '';
   const displayLastNameToRender = globalLastName || profileData.last_name || '';
+
+  // 🚀 FIX HYDRATION ERROR (#418): Evita que el servidor y el cliente se peleen por el diseño web inicial
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return null; // Oculta el componente un microsegundo hasta que el navegador asuma el control real
+  }
 
   return (
     <View style={{ width: '100%', backgroundColor: 'transparent' }}>

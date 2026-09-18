@@ -14,7 +14,7 @@ import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/nati
 import { DarkTheme, DefaultTheme } from '../constants/Theme';
 
 // 🚀 IMPORTAMOS NUESTRO THEME PROVIDER
-import { ThemeProvider as CustomAppThemeProvider, useAppTheme } from './src/context/ThemeContext';
+import { ThemeProvider as CustomAppThemeProvider, useAppTheme } from '../context/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
 

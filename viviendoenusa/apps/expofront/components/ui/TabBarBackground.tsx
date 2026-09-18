@@ -4,7 +4,7 @@ import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL QUE CREAMOS (Uso tu alias @)
-import { useAppTheme } from '@/app/src/context/ThemeContext';
+import { useAppTheme } from '../../context/ThemeContext';
 
 export default function BlurTabBarBackground() {
   // 🚀 LEEMOS EL TEMA EN TIEMPO REAL DIRECTO DEL CONTEXTO

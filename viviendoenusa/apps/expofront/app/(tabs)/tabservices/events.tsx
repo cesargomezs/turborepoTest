@@ -16,6 +16,8 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
+import { useAppTheme } from '../../../context/ThemeContext';
+
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -24,13 +26,15 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
 import { useMockSelector } from '@/redux/slices';
-import { useAppTheme } from 'app/src/context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
+import { supabaseClient } from '../../../utils/supabase';
 
+/*
 // 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+*/
 
 // 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'events') => {
@@ -1339,7 +1343,7 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
     >
       {/* 🚀 OFUSCAR EVENTOS PENDIENTES */}
       {isPending && !isAdminMode && (
-        <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none" />
+        <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 , pointerEvents: 'none'}]}  />
       )}
 
       {isPending && isOwner && (

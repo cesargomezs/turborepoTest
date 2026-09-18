@@ -15,7 +15,9 @@ import {
 } from '../../redux/slices';
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
-import { useAppTheme } from '../src/context/ThemeContext'; 
+import { useAppTheme } from '../../context/ThemeContext'; 
+
+
 
 export default function TabLayout() {
   const { t } = useTranslation();
@@ -135,18 +137,6 @@ export default function TabLayout() {
           ),
         }}
       />
-
-      {/* 🚀 PESTAÑA DE SOPORTE TÉCNICO / IT (Visible en Web, integrada limpiamente) */}
-      <Tabs.Screen
-        name="support-it"
-        options={{
-          title: 'Soporte IT',
-          href: Platform.OS === 'web' ? '/support-it' : null, 
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons size={28} name="headset" color={color} />
-          ),
-        }}
-      />
       
       {/* 🚀 PESTAÑA DINÁMICA: "Salir" para usuarios, "Entrar" para invitados */}
       <Tabs.Screen
@@ -159,9 +149,10 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => {
-            e.preventDefault();
-            dispatch(toggleAuth());
-            router.replace('/');
+            // 🚀 Permitimos que navegue libremente al archivo logout.tsx sin bloquearlo
+            if (Platform.OS === 'web') {
+              window.location.href = '/logout';
+            }
           },
         }}
       />

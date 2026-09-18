@@ -51,9 +51,11 @@ import { Colors } from '../../constants/Colors';
 import { default as ThemedTextInput } from '../../components/ThemedTextInput';
 import { toggleAuth, setUserMetadata, useMockDispatch, useMockSelector } from '../../redux/slices';
 import { useTranslation } from '../../hooks/useTranslation';
-import { useAppTheme } from '../src/context/ThemeContext';
+import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { createClient } from '@supabase/supabase-js'; 
+
+// 🚀 Importamos directamente tu cliente de Supabase
+import { supabaseClient } from '../../utils/supabase';
 
 import badWordsData from '../../utils/babwords.json';
 
@@ -79,10 +81,6 @@ const containsBadWords = (text: string): boolean => {
   });
 };
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-
-const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const NOMBRE_BUCKET = 'images'; 
 
 WebBrowser.maybeCompleteAuthSession();
@@ -354,13 +352,14 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const loadSignedImages = async () => {
-      if (!supabase) return;
+      if (!supabaseClient) return;
       try {
-        const { data: logoData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
+        const { data: logoData } = await supabaseClient.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
         if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
-            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
+            // 🚀 SOLUCIÓN: Agregamos "!" (supabaseClient!) para decirle a TS que no es null aquí
+            const { data } = await supabaseClient!.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
             return { ...service, img: data?.signedUrl || '' };
           })
         );
@@ -628,8 +627,6 @@ export default function HomeScreen() {
       isWebPlatform ? window.alert(isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido") : Alert.alert("Atención", isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido");
       return;
     }
-    
-    // Se ha eliminado la validación obligatoria para phone y zipCode para cumplir con la App Store Guideline 5.1.1(v)
 
     const contentToValidate = `${form.firstName} ${form.lastName}`;
     if (containsBadWords(contentToValidate)) {

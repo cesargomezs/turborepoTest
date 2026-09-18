@@ -23,12 +23,14 @@ import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
-import { useAppTheme } from 'app/src/context/ThemeContext';
+import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
+import { supabaseClient } from '../../../utils/supabase';
 
+/*
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;*/
 
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'community') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -136,18 +138,20 @@ const getTranslatedTag = (backendTag: string, t: any) => {
   if (!backendTag) return '';
   const clean = backendTag.trim().toLowerCase();
   
+  const typepost = t?.communitytab?.typepost || [];
+
   // Si estamos en español, buscamos su equivalente
-  if (t.communitytab.typepost.includes('Experiencia')) {
-    if (clean === 'experience' || clean === 'experiencia') return t.communitytab.typepost[1] || 'Experiencia';
-    if (clean === 'question' || clean === 'preguntas' || clean === 'pregunta') return t.communitytab.typepost[2] || 'Pregunta';
-    if (clean === 'advice' || clean === 'consejos' || clean === 'consejo') return t.communitytab.typepost[3] || 'Consejo';
+  if (typepost.includes('Experiencia')) {
+    if (clean === 'experience' || clean === 'experiencia') return typepost[1] || 'Experiencia';
+    if (clean === 'question' || clean === 'preguntas' || clean === 'pregunta') return typepost[2] || 'Pregunta';
+    if (clean === 'advice' || clean === 'consejos' || clean === 'consejo') return typepost[3] || 'Consejo';
   }
   
   // Si estamos en inglés, buscamos su equivalente
-  if (t.communitytab.typepost.includes('Experience')) {
-    if (clean === 'experiencia' || clean === 'experience') return t.communitytab.typepost[1] || 'Experience';
-    if (clean === 'pregunta' || clean === 'preguntas' || clean === 'question') return t.communitytab.typepost[2] || 'Question';
-    if (clean === 'consejo' || clean === 'consejos' || clean === 'advice') return t.communitytab.typepost[3] || 'Advice';
+  if (typepost.includes('Experience')) {
+    if (clean === 'experiencia' || clean === 'experience') return typepost[1] || 'Experience';
+    if (clean === 'pregunta' || clean === 'preguntas' || clean === 'question') return typepost[2] || 'Question';
+    if (clean === 'consejo' || clean === 'consejos' || clean === 'advice') return typepost[3] || 'Advice';
   }
   
   return backendTag;
@@ -172,8 +176,11 @@ export default function CommunityScreen() {
   const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
-  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
-  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  // 🚀 ADMIN CHECK SEGURO
+  const userEmailClean = userMetadata?.email || '';
+  const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
+  const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
+  
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [pendingPosts, setPendingPosts] = useState<any[]>([]);
 
@@ -224,12 +231,13 @@ export default function CommunityScreen() {
     'Advice': 'Advice', 'Consejo': 'Advice'
   };
 
+  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
   const subCategories = [
-    { id: t.communitytab.subCategories[0], icon: 'earth' }, 
-    { id: t.communitytab.subCategories[1], icon: 'silverware-fork-knife' },
-    { id: t.communitytab.subCategories[2], icon: 'briefcase-outline' }, 
-    { id: t.communitytab.subCategories[3], icon: 'file-document-outline' },
-    { id: t.communitytab.subCategories[4], icon: 'heart-pulse' },
+    { id: t?.communitytab?.subCategories?.[0] || 'General', icon: 'earth' }, 
+    { id: t?.communitytab?.subCategories?.[1] || 'Comida', icon: 'silverware-fork-knife' },
+    { id: t?.communitytab?.subCategories?.[2] || 'Trabajos', icon: 'briefcase-outline' }, 
+    { id: t?.communitytab?.subCategories?.[3] || 'Trámites', icon: 'file-document-outline' },
+    { id: t?.communitytab?.subCategories?.[4] || 'Salud', icon: 'heart-pulse' },
   ];
 
   const [postText, setPostText] = useState('');
@@ -237,7 +245,8 @@ export default function CommunityScreen() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [zipCode, setZipCode] = useState(''); 
 
-  const defaultTag = (t.communitytab.typepostAdd && t.communitytab.typepostAdd.length > 0) ? t.communitytab.typepostAdd[0] : 'Experience';
+  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
+  const defaultTag = (t?.communitytab?.typepostAdd?.length > 0) ? t?.communitytab?.typepostAdd[0] : 'Experience';
   const [selectedTag, setSelectedTag] = useState(defaultTag); 
   const [selectedSubCategory, setSelectedSubCategory] = useState('All'); 
   
@@ -499,8 +508,8 @@ export default function CommunityScreen() {
 
     if (containsBadWords(trimmedText)) {
       triggerAlert(
-        "Contenido Inapropiado", 
-        "Hemos detectado lenguaje inapropiado en tu publicación. Por favor, modifícalo para mantener un ambiente de respeto."
+        t?.communitytab?.textInappropriateTittle || "Bloqueado", 
+        t?.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado."
       );
       return; 
     }
@@ -513,7 +522,10 @@ export default function CommunityScreen() {
         const esSegura = await validarImagenEnServidor(selectedImage);
         if (!esSegura) {
           setIsPublishing(false);
-          triggerAlert(t.communitytab.imageInappropriateTittle, t.communitytab.imageInappropriateDescription);
+          triggerAlert(
+            t?.communitytab?.imageInappropriateTittle || "Bloqueada", 
+            t?.communitytab?.imageInappropriateDescription || "La imagen no cumple normas."
+          );
           return;
         }
 
@@ -614,7 +626,7 @@ export default function CommunityScreen() {
 
     } catch (err: any) {
       console.error("❌ ERROR EN FETCH:", err.message);
-      triggerAlert("Error", err.message || t.communitytab.errorServer);
+      triggerAlert("Error", err.message || t?.communitytab?.errorServer || "Error");
     } finally {
       setIsPublishing(false);
     }
@@ -625,7 +637,10 @@ export default function CommunityScreen() {
     if (!trimmed || !activeCommentId) return;
 
     if (containsBadWords(trimmed)) {
-      triggerAlert(t.communitytab.textInappropriateTittle, t.communitytab.textInappropriateDescription);
+      triggerAlert(
+        t?.communitytab?.textInappropriateTittle || "Bloqueado", 
+        t?.communitytab?.textInappropriateDescription || "Inapropiado."
+      );
       return;
     }
 
@@ -838,19 +853,27 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 BOTÓN DE ADMINISTRADOR CON CONTADOR FLOTANTE */}
+                {/* 🚀 BOTÓN DE ADMINISTRADOR SIEMPRE VISIBLE */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  {isAdmin && (
-                    <TouchableOpacity onPress={() => setIsAdminMode(!isAdminMode)} style={{ position: 'relative', padding: 4 }}>
-                      <MaterialCommunityIcons name="account-group-outline" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{ opacity: isAdminMode ? 1 : 0.2 }} />
-                      {pendingPosts.length > 0 && (
-                        <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
-                          <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingPosts.length}</ThemedText>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity 
+                    activeOpacity={isAdmin ? 0.7 : 1}
+                    onPress={() => { if (isAdmin) setIsAdminMode(!isAdminMode); }} 
+                    style={{ position: 'relative', padding: 4 }}
+                  >
+                    <MaterialCommunityIcons 
+                      name="account-group-outline" 
+                      size={40} 
+                      color={isAdminMode ? '#FF5F6D' : Colors.text} 
+                      style={{ opacity: isAdminMode ? 1 : (isAdmin ? 0.6 : 0.2) }} 
+                    />
+                    {isAdmin && pendingPosts.length > 0 && (
+                      <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#FF5F6D', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
+                        <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{pendingPosts.length}</ThemedText>
+                      </View>
+                    )}
+                  </TouchableOpacity>
                 </View>
+
               </View>
 
               {/* LAYOUT PRINCIPAL DE COLUMNAS (WEB vs MÓVIL) */}
@@ -860,8 +883,10 @@ export default function CommunityScreen() {
                 {isLargeWeb && (
                   <View style={{ width: 280, paddingRight: 25, marginRight: 25, borderRightWidth: 1, borderColor: Colors.border }}>
                     <ScrollView showsVerticalScrollIndicator={false}>
-                      <ThemedText style={[styles.sideMenuTitle, { color: Colors.text, fontSize: 15, marginBottom: 15 }]}>{t.communitytab.filter}</ThemedText>
-                      {t.communitytab.typepost.map((f: string) => {
+                      <ThemedText style={[styles.sideMenuTitle, { color: Colors.text, fontSize: 15, marginBottom: 15 }]}>
+                        {t?.communitytab?.filter || 'Filtros'}
+                      </ThemedText>
+                      {(t?.communitytab?.typepost || []).map((f: string) => {
                         const isActive = tagMapping[f] === tagMapping[activeFilter];
                         return (
                           <TouchableOpacity key={f} onPress={() => setActiveFilter(f)} style={{ borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
@@ -895,12 +920,16 @@ export default function CommunityScreen() {
                             {isRecentFirst ? (
                               <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
                                 <MaterialCommunityIcons name="clock-outline" size={15} color="#FFF" style={{ marginRight: 6 }} />
-                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{t.communitytab.subCategories[5] || 'Nuevos'}</ThemedText>
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>
+                                  {t?.communitytab?.subCategories?.[5] || 'Nuevos'}
+                                </ThemedText>
                               </LinearGradient>
                             ) : (
                               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, backgroundColor: Colors.categoryUnselected }}>
                                 <MaterialCommunityIcons name="clock-outline" size={15} color={Colors.iconInactive} style={{ marginRight: 6 }} />
-                                <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 13 }}>{t.communitytab.subCategories[5] || 'Nuevos'}</ThemedText>
+                                <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 13 }}>
+                                  {t?.communitytab?.subCategories?.[5] || 'Nuevos'}
+                                </ThemedText>
                               </View>
                             )}
                           </TouchableOpacity>
@@ -948,12 +977,16 @@ export default function CommunityScreen() {
                               {isRecentFirst ? (
                                 <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 }}>
                                   <MaterialCommunityIcons name="clock-outline" size={15} color="#FFF" style={{ marginRight: 5 }} />
-                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{t.communitytab.subCategories[5] || 'Nuevos'}</ThemedText>
+                                  <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>
+                                    {t?.communitytab?.subCategories?.[5] || 'Nuevos'}
+                                  </ThemedText>
                                 </LinearGradient>
                               ) : (
                                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, backgroundColor: Colors.categoryUnselected }}>
                                   <MaterialCommunityIcons name="clock-outline" size={15} color={Colors.iconInactive} style={{ marginRight: 5 }} />
-                                  <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 13 }}>{t.communitytab.subCategories[5] || 'Nuevos'}</ThemedText>
+                                  <ThemedText style={{ color: Colors.iconInactive, fontWeight: '600', fontSize: 13 }}>
+                                    {t?.communitytab?.subCategories?.[5] || 'Nuevos'}
+                                  </ThemedText>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -1052,10 +1085,10 @@ export default function CommunityScreen() {
                             <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.subtext} />
                           </View>
                           <ThemedText style={{ textAlign: 'center', color: Colors.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }}>
-                            {t.communitytab.messageemptytitle}
+                            {t?.communitytab?.messageemptytitle || 'Comunidad'}
                           </ThemedText>
                           <ThemedText style={{ textAlign: 'center', color: Colors.subtext, fontSize: 14, lineHeight: 20 }}>
-                            {t.communitytab.messageempty}
+                            {t?.communitytab?.messageempty || 'Ingresa un código postal'}
                           </ThemedText>
                         </View>
                       ) : filteredPosts.length === 0 ? (
@@ -1064,10 +1097,10 @@ export default function CommunityScreen() {
                             <MaterialCommunityIcons name="post-outline" size={40} color={Colors.subtext} />
                           </View>
                           <ThemedText style={{ textAlign: 'center', color: Colors.text, fontSize: 16, fontWeight: '800', marginBottom: 8 }}>
-                            {t.communitytab.messageNodatatitle}
+                            {t?.communitytab?.messageNodatatitle || 'Sin datos'}
                           </ThemedText>
                           <ThemedText style={{ textAlign: 'center', color: Colors.subtext, fontSize: 14, lineHeight: 20 }}>
-                            {t.communitytab.messageNodata}
+                            {t?.communitytab?.messageNodata || 'No hay nada por aquí'}
                           </ThemedText>
                         </View>
                       ) : (
@@ -1135,11 +1168,15 @@ export default function CommunityScreen() {
                                       ))
                                     ) : 
 
-                                    <ThemedText style={[styles.noCommentsText, { marginBottom: 4 }]}>{t.communitytab.firtscomment}</ThemedText>}
+                                    <ThemedText style={[styles.noCommentsText, { marginBottom: 4 }]}>
+                                      {t?.communitytab?.firtscomment || 'Sé el primero en comentar'}
+                                    </ThemedText>}
                                     
                                     <TouchableOpacity disabled={isPending} onPress={() => { setActiveCommentId(post.id); setShowCommentInput(true); }} style={[styles.replyBtn, { marginTop: 4, opacity: isPending ? 0.4 : 1 }]}>
                                       <MaterialCommunityIcons name="pencil-outline" size={14} color={Colors.accent} />
-                                      <ThemedText style={[styles.replyBtnText, { color: Colors.accent }]}>{t.communitytab.responsebutton}</ThemedText>
+                                      <ThemedText style={[styles.replyBtnText, { color: Colors.accent }]}>
+                                        {t?.communitytab?.responsebutton || 'Responder'}
+                                      </ThemedText>
                                     </TouchableOpacity>
                                   </View>
                                 )}
@@ -1200,14 +1237,18 @@ export default function CommunityScreen() {
                 <TouchableOpacity onPress={() => setModalVisible(false)}>
                   <MaterialCommunityIcons name="close" size={24} color={Colors.text} />
                 </TouchableOpacity>
-                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: Colors.text }}>{t.communitytab.messagenewpost}</ThemedText>
+                <ThemedText style={{ fontSize: 16, fontWeight: '900', color: Colors.text }}>
+                  {t?.communitytab?.messagenewpost || 'Nuevo Post'}
+                </ThemedText>
                 <View style={{ width: 24 }} />
               </View>
 
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
-                <ThemedText style={[{fontSize: 12, fontWeight: '900', marginBottom: 8, color:Colors.text}]}>{t.communitytab.labeltypepost}</ThemedText>
+                <ThemedText style={[{fontSize: 12, fontWeight: '900', marginBottom: 8, color:Colors.text}]}>
+                  {t?.communitytab?.labeltypepost || 'TIPO'}
+                </ThemedText>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-                  {t.communitytab.typepostAdd.map((tag: string) => {
+                  {(t?.communitytab?.typepostAdd || []).map((tag: string) => {
                     const isActive = selectedTag === tag;
                     return (
                       <TouchableOpacity key={tag} onPress={() => setSelectedTag(tag)} style={{ borderRadius: 12, overflow: 'hidden', height: 42, borderWidth: isActive ? 0 : 1, borderColor: Colors.border }}>
@@ -1227,7 +1268,9 @@ export default function CommunityScreen() {
                   })}
                 </View>
 
-                <ThemedText style={[{ color:Colors.text,fontSize: 12, fontWeight: '900', marginBottom: 8}]}>{t.communitytab.category}</ThemedText>
+                <ThemedText style={[{ color:Colors.text,fontSize: 12, fontWeight: '900', marginBottom: 8}]}>
+                  {t?.communitytab?.category || 'CATEGORÍA'}
+                </ThemedText>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}>
                   {subCategories.map(sub => {
                     const isActive = selectedSubCategory === sub.id;
@@ -1251,7 +1294,8 @@ export default function CommunityScreen() {
 
                 <TextInput 
                   value={postText}
-                  placeholder={t.communitytab.messageNewPost} placeholderTextColor={Colors.iconInactive} 
+                  placeholder={t?.communitytab?.messageNewPost || 'Escribe...'} 
+                  placeholderTextColor={Colors.iconInactive} 
                   onChangeText={(text) => setPostText(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')}
                   multiline 
                   autoCapitalize="sentences"
@@ -1293,7 +1337,9 @@ export default function CommunityScreen() {
                     <LinearGradient colors={postText.trim() ? orangeGradient : disabledGradient} style={{ height: 54, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                       {isPublishing ? <ActivityIndicator color="#fff" /> : <>
                         <MaterialCommunityIcons name="send" size={18} color="#fff" style={{ marginRight: 8 }} />
-                        <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>{t.communitytab.botonpost}</ThemedText>
+                        <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
+                          {t?.communitytab?.botonpost || 'Publicar'}
+                        </ThemedText>
                       </>}
                     </LinearGradient>
                   </TouchableOpacity>
@@ -1309,13 +1355,23 @@ export default function CommunityScreen() {
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCommentInput(false)} />
             <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
               <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
-                <TextInput style={[{backgroundColor: Colors.inputBg, borderRadius: 15, padding: 15, color: Colors.text, minHeight: 80, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {})}]} placeholder={t.communitytab.placeHolderModal} placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline autoFocus />
+                <TextInput 
+                  style={[{backgroundColor: Colors.inputBg, borderRadius: 15, padding: 15, color: Colors.text, minHeight: 80, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {})}]} 
+                  placeholder={t?.communitytab?.placeHolderModal || 'Responde...'} 
+                  placeholderTextColor="#999" 
+                  value={commentText} 
+                  onChangeText={setCommentText} 
+                  multiline 
+                  autoFocus 
+                />
                 
                 <TouchableOpacity 
                   onPress={handleAddComment} 
                   style={{ backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', alignSelf: 'center', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 20 }}>
                   <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
-                  <ThemedText style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>{t.communitytab.sendbutton}</ThemedText>
+                  <ThemedText style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>
+                    {t?.communitytab?.sendbutton || 'Enviar'}
+                  </ThemedText>
                 </TouchableOpacity>
               </BlurView>
             </KeyboardAvoidingView>

@@ -10,26 +10,22 @@ import {
   Platform
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState(''); 
-  const [isSuccess, setIsSuccess] = useState(false); // ⬅️ NUEVO: Controla si mostramos el formulario o el éxito
+  const [isSuccess, setIsSuccess] = useState(false); 
   
   const { token } = useLocalSearchParams(); 
   const router = useRouter();
 
-  // Función universal para intentar volver a la app o ir al index web
-  const handleReturnToApp = async () => {
-    try {
-      // Intenta despertar la aplicación en iOS/Android
-      //await Linking.openURL('viviendoenusa://');
-      await Linking.openURL('exp://192.168.252.243:8081');
-    } catch (error) {
-      // Si falla (ej. escritorio), navega al inicio
+  // 🚀 Redirección limpia hacia la web principal (viviendoenusa.app)
+  const handleReturnToApp = () => {
+    if (Platform.OS === 'web') {
+      window.location.replace('https://viviendoenusa.app');
+    } else {
       router.replace('/');
     }
   };
@@ -56,7 +52,7 @@ export default function ResetPassword() {
 
       if (response.ok) {
         setSuccessMsg("¡Tu contraseña ha sido actualizada con éxito!");
-        setIsSuccess(true); // Cambiamos la vista a "Éxito"
+        setIsSuccess(true); 
       } else {
         setErrorMsg(data.error || "Error al actualizar la contraseña.");
       }
@@ -85,7 +81,7 @@ export default function ResetPassword() {
               onPress={handleReturnToApp}
               activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>Abrir la aplicación</Text>
+              <Text style={styles.buttonText}>Ir a Viviendo en USA</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -101,7 +97,7 @@ export default function ResetPassword() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>NUEVA CONTRASEÑA</Text>
               <TextInput 
-                style={styles.input}
+                style={[styles.input, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}]}
                 placeholder="********" 
                 placeholderTextColor="#A0A0A0"
                 value={password}
@@ -129,7 +125,7 @@ export default function ResetPassword() {
               onPress={handleReturnToApp}
               disabled={isLoading}
             >
-              <Text style={styles.cancelButtonText}>Volver a la aplicación</Text>
+              <Text style={styles.cancelButtonText}>Volver al inicio</Text>
             </TouchableOpacity>
           </>
         )}
@@ -153,10 +149,8 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     borderRadius: 20,
     padding: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    // 🚀 Uso de boxShadow optimizado para evitar warnings en la consola web
+    boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.1)',
     elevation: 8,
   },
   successContainer: {
@@ -200,14 +194,11 @@ const styles = StyleSheet.create({
   button: { 
     backgroundColor: '#FF5F6D', 
     paddingVertical: 15, 
-    paddingHorizontal: 30, // Asegura que el botón se vea bien cuando está solo
+    paddingHorizontal: 30, 
     width: '100%',
     borderRadius: 25, 
     alignItems: 'center',
-    shadowColor: '#FF5F6D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(255, 95, 109, 0.3)',
     elevation: 5,
     marginBottom: 15,
   },
@@ -232,7 +223,7 @@ const styles = StyleSheet.create({
   successText: {
     color: '#28a745',
     textAlign: 'center',
-    marginBottom: 30, // Más espacio para separarlo del botón final
+    marginBottom: 30, 
     fontWeight: '500',
     fontSize: 16,
     lineHeight: 22,

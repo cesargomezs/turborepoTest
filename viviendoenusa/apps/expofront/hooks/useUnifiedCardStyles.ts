@@ -2,7 +2,7 @@ import { StyleSheet, Platform, useColorScheme, useWindowDimensions } from 'react
 import { useMockSelector } from '@/redux/slices';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAppTheme } from 'app/src/context/ThemeContext';
+import { useAppTheme } from '../context/ThemeContext';
 
 export const useUnifiedCardStyles = () => {
   const { width, height } = useWindowDimensions();

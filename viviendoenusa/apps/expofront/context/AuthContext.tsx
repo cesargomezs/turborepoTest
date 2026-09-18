@@ -69,15 +69,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const logout = async () => {
-    setToken(null);
-    setUser(null);
+    try {
+      // 1. Limpiamos almacenamiento nativo
+      if (Platform.OS !== 'web') {
+        await SecureStore.deleteItemAsync('userToken');
+        await SecureStore.deleteItemAsync('userData');
+      }
+      
+      // 2. Limpiamos almacenamiento web por completo
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
 
-    if (Platform.OS === 'web') {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-    } else {
-      await SecureStore.deleteItemAsync('token');
-      await SecureStore.deleteItemAsync('user');
+      // 3. Seteamos los estados a vacío
+      setUser(null);
+      setToken(null);
+    } catch (error) {
+      console.error("Error destruyendo la sesión en AuthContext:", error);
     }
   };
 
