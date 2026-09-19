@@ -41,8 +41,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setToken(storedToken);
           setUser(storedUser);
           
-          // 🚀 2. USAMOS store.dispatch DIRECTAMENTE (Sin depender del Provider de Contexto)
-          store.dispatch(setUserMetadata({ ...storedUser, token: storedToken }));
+          // 🚀 2. USAMOS store.dispatch DIRECTAMENTE
+          store.dispatch(setUserMetadata({ ...storedUser, token: storedToken } as any));
           store.dispatch(toggleAuth());
         }
       } catch (error) {
@@ -70,19 +70,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     try {
-      // 1. Limpiamos almacenamiento nativo
-      if (Platform.OS !== 'web') {
-        await SecureStore.deleteItemAsync('userToken');
-        await SecureStore.deleteItemAsync('userData');
-      }
-      
-      // 2. Limpiamos almacenamiento web por completo
-      if (typeof window !== 'undefined') {
-        localStorage.clear();
-        sessionStorage.clear();
+      // 🚀 3. LIMPIEZA SEGURA SEGÚN LA PLATAFORMA (Evita errores en iOS/Android)
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          localStorage.clear();
+          sessionStorage.clear();
+        }
+      } else {
+        await SecureStore.deleteItemAsync('token');
+        await SecureStore.deleteItemAsync('user');
       }
 
-      // 3. Seteamos los estados a vacío
+      // Seteamos los estados a vacío
       setUser(null);
       setToken(null);
     } catch (error) {

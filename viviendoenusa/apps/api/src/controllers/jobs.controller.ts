@@ -135,13 +135,16 @@ const sendTelegramAlert = async (jobTitle: string, companyName: string) => {
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (CON REGLAS DE ORDENAMIENTO: PROPIOS > ADMIN > RESTO)
+// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
 // =====================================================================
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) : '';
-    const cleanUserId = currentUserId ? sanitizeText(String(currentUserId)) : null;
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null') 
+      ? sanitizeText(String(currentUserId)) 
+      : null;
 
+    // 🚀 Condición segura: Si es invitado (sin userId real), solo trae empleos abiertos de empresas aprobadas.
     let baseConditions = cleanUserId 
       ? sql`(${jobs.userId} = ${cleanUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)))`
       : sql`(${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL))`;
@@ -169,12 +172,12 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
     .from(jobs)
     .leftJoin(ratingTable, eq(ratingTable.referenceId, jobs.id))
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    .leftJoin(users, eq(jobs.userId, users.id)) // 👈 Cambiado para evaluar el rol del dueño de la oferta
+    .leftJoin(users, eq(jobs.userId, users.id))
     .leftJoin(companies, eq(jobs.companyId, companies.id))
     .where(finalConditions)
     .$dynamic();
 
-    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO
+    // 🚀 ORDENAMIENTO SEGURO
     if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
@@ -219,15 +222,20 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
         const reviewUserId = row.reviews ? (row.reviews as any).userId : null;
         const reviewerName = reviewUserId === ANON_UUID ? 'Anónimo' : (row.users?.name  + ' ' + (row.users?.lastName ? row.users.lastName.substring(0,1) : '') || 'Anónimo');
 
-        const { data, error } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users?.imageUrl, 3600);
+        let signedAvatarUrl = null;
+        if (row.users?.imageUrl && supabase) {
+          try {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.users.imageUrl, 3600);
+            signedAvatarUrl = data?.signedUrl || null;
+          } catch(e) {}
+        }
 
         jobsMap.get(jobId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
            userName: reviewerName, 
-           image: data?.signedUrl,
+           image: signedAvatarUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -258,7 +266,6 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
     return [];
   }
 };
-
 // =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID
 // =====================================================================

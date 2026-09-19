@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, Tabs, useSegments } from 'expo-router'; 
-import { Platform, StyleSheet, ViewStyle } from 'react-native';
+import { Platform, StyleSheet, ViewStyle, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect } from 'react';
 
 import { HapticTab } from '../../components/HapticTab';
 import Header from '../../components/ui/Header';
@@ -12,12 +13,11 @@ import {
   toggleAuth,
   useMockDispatch,
   useMockSelector,
+  setUserMetadata
 } from '../../redux/slices';
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
 import { useAppTheme } from '../../context/ThemeContext'; 
-
-
 
 export default function TabLayout() {
   const { t } = useTranslation();
@@ -39,9 +39,44 @@ export default function TabLayout() {
   const segments = useSegments();
   const isServiceSubScreen = segments.includes('lawyers') || segments.includes('community') || segments.includes('donations') || segments.includes('events') || segments.includes('stores') || segments.includes('entrepreneurs') || segments.includes('support');
 
-  // 🚀 COLORES DE ALTO CONTRASTE PARA QUE SE VEAN PERFECTO
-  const activeColor = isDark ? '#4FC3F7' : '#007AFF'; // Azul brillante en oscuro
-  const inactiveColor = isDark ? '#CFD8DC' : '#3c3c3c'; // Gris muy claro (casi blanco) en oscuro
+  // 🚀 COLORES DE ALTO CONTRASTE
+  const activeColor = isDark ? '#4FC3F7' : '#007AFF'; 
+  const inactiveColor = isDark ? '#CFD8DC' : '#3c3c3c'; 
+
+  // 🚀 TEMPORIZADOR DE INVITADO (4 MINUTOS)
+  useEffect(() => {
+    let guestTimer: any;
+    
+    // Si está logueado y es invitado, arranca el reloj
+    if (loggedIn && isGuest) {
+      guestTimer = setTimeout(() => {
+        // Alerta de que se acabó el tiempo
+        if (Platform.OS === 'web') {
+          window.alert("Tu tiempo de exploración ha terminado. ¡Regístrate gratis para seguir descubriendo Viviendo en USA!");
+          // Destruimos la sesión simulada
+          dispatch(setUserMetadata({} as any));
+          dispatch(toggleAuth());
+          window.location.replace('/?login=true'); // Lo mandamos directo al login
+        } else {
+          Alert.alert(
+            "¡Tiempo Expirado!",
+            "Tu tiempo de exploración ha terminado. ¡Regístrate gratis para seguir descubriendo Viviendo en USA!",
+            [{
+              text: "Crear Cuenta",
+              onPress: () => {
+                dispatch(setUserMetadata({} as any));
+                dispatch(toggleAuth());
+                router.replace('/?login=true');
+              }
+            }]
+          );
+        }
+      }, 4 * 60 * 1000); // 4 minutos exactos en milisegundos (240,000 ms)
+    }
+
+    // Limpiamos el temporizador si el componente se desmonta o el usuario sale antes
+    return () => clearTimeout(guestTimer);
+  }, [loggedIn, isGuest, dispatch]);
 
   const getTabBarStyle = (): ViewStyle => {
     if (Platform.OS === 'web') {

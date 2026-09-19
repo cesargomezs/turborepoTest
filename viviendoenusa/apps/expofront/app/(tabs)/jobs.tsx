@@ -28,13 +28,6 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { handleUniversalShare } from '../../utils/shareHelper';
 import { supabaseClient } from '../../utils/supabase';
 
-/*
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
-*/
-
 // 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'companies') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -108,7 +101,6 @@ export default function JobsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
 
   const usCitiesData: Record<string, string[]> = t.jobstab.statesCity; 
@@ -119,24 +111,29 @@ export default function JobsScreen() {
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
 
   const { isDark, toggleTheme } = useAppTheme();
-  const localTheme = isDark ? 'dark' : 'light';
   
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
 
+  // 🚀 Verificamos si el usuario actual es un Invitado
+  const isGuest = userMetadata?.typeDetail === 'Guest';
+
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  
+  // 🚀 Definición faltante de isSuperAdmin para corregir el error TS(2304)
+  const isSuperAdmin = !isGuest && (userMetadata?.role === 'SAdmin' || userMetadata?.email === 'cesargomez853@gmail.com');
 
+  // 🚀 RESTRICCIÓN: Si no hay token Y tampoco es invitado, redirigimos a la portada.
   useEffect(() => {
-    if (!userToken) {
+    if (!userToken && !isGuest) {
       router.replace('/');
     }
-  }, [userToken]);
+  }, [userToken, isGuest]);
   
   const currentUser = userMetadata?.name || userMetadata?.firstName || 'Cesar Gomez';
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
-  const isSuperAdmin = userMetadata?.role === 'SAdmin' || userMetadata?.email === 'cesargomez853@gmail.com'; 
 
   const jobstabData = (t.jobstab as any) || {};
   
@@ -215,7 +212,6 @@ export default function JobsScreen() {
   const [userCompanies, setUserCompanies] = useState<any[]>([]);
   const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '155.00' });
   
-  // 🚀 CAMUFLAJE: En Web permite suscripción por defecto; en Móvil fuerza a Cupón/Gratis
   const [newCompanyForm, setNewCompanyForm] = useState({ 
     name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: isWeb ? 'basic' : 'coupon'
   });
@@ -270,11 +266,12 @@ export default function JobsScreen() {
   useEffect(() => {
     const fetchTariff = async () => {
       try {
+        const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
         const res = await fetch(`${API_TARIFFS_URL}?typeCode=Jobs`, {
           method: 'GET',
-          headers: userToken ? { 'Authorization': `Bearer ${userToken}` } : undefined
+          headers
         });
-        if (res.status === 401) { router.replace('/'); return; }
+        if (res.status === 401 && !isGuest) { router.replace('/'); return; }
         
         if (res.ok) {
           const tariffsData = await res.json();
@@ -290,19 +287,19 @@ export default function JobsScreen() {
       } catch (e) { console.warn("⚠️ No se pudo cargar la tarifa de empresas"); }
     };
     fetchTariff();
-  }, []);
+  }, [userToken, isGuest]);
 
   const fetchUserCompanies = async () => {
     try {
+      const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
       const res = await fetch(`${API_COMPANIES_URL}?userId=${currentUserId}`, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}` }
+        headers
       });
-      if (res.status === 401) { router.replace('/'); return; }
+      if (res.status === 401 && !isGuest) { router.replace('/'); return; }
       
       const data = await res.json();
       if (Array.isArray(data)) {
-        // 🚀 FIRMA AL VUELO DE LOGOS DE EMPRESA DEL USUARIO
         const mappedCompanies = await Promise.all(data.map(async (comp: any) => {
           const rawLogo = comp.logoUrl;
           const freshLogo = rawLogo ? await refreshSupabaseUrl(rawLogo, 'companies') : null;
@@ -315,15 +312,15 @@ export default function JobsScreen() {
 
   const fetchPendingCompaniesForAdmin = async () => {
     try {
+      const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
       const res = await fetch(API_COMPANIES_URL, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}` }
+        headers
       });
-      if (res.status === 401) { router.replace('/'); return; }
+      if (res.status === 401 && !isGuest) { router.replace('/'); return; }
       
       const data = await res.json();
       if (Array.isArray(data)) {
-        // 🚀 FIRMA AL VUELO DE LOGOS PENDIENTES
         const mappedCompanies = await Promise.all(data.map(async (comp: any) => {
           const rawLogo = comp.logoUrl;
           const freshLogo = rawLogo ? await refreshSupabaseUrl(rawLogo, 'companies') : null;
@@ -347,16 +344,17 @@ export default function JobsScreen() {
   const fetchJobsData = async () => {
     setLoading(true);
     try {
+      // 🚀 Headers limpios con tipado seguro HeadersInit
+      const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
       const res = await fetch(`${API_JOBS_URL}?userId=${currentUserId}`, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}` }
+        headers
       });
-      if (res.status === 401) { router.replace('/'); return; }
+      if (res.status === 401 && !isGuest) { router.replace('/'); return; }
       
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // 🚀 FIRMAMOS AL VUELO IMÁGENES DE LAS RESEÑAS
         const mappedData = await Promise.all(data.map(async (item: any) => {
           const parsedReviews = item.reviews ? await Promise.all(item.reviews.map(async (r: any) => {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
@@ -405,7 +403,6 @@ export default function JobsScreen() {
     finally { setLoading(false); }
   };
 
-  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
   useFocusEffect(
     useCallback(() => {
       if (isAdminMode) {
@@ -415,11 +412,9 @@ export default function JobsScreen() {
     }, [isAdminMode, currentUserId])
   );
 
-  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        console.log("🚀 La app despertó en Empleos. Refrescando vacantes e imágenes...");
         if (isAdminMode) {
           fetchPendingCompaniesForAdmin();
         }
@@ -434,15 +429,15 @@ export default function JobsScreen() {
     if (!companyId) return triggerAlert("Aviso", "Esta vacante no tiene un perfil de empresa verificado enlazado.");
     try {
         setLoading(true);
+        const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
         const res = await fetch(`${API_COMPANIES_URL}/${companyId}`, {
           method: 'GET',
-          headers: { 'Authorization': `Bearer ${userToken}` }
+          headers
         });
-        if (res.status === 401) { router.replace('/'); return; }
+        if (res.status === 401 && !isGuest) { router.replace('/'); return; }
         
         if (res.ok) {
             const data = await res.json();
-            // 🚀 FIRMA AL VUELO DE LOGO DE LA EMPRESA CONSULTADA
             const freshLogo = data.logoUrl ? await refreshSupabaseUrl(data.logoUrl, 'companies') : null;
             setSelectedCompanyProfile({ ...data, logoUrl: freshLogo });
         } else {
@@ -473,11 +468,12 @@ export default function JobsScreen() {
       } else {
         const fetchSpecificJob = async () => {
           try {
+            const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
             const res = await fetch(`${API_JOBS_URL}/${cleanNotifId}`, {
               method: 'GET',
-              headers: { 'Authorization': `Bearer ${userToken}` }
+              headers
             });
-            if (res.status === 401) { router.replace('/'); return; }
+            if (res.status === 401 && !isGuest) { router.replace('/'); return; }
             
             if (res.ok) {
               const data = await res.json();
@@ -534,7 +530,6 @@ export default function JobsScreen() {
     return SUGGESTED_TITLES[activeFilter] || [];
   }, [activeFilter, SUGGESTED_TITLES]);
 
-  // 🚀 HELPER MULTIPLATAFORMA ALERTA WEB Y APP
   const triggerAlert = (title: string, message: string) => {
     if (isWeb) { window.alert(`${title}\n${message}`); } 
     else { Alert.alert(title, message); }
@@ -559,9 +554,10 @@ export default function JobsScreen() {
     let publicUrl = '';
 
     try {
+      const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
       const res = await fetch(`${API_COMPANIES_URL}/${job.companyId}`, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}` }
+        headers
       });
       if (res.ok) {
         const companyData = await res.json();
@@ -611,6 +607,11 @@ export default function JobsScreen() {
   };
 
   const handleRegisterCompany = async () => {
+    if (isGuest) {
+      triggerAlert("Acceso Restringido", "Los invitados no pueden registrar empresas. ¡Crea una cuenta gratis!");
+      return;
+    }
+
     if (!newCompanyForm.name.trim() || !newCompanyForm.phone.trim()) {
       triggerAlert("Campos Incompletos", "Por favor ingresa el nombre de la empresa y teléfono.");
       return;
@@ -666,8 +667,6 @@ export default function JobsScreen() {
       }
 
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : newCompanyForm.premiumPlan;
-      
-      // 🚀 LIMPIEZA TOTAL DEL CUPÓN FRONTEND (Sin "COUPON-")
       const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
       const payload = {
@@ -700,15 +699,12 @@ export default function JobsScreen() {
 
       const savedCompany = await res.json();
       
-      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!res.ok) {
         throw new Error(savedCompany.error || "Error al registrar la empresa");
       }
 
-      // 🚀 PARCHE BOOLEANO ESTRICTO (Detecta si nació aprobada por el cupón)
       const isBackendApproved = String(savedCompany.status) === 'approved' || savedCompany.isVerified === true;
       
-      // Añadir directamente a las empresas del usuario en memoria
       setUserCompanies(prev => [savedCompany, ...prev]);
       
       setNewJob(prev => ({ 
@@ -726,7 +722,6 @@ export default function JobsScreen() {
       setFormPayMethod('Zelle');
       setPublishView('form');
       
-      // 🚀 ALERTA DIFERIDA PARA EVITAR CONGELAMIENTO EN WEB
       setTimeout(() => {
         let successMsg = "";
         if (savedCompany.message) {
@@ -747,6 +742,11 @@ export default function JobsScreen() {
   };
 
   const handlePublishJob = async () => {
+    if (isGuest) {
+      triggerAlert("Acceso Restringido", "Los invitados no pueden publicar vacantes. ¡Crea una cuenta gratis!");
+      return;
+    }
+
     if (!newJob.title || !newJob.companyId || !newJob.city || !newJob.description || newJob.shifts.length === 0 || !newJob.salaryMin) {
       triggerAlert("Campos Incompletos", "Selecciona una empresa registrada y completa todos los campos de la vacante.");
       return;
@@ -847,6 +847,7 @@ export default function JobsScreen() {
   };
 
   const toggleJobStatus = async (id: string, currentIsOpen: boolean) => {
+    if (isGuest) return;
     try {
       const willBeOpen = !currentIsOpen;
       setJobs(prevJobs => prevJobs.map(job => {
@@ -874,6 +875,11 @@ export default function JobsScreen() {
   };
 
   const handleSubmitReview = async () => {
+    if (isGuest) {
+      triggerAlert("Acceso Restringido", "Los invitados no pueden dejar reseñas. ¡Crea una cuenta gratis!");
+      return;
+    }
+
     if (!reviewForm.text.trim() || reviewForm.rating === 0) return triggerAlert("Incompleto", "Ingresa estrellas y un comentario.");
     
     if (containsBadWords(reviewForm.text)) {
@@ -909,7 +915,6 @@ export default function JobsScreen() {
 
       const savedReview = await res.json();
       
-      // 🚀 FIRMA AL VUELO DE LA FOTO DEL USUARIO QUE ACABA DE RESEÑAR
       const freshReviewImage = savedReview.image ? await refreshSupabaseUrl(savedReview.image, 'users') : (reviewForm.isAnonymous ? null : (userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg'));
 
       const newReviewFormatted = { 
@@ -1283,7 +1288,7 @@ export default function JobsScreen() {
                                     </TouchableOpacity>
                                 </View>
 
-                                {(isOwner || isSuperAdmin) && job.groupedCount <= 1 && (
+                                {(isOwner || isSuperAdmin) && job.groupedCount <= 1 && !isGuest && (
                                     <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ width: '100%', marginTop: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.5)' : 'rgba(76, 175, 80, 0.5)', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.05)' : 'rgba(76, 175, 80, 0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
                                         <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={18} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 6}} />
                                         <ThemedText numberOfLines={1} style={{ color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: '900', fontSize: 13, textAlign: 'center', flexShrink: 1 }}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
@@ -1304,7 +1309,18 @@ export default function JobsScreen() {
       </ScrollView>
 
       {/* FAB Flotante */}
-      <TouchableOpacity onPress={() => { fetchUserCompanies(); setPublishView('company_list'); setModalVisible(true); }} style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+      <TouchableOpacity 
+        onPress={() => { 
+          if (isGuest) {
+            triggerAlert("Acceso Restringido", "Los invitados no pueden publicar. ¡Regístrate gratis para publicar tus vacantes!");
+            return;
+          }
+          fetchUserCompanies(); 
+          setPublishView('company_list'); 
+          setModalVisible(true); 
+        }} 
+        style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}
+      >
         <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}>
           <MaterialCommunityIcons name="briefcase-plus" size={28} color="#fff" />
         </LinearGradient>
@@ -1392,7 +1408,7 @@ export default function JobsScreen() {
                                       <ThemedText numberOfLines={1} style={{fontSize: 12, fontWeight: 'bold', color: DynamicColors.text, textAlign: 'center', flexShrink: 1}}>Ver Info</ThemedText>
                                   </TouchableOpacity>
 
-                                  {(isJobOwner || isSuperAdmin) && (
+                                  {(isJobOwner || isSuperAdmin) && !isGuest && (
                                       <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ flex: 1, height: 40, borderRadius: 12, backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.1)' : 'rgba(76, 175, 80, 0.1)', borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.3)' : 'rgba(76, 175, 80, 0.3)', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 4 }}>
                                           <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={16} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 4}} />
                                           <ThemedText numberOfLines={1} style={{color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: 'bold', fontSize: 12, textAlign: 'center', flexShrink: 1}}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
@@ -1711,7 +1727,6 @@ export default function JobsScreen() {
                              />
                          </View>
 
-                         {/* 🚀 EL CAMUFLAJE: SOLO MOSTRAR OPCIONES DE PAGO SI ES WEB */}
                          {isWeb && (
                            <>
                              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
@@ -1735,7 +1750,6 @@ export default function JobsScreen() {
                            </>
                          )}
 
-                         {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
                          {uiPayType === 'subscription' && isWeb && (
                            <>
                              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
@@ -1802,7 +1816,6 @@ export default function JobsScreen() {
                            </>
                          )}
 
-                         {/* RUTA DE CUPÓN (VISIBLE EN AMBAS, PERO ES LA ÚNICA EN MÓVIL) */}
                          {uiPayType === 'coupon' && (
                            <View style={{ marginBottom: 10 }}>
                              <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>
@@ -2147,7 +2160,15 @@ export default function JobsScreen() {
               </View>
               {!showReviewInput ? (
                 <View style={{ flex: 1 }}>
-                  <TouchableOpacity onPress={() => { const hasReviewed = selectedCompany?.reviews?.some((r: any) => r.userId === currentUserId); if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } setShowReviewInput(true); }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                  <TouchableOpacity onPress={() => { 
+                      if (isGuest) {
+                        triggerAlert("Acceso Restringido", "Los invitados no pueden escribir reseñas. ¡Regístrate gratis!");
+                        return;
+                      }
+                      const hasReviewed = selectedCompany?.reviews?.some((r: any) => r.userId === currentUserId); 
+                      if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } 
+                      setShowReviewInput(true); 
+                    }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>

@@ -145,15 +145,19 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL
+// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
 // =====================================================================
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null') 
+      ? sanitizeText(String(currentUserId)) 
+      : null;
 
-    let baseConditions = currentUserId 
-      ? sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${currentUserId})`
-      : sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW())`;
+    // 🚀 Condición segura: Si es invitado (sin userId real), permite ver abogados aprobados sin bloquear
+    let baseConditions = cleanUserId 
+      ? sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${cleanUserId})`
+      : sql`(${lawyers.approved} = true OR ${lawyers.timepostEnd} > NOW())`;
 
     let finalConditions: any = baseConditions;
 
@@ -185,11 +189,11 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       .where(finalConditions)
       .$dynamic(); 
 
-    // 🚀 ORDENAMIENTO POR REGLAS (Prioridad Propios, luego Admin, luego Aprobados/Recientes)
-    if (currentUserId) {
+    // 🚀 ORDENAMIENTO SEGURO
+    if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
-              WHEN ${lawyers.userId} = ${currentUserId} THEN 0 
+              WHEN ${lawyers.userId} = ${cleanUserId} THEN 0 
               WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
               ELSE 2 
             END`,
@@ -230,15 +234,20 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
 
-        const { data, error } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers?.imageUrl, 3600);
+        let signedReviewerUrl = null;
+        if (row.reviewers?.imageUrl && supabase) {
+          try {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+            signedReviewerUrl = data?.signedUrl || null;
+          } catch(e) {}
+        }
         
         lawyersMap.get(lawyerId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
            name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
-           image: data?.signedUrl,
+           image: signedReviewerUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       }
@@ -283,7 +292,7 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 };
 
 // =====================================================================
-// 🔍 2. CONSULTA INDIVIDUAL POR ID
+// 🔍 2. CONSULTA INDIVIDUAL POR ID (OPTIMIZADA)
 // =====================================================================
 export const getLawyerByIdWithReviews = async (id: string) => {
   try {
@@ -323,29 +332,22 @@ export const getLawyerByIdWithReviews = async (id: string) => {
     };
 
     for (const row of rows) {
-      if (row.reviewers && row.reviewers.imageUrl) {
-        const { data, error } = await supabase
-        .storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+      let signedReviewerUrl = null;
+      if (row.reviewers && row.reviewers.imageUrl && supabase) {
+        try {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+          signedReviewerUrl = data?.signedUrl || null;
+        } catch(e) {}
+      }
 
-        if (row.rating && row.rating.id) {
-          const commentText = row.reviews?.comment || '';
-          lawyerFinal.reviews.push({
-            ...row.rating,
-            stars: Number(row.rating.rating) || 0,
-            comment: commentText,
-            name: row.reviewers.name + ' ' + (row.reviewers.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
-            image: data?.signedUrl,
-            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          });
-        }
-      } else if (row.rating && row.rating.id) {
+      if (row.rating && row.rating.id) {
         const commentText = row.reviews?.comment || '';
         lawyerFinal.reviews.push({
           ...row.rating,
           stars: Number(row.rating.rating) || 0,
           comment: commentText,
-          name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers?.lastName.substring(0, 1) : ''),
-          image: null,
+          name: row.reviewers?.name ? `${row.reviewers.name} ${row.reviewers.lastName ? row.reviewers.lastName.substring(0, 1) : ''}` : 'Anónimo',
+          image: signedReviewerUrl,
           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
       }

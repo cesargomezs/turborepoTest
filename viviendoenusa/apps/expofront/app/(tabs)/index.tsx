@@ -179,8 +179,9 @@ export default function HomeScreen() {
   const [authProvider, setAuthProvider] = useState('local');
   const [socialToken, setSocialToken] = useState(''); 
   
-  const [form, setForm] = useState({ 
-    email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() 
+  // 🚀 Fecha Nula por Defecto
+  const [form, setForm] = useState<{ email: string; password: string; firstName: string; lastName: string; phone: string; zipCode: string; birthDate: Date | null; }>({ 
+    email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: null 
   });
 
   const dispatch = useMockDispatch();
@@ -193,7 +194,8 @@ export default function HomeScreen() {
 
   const [showWebLanding, setShowWebLanding] = useState(() => {
     if (isWebPlatform) {
-      if (params?.login === 'true' && !window.location.search.includes('forceLanding')) return false;
+      if (params?.login === 'true' && !Platform.OS.includes('web' as any)) return false; 
+      if (params?.login === 'true' && typeof window !== 'undefined' && !window.location.search.includes('forceLanding')) return false;
       return true;
     }
     return false;
@@ -390,9 +392,6 @@ export default function HomeScreen() {
     if (isWebPlatform && showWebLanding && !loggedIn) fetchStats();
   }, [loggedIn, showWebLanding, isWebPlatform]);
 
-  // 🚀 CORRECCIÓN DEL BUCLE INFINITO AL CERRAR SESIÓN:
-  // Hemos limpiado la dependencia para que no escuche el estado de `loggedIn` y 
-  // no entre en bucle infinito al cerrar sesión recuperando los datos del cache.
   useEffect(() => {
     if (!loggedIn && isWebPlatform && params?.login === 'true') {
       setShowWebLanding(false);
@@ -427,47 +426,67 @@ export default function HomeScreen() {
     });
   };
 
-  useEffect(() => {
-    const verifyGoogle = async (id_token: string) => {
-      try {
-        const pushTokenReal = await getSafePushToken();
-        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
-        if (!API_URL) throw new Error("Falta configuración del servidor");
-        
-        const res = await fetch(`${API_URL}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken: id_token, isGoogle: true, pushToken: pushTokenReal, deviceType: Platform.OS })
-        });
-        const dataRes = await res.json();
-
-        if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
-          await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
-        } else {
-          let googleEmail = dataRes.user?.email || dataRes.email || ''; 
-          let name = dataRes.user?.firstName || '';
-          let lastName = dataRes.user?.lastName || '';
-          try {
-            const base64Url = id_token.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-            const claims = JSON.parse(jsonPayload);
-            if(claims.email) googleEmail = claims.email;
-            if(claims.given_name) name = claims.given_name;
-            if(claims.family_name) lastName = claims.family_name;
-          } catch(e) {}
-
-          const randomPassword = Math.random().toString(36).slice(-12);
-          setForm(prev => ({ ...prev, email: googleEmail, firstName: name, lastName, password: randomPassword }));
-          setAuthProvider('google');
-          setSocialToken(id_token); 
-          setAcceptedTerms(false); 
-          setShowCompletionModal(true);
-        }
-      } catch (error) {
-        isWebPlatform ? window.alert("Error de conexión.") : Alert.alert("Error", "No se pudo verificar la cuenta.");
-      }
+  // 🚀 INICIAR SESIÓN COMO INVITADO
+  const handleGuestLogin = () => {
+    Keyboard.dismiss();
+    const guestUser = {
+      id: 'guest_' + Date.now(),
+      email: 'invitado@viviendoenusa.app',
+      firstName: 'Invitado',
+      lastName: '',
+      typeDetail: 'Guest', // Activa el reloj de 4 min en _layout
     };
+    
+    dispatch(setUserMetadata({ ...guestUser, token: 'guest_token_temp' } as any));
+    if (!loggedIn) {
+      dispatch(toggleAuth());
+    }
+    setShowWebLanding(false);
+    router.replace('/');
+  };
+
+  const verifyGoogle = async (id_token: string) => {
+    try {
+      const pushTokenReal = await getSafePushToken();
+      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+      if (!API_URL) throw new Error("Falta configuración del servidor");
+      
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: id_token, isGoogle: true, pushToken: pushTokenReal, deviceType: Platform.OS })
+      });
+      const dataRes = await res.json();
+
+      if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
+        await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
+      } else {
+        let googleEmail = dataRes.user?.email || dataRes.email || ''; 
+        let name = dataRes.user?.firstName || '';
+        let lastName = dataRes.user?.lastName || '';
+        try {
+          const base64Url = id_token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+          const claims = JSON.parse(jsonPayload);
+          if(claims.email) googleEmail = claims.email;
+          if(claims.given_name) name = claims.given_name;
+          if(claims.family_name) lastName = claims.family_name;
+        } catch(e) {}
+
+        const randomPassword = Math.random().toString(36).slice(-12);
+        setForm(prev => ({ ...prev, email: googleEmail, firstName: name, lastName, password: randomPassword }));
+        setAuthProvider('google');
+        setSocialToken(id_token); 
+        setAcceptedTerms(false); 
+        setShowCompletionModal(true);
+      }
+    } catch (error) {
+      isWebPlatform ? window.alert("Error de conexión.") : Alert.alert("Error", "No se pudo verificar la cuenta.");
+    }
+  };
+
+  useEffect(() => {
     if (response?.type === 'success') verifyGoogle(response.params.id_token);
   }, [response]);
 
@@ -638,19 +657,35 @@ export default function HomeScreen() {
     }
     const today = new Date();
     const birthDate = form.birthDate;
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDifference = today.getMonth() - birthDate.getMonth();
-    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) age--; 
-    if (age < 18) {
-      const ageMsg = isEnglish ? "You must be at least 18 years old to register." : "Debes tener al menos 18 años para registrarte.";
-      isWebPlatform ? window.alert(ageMsg) : Alert.alert("Acceso denegado", ageMsg);
-      return; 
+    
+    if (birthDate) {
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDifference = today.getMonth() - birthDate.getMonth();
+      if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) age--; 
+      if (age < 18) {
+        const ageMsg = isEnglish ? "You must be at least 18 years old to register." : "Debes tener al menos 18 años para registrarte.";
+        isWebPlatform ? window.alert(ageMsg) : Alert.alert("Acceso denegado", ageMsg);
+        return; 
+      }
     }
+    
     if (isSubmittingProfile) return;
     setIsSubmittingProfile(true);
     try {
       const pushTokenReal = await getSafePushToken(); 
-      const finalPayload = { email: form.email, firstName: form.firstName, lastName: form.lastName, password: form.password, phone: form.phone, zip: form.zipCode, birth: form.birthDate.toISOString(), isVerified: true, authProvider: authProvider, pushToken: pushTokenReal, deviceType: Platform.OS };
+      const finalPayload = { 
+        email: form.email, 
+        firstName: form.firstName, 
+        lastName: form.lastName, 
+        password: form.password, 
+        phone: form.phone, 
+        zip: form.zipCode, 
+        birth: form.birthDate ? form.birthDate.toISOString() : null, 
+        isVerified: true, 
+        authProvider: authProvider, 
+        pushToken: pushTokenReal, 
+        deviceType: Platform.OS 
+      };
       const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
       if (!API_URL) throw new Error("Falta configuración del servidor"); 
       const response = await fetch(`${API_URL}/auth/register`, {
@@ -702,11 +737,13 @@ export default function HomeScreen() {
       if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
         setForm({ ...form, birthDate: new Date(year, month - 1, day) });
       }
+    } else {
+      setForm({ ...form, birthDate: null });
     }
   };
   
   const getSafeDateString = () => {
-    return !isNaN(form.birthDate.getTime()) ? form.birthDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    return form.birthDate && !isNaN(form.birthDate.getTime()) ? form.birthDate.toISOString().split('T')[0] : '';
   };
 
   const handleAuthAction = async () => {
@@ -729,7 +766,7 @@ export default function HomeScreen() {
       if (!API_URL) throw new Error("Falta configuración del servidor");
       const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
       const payload = isRegistering 
-        ? { data: { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, phone: form.phone, zip: form.zipCode, birth: form.birthDate.toISOString(), isVerified: false, pushToken: pushTokenReal, deviceType: Platform.OS } }
+        ? { data: { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, phone: form.phone, zip: form.zipCode, birth: form.birthDate ? form.birthDate.toISOString() : null, isVerified: false, pushToken: pushTokenReal, deviceType: Platform.OS } }
         : { email: form.email, password: form.password, isGoogle: false, pushToken: pushTokenReal, deviceType: Platform.OS }; 
       const response = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -1143,7 +1180,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity accessibilityRole="button" onPress={() => setShowWebLanding(false)} style={[styles.storeButtonLightBig, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF', borderColor: DynamicColors.accent }]}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => { setShowWebLanding(false); router.replace('/'); }} style={[styles.storeButtonLightBig, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF', borderColor: DynamicColors.accent }]}>
                 <MaterialCommunityIcons name="web" size={30} color={DynamicColors.accent} />
                 <View style={{ marginLeft: 12 }}>
                   <Text style={[styles.storeButtonSubBig, { color: DynamicColors.subtext }]}>{isEnglish ? "Browse on" : "Navegar en"}</Text>
@@ -1381,7 +1418,7 @@ export default function HomeScreen() {
                             <TouchableOpacity 
                               onPress={() => { 
                                 setShowWebLanding(true); 
-                                setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: new Date() });
+                                setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: null });
                                 router.replace('/');
                               }} 
                               style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 2 }}
@@ -1496,14 +1533,23 @@ export default function HomeScreen() {
                                     </>
                                   )}
                                   
-                                  <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate" : "Fecha de Nacimiento")}</ThemedText>
+                                  <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate (Optional)" : "Fecha de Nacimiento (Opcional)")}</ThemedText>
                                   <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 10 }]}>
                                     {isWebPlatform ? (
                                       <input type="date" onChange={handleWebDateChange} value={getSafeDateString()} style={{ width: '100%', padding: '10px', border: 'none', background: 'transparent', color: DynamicColors.text, outline: 'none', fontSize: '15px', cursor: 'pointer' }} />
                                     ) : (
                                       <>
-                                        <ThemedText style={{ color: DynamicColors.text, fontWeight: '700' }}>{!isNaN(form.birthDate.getTime()) ? form.birthDate.toLocaleDateString() : ''}</ThemedText>
-                                        <MaterialCommunityIcons name={showDatePicker ? "chevron-up" : "calendar-edit"} size={20} color="#FF5F6D" />
+                                        <ThemedText style={{ color: DynamicColors.text, fontWeight: '700' }}>
+                                          {form.birthDate && !isNaN(form.birthDate.getTime()) ? form.birthDate.toLocaleDateString() : (isEnglish ? 'Select date' : 'Seleccionar fecha')}
+                                        </ThemedText>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                          {form.birthDate && (
+                                            <TouchableOpacity onPress={() => setForm({...form, birthDate: null})} style={{ marginRight: 15, zIndex: 10 }}>
+                                              <MaterialCommunityIcons name="close-circle" size={20} color={DynamicColors.subtext} />
+                                            </TouchableOpacity>
+                                          )}
+                                          <MaterialCommunityIcons name={showDatePicker ? "chevron-up" : "calendar-edit"} size={20} color="#FF5F6D" />
+                                        </View>
                                         <TouchableOpacity onPress={() => { Keyboard.dismiss(); setShowDatePicker(!showDatePicker); }} style={StyleSheet.absoluteFill} />
                                       </>
                                     )}
@@ -1511,7 +1557,7 @@ export default function HomeScreen() {
                                   {showDatePicker && !isAndroid && !isWebPlatform && (
                                       <View style={isIOS ? styles.iosPickerContainer : null}>
                                           {isIOS && (<TouchableOpacity onPress={closeDatePickerIOS} style={styles.iosPickerDoneButton}><ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>{t?.hometab?.ready || (isEnglish ? "Ready" : "Listo")}</ThemedText></TouchableOpacity>)}
-                                          <DateTimePicker value={form.birthDate} mode="date" display={isIOS ? "spinner" : "default"} onChange={onDateChange} textColor={DynamicColors.text} maximumDate={new Date()} />
+                                          <DateTimePicker value={form.birthDate || new Date()} mode="date" display={isIOS ? "spinner" : "default"} onChange={onDateChange} textColor={DynamicColors.text} maximumDate={new Date()} />
                                       </View>
                                   )}
 
@@ -1608,6 +1654,18 @@ export default function HomeScreen() {
                                   {!isWebPlatform && isIOS && (
                                     <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
                                   )}
+                                  
+                                  {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (EN REGISTRO) */}
+                                  <TouchableOpacity 
+                                    activeOpacity={0.8}
+                                    onPress={handleGuestLogin}
+                                    style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
+                                  >
+                                    <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
+                                      <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
+                                      {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
+                                    </Text>
+                                  </TouchableOpacity>
                                 </>
                               ) : (
                                 !showManualLogin ? (
@@ -1636,6 +1694,18 @@ export default function HomeScreen() {
                                         <MaterialCommunityIcons name="email-outline" size={16} color={DynamicColors.text} style={{ marginRight: 5 }} /> {isEnglish ? "Sign in with Email" : "Iniciar sesión con Correo"}
                                       </Text>
                                     </TouchableOpacity>
+                                    
+                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (EN LOGIN) */}
+                                    <TouchableOpacity 
+                                      activeOpacity={0.8}
+                                      onPress={handleGuestLogin}
+                                      style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
+                                    >
+                                      <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
+                                        <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
+                                        {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
+                                      </Text>
+                                    </TouchableOpacity>
                                   </View>
                                 ) : (
                                   <View style={{ width: '100%' }}>
@@ -1660,6 +1730,18 @@ export default function HomeScreen() {
                                     {!isWebPlatform && isIOS && (
                                       <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
                                     )}
+
+                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (EN MANUAL LOGIN) */}
+                                    <TouchableOpacity 
+                                      activeOpacity={0.8}
+                                      onPress={handleGuestLogin}
+                                      style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
+                                    >
+                                      <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
+                                        <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
+                                        {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
+                                      </Text>
+                                    </TouchableOpacity>
                                   </View>
                                 )
                               )}
@@ -1767,14 +1849,23 @@ export default function HomeScreen() {
                   </View>
 
                   <View style={{ width: '100%' }}>
-                    <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate" : "Fecha de Nacimiento")}</ThemedText>
+                    <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate (Optional)" : "Fecha de Nacimiento (Opcional)")}</ThemedText>
                     <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 12 }]}>
                       {isWebPlatform ? (
                         <input type="date" onChange={handleWebDateChange} value={getSafeDateString()} style={{ width: '100%', padding: '12px', border: 'none', background: 'transparent', color: DynamicColors.text, outline: 'none', fontSize: '16px', cursor: 'pointer' }} />
                       ) : (
                         <>
-                          <ThemedText style={{ color: DynamicColors.text, fontWeight: '700' }}>{!isNaN(form.birthDate.getTime()) ? form.birthDate.toLocaleDateString() : ''}</ThemedText>
-                          <MaterialCommunityIcons name={showDatePicker ? "chevron-up" : "calendar-edit"} size={20} color="#FF5F6D" />
+                          <ThemedText style={{ color: DynamicColors.text, fontWeight: '700' }}>
+                            {form.birthDate && !isNaN(form.birthDate.getTime()) ? form.birthDate.toLocaleDateString() : (isEnglish ? 'Select date' : 'Seleccionar fecha')}
+                          </ThemedText>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {form.birthDate && (
+                              <TouchableOpacity onPress={() => setForm({...form, birthDate: null})} style={{ marginRight: 15, zIndex: 10 }}>
+                                <MaterialCommunityIcons name="close-circle" size={20} color={DynamicColors.subtext} />
+                              </TouchableOpacity>
+                            )}
+                            <MaterialCommunityIcons name={showDatePicker ? "chevron-up" : "calendar-edit"} size={20} color="#FF5F6D" />
+                          </View>
                           <TouchableOpacity onPress={() => setShowDatePicker(!showDatePicker)} style={StyleSheet.absoluteFill} />
                         </>
                       )}
@@ -1782,7 +1873,7 @@ export default function HomeScreen() {
                     {showDatePicker && !isAndroid && !isWebPlatform && (
                         <View style={isIOS ? styles.iosPickerContainer : null}>
                             {isIOS && (<TouchableOpacity onPress={closeDatePickerIOS} style={styles.iosPickerDoneButton}><ThemedText style={{color: '#FF5F6D', fontWeight: '800'}}>{t?.hometab?.ready || (isEnglish ? "Ready" : "Listo")}</ThemedText></TouchableOpacity>)}
-                            <DateTimePicker value={form.birthDate} mode="date" display={isIOS ? "spinner" : "default"} onChange={onDateChange} textColor={DynamicColors.text} maximumDate={new Date()} />
+                            <DateTimePicker value={form.birthDate || new Date()} mode="date" display={isIOS ? "spinner" : "default"} onChange={onDateChange} textColor={DynamicColors.text} maximumDate={new Date()} />
                         </View>
                     )}
                   </View>
@@ -1798,19 +1889,40 @@ export default function HomeScreen() {
                 </View>
               </ScrollView>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
-                <TouchableOpacity 
-                  style={[styles.primaryWrapper, { width: '100%', height: 45 }, (!acceptedTerms || isSubmittingProfile) && { opacity: 0.4 }]} 
-                  onPress={submitProfileCompletion} 
-                  disabled={!acceptedTerms || isSubmittingProfile}
-                >
-                  <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                    {isSubmittingProfile ? (
-                      <ActivityIndicator color="#FFF" size="small" />
-                    ) : (
-                      <Text style={styles.primaryText}>{isEnglish ? "Save and Continue" : "Guardar y Continuar"}</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
+                
+                {/* 🚀 BOTONES DE COMPLETAR PERFIL (CON OPCIÓN DE OMITIR) */}
+                <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+                  <TouchableOpacity 
+                    style={{ flex: 1, height: 45, justifyContent: 'center', alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border }} 
+                    onPress={() => {
+                      if (!acceptedTerms) {
+                        Alert.alert("Atención", isEnglish ? "Please accept Terms and Conditions." : "Debes aceptar los términos y condiciones.");
+                        return;
+                      }
+                      if (!form.firstName) setForm(prev => ({...prev, firstName: 'Usuario'}));
+                      if (!form.lastName) setForm(prev => ({...prev, lastName: 'Apple/Google'}));
+                      submitProfileCompletion();
+                    }}
+                    disabled={isSubmittingProfile}
+                  >
+                    <Text style={{ color: DynamicColors.text, fontWeight: '700' }}>{isEnglish ? "Skip Optionals" : "Omitir Opcionales"}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.primaryWrapper, { flex: 1, height: 45, marginVertical: 0 }, (!acceptedTerms || isSubmittingProfile) && { opacity: 0.4 }]} 
+                    onPress={submitProfileCompletion} 
+                    disabled={!acceptedTerms || isSubmittingProfile}
+                  >
+                    <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
+                      {isSubmittingProfile ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <Text style={styles.primaryText}>{isEnglish ? "Save" : "Guardar"}</Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+
               </View>
             </View>
           </View>

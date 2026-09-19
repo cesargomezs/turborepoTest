@@ -173,13 +173,16 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (FILTRADA POR APROBACIÓN O DUEÑO CON ORDENAMIENTO)
+// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
-    const cleanUserId = userId ? sanitizeText(String(userId)) : null;
+    const cleanUserId = (userId && userId !== 'undefined' && userId !== 'null' && userId !== '') 
+      ? sanitizeText(String(userId)) 
+      : null;
     
+    // 🚀 Condición segura: Si es invitado (sin userId real), solo filtra por eventos aprobados y vigentes
     let baseConditions = cleanUserId 
       ? and(or(eq(events.approved, true), eq(events.userId, cleanUserId)), sql`${events.dateEvent} >= CURRENT_DATE`)
       : and(eq(events.approved, true), sql`${events.dateEvent} >= CURRENT_DATE`);
@@ -206,9 +209,9 @@ export const getEvents = async (zip?: string, userId?: string) => {
       .leftJoin(users, eq(events.userId, users.id)) 
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .where(finalConditions)
-      .$dynamic(); // 🚀 Permite aplicar ORDER BY dinámico
+      .$dynamic(); 
 
-    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
+    // 🚀 ORDENAMIENTO SEGURO
     if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 

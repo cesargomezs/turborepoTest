@@ -156,15 +156,19 @@ const sendTelegramAlert = async (storeName: string, refCode: string, method: str
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL CON REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
+// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
 // =====================================================================
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null') 
+      ? sanitizeText(String(currentUserId)) 
+      : null;
 
-    let baseConditions = currentUserId
-      ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${currentUserId})`
-      : sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW())`;
+    // 🚀 Condición segura: Si es invitado (sin userId real), permite ver negocios aprobados de forma pública
+    let baseConditions = cleanUserId
+      ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${cleanUserId})`
+      : sql`(${stores.approved} = true OR ${stores.timepostEnd} > NOW())`;
 
     let finalConditions: any = baseConditions;
 
@@ -195,11 +199,11 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
     .where(finalConditions)
     .$dynamic();
 
-    // 🚀 APLICACIÓN DE LAS REGLAS DE ORDENAMIENTO
-    if (currentUserId) {
+    // 🚀 ORDENAMIENTO SEGURO
+    if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
-              WHEN ${stores.userId} = ${currentUserId} THEN 0 
+              WHEN ${stores.userId} = ${cleanUserId} THEN 0 
               WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
               ELSE 2 
             END`,
@@ -241,16 +245,18 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
         const commentText = row.reviews?.comment || '';
         let signedImageUrl = null;
 
-        if (row.reviewers?.imageUrl) {
-          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
-          if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        if (row.reviewers?.imageUrl && supabase) {
+          try {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+            if (data?.signedUrl) signedImageUrl = data.signedUrl;
+          } catch(e) {}
         }
 
         storesMap.get(storeId).reviews.push({
            ...row.rating,
            stars: Number(row.rating.rating) || 0,
            comment: commentText,
-           name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
+           name: row.reviewers?.name ? `${row.reviewers.name} ${row.reviewers.lastName ? row.reviewers.lastName.substring(0, 1) : ''}` : 'Anónimo',
            image: signedImageUrl,
            displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
