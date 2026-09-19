@@ -150,7 +150,8 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
-    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null') 
+    // 🚀 NUEVA VALIDACIÓN ANTI-GUEST
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
 

@@ -161,7 +161,8 @@ const sendTelegramAlert = async (storeName: string, refCode: string, method: str
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
-    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null') 
+    // 🚀 NUEVA VALIDACIÓN ANTI-GUEST
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
 

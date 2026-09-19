@@ -178,7 +178,8 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
-    const cleanUserId = (userId && userId !== 'undefined' && userId !== 'null' && userId !== '') 
+    // 🚀 NUEVA VALIDACIÓN ANTI-GUEST (aquí tu variable se llama userId)
+    const cleanUserId = (userId && userId !== 'undefined' && userId !== 'null' && userId !== '' && !String(userId).startsWith('guest_')) 
       ? sanitizeText(String(userId)) 
       : null;
     

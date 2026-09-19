@@ -140,7 +140,7 @@ const sendTelegramAlert = async (jobTitle: string, companyName: string) => {
 export const getJobs = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) : '';
-    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null') 
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
 
