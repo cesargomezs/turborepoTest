@@ -131,15 +131,24 @@ const getCurrentCompanyPrices = async () => {
   return { basic: "50.00", premium: "99.00", unlimited: "149.00" };
 };
 
+// =====================================================================
+// 🔍 1. CONSULTA GENERAL DE EMPRESAS (OPTIMIZADA PARA INVITADOS)
+// =====================================================================
 export const getCompanies = async (currentUserId?: string) => {
   try {
+    // 🚀 VALIDACIÓN ANTI-GUEST
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
+      ? sanitizeText(String(currentUserId)) 
+      : null;
+
     let query = db.select().from(companies)
       .leftJoin(payments, and(eq(payments.entityId, companies.id), eq(payments.entityType, 'company')))
       .orderBy(desc(companies.createdAt))
       .$dynamic();
 
-    if (currentUserId) {
-      query = query.where(eq(companies.userId, currentUserId));
+    // 🚀 Solo filtra si es un usuario válido
+    if (cleanUserId) {
+      query = query.where(eq(companies.userId, cleanUserId));
     }
 
     const rows = await query;
@@ -173,10 +182,18 @@ export const getCompanies = async (currentUserId?: string) => {
   }
 };
 
-export const getCompanyById = async (id: string) => {
+// =====================================================================
+// 🔍 2. CONSULTAR EMPRESA POR ID (OPTIMIZADA PARA INVITADOS)
+// =====================================================================
+export const getCompanyById = async (id: string, currentUserId?: string) => {
   try {
     const cleanId = sanitizeText(id);
     if (!cleanId) return null;
+
+    // 🚀 VALIDACIÓN ANTI-GUEST: Asegurar que currentUserId no rompa Postgres si es invitado
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
+      ? sanitizeText(String(currentUserId)) 
+      : null;
 
     const rows = await db.select().from(companies)
       .leftJoin(payments, and(eq(payments.entityId, companies.id), eq(payments.entityType, 'company')))
@@ -185,6 +202,8 @@ export const getCompanyById = async (id: string) => {
     if (!rows || rows.length === 0) return null;
     
     const company = rows[0].companies;
+
+    // 🚀 FIRMA AL VUELO DE SUPABASE
     if (company.logoUrl && !company.logoUrl.startsWith('http')) {
         const cleanName = company.logoUrl.startsWith('companies/') ? company.logoUrl : `companies/${company.logoUrl}`;
         const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(cleanName, 3600);
@@ -197,6 +216,7 @@ export const getCompanyById = async (id: string) => {
       paymentMethod: rows[0].payments?.paymentMethod || null,
     };
   } catch (error: any) {
+    console.error("❌ Error en getCompanyById:", error);
     throw new Error(`Error al obtener la empresa: ${error.message}`);
   }
 };
@@ -269,9 +289,9 @@ export const createCompany = async (data: any) => {
         email: sanitizeText(data.email) || null,
         website: sanitizeText(data.website) || null,
         logoUrl: finalLogoUrl, 
-        isVerified: isApproved, // 👈 Se controla con la variable de arriba
+        isVerified: isApproved, 
         premiumPlan: isCoupon ? 'coupon' : selectedPlan, 
-        status: isApproved ? 'approved' : 'pending', // 👈 Se controla con la variable de arriba
+        status: isApproved ? 'approved' : 'pending', 
         // 🚀 EL FIX MAESTRO PARA POSTGRES
         timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
         timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
