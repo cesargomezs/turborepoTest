@@ -8,15 +8,21 @@ export interface AuthRequest extends Request {
 export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
 
-  // 1. Si no viene el header (Como en tu foto del navegador), bloqueamos:
+  // 🚀 PERMITIR LECTURA PÚBLICA (MÉTODO GET): Si es una petición GET y no hay header o es invitado, dejamos pasar.
+  const token = authHeader ? authHeader.split(' ')[1] : null;
+  
+  if (req.method === 'GET' && (!authHeader || !token || token === 'guest_token_temp' || token === 'undefined' || token === 'null')) {
+    req.user = { id: null, role: 'guest' };
+    return next();
+  }
+
+  // 1. Si no viene el header en peticiones de escritura (POST, PUT, DELETE), bloqueamos:
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log("⛔ Petición bloqueada: No hay header de autorización.");
     return res.status(401).json({ error: 'Acceso denegado. Se requiere iniciar sesión.', redirect: '/' });
   }
 
-  const token = authHeader.split(' ')[1];
-
-  // 2. Si el frontend envía "Bearer undefined" o "Bearer null" (Como en tu foto de Network), bloqueamos:
+  // 2. Si el frontend envía "Bearer undefined" o "Bearer null", bloqueamos:
   if (!token || token === 'undefined' || token === 'null') {
     console.log("⛔ Petición bloqueada: El token recibido es 'undefined' o 'null'.");
     return res.status(401).json({ error: 'Token vacío o corrupto.', redirect: '/' });
