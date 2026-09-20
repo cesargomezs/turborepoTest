@@ -425,6 +425,7 @@ export default function JobsScreen() {
   }, [isFocused, isAdminMode, currentUserId]);
 
   const handleOpenCompanyProfile = async (companyId: string) => {
+    // 🚀 PERMITIR A LOS INVITADOS VER LAS OFERTAS DE LA EMPRESA
     if (!companyId) return triggerAlert("Aviso", "Esta vacante no tiene un perfil de empresa verificado enlazado.");
     try {
         setLoading(true);

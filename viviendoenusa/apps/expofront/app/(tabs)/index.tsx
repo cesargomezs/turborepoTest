@@ -179,7 +179,6 @@ export default function HomeScreen() {
   const [authProvider, setAuthProvider] = useState('local');
   const [socialToken, setSocialToken] = useState(''); 
   
-  // 🚀 Fecha Nula por Defecto
   const [form, setForm] = useState<{ email: string; password: string; firstName: string; lastName: string; phone: string; zipCode: string; birthDate: Date | null; }>({ 
     email: '', password: '', firstName: '', lastName: '', phone: '', zipCode: '', birthDate: null 
   });
@@ -426,7 +425,7 @@ export default function HomeScreen() {
     });
   };
 
-  // 🚀 INICIAR SESIÓN COMO INVITADO
+  // 🚀 INICIAR SESIÓN COMO INVITADO (SOLO MÓVIL)
   const handleGuestLogin = () => {
     Keyboard.dismiss();
     const guestUser = {
@@ -434,7 +433,7 @@ export default function HomeScreen() {
       email: 'invitado@viviendoenusa.app',
       firstName: 'Invitado',
       lastName: '',
-      typeDetail: 'Guest', // Activa el reloj de 4 min en _layout
+      typeDetail: 'Guest', 
     };
     
     dispatch(setUserMetadata({ ...guestUser, token: 'guest_token_temp' } as any));
@@ -1655,17 +1654,19 @@ export default function HomeScreen() {
                                     <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
                                   )}
                                   
-                                  {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (EN REGISTRO) */}
-                                  <TouchableOpacity 
-                                    activeOpacity={0.8}
-                                    onPress={handleGuestLogin}
-                                    style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
-                                  >
-                                    <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
-                                      <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
-                                      {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
-                                    </Text>
-                                  </TouchableOpacity>
+                                  {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (SOLO MÓVIL) */}
+                                  {!isWebPlatform && (
+                                    <TouchableOpacity 
+                                      activeOpacity={0.8}
+                                      onPress={handleGuestLogin}
+                                      style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
+                                    >
+                                      <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
+                                        <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
+                                        {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  )}
                                 </>
                               ) : (
                                 !showManualLogin ? (
@@ -1695,17 +1696,19 @@ export default function HomeScreen() {
                                       </Text>
                                     </TouchableOpacity>
                                     
-                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (EN LOGIN) */}
-                                    <TouchableOpacity 
-                                      activeOpacity={0.8}
-                                      onPress={handleGuestLogin}
-                                      style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
-                                    >
-                                      <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
-                                        <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
-                                        {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
-                                      </Text>
-                                    </TouchableOpacity>
+                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (SOLO MÓVIL) */}
+                                    {!isWebPlatform && (
+                                      <TouchableOpacity 
+                                        activeOpacity={0.8}
+                                        onPress={handleGuestLogin}
+                                        style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
+                                      >
+                                        <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
+                                          <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
+                                          {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    )}
                                   </View>
                                 ) : (
                                   <View style={{ width: '100%' }}>
@@ -1731,17 +1734,19 @@ export default function HomeScreen() {
                                       <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
                                     )}
 
-                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (EN MANUAL LOGIN) */}
-                                    <TouchableOpacity 
-                                      activeOpacity={0.8}
-                                      onPress={handleGuestLogin}
-                                      style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
-                                    >
-                                      <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
-                                        <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
-                                        {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
-                                      </Text>
-                                    </TouchableOpacity>
+                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (SOLO MÓVIL) */}
+                                    {!isWebPlatform && (
+                                      <TouchableOpacity 
+                                        activeOpacity={0.8}
+                                        onPress={handleGuestLogin}
+                                        style={{ width: '100%', height: 50, borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', marginTop: 15 }}
+                                      >
+                                        <Text style={{ color: DynamicColors.text, fontWeight: '700', fontSize: 15 }}>
+                                          <MaterialCommunityIcons name="account-clock-outline" size={18} color={DynamicColors.text} style={{ marginRight: 5 }} /> 
+                                          {isEnglish ? "Explore as Guest (4 Min)" : "Explorar como Invitado (4 Min)"}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    )}
                                   </View>
                                 )
                               )}
@@ -1890,7 +1895,6 @@ export default function HomeScreen() {
               </ScrollView>
               <View style={[styles.modalFooter, { borderTopColor: DynamicColors.border }]}>
                 
-                {/* 🚀 BOTONES DE COMPLETAR PERFIL (CON OPCIÓN DE OMITIR) */}
                 <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
                   <TouchableOpacity 
                     style={{ flex: 1, height: 45, justifyContent: 'center', alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border }} 

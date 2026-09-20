@@ -12,7 +12,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
-import AppTutorialModal from '@/components/AppTutorialModal';
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
 import { useAppTheme } from '../../context/ThemeContext';
@@ -35,7 +34,7 @@ const BUTTONS_DATA: ButtonConfig[] = [
   { id: 6, icon: 'lightbulb-multiple-outline', path: '/tabservices/entrepreneurs', colors: ['#f093fb', '#f5576c'], description: 'Recursos para impulsar tu emprendimiento.', isAllowedForGuest: false },
 ];
 
-// 🚀 PASOS DEL SLIDER / MINI TUTORIAL
+// 🚀 SLIDES DEL GUÍA PARA INVITADOS
 const GUEST_SLIDES = [
   {
     icon: 'compass-outline',
@@ -63,12 +62,57 @@ const GUEST_SLIDES = [
   }
 ];
 
+// 🚀 SLIDES DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS (CON COLORES POR CARACTERÍSTICA)
+const LOGGED_IN_SLIDES = [
+  {
+    icon: 'heart-pulse',
+    title: 'Red de Apoyo',
+    desc: 'Conecta con tu comunidad, comparte necesidades y encuentra ayuda mutua de forma rápida y segura.',
+    colors: ['#FF5F6D', '#FF416C']
+  },
+  {
+    icon: 'scale-balance',
+    title: 'Asesoría Legal',
+    desc: 'Encuentra abogados certificados y especialistas en diferentes áreas para resolver tus dudas legales.',
+    colors: ['#4facfe', '#00f2fe']
+  },
+  {
+    icon: 'account-group-outline',
+    title: 'Comunidad',
+    desc: 'Participa en debates, comparte avisos importantes y mantente al día con lo que pasa a tu alrededor.',
+    colors: ['#FF5F6D', '#FFC371']
+  },
+  {
+    icon: 'hand-heart',
+    title: 'Donaciones',
+    desc: 'Apoya causas benéficas, organizaciones locales y proyectos que impactan positivamente a nuestra gente.',
+    colors: ['#00c6fb', '#005bea']
+  },
+  {
+    icon: 'calendar-star',
+    title: 'Eventos',
+    desc: 'Descubre ferias, talleres, reuniones y actividades recreativas programadas en tu ciudad.',
+    colors: ['#f6d365', '#fda085']
+  },
+  {
+    icon: 'store-plus-outline',
+    title: 'Tiendas y Negocios',
+    desc: 'Explora establecimientos latinos, servicios y comercios locales recomendados cerca de ti.',
+    colors: ['#667eea', '#764ba2']
+  },
+  {
+    icon: 'lightbulb-multiple-outline',
+    title: 'Emprendedores',
+    desc: 'Encuentra recursos, guías y herramientas clave para lanzar o hacer crecer tu propio negocio.',
+    colors: ['#f093fb', '#f5576c']
+  }
+];
+
 export default function ServicesScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
   const dispatch = useMockDispatch();
   
-  // 🚀 LEEMOS EL TEMA DESDE EL CONTEXTO
   const { isDark } = useAppTheme();
 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
@@ -78,26 +122,25 @@ export default function ServicesScreen() {
   const isGuest = userMetadata?.typeDetail === 'Guest';
   const [showRestrictedModal, setShowRestrictedModal] = useState(false);
   const [showGuestSliderModal, setShowGuestSliderModal] = useState(false);
+  const [showLoggedInTutorialModal, setShowLoggedInTutorialModal] = useState(false);
+  
   const [currentSlideIdx, setCurrentSlideIdx] = useState(0);
+  const [loggedInSlideIdx, setLoggedInSlideIdx] = useState(0);
 
   const { t } = useTranslation();
   const localStyles = useUnifiedCardStyles();
 
-  // --- DIMENSIONES Y PLATAFORMA ---
   const isWeb = Platform.OS === 'web';
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
   const isLargeWeb = isWeb && width > 1000;
 
-  // 🚀 REDIRECCIÓN Y SEGURIDAD ESTRICTA PARA WEB
   useEffect(() => {
-    // 1. Si no hay token en lo absoluto
     if (!userToken) {
       router.replace('/');
       return;
     }
 
-    // 2. 🛡️ RESTRICCIÓN ANTI-HACKEO WEB: Los invitados NO pueden usar la versión web
     if (isWeb && isGuest) {
       setTimeout(() => {
         dispatch(setUserMetadata({} as any));
@@ -107,7 +150,6 @@ export default function ServicesScreen() {
     }
   }, [userToken, isGuest, isWeb]);
 
-  // Mostrar el slider de guía automáticamente SOLO a los invitados en móviles
   useEffect(() => {
     if (isGuest && !isWeb) {
       setShowGuestSliderModal(true);
@@ -115,7 +157,6 @@ export default function ServicesScreen() {
     }
   }, [isGuest, isWeb]);
 
-  // --- ANIMACIÓN: CORAZÓN LATIENDO ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -139,7 +180,7 @@ export default function ServicesScreen() {
     subtext: isDark ? '#B0BEC5' : '#546E7A',
     border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     iconInactive: isDark ? '#E0E0E0' : '#666666',
-    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', // 🚀 GRIS NEUTRO ELEGANTE COMO LA REFERENCIA
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', 
   };
 
   const handleCardPress = (item: ButtonConfig) => {
@@ -155,6 +196,14 @@ export default function ServicesScreen() {
       setCurrentSlideIdx(prev => prev + 1);
     } else {
       setShowGuestSliderModal(false);
+    }
+  };
+
+  const handleNextLoggedInSlide = () => {
+    if (loggedInSlideIdx < LOGGED_IN_SLIDES.length - 1) {
+      setLoggedInSlideIdx(prev => prev + 1);
+    } else {
+      setShowLoggedInTutorialModal(false);
     }
   };
 
@@ -188,9 +237,17 @@ export default function ServicesScreen() {
             )}
             
             <View style={localStyles.cardContent}>
-              <View style={localStyles.headerRow}>
-                <View style={{ flex: 1 }}>
-                </View>
+              <View style={[localStyles.headerRow, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                {/* 🚀 BOTÓN DE AYUDA / MANUAL PARA USUARIOS LOGUEADOS */}
+                {!isGuest && (
+                  <TouchableOpacity 
+                    onPress={() => { setShowLoggedInTutorialModal(true); setLoggedInSlideIdx(0); }}
+                    style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    <MaterialCommunityIcons name="help-circle-outline" size={22} color={textColor} />
+                  </TouchableOpacity>
+                )}
+                <View style={{ flex: 1 }} />
                 <MaterialCommunityIcons 
                   name="view-list" 
                   size={40} 
@@ -199,7 +256,7 @@ export default function ServicesScreen() {
                 />
               </View>
 
-              {/* --- ZONA: RED DE APOYO (BOTÓN ROJO DESTACADO CON CANDADO SI ES INVITADO) --- */}
+              {/* --- ZONA: RED DE APOYO --- */}
               <View style={{ 
                 paddingHorizontal: isLargeWeb ? 0 : 5, 
                 marginTop: 0, 
@@ -314,12 +371,11 @@ export default function ServicesScreen() {
         </View>
       </ScrollView>
 
-      {/* 🚀 MODAL DE SLIDER / MINI TUTORIAL PARA INVITADOS CON DISEÑO NEUTRO (IGUAL A LA REFERENCIA) */}
+      {/* 🚀 MODAL DE SLIDER / MINI TUTORIAL PARA INVITADOS */}
       <Modal visible={showGuestSliderModal && isGuest && !isWeb} transparent animationType="fade" onRequestClose={() => setShowGuestSliderModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 30, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
             
-            {/* Indicadores de Paginación Superior */}
             <View style={{ flexDirection: 'row', gap: 6, marginBottom: 30, alignItems: 'center' }}>
               {GUEST_SLIDES.map((_, i) => (
                 <View 
@@ -334,7 +390,6 @@ export default function ServicesScreen() {
               ))}
             </View>
 
-            {/* Ícono Circular con Degradado */}
             <LinearGradient 
               colors={GUEST_SLIDES[currentSlideIdx].colors as any} 
               style={{ width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 25, shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 }}
@@ -342,7 +397,6 @@ export default function ServicesScreen() {
               <MaterialCommunityIcons name={GUEST_SLIDES[currentSlideIdx].icon as any} size={42} color="#FFF" />
             </LinearGradient>
 
-            {/* Títulos y Descripción */}
             <Text style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 12 }}>
               {GUEST_SLIDES[currentSlideIdx].title}
             </Text>
@@ -351,7 +405,6 @@ export default function ServicesScreen() {
               {GUEST_SLIDES[currentSlideIdx].desc}
             </Text>
 
-            {/* Botones Inferiores: Omitir / Siguiente */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 15 }}>
               <TouchableOpacity 
                 onPress={() => setShowGuestSliderModal(false)}
@@ -379,24 +432,99 @@ export default function ServicesScreen() {
         </View>
       </Modal>
 
+      {/* 🚀 MODAL DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS (CON COLORES POR CARACTERÍSTICA) */}
+      <Modal visible={showLoggedInTutorialModal} transparent animationType="fade" onRequestClose={() => setShowLoggedInTutorialModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 30, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            {/* Indicadores de Paginación Superior */}
+            <View style={{ flexDirection: 'row', gap: 5, marginBottom: 30, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {LOGGED_IN_SLIDES.map((_, i) => (
+                <View 
+                  key={i} 
+                  style={{ 
+                    height: 5, 
+                    borderRadius: 2.5, 
+                    width: loggedInSlideIdx === i ? 20 : 5, 
+                    backgroundColor: loggedInSlideIdx === i ? LOGGED_IN_SLIDES[loggedInSlideIdx].colors[0] : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)') 
+                  }} 
+                />
+              ))}
+            </View>
+
+            {/* Ícono Circular con Degradado Característico de la Sección */}
+            <LinearGradient 
+              colors={LOGGED_IN_SLIDES[loggedInSlideIdx].colors as any} 
+              style={{ width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 25, shadowColor: LOGGED_IN_SLIDES[loggedInSlideIdx].colors[0], shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 }}
+            >
+              <MaterialCommunityIcons name={LOGGED_IN_SLIDES[loggedInSlideIdx].icon as any} size={42} color="#FFF" />
+            </LinearGradient>
+
+            {/* Títulos y Descripción */}
+            <Text style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 12 }}>
+              {LOGGED_IN_SLIDES[loggedInSlideIdx].title}
+            </Text>
+            
+            <Text style={{ fontSize: 14, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 22, marginBottom: 35, paddingHorizontal: 5 }}>
+              {LOGGED_IN_SLIDES[loggedInSlideIdx].desc}
+            </Text>
+
+            {/* Botones Inferiores */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 15 }}>
+              <TouchableOpacity 
+                onPress={() => setShowLoggedInTutorialModal(false)}
+                style={{ paddingVertical: 12, paddingHorizontal: 15 }}
+              >
+                <Text style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 15 }}>Cerrar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={handleNextLoggedInSlide}
+                style={{ flex: 1, borderRadius: 18, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={LOGGED_IN_SLIDES[loggedInSlideIdx].colors as any} style={{ paddingVertical: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>
+                    {loggedInSlideIdx === LOGGED_IN_SLIDES.length - 1 ? "¡Entendido!" : "Siguiente"}
+                  </Text>
+                  {loggedInSlideIdx < LOGGED_IN_SLIDES.length - 1 && (
+                    <MaterialCommunityIcons name="arrow-right" size={18} color="#FFF" />
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
+      </Modal>
+
       {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO */}
       <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 30, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
             
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
-              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
-            </View>
+            <LinearGradient 
+              colors={['#FF5F6D', '#FFC371']} 
+              style={{ width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 25, shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 }}
+            >
+              <MaterialCommunityIcons name="lock-alert" size={42} color="#FFF" />
+            </LinearGradient>
 
-            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 12 }}>
               Contenido Exclusivo
-            </ThemedText>
+            </Text>
             
-            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+            <Text style={{ fontSize: 14, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 22, marginBottom: 35, paddingHorizontal: 5 }}>
               Para acceder a la Red de Apoyo, Donaciones y Emprendimientos, necesitas crear una cuenta gratuita. ¡Los accesos a Abogados, Eventos y Tiendas están totalmente abiertos para ti!
-            </ThemedText>
+            </Text>
 
-            <View style={{ width: '100%', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 15 }}>
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, paddingHorizontal: 15 }}
+              >
+                <Text style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 15 }}>Seguir Explorando</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity 
                 onPress={() => {
                   setShowRestrictedModal(false);
@@ -406,31 +534,17 @@ export default function ServicesScreen() {
                     router.replace('/?login=true');
                   }, 100);
                 }}
-                style={{ borderRadius: 16, overflow: 'hidden' }}
+                style={{ flex: 1, borderRadius: 18, overflow: 'hidden' }}
               >
                 <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
-                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</Text>
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta</Text>
                 </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                onPress={() => setShowRestrictedModal(false)}
-                style={{ paddingVertical: 12, alignItems: 'center' }}
-              >
-                <Text style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</Text>
               </TouchableOpacity>
             </View>
 
           </View>
         </View>
       </Modal>
-
-      {/* 🚀 EL TUTORIAL INVISIBLE */}
-      <AppTutorialModal 
-         isDark={isDark} 
-         Colors={DynamicColors} 
-         orangeGradient={['#FF5F6D', '#FFC371']} 
-      />
     </View>
   );
 }

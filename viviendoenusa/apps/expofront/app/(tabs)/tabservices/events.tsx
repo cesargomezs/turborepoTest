@@ -805,9 +805,6 @@ export default function EventsScreen() {
                 </View>
                 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <TouchableOpacity onPress={() => { setEvents([]); setPendingEvents([]); setZipCode(''); }}>
-                      <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
-                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
                     <MaterialCommunityIcons name="calendar-star" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
                   </TouchableOpacity>
