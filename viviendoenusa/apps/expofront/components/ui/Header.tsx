@@ -717,16 +717,16 @@ export default function Header({ title }: { title?: string }) {
     <View style={{ width: '100%', backgroundColor: 'transparent' }}>
       <BlurView tint={isDark ? 'dark' : 'light'} intensity={Platform.OS === 'ios' ? 85 : 100} style={{ paddingTop: insets.top }} className="border-b border-white/10">
         <View style={[styles.headerRow, isWeb && { paddingBottom: 15 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+         <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: 8 }}>
             <TouchableOpacity activeOpacity={0.8} onPress={() => setSettingsModalVisible(true)} style={[styles.avatarContainer, { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
               <Image source={isGuest ? require('../../assets/images/cesar.webp') : currentDisplayImage} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
             </TouchableOpacity>
-            <View style={{ marginLeft: 12 }}>
-              <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors[localTheme].text }}>
-                {isGuest ? '¡Hola, Invitado!' : t.welcome + displayNameToRender + ' ' + (displayLastNameToRender ? displayLastNameToRender.substring(0, 1) : '')}
+            <View style={{ marginLeft: 12, flexShrink: 1 }}>
+              <ThemedText numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 16, fontWeight: 'bold', color: Colors[localTheme].text }}>
+                {isGuest ? '¡Hola, Invitado!' : `${t.welcome}${displayNameToRender.length > 10 ? displayNameToRender.substring(0, 10) + '...' : displayNameToRender} ${displayLastNameToRender ? displayLastNameToRender.substring(0, 1) + '.' : ''}`}
               </ThemedText>
               {isSuperAdmin && (
-                 <ThemedText style={{ fontSize: 11, color: '#FF5F6D', fontWeight: 'bold' }}>SAdmin Panel</ThemedText>
+                  <ThemedText style={{ fontSize: 11, color: '#FF5F6D', fontWeight: 'bold' }}>SAdmin Panel</ThemedText>
               )}
             </View>
           </View>

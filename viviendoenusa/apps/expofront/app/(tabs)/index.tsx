@@ -189,6 +189,7 @@ export default function HomeScreen() {
 
   const landingScrollRef = useRef<ScrollView>(null);
   const carouselRef = useRef<FlatList>(null);
+  const zipCodeRef = useRef<TextInput>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const [showWebLanding, setShowWebLanding] = useState(() => {
@@ -425,7 +426,6 @@ export default function HomeScreen() {
     });
   };
 
-  // 🚀 INICIAR SESIÓN COMO INVITADO (SOLO MÓVIL)
   const handleGuestLogin = () => {
     Keyboard.dismiss();
     const guestUser = {
@@ -641,22 +641,31 @@ export default function HomeScreen() {
     }, 300);
   };
 
-  const submitProfileCompletion = async () => {
+  const submitProfileCompletion = async (isSkipping = false) => {
     Keyboard.dismiss();
-    if (!form.firstName || !form.lastName) {
+    
+    let fName = form.firstName;
+    let lName = form.lastName;
+    
+    if (isSkipping) {
+      if (!fName) fName = 'Usuario';
+      if (!lName) lName = 'Apple/Google';
+    }
+
+    if (!fName || !lName) {
       isWebPlatform ? window.alert(isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido") : Alert.alert("Atención", isEnglish ? "Please enter your Name and Last Name" : "Por favor ingresa tu Nombre y Apellido");
       return;
     }
 
-    const contentToValidate = `${form.firstName} ${form.lastName}`;
+    const contentToValidate = `${fName} ${lName}`;
     if (containsBadWords(contentToValidate)) {
       const errorMsg = isEnglish ? "Inappropriate content detected in your name." : "Se detectó lenguaje inapropiado en tu nombre.";
       isWebPlatform ? window.alert(errorMsg) : Alert.alert(isEnglish ? "Attention" : "Atención", errorMsg);
       return;
     }
+    
     const today = new Date();
     const birthDate = form.birthDate;
-    
     if (birthDate) {
       let age = today.getFullYear() - birthDate.getFullYear();
       const monthDifference = today.getMonth() - birthDate.getMonth();
@@ -669,57 +678,81 @@ export default function HomeScreen() {
     }
     
     if (isSubmittingProfile) return;
-    setIsSubmittingProfile(true);
-    try {
-      const pushTokenReal = await getSafePushToken(); 
-      const finalPayload = { 
-        email: form.email, 
-        firstName: form.firstName, 
-        lastName: form.lastName, 
-        password: form.password, 
-        phone: form.phone, 
-        zip: form.zipCode, 
-        birth: form.birthDate ? form.birthDate.toISOString() : null, 
-        isVerified: true, 
-        authProvider: authProvider, 
-        pushToken: pushTokenReal, 
-        deviceType: Platform.OS 
-      };
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
-      if (!API_URL) throw new Error("Falta configuración del servidor"); 
-      const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: finalPayload, newImageUri: null, idToken: socialToken })
-      });
-      const dataRes = await response.json();
-      if (!response.ok) {
-        if (dataRes.error && dataRes.error.includes("ya está registrado")) {
-          setShowCompletionModal(false);
-          try {
-            const loginRes = await fetch(`${API_URL}/auth/login`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: form.email, idToken: socialToken, isGoogle: authProvider === 'google', isApple: authProvider === 'apple', pushToken: pushTokenReal, deviceType: Platform.OS })
-            });
-            const loginData = await loginRes.json();
-            if (loginRes.ok && loginData.token) {
-              await handlePostLoginSuccess(loginData.user, loginData.token, loginData);
-              return;
-            }
-          } catch(e) {}
-          const safeUser = { email: form.email, firstName: form.firstName, lastName: form.lastName };
-          await handlePostLoginSuccess(safeUser, "token_generico_bypass");
-          return;
+
+    const executeSubmit = async () => {
+      setIsSubmittingProfile(true);
+      try {
+        const pushTokenReal = await getSafePushToken(); 
+        const finalPayload = { 
+          email: form.email, 
+          firstName: fName, 
+          lastName: lName, 
+          password: form.password, 
+          phone: form.phone, 
+          zip: form.zipCode, 
+          birth: form.birthDate ? form.birthDate.toISOString() : null, 
+          isVerified: true, 
+          authProvider: authProvider, 
+          pushToken: pushTokenReal, 
+          deviceType: Platform.OS 
+        };
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        if (!API_URL) throw new Error("Falta configuración del servidor"); 
+        const response = await fetch(`${API_URL}/auth/register`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: finalPayload, newImageUri: null, idToken: socialToken })
+        });
+        const dataRes = await response.json();
+        if (!response.ok) {
+          if (dataRes.error && dataRes.error.includes("ya está registrado")) {
+            setShowCompletionModal(false);
+            try {
+              const loginRes = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: form.email, idToken: socialToken, isGoogle: authProvider === 'google', isApple: authProvider === 'apple', pushToken: pushTokenReal, deviceType: Platform.OS })
+              });
+              const loginData = await loginRes.json();
+              if (loginRes.ok && loginData.token) {
+                await handlePostLoginSuccess(loginData.user, loginData.token, loginData);
+                return;
+              }
+            } catch(e) {}
+            const safeUser = { email: form.email, firstName: fName, lastName: lName };
+            await handlePostLoginSuccess(safeUser, "token_generico_bypass");
+            return;
+          }
+          throw new Error(dataRes.error || `Error en el servidor: ${response.status}`);
         }
-        throw new Error(dataRes.error || `Error en el servidor: ${response.status}`);
+        setShowCompletionModal(false);
+        const newUserId = dataRes.user?.id || dataRes.id;
+        if (acceptedTerms && newUserId) await recordTermsAcceptance(newUserId); 
+        await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
+      } catch (error: any) {
+        const msg = error.message || "Ocurrió un error de conexión.";
+        isWebPlatform ? window.alert(msg) : Alert.alert("Error", msg);
+      } finally {
+        setIsSubmittingProfile(false);
       }
-      setShowCompletionModal(false);
-      const newUserId = dataRes.user?.id || dataRes.id;
-      if (acceptedTerms && newUserId) await recordTermsAcceptance(newUserId); 
-      await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
-    } catch (error: any) {
-      const msg = error.message || "Ocurrió un error de conexión.";
-      isWebPlatform ? window.alert(msg) : Alert.alert("Error", msg);
-    } finally {
-      setIsSubmittingProfile(false);
+    };
+
+    if (!form.zipCode) {
+      if (isWebPlatform) {
+        if (window.confirm(isEnglish ? "💡 Tip: Adding a zip code helps us show you better local results. Continue without it?" : "💡 Sugerencia: Agregar un código postal nos ayuda a mostrarte mejores resultados locales. ¿Continuar sin él?")) {
+          executeSubmit();
+        } else {
+          setTimeout(() => zipCodeRef.current?.focus(), 100);
+        }
+      } else {
+        Alert.alert(
+          isEnglish ? "Better Local Results" : "Mejores Resultados Locales",
+          isEnglish ? "Adding a zip code helps us show you relevant local content. Continue without it?" : "Agregar un código postal nos ayuda a mostrarte contenido local relevante. ¿Continuar sin él?",
+          [
+            { text: isEnglish ? "Add Zip Code" : "Agregar Código", style: "cancel", onPress: () => setTimeout(() => zipCodeRef.current?.focus(), 100) },
+            { text: isEnglish ? "Continue" : "Continuar", onPress: executeSubmit }
+          ]
+        );
+      }
+    } else {
+      executeSubmit();
     }
   };
 
@@ -759,58 +792,82 @@ export default function HomeScreen() {
         return;
       }
     }
-    try {
-      const pushTokenReal = await getSafePushToken(); 
-      const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
-      if (!API_URL) throw new Error("Falta configuración del servidor");
-      const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
-      const payload = isRegistering 
-        ? { data: { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, phone: form.phone, zip: form.zipCode, birth: form.birthDate ? form.birthDate.toISOString() : null, isVerified: false, pushToken: pushTokenReal, deviceType: Platform.OS } }
-        : { email: form.email, password: form.password, isGoogle: false, pushToken: pushTokenReal, deviceType: Platform.OS }; 
-      const response = await fetch(endpoint, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-      });
-      const dataRes = await response.json();
-      if (!response.ok) throw new Error(dataRes.error || "Error al autenticar");
-      
-      if (isRegistering) {
-        const newUserId = dataRes.user?.id || dataRes.id;
-        if (acceptedTerms && newUserId) await recordTermsAcceptance(newUserId); 
-        setTimeout(() => {
-          const successMsg = isEnglish ? "Account created successfully. Please log in." : "Cuenta creada con éxito. Por favor, inicia sesión.";
-          if (isWebPlatform) window.alert(successMsg);
-          else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
-        }, 200);
-        setIsRegistering(false); 
-        setForm({ ...form, password: '' }); 
-        return; 
-      }
-      await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
-    } catch (error: any) {
-      const msg = error.message || "Ocurrió un error al intentar acceder.";
-      if (msg.toLowerCase().includes("google") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("credenciales")) {
-        const customMsg = isEnglish ? "This account uses Google or Apple to log in. Please use the social buttons below." : "Esta cuenta utiliza Google o Apple para iniciar sesión. Por favor, usa los botones sociales abajo.";
-        if (isWebPlatform) {
-          window.alert(customMsg);
-        } else {
-          Alert.alert(isEnglish ? "Social Login" : "Inicio Social", customMsg);
+
+    const executeAuth = async () => {
+      try {
+        const pushTokenReal = await getSafePushToken(); 
+        const API_URL = process.env.EXPO_PUBLIC_URL_BACKEND;
+        if (!API_URL) throw new Error("Falta configuración del servidor");
+        const endpoint = isRegistering ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
+        const payload = isRegistering 
+          ? { data: { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, phone: form.phone, zip: form.zipCode, birth: form.birthDate ? form.birthDate.toISOString() : null, isVerified: false, pushToken: pushTokenReal, deviceType: Platform.OS } }
+          : { email: form.email, password: form.password, isGoogle: false, pushToken: pushTokenReal, deviceType: Platform.OS }; 
+        const response = await fetch(endpoint, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        const dataRes = await response.json();
+        if (!response.ok) throw new Error(dataRes.error || "Error al autenticar");
+        
+        if (isRegistering) {
+          const newUserId = dataRes.user?.id || dataRes.id;
+          if (acceptedTerms && newUserId) await recordTermsAcceptance(newUserId); 
+          setTimeout(() => {
+            const successMsg = isEnglish ? "Account created successfully. Please log in." : "Cuenta creada con éxito. Por favor, inicia sesión.";
+            if (isWebPlatform) window.alert(successMsg);
+            else Alert.alert(isEnglish ? "Welcome!" : "¡Bienvenido!", successMsg);
+          }, 200);
+          setIsRegistering(false); 
+          setForm({ ...form, password: '' }); 
+          return; 
         }
-        return;
-      }
-      if (msg.includes("bloqueada por múltiples intentos")) {
-        if (isWebPlatform) {
-          if (window.confirm(`${msg}\n\n${isEnglish ? "Would you like to reset your password now?" : "¿Deseas recuperar tu contraseña ahora?"}`)) {
-            setResetEmail(form.email); setShowResetModal(true);
+        await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
+      } catch (error: any) {
+        const msg = error.message || "Ocurrió un error al intentar acceder.";
+        if (msg.toLowerCase().includes("google") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("credenciales")) {
+          const customMsg = isEnglish ? "This account uses Google or Apple to log in. Please use the social buttons below." : "Esta cuenta utiliza Google o Apple para iniciar sesión. Por favor, usa los botones sociales abajo.";
+          if (isWebPlatform) {
+            window.alert(customMsg);
+          } else {
+            Alert.alert(isEnglish ? "Social Login" : "Inicio Social", customMsg);
           }
-        } else {
-          Alert.alert(isEnglish ? "Account Locked" : "Cuenta Bloqueada", msg, [
-              { text: isEnglish ? "Cancel" : "Cancelar", style: "cancel" },
-              { text: isEnglish ? "Recover" : "Recuperar", onPress: () => { setResetEmail(form.email); setShowResetModal(true); } }
-          ]);
+          return;
         }
-        return; 
+        if (msg.includes("bloqueada por múltiples intentos")) {
+          if (isWebPlatform) {
+            if (window.confirm(`${msg}\n\n${isEnglish ? "Would you like to reset your password now?" : "¿Deseas recuperar tu contraseña ahora?"}`)) {
+              setResetEmail(form.email); setShowResetModal(true);
+            }
+          } else {
+            Alert.alert(isEnglish ? "Account Locked" : "Cuenta Bloqueada", msg, [
+                { text: isEnglish ? "Cancel" : "Cancelar", style: "cancel" },
+                { text: isEnglish ? "Recover" : "Recuperar", onPress: () => { setResetEmail(form.email); setShowResetModal(true); } }
+            ]);
+          }
+          return; 
+        }
+        isWebPlatform ? window.alert(`Error: ${msg}`) : Alert.alert("Error", msg);
       }
-      isWebPlatform ? window.alert(`Error: ${msg}`) : Alert.alert("Error", msg);
+    };
+
+    if (isRegistering && !form.zipCode) {
+      if (isWebPlatform) {
+        if (window.confirm(isEnglish ? "💡 Tip: Adding a zip code helps us show you better local results. Continue without it?" : "💡 Sugerencia: Agregar un código postal nos ayuda a mostrarte mejores resultados locales. ¿Continuar sin él?")) {
+          executeAuth();
+        } else {
+          setTimeout(() => zipCodeRef.current?.focus(), 100);
+        }
+      } else {
+        Alert.alert(
+          isEnglish ? "Better Local Results" : "Mejores Resultados Locales",
+          isEnglish ? "Adding a zip code helps us show you relevant local content. Continue without it?" : "Agregar un código postal nos ayuda a mostrarte contenido local relevante. ¿Continuar sin él?",
+          [
+            { text: isEnglish ? "Add Zip Code" : "Agregar Código", style: "cancel", onPress: () => setTimeout(() => zipCodeRef.current?.focus(), 100) },
+            { text: isEnglish ? "Continue" : "Continuar", onPress: executeAuth }
+          ]
+        );
+      }
+    } else {
+      executeAuth();
     }
   };  
 
@@ -1508,7 +1565,21 @@ export default function HomeScreen() {
                                         </View>
                                       </View>
                                       <View style={{ flex: 1 }}>
-                                        <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                        <ThemedText style={styles.labelDate}>
+                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
+                                        </ThemedText>
+                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
+                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
+                                        </Text>
+                                        <TextInput 
+                                          ref={zipCodeRef}
+                                          value={form.zipCode} 
+                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
+                                          placeholder="90210" 
+                                          placeholderTextColor={DynamicColors.subtext}
+                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
+                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
+                                        />
                                       </View>
                                     </View>
                                   ) : (
@@ -1534,7 +1605,23 @@ export default function HomeScreen() {
                                           />
                                         </View>
                                       </View>
-                                      <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                      <View style={{ width: '100%', marginTop: 2 }}>
+                                        <ThemedText style={styles.labelDate}>
+                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
+                                        </ThemedText>
+                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
+                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
+                                        </Text>
+                                        <TextInput 
+                                          ref={zipCodeRef}
+                                          value={form.zipCode} 
+                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
+                                          placeholder="90210" 
+                                          placeholderTextColor={DynamicColors.subtext}
+                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
+                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
+                                        />
+                                      </View>
                                     </>
                                   )}
                                   
@@ -1856,7 +1943,19 @@ export default function HomeScreen() {
 
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}</ThemedText>
-                    <TextInput value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" placeholderTextColor={DynamicColors.subtext} style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} keyboardType={isWebPlatform ? "default" : "number-pad"} autoComplete="off" />
+                    <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 4, marginTop: -2 }}>
+                      {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
+                    </Text>
+                    <TextInput 
+                      ref={zipCodeRef}
+                      value={form.zipCode} 
+                      onChangeText={(v: string) => setForm({...form, zipCode: v})} 
+                      placeholder="90210" 
+                      placeholderTextColor={DynamicColors.subtext} 
+                      style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]} 
+                      keyboardType={isWebPlatform ? "default" : "number-pad"} 
+                      autoComplete="off" 
+                    />
                   </View>
 
                   <View style={{ width: '100%' }}>
@@ -1906,12 +2005,10 @@ export default function HomeScreen() {
                     style={{ flex: 1, height: 45, justifyContent: 'center', alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: DynamicColors.border }} 
                     onPress={() => {
                       if (!acceptedTerms) {
-                        Alert.alert("Atención", isEnglish ? "Please accept Terms and Conditions." : "Debes aceptar los términos y condiciones.");
+                        isWebPlatform ? window.alert(isEnglish ? "Please accept Terms and Conditions." : "Debes aceptar los términos y condiciones.") : Alert.alert("Atención", isEnglish ? "Please accept Terms and Conditions." : "Debes aceptar los términos y condiciones.");
                         return;
                       }
-                      if (!form.firstName) setForm(prev => ({...prev, firstName: 'Usuario'}));
-                      if (!form.lastName) setForm(prev => ({...prev, lastName: 'Apple/Google'}));
-                      submitProfileCompletion();
+                      submitProfileCompletion(true);
                     }}
                     disabled={isSubmittingProfile}
                   >
@@ -1920,7 +2017,7 @@ export default function HomeScreen() {
 
                   <TouchableOpacity 
                     style={[styles.primaryWrapper, { flex: 1, height: 45, marginVertical: 0 }, (!acceptedTerms || isSubmittingProfile) && { opacity: 0.4 }]} 
-                    onPress={submitProfileCompletion} 
+                    onPress={() => submitProfileCompletion(false)} 
                     disabled={!acceptedTerms || isSubmittingProfile}
                   >
                     <LinearGradient colors={orangeGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>

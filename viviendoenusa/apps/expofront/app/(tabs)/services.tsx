@@ -13,6 +13,8 @@ import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
+import * as SecureStore from 'expo-secure-store'; // 🚀 Aseguramos de usar SecureStore para guardar la visita
+
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
 import { useAppTheme } from '../../context/ThemeContext';
 
@@ -105,6 +107,12 @@ const LOGGED_IN_SLIDES = [
     title: 'Emprendedores',
     desc: 'Encuentra recursos, guías y herramientas clave para lanzar o hacer crecer tu propio negocio.',
     colors: ['#f093fb', '#f5576c']
+  },
+  {
+    icon: 'briefcase-search-outline',
+    title: 'Bolsa de Empleos',
+    desc: 'Encuentra el trabajo ideal o descubre el talento que necesitas para tu negocio en nuestra red.',
+    colors: ['#4facfe', '#00f2fe']
   }
 ];
 
@@ -156,6 +164,39 @@ export default function ServicesScreen() {
       setCurrentSlideIdx(0);
     }
   }, [isGuest, isWeb]);
+
+  // 🚀 NUEVO: MOSTRAR EL TUTORIAL LA PRIMERA VEZ QUE EL USUARIO REGISTRADO ENTRA A SERVICIOS
+  useEffect(() => {
+    const checkFirstTimeTutorial = async () => {
+      // Si es invitado o no hay token, no hacemos nada aquí
+      if (isGuest || !userToken) return;
+
+      try {
+        let hasSeen = null;
+        if (isWeb) {
+          hasSeen = window.localStorage.getItem('hasSeenServicesTutorial');
+        } else {
+          hasSeen = await SecureStore.getItemAsync('hasSeenServicesTutorial');
+        }
+
+        // Si nunca lo ha visto, se lo mostramos y guardamos el registro
+        if (!hasSeen) {
+          setShowLoggedInTutorialModal(true);
+          setLoggedInSlideIdx(0);
+          
+          if (isWeb) {
+            window.localStorage.setItem('hasSeenServicesTutorial', 'true');
+          } else {
+            await SecureStore.setItemAsync('hasSeenServicesTutorial', 'true');
+          }
+        }
+      } catch (error) {
+        console.log("Error comprobando el tutorial de servicios:", error);
+      }
+    };
+
+    checkFirstTimeTutorial();
+  }, [isGuest, userToken, isWeb]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 

@@ -22,8 +22,8 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación para calcular un radio de 20 millas y enviarte notificaciones precisas sobre ofertas de trabajo, eventos comunitarios y servicios cercanos a ti.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación para calcular un radio de 20 millas y enviarte notificaciones precisas sobre ofertas de trabajo, eventos comunitarios y servicios cercanos a ti."
+        "NSLocationWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación actual para calcular un radio de búsqueda de 20 millas y mostrarte recursos locales específicos, por ejemplo, encontrar oficinas de abogados de inmigración o ferias comunitarias cercanas a tu vecindario.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación actual para calcular un radio de búsqueda de 20 millas y mostrarte recursos locales específicos, por ejemplo, encontrar oficinas de abogados de inmigración o ferias comunitarias cercanas a tu vecindario."
       }
     },
     "android": {
