@@ -18,7 +18,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMockSelector } from '@/redux/slices';
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
@@ -31,13 +31,6 @@ import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
-
-/*
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
-*/
 
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'lawyers') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -153,7 +146,6 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
   const [isRenewing, setIsRenewing] = useState(false);
 
-  // 🚀 HELPER DE ALERTAS MULTIPLATAFORMA
   const triggerAlert = (title: string, message: string) => {
     if (isWebLocal) {
       window.alert(`${title}\n${message}`);
@@ -245,7 +237,6 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   );
 });
 
-// 🚀 MODAL SUGERIR ABOGADO 
 const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, companyTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets, userToken, router, zelleQrUrl }: any) => {
   const isWebLocal = Platform.OS === 'web';
   const [isPublishing, setIsPublishing] = useState(false);
@@ -268,7 +259,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
 
   const disabledGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = isDark ? ['#333', '#444'] : ['#ddd', '#ccc'];
 
-  // 🚀 HELPER DE ALERTAS MULTIPLATAFORMA
   const triggerAlert = (title: string, message: string) => {
     if (isWebLocal) {
       window.alert(`${title}\n${message}`);
@@ -369,26 +359,21 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
       if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
       const savedFromDB = await response.json();
-      
-      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!response.ok) throw new Error(savedFromDB.error || "Error al procesar la solicitud");
 
-      // 🚀 PARCHE BOOLEANO ESTRICTO (Para evitar que "false" se vuelva true)
       const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEntryLocal = {
         id: savedFromDB.id, name: savedFromDB.nameLawy || savedFromDB.name, description: savedFromDB.description,
         address: savedFromDB.address, area: savedFromDB.area, image: formImage, lat, lng,
         rating: 0, reviews: [], totalReviews: 0, phone: savedFromDB.phone, 
-        status: isBackendApproved ? 'approved' : 'pending', // 👈 ¡Filtro corregido!
+        status: isBackendApproved ? 'approved' : 'pending',
         referenceCode: finalRefCode, paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod, userId: currentUserId, timepostEnd: savedFromDB.timepostEnd || null,
         premiumPlan: finalPlan, couponCode: uiPayType === 'coupon' ? formRefCode.trim() : ''
       };
       
-      // 🚀 CERRAMOS EL MODAL PRIMERO
       onSuccess(newEntryLocal, formZip);
 
-      // 🚀 MOSTRAMOS EL MENSAJE CON DELAY PARA NO BLOQUEAR LA WEB
       setTimeout(() => {
         let successMsg = "";
         if (savedFromDB.message) {
@@ -468,7 +453,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" keyboardType="phone-pad" placeholderTextColor={Colors.subtext} style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '800', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
               
-              {/* 🚀 EL CAMUFLAJE: SOLO MOSTRAR OPCIONES DE PAGO SI ES WEB */}
               {isWebLocal && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
@@ -486,7 +470,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 </>
               )}
 
-              {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
               {uiPayType === 'subscription' && isWebLocal && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
@@ -538,7 +521,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 </>
               )}
 
-              {/* RUTA DE CUPÓN (VISIBLE EN AMBAS, PERO ES LA ÚNICA EN MÓVIL) */}
               {uiPayType === 'coupon' && (
                 <View style={{ marginBottom: 10 }}>
                   <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>
@@ -591,6 +573,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
 export default function LawyersScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
+  const dispatch = useMockDispatch();
   const params = useLocalSearchParams();
   const notificationId = params.id || params.lawyerId || params.referenceId || params.reference_id || params.openEventId;
   const insets = useSafeAreaInsets();
@@ -598,7 +581,6 @@ export default function LawyersScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
-  // 🚀 HOOK DE FOCO Y ESTADO ACTIVO
   const isFocused = useIsFocused();
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken;
@@ -607,6 +589,8 @@ export default function LawyersScreen() {
 
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const isGuest = userMetadata?.typeDetail === 'Guest'; 
+
   const selectedLanguage = useMockSelector((state: any) => state.language.code);
   
   const stylesUnified = useUnifiedCardStyles();
@@ -629,6 +613,7 @@ export default function LawyersScreen() {
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     iconInactive: isDark ? '#B0BEC5' : '#364045',  
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', 
   };
 
   const rawCategories = (t.lawyerstab as any)?.practiceAreas;
@@ -655,6 +640,7 @@ export default function LawyersScreen() {
 
   const [isModalVisible, setModalVisible] = useState(false);
   const [renewModalVisible, setRenewModalVisible] = useState(false);
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false); 
   const [lawyerToRenew, setLawyerToRenew] = useState<any>(null);
 
   const [pendingLawyers, setPendingLawyers] = useState<any[]>([]);
@@ -678,7 +664,6 @@ export default function LawyersScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
-  // 🚀 COMPONENTE DE FORMULARIO DE RESEÑAS DEFINIDO AQUÍ MISMO
   const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
     const [rating, setRating] = useState(5);
     const [comment, setComment] = useState('');
@@ -736,7 +721,6 @@ export default function LawyersScreen() {
     );
   });
 
-  // 🚀 REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
   useFocusEffect(
     useCallback(() => {
       if (isAdminMode) {
@@ -751,11 +735,9 @@ export default function LawyersScreen() {
     }, [isAdminMode, zipCode])
   );
 
-  // 🚀 DETECTOR DE DESPERTAR (APPSTATE)
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === 'active' && isFocused) {
-        console.log("🚀 La app despertó en Abogados. Refrescando...");
         if (isAdminMode) {
           fetchAllPendingLawyers();
         } else {
@@ -788,7 +770,6 @@ export default function LawyersScreen() {
   const applyLocalFilters = (lawyersList: any[], areaName: string, lat: number, lng: number) => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
     
-    // 🚀 FILTRAMOS LOS VENCIDOS PARA EL PÚBLICO (EL DUEÑO LOS SIGUE VIENDO)
     filtered = filtered.filter(item => {
       const isOwner = item.userId === currentUserId;
       const isPending = item.status === 'pending';
@@ -828,7 +809,6 @@ export default function LawyersScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // 🚀 FIRMA AL VUELO DE IMÁGENES
         const mappedData = await Promise.all(data.map(async (item: any) => {
           const rawImage = item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
           const freshImage = await refreshSupabaseUrl(rawImage, 'lawyers');
@@ -838,7 +818,6 @@ export default function LawyersScreen() {
              return { ...r, image: freshReviewImage };
           })) : [];
           
-          // 🚀 PARCHE ESTRICTO DE BOOLEANOS (Evita que "false" string se vuelva true)
           const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
 
           return {
@@ -865,7 +844,6 @@ export default function LawyersScreen() {
           };
         }));
         
-        // 🚀 AHORA EL DUEÑO SÍ PUEDE VER SUS POSTS PENDIENTES EN LA LISTA PRINCIPAL
         const approvedOrOwnedPending = mappedData.filter(s => s.status === 'approved' || (s.status === 'pending' && s.userId === currentUserId));
         setAllLawyers(approvedOrOwnedPending);
         setLocalData(approvedOrOwnedPending);
@@ -1188,7 +1166,6 @@ export default function LawyersScreen() {
   const LawyerCard = ({ lawyer, isReviewMode = false, renderAdminControls }: { lawyer: any, isReviewMode?: boolean, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, lawyer.lat, lawyer.lng) : null;
     
-    // 🚀 AHORA IS PENDING FUNCIONA PERFECTO GRACIAS AL PARCHE BOOLEANO
     const isPending = lawyer.status === 'pending';
     const isOwner = lawyer.userId === currentUserId;
     
@@ -1226,7 +1203,6 @@ export default function LawyersScreen() {
           </View>
         )}
 
-        {/* 🚀 EL LETRERO ROJO DE CADUCADO YA NO SALDRÁ CUANDO ESTÉ PENDIENTE */}
         {isOwner && isExpired && !isPending && (
           <View style={{ backgroundColor: 'rgba(255, 82, 82, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 82, 82, 0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -1278,7 +1254,16 @@ export default function LawyersScreen() {
           
           <View style={{ gap: 8, marginTop: 15, opacity: isPending ? 0.5 : 1 }}>
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity onPress={() => !isPending && setSelectedReviews(lawyer)} disabled={isPending || isExpired} style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  if (isGuest) {
+                    setShowRestrictedModal(true);
+                    return;
+                  }
+                  if (!isPending) setSelectedReviews(lawyer);
+                }} 
+                disabled={isPending || isExpired} 
+                style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                  <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
                  <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
                     {(t.genericbtn as any)?.reviews } {reviewCount > 0 ? `(${formattedCount})` : ''}
@@ -1437,6 +1422,10 @@ export default function LawyersScreen() {
                 {selectedDetail?.status !== 'pending' && (
                   <TouchableOpacity 
                     onPress={() => { 
+                      if (isGuest) {
+                        setShowRestrictedModal(true);
+                        return;
+                      }
                       const hasReviewed = selectedDetail?.reviews?.some((r: any) => r.userId === currentUserId);
                       if (hasReviewed) {
                         return Alert.alert(
@@ -1481,6 +1470,10 @@ export default function LawyersScreen() {
                 <View style={{ flex: 1 }}>
                   <TouchableOpacity 
                     onPress={() => {
+                      if (isGuest) {
+                        setShowRestrictedModal(true);
+                        return;
+                      }
                       const hasReviewed = selectedReviews?.reviews?.some((r: any) => r.userId === currentUserId);
                       if (hasReviewed) {
                         return Alert.alert(
@@ -1580,6 +1573,48 @@ export default function LawyersScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: Colors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para dejar reseñas y publicaciones, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
       </Modal>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
@@ -1805,7 +1840,17 @@ export default function LawyersScreen() {
         </View>
       </ScrollView>
 
-      <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
+      {/* 🚀 BOTÓN FLOTANTE (FAB) PARA PUBLICAR - TAMBIÉN BLOQUEADO PARA INVITADOS */}
+      <TouchableOpacity 
+        style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} 
+        onPress={() => {
+          if (isGuest) {
+            setShowRestrictedModal(true);
+            return;
+          }
+          setModalVisible(true);
+        }}
+      >
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="scale-balance" size={32} color="#FFF" />
         </LinearGradient>

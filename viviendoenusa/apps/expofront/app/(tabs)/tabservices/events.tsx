@@ -25,18 +25,10 @@ import { useTranslation } from '@/hooks/useTranslation';
 // --- VALIDACIONES ---
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
-import { useMockSelector } from '@/redux/slices';
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices'; // 🚀 IMPORTAMOS DISPATCH PARA EL MODAL DE INVITADO
 import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
 
-/*
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
-*/
-
-// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'events') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
   if (!supabaseClient) return url;
@@ -119,6 +111,7 @@ export default function EventsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const dispatch = useMockDispatch(); // 🚀 IMPORTAMOS DISPATCH
   
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
@@ -141,6 +134,7 @@ export default function EventsScreen() {
   
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const isGuest = userMetadata?.typeDetail === 'Guest'; // 🚀 DETECTOR DE INVITADO
 
   useEffect(() => {
     if (!userToken) {
@@ -166,6 +160,7 @@ export default function EventsScreen() {
     iconInactive: isDark ? '#B0BEC5' : '#364045',  
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
     cardBg: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', // 🚀 COLOR NEUTRO PARA MODAL
   };
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : width * 0.92);
@@ -184,6 +179,7 @@ export default function EventsScreen() {
   
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [isModalVisible, setModalVisible] = useState(false);
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false); // 🚀 ESTADO PARA EL MODAL RESTRINGIDO
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
   const [isPublishing, setIsPublishing] = useState(false);
@@ -298,7 +294,6 @@ export default function EventsScreen() {
           const rawImage = item.imageEven || item.imageUrl;
           const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'events') : '';
           
-          // 🚀 PARCHE ESTRICTO DE BOOLEANOS
           const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
 
           return {
@@ -331,7 +326,6 @@ export default function EventsScreen() {
     }
   };
 
-  // 🚀 1. REFRESCO SILENCIOSO AL CAMBIAR A ESTA PESTAÑA
   useFocusEffect(
     useCallback(() => {
       if (isAdminMode) {
@@ -347,12 +341,9 @@ export default function EventsScreen() {
     }, [isAdminMode, zipCode])
   );
 
-  // 🚀 2. DETECTOR DE DESPERTAR (APPSTATE) SÚPER OPTIMIZADO
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      // Solo dispara la consulta si la app despertó Y esta es la pestaña activa
       if (nextAppState === 'active' && isFocused) {
-        console.log("🚀 La app despertó en Eventos. Refrescando imágenes...");
         if (isAdminMode) {
           fetchEvents('', true);
         } else if (zipCode && zipCode.length === 5) {
@@ -393,7 +384,6 @@ export default function EventsScreen() {
                   formattedDate = new Date(data.dateEvent).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
                 } catch(e) { formattedDate = 'Fecha N/A'; }
 
-                // 🚀 FIRMA AL VUELO PARA EVENTO DESDE NOTIFICACIÓN
                 const rawImage = data.imageEven || data.imageUrl;
                 const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'events') : '';
                 const isAppr = String(data.approved) === 'true' || data.approved === 1 || data.approved === true;
@@ -559,7 +549,6 @@ export default function EventsScreen() {
 
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
       
-      // 🚀 LIMPIEZA TOTAL DEL CUPÓN (Sin "COUPON-")
       const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
       const newEntryPayload = {
@@ -597,10 +586,8 @@ export default function EventsScreen() {
 
       const savedFromDB = await response.json();
       
-      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando evento");
 
-      // 🚀 PARCHE BOOLEANO ESTRICTO PARA SABER SI EL BACKEND LO APROBÓ
       const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEventLocal = {
@@ -619,7 +606,6 @@ export default function EventsScreen() {
         approved: isBackendApproved
       };
 
-      // 🚀 CERRAMOS EL MODAL PRIMERO
       setModalVisible(false);
       resetForm();
       
@@ -634,7 +620,6 @@ export default function EventsScreen() {
         }
       }
       
-      // 🚀 MOSTRAMOS EL MENSAJE CON DELAY PARA NO BLOQUEAR LA WEB
       setTimeout(() => {
         let successMsg = "";
         if (savedFromDB.message) {
@@ -960,8 +945,17 @@ export default function EventsScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB - NUEVO EVENTO */}
-      <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+      {/* 🚀 FAB - NUEVO EVENTO CON PROTECCIÓN DE INVITADOS */}
+      <TouchableOpacity 
+        onPress={() => {
+          if (isGuest) {
+            setShowRestrictedModal(true);
+            return;
+          }
+          setModalVisible(true);
+        }} 
+        style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}
+      >
         <LinearGradient colors={orangeGradient} style={{ flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }}>
           <MaterialCommunityIcons name="calendar-plus" size={28} color="#fff" />
         </LinearGradient>
@@ -1313,6 +1307,49 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
+      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
+      <RNModal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: Colors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para publicar eventos y guardar reseñas, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
+      </RNModal>
+
       {isWeb && (
         <style dangerouslySetInnerHTML={{ __html: `
           .native-web-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
@@ -1327,7 +1364,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
   
-  // 🚀 AHORA EL ESTADO PENDING FUNCIONA CORRECTAMENTE
   const isPending = item.status === 'pending';
   const isOwner = item.userId === currentUserId;
   

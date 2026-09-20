@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import {
   TouchableOpacity, View, ScrollView, StyleSheet, useWindowDimensions,
   TextInput, Alert, Share, ColorValue, ActivityIndicator,
-  Platform, Modal as RNModal, KeyboardAvoidingView, Linking, Image,
+  Platform, Modal, KeyboardAvoidingView, Linking, Image,
   AppState
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMockSelector } from '@/redux/slices';
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
@@ -100,6 +100,7 @@ export default function JobsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const dispatch = useMockDispatch();
 
   const isFocused = useIsFocused();
 
@@ -116,16 +117,14 @@ export default function JobsScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
 
-  // 🚀 Verificamos si el usuario actual es un Invitado
   const isGuest = userMetadata?.typeDetail === 'Guest';
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false);
 
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
   
-  // 🚀 Definición faltante de isSuperAdmin para corregir el error TS(2304)
   const isSuperAdmin = !isGuest && (userMetadata?.role === 'SAdmin' || userMetadata?.email === 'cesargomez853@gmail.com');
 
-  // 🚀 RESTRICCIÓN: Si no hay token Y tampoco es invitado, redirigimos a la portada.
   useEffect(() => {
     if (!userToken && !isGuest) {
       router.replace('/');
@@ -162,6 +161,7 @@ export default function JobsScreen() {
     cardBg:  isDark ? 'rgba(255,255,255,0.05)'   : 'rgba(255,255,255,0.45)',
     iconInactive: isDark ? '#E0E0E0' : '#666666',
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', 
   };
 
   const planStyles: any = {
@@ -344,7 +344,6 @@ export default function JobsScreen() {
   const fetchJobsData = async () => {
     setLoading(true);
     try {
-      // 🚀 Headers limpios con tipado seguro HeadersInit
       const headers: HeadersInit = (userToken && !isGuest) ? { 'Authorization': `Bearer ${userToken}` } : {};
       const res = await fetch(`${API_JOBS_URL}?userId=${currentUserId}`, {
         method: 'GET',
@@ -608,7 +607,7 @@ export default function JobsScreen() {
 
   const handleRegisterCompany = async () => {
     if (isGuest) {
-      triggerAlert("Acceso Restringido", "Los invitados no pueden registrar empresas. ¡Crea una cuenta gratis!");
+      setShowRestrictedModal(true);
       return;
     }
 
@@ -743,7 +742,7 @@ export default function JobsScreen() {
 
   const handlePublishJob = async () => {
     if (isGuest) {
-      triggerAlert("Acceso Restringido", "Los invitados no pueden publicar vacantes. ¡Crea una cuenta gratis!");
+      setShowRestrictedModal(true);
       return;
     }
 
@@ -876,7 +875,7 @@ export default function JobsScreen() {
 
   const handleSubmitReview = async () => {
     if (isGuest) {
-      triggerAlert("Acceso Restringido", "Los invitados no pueden dejar reseñas. ¡Crea una cuenta gratis!");
+      setShowRestrictedModal(true);
       return;
     }
 
@@ -1077,6 +1076,50 @@ export default function JobsScreen() {
 
   return (
     <View style={styles.container}>
+      
+      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
+      <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para dejar reseñas y publicar vacantes, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={[styles.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border }}>
@@ -1275,7 +1318,15 @@ export default function JobsScreen() {
                                 )}
 
                                 <View style={{ flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: DynamicColors.border, paddingTop: 15 }}>
-                                    <TouchableOpacity onPress={() => setSelectedCompany(job)} style={{ flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)' }}>
+                                    <TouchableOpacity 
+                                      onPress={() => {
+                                        if (isGuest) {
+                                          setShowRestrictedModal(true);
+                                          return;
+                                        }
+                                        setSelectedCompany(job);
+                                      }} 
+                                      style={{ flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)' }}>
                                       <MaterialCommunityIcons name="comment-text-outline" size={18} color={DynamicColors.text} />
                                       <ThemedText style={{ marginLeft: 8, fontSize: 13, fontWeight: '800', color: DynamicColors.text }}>{t.genericbtn.reviews} ({formattedCount})</ThemedText>
                                     </TouchableOpacity>
@@ -1308,11 +1359,11 @@ export default function JobsScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB Flotante */}
+      {/* 🚀 FAB Flotante - BLOQUEADO PARA INVITADOS */}
       <TouchableOpacity 
         onPress={() => { 
           if (isGuest) {
-            triggerAlert("Acceso Restringido", "Los invitados no pueden publicar. ¡Regístrate gratis para publicar tus vacantes!");
+            setShowRestrictedModal(true);
             return;
           }
           fetchUserCompanies(); 
@@ -1327,7 +1378,7 @@ export default function JobsScreen() {
       </TouchableOpacity>
 
       {/* --- MODAL DEL PERFIL CORPORATIVO --- */}
-      <RNModal visible={!!selectedCompanyProfile} transparent animationType="slide" statusBarTranslucent>
+      <Modal visible={!!selectedCompanyProfile} transparent animationType="slide" statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', alignItems: 'center' }}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setSelectedCompanyProfile(null)} />
             <View style={{ width: isLargeWeb ? 600 : '100%', height: height * 0.85, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderTopLeftRadius: 40, borderTopRightRadius: 40, padding: 25, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden' }}>
@@ -1421,10 +1472,10 @@ export default function JobsScreen() {
               </ScrollView>
             </View>
         </View>
-      </RNModal>
+      </Modal>
 
       {/* --- MODAL DETALLE DE VACANTE --- */}
-      <RNModal visible={!!selectedJobDetail} transparent animationType="fade" statusBarTranslucent>
+      <Modal visible={!!selectedJobDetail} transparent animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
           
@@ -1499,7 +1550,16 @@ export default function JobsScreen() {
                 <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 25 }}>{selectedJobDetail?.description}</ThemedText>
 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 20 }}>
-                    <TouchableOpacity onPress={() => { setSelectedJobDetail(null); setTimeout(() => setSelectedCompany(selectedJobDetail), 300); }} style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: DynamicColors.inputBg }}>
+                    <TouchableOpacity 
+                      onPress={() => { 
+                        if (isGuest) {
+                          setShowRestrictedModal(true);
+                          return;
+                        }
+                        setSelectedJobDetail(null); 
+                        setTimeout(() => setSelectedCompany(selectedJobDetail), 300); 
+                      }} 
+                      style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: DynamicColors.inputBg }}>
                         <MaterialCommunityIcons name="star" size={18} color="#FFB300" />
                         <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.viewreviews}</ThemedText>
                     </TouchableOpacity>
@@ -1515,10 +1575,10 @@ export default function JobsScreen() {
             </ScrollView>
           </View>
         </View>
-      </RNModal>
+      </Modal>
 
       {/* --- MODAL FORMULARIO DE PUBLICACIÓN Y CREACIÓN DE EMPRESAS --- */}
-      <RNModal visible={isModalVisible} transparent animationType="slide">
+      <Modal visible={isModalVisible} transparent animationType="slide">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: isLargeWeb ? 'center' : 'flex-end' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
           <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"} style={{ width: isLargeWeb ? 600 : '100%', alignSelf: 'center' }}>
@@ -2024,10 +2084,10 @@ export default function JobsScreen() {
             </View>
           </KeyboardAvoidingView>
         </View>
-      </RNModal>
+      </Modal>
 
       {/* --- MODALES DE FILTROS --- */}
-      <RNModal visible={showTitlePickerModal} transparent animationType="fade">
+      <Modal visible={showTitlePickerModal} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowTitlePickerModal(false)} />
               <View style={{ width: 300, maxHeight: height * 0.7, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden' }}>
@@ -2053,9 +2113,9 @@ export default function JobsScreen() {
                   </ScrollView>
               </View>
           </View>
-      </RNModal>
+      </Modal>
 
-      <RNModal visible={showShiftPickerModal} transparent animationType="fade">
+      <Modal visible={showShiftPickerModal} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowShiftPickerModal(false)} />
               <View style={{ width: 280, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden' }}>
@@ -2074,9 +2134,9 @@ export default function JobsScreen() {
                   </View>
               </View>
           </View>
-      </RNModal>
+      </Modal>
 
-      <RNModal visible={showLocationPickerModal} transparent animationType="fade">
+      <Modal visible={showLocationPickerModal} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowLocationPickerModal(false)} />
               <View style={{ width: 320, maxHeight: height * 0.8, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: DynamicColors.border, overflow: 'hidden' }}>
@@ -2140,10 +2200,10 @@ export default function JobsScreen() {
                   )}
               </View>
           </View>
-      </RNModal>
+      </Modal>
 
       {/* MODAL RESEÑAS EMPRESA */}
-      <RNModal visible={!!selectedCompany} transparent animationType="slide" statusBarTranslucent>
+      <Modal visible={!!selectedCompany} transparent animationType="slide" statusBarTranslucent>
         <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
             <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => { setSelectedCompany(null); setShowReviewInput(false); }} />
@@ -2162,7 +2222,7 @@ export default function JobsScreen() {
                 <View style={{ flex: 1 }}>
                   <TouchableOpacity onPress={() => { 
                       if (isGuest) {
-                        triggerAlert("Acceso Restringido", "Los invitados no pueden escribir reseñas. ¡Regístrate gratis!");
+                        setShowRestrictedModal(true);
                         return;
                       }
                       const hasReviewed = selectedCompany?.reviews?.some((r: any) => r.userId === currentUserId); 
@@ -2239,7 +2299,7 @@ export default function JobsScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
-      </RNModal>
+      </Modal>
     </View>
   );
 }

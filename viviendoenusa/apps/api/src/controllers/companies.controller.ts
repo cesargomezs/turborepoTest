@@ -190,7 +190,7 @@ export const getCompanyById = async (id: string, currentUserId?: string) => {
     const cleanId = sanitizeText(id);
     if (!cleanId) return null;
 
-    // 🚀 VALIDACIÓN ANTI-GUEST: Asegurar que currentUserId no rompa Postgres si es invitado
+    // 🚀 VALIDACIÓN ANTI-GUEST Y NULOS
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;

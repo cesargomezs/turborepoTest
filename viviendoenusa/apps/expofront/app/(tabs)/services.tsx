@@ -35,7 +35,7 @@ const BUTTONS_DATA: ButtonConfig[] = [
   { id: 6, icon: 'lightbulb-multiple-outline', path: '/tabservices/entrepreneurs', colors: ['#f093fb', '#f5576c'], description: 'Recursos para impulsar tu emprendimiento.', isAllowedForGuest: false },
 ];
 
-// 🚀 PASOS DEL SLIDER / MINI TUTORIAL PARA INVITADOS
+// 🚀 PASOS DEL SLIDER / MINI TUTORIAL
 const GUEST_SLIDES = [
   {
     icon: 'compass-outline',
@@ -75,7 +75,6 @@ export default function ServicesScreen() {
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
 
-  // 🚀 Detección exclusiva de invitado
   const isGuest = userMetadata?.typeDetail === 'Guest';
   const [showRestrictedModal, setShowRestrictedModal] = useState(false);
   const [showGuestSliderModal, setShowGuestSliderModal] = useState(false);
@@ -84,20 +83,37 @@ export default function ServicesScreen() {
   const { t } = useTranslation();
   const localStyles = useUnifiedCardStyles();
 
-  // 🚀 REDIRECCIÓN AUTOMÁTICA SEGURA SI NO HAY TOKEN NI INVITADO
+  // --- DIMENSIONES Y PLATAFORMA ---
+  const isWeb = Platform.OS === 'web';
+  const isAndroid = Platform.OS === 'android';
+  const isIOS = Platform.OS === 'ios';
+  const isLargeWeb = isWeb && width > 1000;
+
+  // 🚀 REDIRECCIÓN Y SEGURIDAD ESTRICTA PARA WEB
   useEffect(() => {
+    // 1. Si no hay token en lo absoluto
     if (!userToken) {
       router.replace('/');
+      return;
     }
-  }, [userToken]);
 
-  // Mostrar el slider de guía automáticamente SOLO la primera vez que entra el invitado
+    // 2. 🛡️ RESTRICCIÓN ANTI-HACKEO WEB: Los invitados NO pueden usar la versión web
+    if (isWeb && isGuest) {
+      setTimeout(() => {
+        dispatch(setUserMetadata({} as any));
+        dispatch(toggleAuth());
+        router.replace('/?login=true');
+      }, 100);
+    }
+  }, [userToken, isGuest, isWeb]);
+
+  // Mostrar el slider de guía automáticamente SOLO a los invitados en móviles
   useEffect(() => {
-    if (isGuest) {
+    if (isGuest && !isWeb) {
       setShowGuestSliderModal(true);
       setCurrentSlideIdx(0);
     }
-  }, [isGuest]);
+  }, [isGuest, isWeb]);
 
   // --- ANIMACIÓN: CORAZÓN LATIENDO ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -111,12 +127,6 @@ export default function ServicesScreen() {
     ).start();
   }, [pulseAnim]);
 
-  // --- DIMENSIONES Y COLORES ---
-  const isWeb = Platform.OS === 'web';
-  const isAndroid = Platform.OS === 'android';
-  const isIOS = Platform.OS === 'ios';
-  const isLargeWeb = isWeb && width > 1000;
-
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
@@ -129,6 +139,7 @@ export default function ServicesScreen() {
     subtext: isDark ? '#B0BEC5' : '#546E7A',
     border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     iconInactive: isDark ? '#E0E0E0' : '#666666',
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', // 🚀 GRIS NEUTRO ELEGANTE COMO LA REFERENCIA
   };
 
   const handleCardPress = (item: ButtonConfig) => {
@@ -303,10 +314,10 @@ export default function ServicesScreen() {
         </View>
       </ScrollView>
 
-      {/* 🚀 MODAL DE SLIDER / MINI TUTORIAL PARA INVITADOS */}
-      <Modal visible={showGuestSliderModal && isGuest} transparent animationType="fade" onRequestClose={() => setShowGuestSliderModal(false)}>
+      {/* 🚀 MODAL DE SLIDER / MINI TUTORIAL PARA INVITADOS CON DISEÑO NEUTRO (IGUAL A LA REFERENCIA) */}
+      <Modal visible={showGuestSliderModal && isGuest && !isWeb} transparent animationType="fade" onRequestClose={() => setShowGuestSliderModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '90%', maxWidth: 380, backgroundColor: '#13112E', borderRadius: 32, padding: 30, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 30, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
             
             {/* Indicadores de Paginación Superior */}
             <View style={{ flexDirection: 'row', gap: 6, marginBottom: 30, alignItems: 'center' }}>
@@ -317,7 +328,7 @@ export default function ServicesScreen() {
                     height: 6, 
                     borderRadius: 3, 
                     width: currentSlideIdx === i ? 24 : 6, 
-                    backgroundColor: currentSlideIdx === i ? '#FF5F6D' : 'rgba(255,255,255,0.2)' 
+                    backgroundColor: currentSlideIdx === i ? '#FF5F6D' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)') 
                   }} 
                 />
               ))}
@@ -332,11 +343,11 @@ export default function ServicesScreen() {
             </LinearGradient>
 
             {/* Títulos y Descripción */}
-            <Text style={{ fontSize: 22, fontWeight: '900', color: '#FFF', textAlign: 'center', marginBottom: 12 }}>
+            <Text style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 12 }}>
               {GUEST_SLIDES[currentSlideIdx].title}
             </Text>
             
-            <Text style={{ fontSize: 14, color: '#B0BEC5', textAlign: 'center', lineHeight: 22, marginBottom: 35, paddingHorizontal: 5 }}>
+            <Text style={{ fontSize: 14, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 22, marginBottom: 35, paddingHorizontal: 5 }}>
               {GUEST_SLIDES[currentSlideIdx].desc}
             </Text>
 
@@ -346,7 +357,7 @@ export default function ServicesScreen() {
                 onPress={() => setShowGuestSliderModal(false)}
                 style={{ paddingVertical: 12, paddingHorizontal: 15 }}
               >
-                <Text style={{ color: '#B0BEC5', fontWeight: 'bold', fontSize: 15 }}>Omitir</Text>
+                <Text style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 15 }}>Omitir</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -368,10 +379,10 @@ export default function ServicesScreen() {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO (LIMPIO, SIN ROUTER.REPLACE EXPLOSIVO) */}
+      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO */}
       <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '90%', maxWidth: 380, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 32, padding: 25, borderWidth: 1, borderColor: DynamicColors.border, alignItems: 'center' }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
             
             <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
               <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
@@ -381,7 +392,7 @@ export default function ServicesScreen() {
               Contenido Exclusivo
             </ThemedText>
             
-            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
               Para acceder a la Red de Apoyo, Donaciones y Emprendimientos, necesitas crear una cuenta gratuita. ¡Los accesos a Abogados, Eventos y Tiendas están totalmente abiertos para ti!
             </ThemedText>
 
@@ -389,8 +400,11 @@ export default function ServicesScreen() {
               <TouchableOpacity 
                 onPress={() => {
                   setShowRestrictedModal(false);
-                  dispatch(setUserMetadata({} as any));
-                  dispatch(toggleAuth());
+                  setTimeout(() => {
+                    dispatch(setUserMetadata({} as any));
+                    dispatch(toggleAuth());
+                    router.replace('/?login=true');
+                  }, 100);
                 }}
                 style={{ borderRadius: 16, overflow: 'hidden' }}
               >
@@ -403,7 +417,7 @@ export default function ServicesScreen() {
                 onPress={() => setShowRestrictedModal(false)}
                 style={{ paddingVertical: 12, alignItems: 'center' }}
               >
-                <Text style={{ color: DynamicColors.subtext, fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</Text>
+                <Text style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</Text>
               </TouchableOpacity>
             </View>
 

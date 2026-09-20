@@ -3,7 +3,7 @@ import {
   TouchableOpacity, View, ScrollView, Platform,
   StyleSheet, useWindowDimensions,
   TextInput, ActivityIndicator, Image, Linking, Alert,
-  Modal, KeyboardAvoidingView, Share, ColorValue, Text, AppState
+  Modal, KeyboardAvoidingView, Share, ColorValue, AppState
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -18,7 +18,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMockSelector } from '@/redux/slices';
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
@@ -30,15 +30,8 @@ import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
 import { useAppTheme } from '../../../context/ThemeContext';
 
-
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
-
-/*
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
-*/
 
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'stores') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -228,6 +221,7 @@ export default function StoresScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const dispatch = useMockDispatch(); 
   
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
@@ -246,6 +240,7 @@ export default function StoresScreen() {
 
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const isGuest = userMetadata?.typeDetail === 'Guest'; 
 
   useEffect(() => {
     if (!userToken) {
@@ -275,6 +270,7 @@ export default function StoresScreen() {
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     iconInactive: isDark ? '#B0BEC5' : '#364045', 
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', 
   };
 
   const ICONS_ARRAY = [
@@ -304,6 +300,7 @@ export default function StoresScreen() {
   const [showReviewInput, setShowReviewInput] = useState(false);
 
   const [renewModalVisible, setRenewModalVisible] = useState(false);
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false); 
   const [storeToRenew, setStoreToRenew] = useState<any>(null);
 
   const [isModalVisible, setModalVisible] = useState(false);
@@ -1032,7 +1029,16 @@ export default function StoresScreen() {
           <ThemedText style={{ fontSize: 14, opacity: 0.7, marginTop: 6, color:DynamicColors.text }} numberOfLines={isPending ? undefined : 2}>{store.description || store.descriptionStores}</ThemedText>
           
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.4 : 1 }}>
-            <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending || isExpired} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
+            <TouchableOpacity 
+              onPress={() => {
+                if (isGuest) {
+                  setShowRestrictedModal(true);
+                  return;
+                }
+                if (!isPending) setSelectedStore(store);
+              }} 
+              disabled={isPending || isExpired} 
+              style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}>
                <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
                <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>
                   Reseñas {reviewCount > 0 ? `(${formattedCount})` : ''}
@@ -1055,52 +1061,52 @@ export default function StoresScreen() {
   };
 
   const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState('');
 
-  const handlePrePublish = () => {
-    if (containsBadWords(comment)) {
-      const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
-      if (Platform.OS === 'web') { window.alert(errorMsg); } 
-      else { Alert.alert("Error", errorMsg); }
-      return;
-    }
-    onPublish(rating, comment);
+    const handlePrePublish = () => {
+      if (containsBadWords(comment)) {
+        const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
+        if (Platform.OS === 'web') { window.alert(errorMsg); } 
+        else { Alert.alert("Error", errorMsg); }
+        return;
+      }
+      onPublish(rating, comment);
+    };
+
+    return (
+      <View style={{ flex: 1, paddingVertical: 10 }}>
+        <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
+          <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.lawyerstab?.backBtn || 'Volver'}</ThemedText>
+        </TouchableOpacity>
+        <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color:DynamicColors.text }}>{t.lawyerstab?.experience || 'Tu Experiencia'}</ThemedText>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
+          {[1, 2, 3, 4, 5].map(s => (
+            <TouchableOpacity key={s} onPress={() => setRating(s)}>
+              <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
+          <TextInput 
+            value={comment} 
+            onChangeText={setComment} 
+            placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} 
+            placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
+            multiline 
+            autoCapitalize="sentences"
+            style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+          />
+        </View>
+        <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
+          <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
+            <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.lawyerstab?.publishBtn || 'Publicar'}</ThemedText>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
   };
-
-  return (
-    <View style={{ flex: 1, paddingVertical: 10 }}>
-      <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.lawyerstab?.backBtn || 'Volver'}</ThemedText>
-      </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color:DynamicColors.text }}>{t.lawyerstab?.experience || 'Tu Experiencia'}</ThemedText>
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
-        {[1, 2, 3, 4, 5].map(s => (
-          <TouchableOpacity key={s} onPress={() => setRating(s)}>
-            <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput 
-          value={comment} 
-          onChangeText={setComment} 
-          placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} 
-          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
-          multiline 
-          autoCapitalize="sentences"
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-        />
-      </View>
-      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-        <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
-          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.lawyerstab?.publishBtn || 'Publicar'}</ThemedText>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  );
-};
 
   const PendingStoreItem = ({ store }: { store: any }) => {
     const [selectedMonths, setSelectedMonths] = useState(1);
@@ -1137,17 +1143,17 @@ export default function StoresScreen() {
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
           {[1, 3, 6, 12].map(m => (
             <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
-               <Text style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</Text>
+               <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
             </TouchableOpacity>
           ))}
         </View>
         
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
-            <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Rechazar</Text>
+            <ThemedText style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Rechazar</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => approveStore(store, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
-            <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Aprobar</Text>
+            <ThemedText style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Aprobar</ThemedText>
           </TouchableOpacity>
         </View>
 
@@ -1213,7 +1219,7 @@ export default function StoresScreen() {
                 </ThemedText>
                 {(selectedDetail?.address || selectedDetail?.addressStores) && (
                     <ThemedText style={{ color: '#FF5F6D', fontWeight:'700', marginBottom:10 }}>
-                        {selectedDetail?.address || selectedDetail?.addressStores}
+                        <MaterialCommunityIcons name="map-marker-outline" size={12}/> {selectedDetail?.address || selectedDetail?.addressStores}
                     </ThemedText>
                 )}
                 <View style={{height:1, backgroundColor:DynamicColors.border, marginVertical:20}} />
@@ -1256,7 +1262,18 @@ export default function StoresScreen() {
               </View>
               {!showReviewInput ? (
                 <View style={{ flex: 1 }}>
-                  <TouchableOpacity onPress={() => { const hasReviewed = selectedStore?.reviews?.some((r: any) => r.userId === currentUserId); if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } setShowReviewInput(true); }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => { 
+                      if (isGuest) {
+                        setShowRestrictedModal(true);
+                        return;
+                      }
+                      const hasReviewed = selectedStore?.reviews?.some((r: any) => r.userId === currentUserId); 
+                      if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } 
+                      setShowReviewInput(true); 
+                    }} 
+                    style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
+                  >
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>
@@ -1350,7 +1367,6 @@ export default function StoresScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL SUGERIR NEGOCIO */}
       <Modal visible={isModalVisible} animationType="slide" transparent statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
@@ -1570,6 +1586,49 @@ export default function StoresScreen() {
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
+      <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para dejar reseñas y publicar negocios, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
         </View>
       </Modal>
 
@@ -1797,7 +1856,17 @@ export default function StoresScreen() {
         </View>
       </ScrollView>
 
-      <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
+      {/* 🚀 BOTÓN FLOTANTE (FAB) PARA PUBLICAR - BLOQUEADO PARA INVITADOS */}
+      <TouchableOpacity 
+        style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} 
+        onPress={() => {
+          if (isGuest) {
+            setShowRestrictedModal(true);
+            return;
+          }
+          setModalVisible(true);
+        }}
+      >
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="store-plus-outline" size={32} color="#FFF" />
         </LinearGradient>
