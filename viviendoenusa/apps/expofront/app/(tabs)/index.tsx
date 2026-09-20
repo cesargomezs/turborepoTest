@@ -1006,7 +1006,13 @@ export default function HomeScreen() {
 
           <View style={{ width: '100%', minHeight: isLargeWeb ? height * 0.85 : height * 0.9, justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E' }}>
-              <iframe src="https://player.vimeo.com/video/950018738?h=6d8edaba23&autoplay=1&loop=1&muted=1&controls=0&title=0&byline=0&portrait=0&transparent=1" style={{ width: '110vw', height: '100vh', pointerEvents: 'none', backgroundColor: 'transparent' }} frameBorder="0" allow="autoplay; fullscreen"></iframe>
+              <iframe 
+                src="https://player.vimeo.com/video/950018738?h=6d8edaba23&autoplay=1&loop=1&muted=1&controls=0&title=0&byline=0&portrait=0&transparent=1&dnt=1" 
+                style={{ width: '110vw', height: '100vh', pointerEvents: 'none', backgroundColor: 'transparent' }} 
+                frameBorder="0" 
+                allow="autoplay; fullscreen"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+              />
             </div>
             
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(19, 17, 46, 0.55)', zIndex: 1 }]} />
