@@ -361,8 +361,6 @@ export default function HomeScreen() {
       try {
         const { data: logoData } = await supabaseClient.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
         if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
-
-        // 🚀 USAMOS EL CLIENTE CON '!' PARA EVITAR EL AVISO DE NULL EN TYPESCRIPT
         const client = supabaseClient!;
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
@@ -1016,6 +1014,17 @@ export default function HomeScreen() {
           <meta name="twitter:title" content="Viviendo en USA | Directorio Latino y Migrante" />
           <meta name="twitter:description" content="Encuentra abogados, emprendimientos, empleos y red de apoyo para latinos e hispanos en USA." />
           <meta name="twitter:image" content={mainLogoUrl} />
+          {/* 🚀 INYECCIÓN DE CSS PARA FUENTES: Evita el bloqueo del renderizado y el "Flash of Invisible Text" (FOIT) */}
+          <style type="text/css">{`
+            @font-face {
+              font-family: 'Material Design Icons';
+              font-display: swap !important;
+            }
+            @font-face {
+              font-family: 'FontAwesome5_Brands';
+              font-display: swap !important;
+            }
+          `}</style>
         </Head>
 
         <ScrollView 
@@ -1389,6 +1398,17 @@ export default function HomeScreen() {
       <Head>
         <title>{loggedIn ? 'Panel de Inicio | Viviendo en USA' : 'Ingresar | Viviendo en USA'}</title>
         <meta name="robots" content={loggedIn ? "noindex, nofollow" : "index, follow"} />
+        {/* 🚀 INYECCIÓN DE CSS PARA FUENTES: Evita el bloqueo del renderizado y el "Flash of Invisible Text" (FOIT) */}
+        <style type="text/css">{`
+          @font-face {
+            font-family: 'Material Design Icons';
+            font-display: swap !important;
+          }
+          @font-face {
+            font-family: 'FontAwesome5_Brands';
+            font-display: swap !important;
+          }
+        `}</style>
       </Head>
       <RootComponent behavior={isIOS ? 'padding' : undefined} style={styles.container}>
         
@@ -1574,21 +1594,7 @@ export default function HomeScreen() {
                                         </View>
                                       </View>
                                       <View style={{ flex: 1 }}>
-                                        <ThemedText style={styles.labelDate}>
-                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
-                                        </ThemedText>
-                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
-                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
-                                        </Text>
-                                        <TextInput 
-                                          ref={zipCodeRef}
-                                          value={form.zipCode} 
-                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
-                                          placeholder="90210" 
-                                          placeholderTextColor={DynamicColors.subtext}
-                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
-                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
-                                        />
+                                        <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
                                       </View>
                                     </View>
                                   ) : (
@@ -1614,23 +1620,7 @@ export default function HomeScreen() {
                                           />
                                         </View>
                                       </View>
-                                      <View style={{ width: '100%', marginTop: 2 }}>
-                                        <ThemedText style={styles.labelDate}>
-                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
-                                        </ThemedText>
-                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
-                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
-                                        </Text>
-                                        <TextInput 
-                                          ref={zipCodeRef}
-                                          value={form.zipCode} 
-                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
-                                          placeholder="90210" 
-                                          placeholderTextColor={DynamicColors.subtext}
-                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
-                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
-                                        />
-                                      </View>
+                                      <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
                                     </>
                                   )}
                                   
@@ -2000,7 +1990,7 @@ export default function HomeScreen() {
 
                   <View style={styles.termsContainer}>
                     <TouchableOpacity onPress={() => setAcceptedTerms(!acceptedTerms)} style={{ padding: 4 }}><MaterialCommunityIcons name={acceptedTerms ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={acceptedTerms ? DynamicColors.accent : DynamicColors.subtext} /></TouchableOpacity>
-                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>{isEnglish ? "I have read and accept the " : "He leído y accepto los "} <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
+                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>{isEnglish ? "I have read and accept the " : "He leído y acepto los "} <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
                         setReturnToCompletion(true);
                         setShowCompletionModal(false);
                         setTimeout(() => setShowTermsModal(true), 300);
