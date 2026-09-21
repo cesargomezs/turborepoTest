@@ -457,7 +457,8 @@ export default function HomeScreen() {
       });
       const dataRes = await res.json();
 
-      if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
+      // 🚀 BLINDAJE ANTI-BUCLE CORREGIDO: Respetamos estrictamente a dataRes.requiresProfileCompletion
+      if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
         await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
       } else {
         let googleEmail = dataRes.user?.email || dataRes.email || ''; 
@@ -520,7 +521,8 @@ export default function HomeScreen() {
         });
         const dataRes = await res.json();
 
-        if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion && dataRes.user?.phone) {
+        // 🚀 BLINDAJE ANTI-BUCLE CORREGIDO: Respetamos estrictamente a dataRes.requiresProfileCompletion
+        if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
           await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
         } else {
           if (!appleEmail && dataRes.user?.email) appleEmail = dataRes.user.email;
@@ -734,7 +736,7 @@ export default function HomeScreen() {
       }
     };
 
-    if (!form.zipCode) {
+    if (!form.zipCode && !isSkipping) { // 🚀 SI ESTAMOS OMITIENDO, NO MOSTRAR EL ALERTA DEL CÓDIGO POSTAL
       if (isWebPlatform) {
         if (window.confirm(isEnglish ? "💡 Tip: Adding a zip code helps us show you better local results. Continue without it?" : "💡 Sugerencia: Agregar un código postal nos ayuda a mostrarte mejores resultados locales. ¿Continuar sin él?")) {
           executeSubmit();
@@ -1958,6 +1960,7 @@ export default function HomeScreen() {
                     />
                   </View>
 
+                  {/* 🚀 FECHA DE NACIMIENTO OPCIONAL EN MODAL (INICIA VACÍA Y PERMITE BORRARSE) */}
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate (Optional)" : "Fecha de Nacimiento (Opcional)")}</ThemedText>
                     <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 12 }]}>
@@ -1965,8 +1968,8 @@ export default function HomeScreen() {
                         <input type="date" onChange={handleWebDateChange} value={getSafeDateString()} style={{ width: '100%', padding: '12px', border: 'none', background: 'transparent', color: DynamicColors.text, outline: 'none', fontSize: '16px', cursor: 'pointer' }} />
                       ) : (
                         <>
-                          <ThemedText style={{ color: DynamicColors.text, fontWeight: '700' }}>
-                            {form.birthDate && !isNaN(form.birthDate.getTime()) ? form.birthDate.toLocaleDateString() : (isEnglish ? 'Select date' : 'Seleccionar fecha')}
+                          <ThemedText style={{ color: form.birthDate ? DynamicColors.text : DynamicColors.subtext, fontWeight: '700' }}>
+                            {form.birthDate && !isNaN(form.birthDate.getTime()) ? form.birthDate.toLocaleDateString() : (isEnglish ? 'Select date (Optional)' : 'Seleccionar fecha (Opcional)')}
                           </ThemedText>
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             {form.birthDate && (

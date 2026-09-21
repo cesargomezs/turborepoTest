@@ -38,20 +38,25 @@ export default function LogoutScreen() {
           dispatch(toggleAuth()); 
         }
 
-        // 🚀 Recarga limpia en web para limpiar cualquier estado en memoria de React
-        if (Platform.OS === 'web') {
-          window.location.replace('/?login=true');
-        } else {
-          router.replace('/?login=true');
-        }
+        // 🚀 FIX: Un pequeño retraso para que Redux limpie el estado antes de que Expo Router navegue.
+        // Esto evita el choque que congelaba la pantalla.
+        setTimeout(() => {
+          if (Platform.OS === 'web') {
+            window.location.replace('/?login=true');
+          } else {
+            router.replace('/?login=true');
+          }
+        }, 150);
         
       } catch (error) {
         console.error("Error al cerrar sesión:", error);
-        if (Platform.OS === 'web') {
-          window.location.replace('/?login=true');
-        } else {
-          router.replace('/?login=true');
-        }
+        setTimeout(() => {
+          if (Platform.OS === 'web') {
+            window.location.replace('/?login=true');
+          } else {
+            router.replace('/?login=true');
+          }
+        }, 150);
       }
     };
 
@@ -74,6 +79,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#13112E', 
+    // 🚀 FIX: Cambiado a transparente para evitar el pantallazo azul oscuro.
+    backgroundColor: 'transparent', 
   }
 });

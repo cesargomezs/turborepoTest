@@ -13,7 +13,7 @@ import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 
-import * as SecureStore from 'expo-secure-store'; // 🚀 Aseguramos de usar SecureStore para guardar la visita
+import * as SecureStore from 'expo-secure-store'; 
 
 // 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
 import { useAppTheme } from '../../context/ThemeContext';
@@ -64,7 +64,7 @@ const GUEST_SLIDES = [
   }
 ];
 
-// 🚀 SLIDES DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS (CON COLORES POR CARACTERÍSTICA)
+// 🚀 SLIDES DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS
 const LOGGED_IN_SLIDES = [
   {
     icon: 'heart-pulse',
@@ -143,20 +143,17 @@ export default function ServicesScreen() {
   const isIOS = Platform.OS === 'ios';
   const isLargeWeb = isWeb && width > 1000;
 
+  // 🚀 FIX: ELIMINAMOS LA REDIRECCIÓN AGRESIVA (!userToken) QUE CAUSABA EL "FONDO AZUL" AL CERRAR SESIÓN.
   useEffect(() => {
-    if (!userToken) {
-      router.replace('/');
-      return;
-    }
-
     if (isWeb && isGuest) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         dispatch(setUserMetadata({} as any));
         dispatch(toggleAuth());
         router.replace('/?login=true');
-      }, 100);
+      }, 300);
+      return () => clearTimeout(timer);
     }
-  }, [userToken, isGuest, isWeb]);
+  }, [isGuest, isWeb]);
 
   useEffect(() => {
     if (isGuest && !isWeb) {
@@ -165,10 +162,9 @@ export default function ServicesScreen() {
     }
   }, [isGuest, isWeb]);
 
-  // 🚀 NUEVO: MOSTRAR EL TUTORIAL LA PRIMERA VEZ QUE EL USUARIO REGISTRADO ENTRA A SERVICIOS
+  // 🚀 TUTORIAL: SE MUESTRA LA PRIMERA VEZ QUE EL USUARIO ENTRA (INTACTO)
   useEffect(() => {
     const checkFirstTimeTutorial = async () => {
-      // Si es invitado o no hay token, no hacemos nada aquí
       if (isGuest || !userToken) return;
 
       try {
@@ -179,7 +175,6 @@ export default function ServicesScreen() {
           hasSeen = await SecureStore.getItemAsync('hasSeenServicesTutorial');
         }
 
-        // Si nunca lo ha visto, se lo mostramos y guardamos el registro
         if (!hasSeen) {
           setShowLoggedInTutorialModal(true);
           setLoggedInSlideIdx(0);
@@ -279,7 +274,7 @@ export default function ServicesScreen() {
             
             <View style={localStyles.cardContent}>
               <View style={[localStyles.headerRow, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                {/* 🚀 BOTÓN DE AYUDA / MANUAL PARA USUARIOS LOGUEADOS */}
+                {/* 🚀 BOTÓN DE AYUDA / MANUAL PARA USUARIOS LOGUEADOS (INTACTO) */}
                 {!isGuest && (
                   <TouchableOpacity 
                     onPress={() => { setShowLoggedInTutorialModal(true); setLoggedInSlideIdx(0); }}
@@ -473,7 +468,7 @@ export default function ServicesScreen() {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS (CON COLORES POR CARACTERÍSTICA) */}
+      {/* 🚀 MODAL DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS */}
       <Modal visible={showLoggedInTutorialModal} transparent animationType="fade" onRequestClose={() => setShowLoggedInTutorialModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 30, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
