@@ -363,7 +363,14 @@ export default function HomeScreen() {
         if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
-            const { data } = await supabaseClient!.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800);
+            // 🚀 Optimización de Lighthouse: Supabase enviará las imágenes al tamaño exacto de la tarjeta web.
+            const { data } = await supabaseClient!.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800, {
+              transform: {
+                width: 500,
+                height: 300,
+                resize: 'cover',
+              }
+            });
             return { ...service, img: data?.signedUrl || '' };
           })
         );
@@ -457,7 +464,6 @@ export default function HomeScreen() {
       });
       const dataRes = await res.json();
 
-      // 🚀 BLINDAJE ANTI-BUCLE CORREGIDO: Respetamos estrictamente a dataRes.requiresProfileCompletion
       if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
         await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
       } else {
@@ -521,7 +527,6 @@ export default function HomeScreen() {
         });
         const dataRes = await res.json();
 
-        // 🚀 BLINDAJE ANTI-BUCLE CORREGIDO: Respetamos estrictamente a dataRes.requiresProfileCompletion
         if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
           await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
         } else {
@@ -736,7 +741,7 @@ export default function HomeScreen() {
       }
     };
 
-    if (!form.zipCode && !isSkipping) { // 🚀 SI ESTAMOS OMITIENDO, NO MOSTRAR EL ALERTA DEL CÓDIGO POSTAL
+    if (!form.zipCode && !isSkipping) {
       if (isWebPlatform) {
         if (window.confirm(isEnglish ? "💡 Tip: Adding a zip code helps us show you better local results. Continue without it?" : "💡 Sugerencia: Agregar un código postal nos ayuda a mostrarte mejores resultados locales. ¿Continuar sin él?")) {
           executeSubmit();
@@ -1064,14 +1069,16 @@ export default function HomeScreen() {
           </View>
 
           <View style={{ width: '100%', minHeight: isLargeWeb ? height * 0.85 : height * 0.9, justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E' }}>
-              <iframe 
-                src="https://player.vimeo.com/video/950018738?h=6d8edaba23&autoplay=1&loop=1&muted=1&controls=0&title=0&byline=0&portrait=0&transparent=1&dnt=1" 
-                style={{ width: '110vw', height: '100vh', pointerEvents: 'none', backgroundColor: 'transparent' }} 
-                frameBorder="0" 
-                allow="autoplay; fullscreen"
-                sandbox="allow-scripts allow-same-origin allow-presentation"
-              />
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E' } as any}>
+              <video 
+                autoPlay 
+                loop 
+                muted 
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' } as any}
+              >
+                <source src="https://pwznamxpdzwppmpiyizp.supabase.co/storage/v1/object/public/images/logoorimages/video_fondo_viviendoenusa.mp4" type="video/mp4" />
+              </video>
             </div>
             
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(19, 17, 46, 0.55)', zIndex: 1 }]} />
@@ -1567,21 +1574,7 @@ export default function HomeScreen() {
                                         </View>
                                       </View>
                                       <View style={{ flex: 1 }}>
-                                        <ThemedText style={styles.labelDate}>
-                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
-                                        </ThemedText>
-                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
-                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
-                                        </Text>
-                                        <TextInput 
-                                          ref={zipCodeRef}
-                                          value={form.zipCode} 
-                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
-                                          placeholder="90210" 
-                                          placeholderTextColor={DynamicColors.subtext}
-                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
-                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
-                                        />
+                                        <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
                                       </View>
                                     </View>
                                   ) : (
@@ -1607,23 +1600,7 @@ export default function HomeScreen() {
                                           />
                                         </View>
                                       </View>
-                                      <View style={{ width: '100%', marginTop: 2 }}>
-                                        <ThemedText style={styles.labelDate}>
-                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
-                                        </ThemedText>
-                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
-                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
-                                        </Text>
-                                        <TextInput 
-                                          ref={zipCodeRef}
-                                          value={form.zipCode} 
-                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
-                                          placeholder="90210" 
-                                          placeholderTextColor={DynamicColors.subtext}
-                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
-                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
-                                        />
-                                      </View>
+                                      <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
                                     </>
                                   )}
                                   
