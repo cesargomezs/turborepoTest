@@ -361,9 +361,12 @@ export default function HomeScreen() {
       try {
         const { data: logoData } = await supabaseClient.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
         if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
+
+        // 🚀 USAMOS EL CLIENTE CON '!' PARA EVITAR EL AVISO DE NULL EN TYPESCRIPT
+        const client = supabaseClient!;
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
-            const { data } = await supabaseClient!.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800, {
+            const { data } = await client.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800, {
               transform: {
                 width: 500,
                 height: 300,
