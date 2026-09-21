@@ -10,6 +10,7 @@ import jwksClient from 'jwks-rsa';
 import { Request, Response } from 'express'; 
 import { AuthRequest } from '../middleware/authMiddleware'; 
 import { logAuditEvent } from '../services/audit.service';
+import crypto from 'crypto'; // 🚀 AÑADIDO: Para solucionar el error de "default ID" en Render
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -40,30 +41,35 @@ const capitalizeName = (str: any) => {
 };
 
 // --------------------------------------------------------
-// 🛠️ TÉRMINOS: UPSERT SEGURO CORREGIDO
+// 🛠️ TÉRMINOS: UPSERT SEGURO CORREGIDO (SOLUCIONA EL ERROR ROJO EN RENDER)
 // --------------------------------------------------------
 const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) => {
   try {
-    await db.insert(userTermsAcceptance)
-      .values({
-        userId,
-        ipAddress: ipAddress || '0.0.0.0', 
-        acceptedAt: new Date(),            
-      })
-      .onConflictDoUpdate({
-        target: userTermsAcceptance.userId,
-        set: {
+    const existing = await db.select().from(userTermsAcceptance).where(eq(userTermsAcceptance.userId, userId));
+    
+    if (existing.length > 0) {
+      await db.update(userTermsAcceptance)
+        .set({
           ipAddress: ipAddress || '0.0.0.0',
           acceptedAt: new Date(),
-        },
-      });
+        })
+        .where(eq(userTermsAcceptance.userId, userId));
+    } else {
+      await db.insert(userTermsAcceptance)
+        .values({
+          id: crypto.randomUUID(), // 🚀 Soluciona el error 'values (default...)'
+          userId,
+          ipAddress: ipAddress || '0.0.0.0', 
+          acceptedAt: new Date(),            
+        });
+    }
   } catch (error: any) {
     console.error("❌ [TÉRMINOS] ERROR ES:", error.message);
   }
 };
 
 // --------------------------------------------------------
-// 🛠️ DISPOSITIVOS: ESTRICTO Y ÚNICO (Cero basura, 1 solo registro)
+// 🛠️ DISPOSITIVOS: ESTRICTO Y ÚNICO
 // --------------------------------------------------------
 const upsertDeviceToken = async (userId: string, pushToken?: string, deviceType?: string) => {
   if (!pushToken || typeof pushToken !== 'string' || pushToken.trim() === '' || pushToken === 'undefined') {
@@ -115,7 +121,6 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       
-      // 🚀 Ya no exigimos que data.phone exista para dejarlo pasar como un login social válido
       if (data.authProvider === 'apple' || data.authProvider === 'google') {
          let hashedPassword = user.password;
          if (data.password) {
@@ -337,6 +342,7 @@ export const authenticateUser = async (credentials: {
     const rows = await db.select().from(users).where(eq(users.email, email));
     let user = rows[0];
     const genericAuthError = "Credenciales incorrectas.";
+    let isBrandNew = false; // 🚀 BANDERA: Detecta si la cuenta acaba de nacer
 
     if (!user) {
       if (credentials.isGoogle || credentials.isApple) {
@@ -348,6 +354,7 @@ export const authenticateUser = async (credentials: {
           typeDetail: 'User'
         }).returning();
         user = newUser;
+        isBrandNew = true; // 🚀 Marcamos al usuario como totalmente nuevo
       } else {
         throw new Error(genericAuthError);
       }
@@ -387,8 +394,9 @@ export const authenticateUser = async (credentials: {
       await db.update(users).set({ failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, user.id));
     }
 
-    // 🚀 FIX CRÍTICO: SOLO exigimos name y lastName. Ya no exigimos phone, zip o birth para considerar el perfil "completo".
-    const needsProfile = !user.name || user.name === "Usuario" || user.name === "Apple" || user.name === "Google" || !user.lastName || user.lastName === "Apple" || user.lastName === "Google";
+    // 🚀 FIX CRÍTICO UI/UX: Solo exigimos completar el perfil si la cuenta ES NUEVA.
+    // Si ya inició sesión antes (y omitió los datos), no lo volvemos a molestar.
+    const needsProfile = isBrandNew;
     
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '150d' });
