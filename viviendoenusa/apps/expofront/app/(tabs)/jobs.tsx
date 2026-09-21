@@ -425,7 +425,6 @@ export default function JobsScreen() {
   }, [isFocused, isAdminMode, currentUserId]);
 
   const handleOpenCompanyProfile = async (companyId: string) => {
-    // 🚀 PERMITIR A LOS INVITADOS VER LAS OFERTAS DE LA EMPRESA
     if (!companyId) return triggerAlert("Aviso", "Esta vacante no tiene un perfil de empresa verificado enlazado.");
     try {
         setLoading(true);
@@ -977,6 +976,7 @@ export default function JobsScreen() {
         if (job.companyId) {
             if (!seenCompanies.has(job.companyId)) {
                 const cJobs = filtered.filter(j => j.companyId === job.companyId);
+                // 🚀 AQUÍ ESTÁ LA MAGIA: Calculamos el número real de vacantes activas/filtradas de la compañía
                 grouped.push({ ...job, groupedCount: cJobs.length });
                 seenCompanies.add(job.companyId);
             }
@@ -1290,11 +1290,19 @@ export default function JobsScreen() {
                                 <View style={{ padding: 15, paddingTop: 0 }}>
                                   <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
                                   
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 15 }}>
-                                      <MaterialCommunityIcons name="domain" size={16} color={DynamicColors.subtext} />
-                                      <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: 'bold', marginLeft: 4 }}>{job.company}</ThemedText>
+                                  {/* 🚀 MAGIA UI/UX: HACEMOS QUE EL NOMBRE DE LA EMPRESA SEA UN ENLACE AL PERFIL CORPORATIVO, INCLUSO SI ES 1 SOLA VACANTE */}
+                                  <TouchableOpacity 
+                                    activeOpacity={0.7} 
+                                    onPress={(e) => {
+                                      e.stopPropagation?.();
+                                      handleOpenCompanyProfile(job.companyId);
+                                    }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 15, alignSelf: 'flex-start' }}
+                                  >
+                                      <MaterialCommunityIcons name="domain" size={16} color={DynamicColors.accenticon} />
+                                      <ThemedText style={{ fontSize: 13, color: DynamicColors.accenticon, fontWeight: 'bold', marginLeft: 4, textDecorationLine: 'underline' }}>{job.company}</ThemedText>
                                       {job.isCompanyVerified && <MaterialCommunityIcons name="check-decagram" size={14} color="#4CAF50" style={{marginLeft: 6}} />}
-                                  </View>
+                                  </TouchableOpacity>
 
                                   <ThemedText numberOfLines={2} style={{ fontSize: 14, color: DynamicColors.text, lineHeight: 22 }}>{job.description}</ThemedText>
                                 </View>
