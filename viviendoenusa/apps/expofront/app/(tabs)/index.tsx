@@ -363,7 +363,6 @@ export default function HomeScreen() {
         if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
-            // 🚀 Optimización de Lighthouse: Supabase enviará las imágenes al tamaño exacto de la tarjeta web.
             const { data } = await supabaseClient!.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800, {
               transform: {
                 width: 500,
@@ -1145,7 +1144,7 @@ export default function HomeScreen() {
                  {isEnglish ? "Explore Our Services" : "Explora Nuestros Servicios"}
                </Text>
                <Text style={{ fontSize: 16, color: DynamicColors.subtext, textAlign: 'center', lineHeight: 24 }}>
-                 {isEnglish ? "Discover everything Living in USA has to offer. Promote your business, find the perfect job, or connect with your local community." : "Descubre todo lo que Viviendo en USA tiene para ofrecerte. Promueve tu negocio, encuentra el trabajo ideal o conecta con tu comunidad local."}
+                 {isEnglish ? "Discover everything Living in USA has to offer. Promote your business, find the perfect job, or connect with your local community." : "Descubre todo lo que Viviendo en USA tiene para circular. Promueve tu negocio, encuentra el trabajo ideal o conecta con tu comunidad local."}
                </Text>
             </View>
 
@@ -1937,7 +1936,6 @@ export default function HomeScreen() {
                     />
                   </View>
 
-                  {/* 🚀 FECHA DE NACIMIENTO OPCIONAL EN MODAL (INICIA VACÍA Y PERMITE BORRARSE) */}
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate (Optional)" : "Fecha de Nacimiento (Opcional)")}</ThemedText>
                     <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 12 }]}>
