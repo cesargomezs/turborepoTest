@@ -1068,16 +1068,14 @@ export default function HomeScreen() {
           </View>
 
           <View style={{ width: '100%', minHeight: isLargeWeb ? height * 0.85 : height * 0.9, justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E' } as any}>
-              <video 
-                autoPlay 
-                loop 
-                muted 
-                playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' } as any}
-              >
-                <source src="https://pwznamxpdzwppmpiyizp.supabase.co/storage/v1/object/public/images/logoorimages/video_fondo_viviendoenusa.mp4" type="video/mp4" />
-              </video>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#13112E' }}>
+              <iframe 
+                src="https://player.vimeo.com/video/950018738?h=6d8edaba23&autoplay=1&loop=1&muted=1&controls=0&title=0&byline=0&portrait=0&transparent=1&dnt=1" 
+                style={{ width: '110vw', height: '100vh', pointerEvents: 'none', backgroundColor: 'transparent' }} 
+                frameBorder="0" 
+                allow="autoplay; fullscreen"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+              />
             </div>
             
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(19, 17, 46, 0.55)', zIndex: 1 }]} />
@@ -1144,7 +1142,7 @@ export default function HomeScreen() {
                  {isEnglish ? "Explore Our Services" : "Explora Nuestros Servicios"}
                </Text>
                <Text style={{ fontSize: 16, color: DynamicColors.subtext, textAlign: 'center', lineHeight: 24 }}>
-                 {isEnglish ? "Discover everything Living in USA has to offer. Promote your business, find the perfect job, or connect with your local community." : "Descubre todo lo que Viviendo en USA tiene para circular. Promueve tu negocio, encuentra el trabajo ideal o conecta con tu comunidad local."}
+                 {isEnglish ? "Discover everything Living in USA has to offer. Promote your business, find the perfect job, or connect with your local community." : "Descubre todo lo que Viviendo en USA tiene para ofrecerte. Promueve tu negocio, encuentra el trabajo ideal o conecta con tu comunidad local."}
                </Text>
             </View>
 
@@ -1573,7 +1571,21 @@ export default function HomeScreen() {
                                         </View>
                                       </View>
                                       <View style={{ flex: 1 }}>
-                                        <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                        <ThemedText style={styles.labelDate}>
+                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
+                                        </ThemedText>
+                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
+                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
+                                        </Text>
+                                        <TextInput 
+                                          ref={zipCodeRef}
+                                          value={form.zipCode} 
+                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
+                                          placeholder="90210" 
+                                          placeholderTextColor={DynamicColors.subtext}
+                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
+                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
+                                        />
                                       </View>
                                     </View>
                                   ) : (
@@ -1599,7 +1611,23 @@ export default function HomeScreen() {
                                           />
                                         </View>
                                       </View>
-                                      <ThemedTextInput label={t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")} value={form.zipCode} onChangeText={(v: string) => setForm({...form, zipCode: v})} placeholder="90210" keyboardType={isWebPlatform ? "default" : "number-pad"} />
+                                      <View style={{ width: '100%', marginTop: 2 }}>
+                                        <ThemedText style={styles.labelDate}>
+                                          {t?.headertab?.zipCode || (isEnglish ? "Zip Code (Optional)" : "Código Postal (Opcional)")}
+                                        </ThemedText>
+                                        <Text style={{ fontSize: 10, color: DynamicColors.subtext, marginBottom: 2 }}>
+                                          {isEnglish ? "💡 Tip: Add it for better local results" : "💡 Ingrésalo para obtener mejores resultados locales"}
+                                        </Text>
+                                        <TextInput 
+                                          ref={zipCodeRef}
+                                          value={form.zipCode} 
+                                          onChangeText={(v: string) => setForm({...form, zipCode: v})} 
+                                          placeholder="90210" 
+                                          placeholderTextColor={DynamicColors.subtext}
+                                          style={[styles.nativeInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, color: DynamicColors.text, marginTop: 0 }, ...(isWebPlatform ? [{ outlineStyle: 'none' as any }] : []) ]}
+                                          keyboardType={isWebPlatform ? "default" : "number-pad"} 
+                                        />
+                                      </View>
                                     </>
                                   )}
                                   
@@ -1936,6 +1964,7 @@ export default function HomeScreen() {
                     />
                   </View>
 
+                  {/* 🚀 FECHA DE NACIMIENTO OPCIONAL EN MODAL (INICIA VACÍA Y PERMITE BORRARSE) */}
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate (Optional)" : "Fecha de Nacimiento (Opcional)")}</ThemedText>
                     <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 12 }]}>
@@ -1968,7 +1997,7 @@ export default function HomeScreen() {
 
                   <View style={styles.termsContainer}>
                     <TouchableOpacity onPress={() => setAcceptedTerms(!acceptedTerms)} style={{ padding: 4 }}><MaterialCommunityIcons name={acceptedTerms ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={acceptedTerms ? DynamicColors.accent : DynamicColors.subtext} /></TouchableOpacity>
-                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>{isEnglish ? "I have read and accept the " : "He leído y acepto los "} <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
+                    <ThemedText style={[styles.termsText, { color: DynamicColors.subtext }]}>{isEnglish ? "I have read and accept the " : "He leído y accepto los "} <ThemedText style={{ color: DynamicColors.accent, fontWeight: 'bold', textDecorationLine: 'underline' }} onPress={() => {
                         setReturnToCompletion(true);
                         setShowCompletionModal(false);
                         setTimeout(() => setShowTermsModal(true), 300);
