@@ -33,9 +33,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname, useFocusEffect } from 'expo-router'; 
 import { setUserMetadata, useMockDispatch, useMockSelector, setLanguage, toggleAuth } from '../../redux/slices'; 
 import { useTranslation } from '../../hooks/useTranslation'; 
-//import { useAppTheme } from '@/app/src/context/ThemeContext'; 
 import { useAppTheme } from '../../context/ThemeContext';
-
 import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 import { handleUniversalShare } from '../../utils/shareHelper';
@@ -62,8 +60,6 @@ const API_DELETE_ACCOUNT_URL = `${API_BASE_URL}/auth/delete-account`;
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-// ⚠️ Nota para después: Este createClient causa el warning naranja en consola. 
-// Lo ideal es moverlo a un archivo utils/supabase.ts e importarlo aquí.
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const NOMBRE_BUCKET = 'images';
 
@@ -157,7 +153,6 @@ export default function Header({ title }: { title?: string }) {
   const globalLastName = userMetadata?.lastName || userMetadata?.last_name || '';
   const globalImageUrl = userMetadata?.imageUrl || '';
   
-  // 🚀 DETECCIÓN DE MODO INVITADO
   const isGuest = userMetadata?.typeDetail === 'Guest';
 
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
@@ -249,7 +244,6 @@ export default function Header({ title }: { title?: string }) {
         }
 
         const errText = await res.text();
-        // 🚀 FIX: Si el backend devuelve una página HTML de error, no la imprimas toda
         const cleanError = errText.trim().startsWith('<') 
           ? 'El servidor backend devolvió un HTML (posible error 404, 502 o Render está dormido).' 
           : errText;
@@ -285,13 +279,11 @@ export default function Header({ title }: { title?: string }) {
         }));
       }
     } catch (error: any) { 
-      // 🚀 Muestra un error limpio en la consola en vez de un código gigante
       console.warn("Advertencia al obtener datos de usuario:", error.message); 
     }
   };
 
   const fetchNotifications = async () => {
-    // 🚀 Evitamos buscar notificaciones si es invitado
     if (!REAL_USER_ID || !token || isGuest) return;
 
     try {
@@ -385,10 +377,12 @@ export default function Header({ title }: { title?: string }) {
     }
   }, [REAL_USER_ID, token, isGuest]);
 
+  // 🚀 ACTUALIZADO: Manejo de notificaciones nativas con actualización en tiempo real
   useEffect(() => {
     if (Platform.OS === 'web' || !Notifications || isGuest) return;
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
+    // 1. Escuchar cuando el usuario hace TAP en la notificación (Background/Killed)
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const notificationData = response.notification.request.content.data;
       const routes: Record<string, { path: string, param: string }> = {
         'job': { path: '/jobs', param: 'openJobId' },
@@ -411,7 +405,15 @@ export default function Header({ title }: { title?: string }) {
       }
     });
 
-    return () => subscription.remove();
+    // 2. Escuchar cuando la app está ABIERTA en primer plano y actualizar el badge
+    const foregroundSubscription = Notifications.addNotificationReceivedListener(() => {
+      fetchNotifications(); // Recarga la campana al instante
+    });
+
+    return () => {
+      responseSubscription.remove();
+      foregroundSubscription.remove();
+    };
   }, [router, isGuest]);
 
   const hasUnread = notifications.some(n => n.read === false || n.isRead === false || n.is_read === false);
@@ -608,7 +610,7 @@ export default function Header({ title }: { title?: string }) {
   };
 
   const pickProfileImage = async () => {
-    if (isGuest) return; // Un invitado no puede cambiar foto
+    if (isGuest) return; 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 1, 
     });
@@ -703,14 +705,13 @@ export default function Header({ title }: { title?: string }) {
   const displayNameToRender = globalName || profileData.name || '';
   const displayLastNameToRender = globalLastName || profileData.last_name || '';
 
-  // 🚀 FIX HYDRATION ERROR (#418): Evita que el servidor y el cliente se peleen por el diseño web inicial
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   if (!isMounted) {
-    return null; // Oculta el componente un microsegundo hasta que el navegador asuma el control real
+    return null; 
   }
 
   return (
@@ -894,7 +895,6 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL SOPORTE TÉCNICO IT (CON CONTENEDOR DE ALTURA FIJA PARA WEB) */}
       <Modal visible={showITSupportModal} transparent animationType="fade" onRequestClose={() => setShowITSupportModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => !isSendingIT && setShowITSupportModal(false)} />
@@ -993,7 +993,6 @@ export default function Header({ title }: { title?: string }) {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 SETTINGS DE TEMA E IDIOMA DISPONIBLES PARA TODOS (INCLUIDO INVITADO) */}
                 <View style={{ marginBottom: 25, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
                   
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
@@ -1031,7 +1030,6 @@ export default function Header({ title }: { title?: string }) {
                   </View>
                 </View>
 
-                {/* 🚀 FORMULARIO RESTRINGIDO SI ES INVITADO */}
                 {!isGuest ? (
                   <>
                     {isSuperAdmin && (
