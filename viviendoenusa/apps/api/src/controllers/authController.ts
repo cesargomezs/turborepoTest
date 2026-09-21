@@ -115,7 +115,8 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       
-      if (!user.phone && (data.authProvider === 'apple' || data.authProvider === 'google')) {
+      // 🚀 Ya no exigimos que data.phone exista para dejarlo pasar como un login social válido
+      if (data.authProvider === 'apple' || data.authProvider === 'google') {
          let hashedPassword = user.password;
          if (data.password) {
            const salt = await bcrypt.genSalt(10);
@@ -125,8 +126,8 @@ export const registerUser = async (data: any, imageUrl: string | null, reqIp?: s
          const [updatedUser] = await db.update(users).set({
            name: capitalizeName(data.firstName) || user.name,
            lastName: capitalizeName(data.lastName) || user.lastName,
-           phone: data.phone,
-           zip: data.zip,
+           phone: data.phone || user.phone,
+           zip: data.zip || user.zip,
            estate: stateObj || user.estate,
            birth: data.birth || user.birth,
            password: hashedPassword,
@@ -386,7 +387,8 @@ export const authenticateUser = async (credentials: {
       await db.update(users).set({ failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, user.id));
     }
 
-    const needsProfile = !user.name || user.name === "Usuario" || user.name === "Apple" || user.name === "Google" || !user.lastName;
+    // 🚀 FIX CRÍTICO: SOLO exigimos name y lastName. Ya no exigimos phone, zip o birth para considerar el perfil "completo".
+    const needsProfile = !user.name || user.name === "Usuario" || user.name === "Apple" || user.name === "Google" || !user.lastName || user.lastName === "Apple" || user.lastName === "Google";
     
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';
     const token = jwt.sign({ id: user.id, email: user.email }, baseSecret, { expiresIn: '150d' });
@@ -394,7 +396,6 @@ export const authenticateUser = async (credentials: {
     await upsertDeviceToken(user.id, credentials.pushToken, credentials.deviceType);
     await ensureTermsAccepted(user.id);
 
-    // 🚀 DEVOLUCIÓN CORRECTA BASADA ESTRICTAMENTE EN TYPE_DETAIL DE LA BASE DE DATOS
     const userRole = user.typeDetail || 'User';
 
     return {
@@ -408,8 +409,8 @@ export const authenticateUser = async (credentials: {
         lastName: user.lastName,
         phone: user.phone, 
         zip: user.zip,
-        role: userRole,       // 🚀 Retorna el rol real de la BD
-        typeDetail: userRole, // 🚀 Retorna el type_detail real de la BD
+        role: userRole,       
+        typeDetail: userRole, 
       }
     };
   } catch (error: any) {
