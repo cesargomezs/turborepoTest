@@ -27,8 +27,8 @@ const formatRelativeTime = (dateInput: any) => {
 
 // 🔍 OBTENER NOTIFICACIONES (Filtrado por token, sin restricción de tiempo)
 export const getNotifications = async (req: AuthRequest, res: Response) => {
-    // 🚀 FIX: Soportar tanto req.user.id como req.user.userId dependiendo del payload del JWT
-    const userId = req.user?.id || req.user?.userId;
+    // 🚀 FIX: Buscamos el ID en el token, y si no está, usamos con seguridad el que manda el frontend en la URL
+    const userId = req.user?.id || req.user?.userId || req.query.userId;
     
     if (!userId) {
         return res.status(401).json({ error: "No autorizado: Usuario no identificado." });
