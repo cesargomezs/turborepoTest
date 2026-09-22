@@ -27,15 +27,17 @@ const formatRelativeTime = (dateInput: any) => {
 
 // 🔍 OBTENER NOTIFICACIONES (Filtrado por token, sin restricción de tiempo)
 export const getNotifications = async (req: AuthRequest, res: Response) => {
-    if (!req.user || !req.user.id) {
+    // 🚀 FIX: Soportar tanto req.user.id como req.user.userId dependiendo del payload del JWT
+    const userId = req.user?.id || req.user?.userId;
+    
+    if (!userId) {
         return res.status(401).json({ error: "No autorizado: Usuario no identificado." });
     }
-    try {
-      const userId = req.user.id; 
 
+    try {
       const list = await db.select()
         .from(notifications)
-        .where(eq(notifications.userId, userId))
+        .where(eq(notifications.userId, String(userId)))
         .orderBy(desc(notifications.visibleAt));
   
       const formattedList = list.map((notif: any) => {
@@ -62,7 +64,8 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
 // 👀 MARCAR COMO LEÍDA (Protegida)
 export const markNotificationAsRead = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = String(req.user.id); 
+        // 🚀 FIX: Extraer el ID correctamente para evitar que asuma "undefined"
+        const userId = String(req.user?.id || req.user?.userId); 
         const notificationId = String(req.params.id);
 
         const updated = await db.update(notifications)
@@ -88,7 +91,8 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
 // 🗑️ ELIMINAR NOTIFICACIÓN INDIVIDUAL (Protegida)
 export const deleteNotification = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = String(req.user.id); 
+        // 🚀 FIX: Extraer el ID correctamente
+        const userId = String(req.user?.id || req.user?.userId); 
         const notificationId = String(req.params.id);
 
         const deleted = await db.delete(notifications)
@@ -113,7 +117,8 @@ export const deleteNotification = async (req: AuthRequest, res: Response) => {
 // 🗑️🔥 ELIMINAR TODAS LAS NOTIFICACIONES DEL USUARIO (Protegida)
 export const deleteAllNotifications = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = String(req.user.id);
+        // 🚀 FIX: Extraer el ID correctamente
+        const userId = String(req.user?.id || req.user?.userId);
 
         const deleted = await db.delete(notifications)
             .where(eq(notifications.userId, userId))
