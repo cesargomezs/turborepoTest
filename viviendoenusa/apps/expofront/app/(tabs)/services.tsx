@@ -143,7 +143,6 @@ export default function ServicesScreen() {
   const isIOS = Platform.OS === 'ios';
   const isLargeWeb = isWeb && width > 1000;
 
-  // 🚀 FIX: ELIMINAMOS LA REDIRECCIÓN AGRESIVA (!userToken) QUE CAUSABA EL "FONDO AZUL" AL CERRAR SESIÓN.
   useEffect(() => {
     if (isWeb && isGuest) {
       const timer = setTimeout(() => {
@@ -162,7 +161,6 @@ export default function ServicesScreen() {
     }
   }, [isGuest, isWeb]);
 
-  // 🚀 TUTORIAL: SE MUESTRA LA PRIMERA VEZ QUE EL USUARIO ENTRA (INTACTO)
   useEffect(() => {
     const checkFirstTimeTutorial = async () => {
       if (isGuest || !userToken) return;
@@ -269,16 +267,18 @@ export default function ServicesScreen() {
                 intensity={isDark ? 100 : 75} 
                 tint={isDark ? 'dark' : 'light'} 
                 style={StyleSheet.absoluteFill} 
+                pointerEvents="none" 
               />
             )}
             
             <View style={localStyles.cardContent}>
               <View style={[localStyles.headerRow, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                {/* 🚀 BOTÓN DE AYUDA / MANUAL PARA USUARIOS LOGUEADOS (INTACTO) */}
+                {/* 🚀 BOTÓN DE AYUDA / MANUAL PARA USUARIOS LOGUEADOS (CON zINDEX 999 PARA IOS) */}
                 {!isGuest && (
                   <TouchableOpacity 
                     onPress={() => { setShowLoggedInTutorialModal(true); setLoggedInSlideIdx(0); }}
-                    style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' }}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                    style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center', zIndex: 999, elevation: 10 }}
                   >
                     <MaterialCommunityIcons name="help-circle-outline" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -358,7 +358,6 @@ export default function ServicesScreen() {
                     </ThemedText>
                 </View>
 
-                {/* CUADRÍCULA DE 6 BOTONES */}
                 <View style={[localStyles.gridContainer, isLargeWeb && localStyles.webGridCentering]}>
                   {BUTTONS_DATA.map((item) => {
                     const isLockedForGuest = isGuest && !item.isAllowedForGuest;
@@ -468,12 +467,11 @@ export default function ServicesScreen() {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS */}
-      <Modal visible={showLoggedInTutorialModal} transparent animationType="fade" onRequestClose={() => setShowLoggedInTutorialModal(false)}>
+      {/* 🚀 MODAL DEL MANUAL PERSONALIZADO PARA USUARIOS LOGUEADOS (statusBarTranslucent agregado para iOS) */}
+      <Modal visible={showLoggedInTutorialModal} transparent animationType="fade" statusBarTranslucent={true} onRequestClose={() => setShowLoggedInTutorialModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 30, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 30, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center', zIndex: 999 }}>
             
-            {/* Indicadores de Paginación Superior */}
             <View style={{ flexDirection: 'row', gap: 5, marginBottom: 30, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
               {LOGGED_IN_SLIDES.map((_, i) => (
                 <View 
@@ -488,7 +486,6 @@ export default function ServicesScreen() {
               ))}
             </View>
 
-            {/* Ícono Circular con Degradado Característico de la Sección */}
             <LinearGradient 
               colors={LOGGED_IN_SLIDES[loggedInSlideIdx].colors as any} 
               style={{ width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 25, shadowColor: LOGGED_IN_SLIDES[loggedInSlideIdx].colors[0], shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 }}
@@ -496,7 +493,6 @@ export default function ServicesScreen() {
               <MaterialCommunityIcons name={LOGGED_IN_SLIDES[loggedInSlideIdx].icon as any} size={42} color="#FFF" />
             </LinearGradient>
 
-            {/* Títulos y Descripción */}
             <Text style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 12 }}>
               {LOGGED_IN_SLIDES[loggedInSlideIdx].title}
             </Text>
@@ -505,7 +501,6 @@ export default function ServicesScreen() {
               {LOGGED_IN_SLIDES[loggedInSlideIdx].desc}
             </Text>
 
-            {/* Botones Inferiores */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 15 }}>
               <TouchableOpacity 
                 onPress={() => setShowLoggedInTutorialModal(false)}
