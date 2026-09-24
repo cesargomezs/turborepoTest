@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
 import { createClient } from '@supabase/supabase-js'; 
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 🚀 IMPORTADO PARA EL TUTORIAL
 
 import { Colors } from '../../constants/Colors';
 import { ThemedText } from '../ThemedText';
@@ -155,6 +156,9 @@ export default function Header({ title }: { title?: string }) {
   
   const isGuest = userMetadata?.typeDetail === 'Guest';
 
+  // 🚀 ESTADO PARA EL TUTORIAL DE COLORES EN EL PRIMER INGRESO
+  const [showColorTutorial, setShowColorTutorial] = useState(false);
+
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -216,6 +220,30 @@ export default function Header({ title }: { title?: string }) {
     "Privacidad / Seguridad",
     "Otro"
   ];
+
+  // 🚀 USEEFFECT PARA DETECTAR LA PRIMERA VEZ QUE SE ABRE LA APP
+  useEffect(() => {
+    const checkFirstLaunchTutorial = async () => {
+      try {
+        const hasSeenTutorial = await AsyncStorage.getItem('@has_seen_color_tutorial');
+        if (hasSeenTutorial !== 'true') {
+          setShowColorTutorial(true);
+        }
+      } catch (error) {
+        console.error("Error validando el tutorial de colores:", error);
+      }
+    };
+    checkFirstLaunchTutorial();
+  }, []);
+
+  const closeColorTutorial = async () => {
+    try {
+      await AsyncStorage.setItem('@has_seen_color_tutorial', 'true');
+      setShowColorTutorial(false);
+    } catch (error) {
+      console.error("Error guardando el estado del tutorial:", error);
+    }
+  };
 
   const fetchUserData = async () => {
     if (!REAL_USER_ID || !token) return;
@@ -377,11 +405,9 @@ export default function Header({ title }: { title?: string }) {
     }
   }, [REAL_USER_ID, token, isGuest]);
 
-  // 🚀 ACTUALIZADO: Manejo de notificaciones nativas con actualización en tiempo real
   useEffect(() => {
     if (Platform.OS === 'web' || !Notifications || isGuest) return;
 
-    // 1. Escuchar cuando el usuario hace TAP en la notificación (Background/Killed)
     const responseSubscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const notificationData = response.notification.request.content.data;
       const routes: Record<string, { path: string, param: string }> = {
@@ -405,9 +431,8 @@ export default function Header({ title }: { title?: string }) {
       }
     });
 
-    // 2. Escuchar cuando la app está ABIERTA en primer plano y actualizar el badge
     const foregroundSubscription = Notifications.addNotificationReceivedListener(() => {
-      fetchNotifications(); // Recarga la campana al instante
+      fetchNotifications(); 
     });
 
     return () => {
@@ -758,6 +783,49 @@ export default function Header({ title }: { title?: string }) {
           <ThemedText className="text-center text-2xl" style={{ color: isDark ? '#4FC3F7' : '#007AFF' , fontWeight: 'bold' }}>{title}</ThemedText>
         </View>
       </BlurView>
+
+      {/* 🚀 MODAL DEL TUTORIAL DE COLORES (PRIMERA VEZ) */}
+      <Modal visible={showColorTutorial} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 32, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', zIndex: 20 }}>
+            
+            <MaterialCommunityIcons name="palette-outline" size={60} color="#FF5F6D" style={{ marginBottom: 20 }} />
+            
+            <ThemedText style={{ fontSize: 24, fontWeight: '900', color: Colors[localTheme].text, marginBottom: 10, textAlign: 'center' }}>
+              Elige tu Estilo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 14, color: isDark ? '#B0BEC5' : '#666', textAlign: 'center', marginBottom: 30, lineHeight: 22 }}>
+              Personaliza tu experiencia. Puedes cambiar el color de la aplicación en cualquier momento desde la configuración.
+            </ThemedText>
+
+            <View style={{ flexDirection: 'row', gap: 15, marginBottom: 30, width: '100%' }}>
+              <TouchableOpacity 
+                onPress={() => toggleTheme('light')} 
+                style={{ flex: 1, paddingVertical: 20, borderRadius: 20, backgroundColor: !isDark ? '#F5F5F5' : 'transparent', borderWidth: 2, borderColor: !isDark ? '#FFB300' : 'rgba(150,150,150,0.2)', alignItems: 'center' }}
+              >
+                <MaterialCommunityIcons name="weather-sunny" size={32} color={!isDark ? '#FFB300' : '#888'} style={{ marginBottom: 10 }} />
+                <ThemedText style={{ fontWeight: 'bold', color: !isDark ? '#333' : '#888' }}>Claro</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => toggleTheme('dark')} 
+                style={{ flex: 1, paddingVertical: 20, borderRadius: 20, backgroundColor: isDark ? '#333' : 'transparent', borderWidth: 2, borderColor: isDark ? '#4FC3F7' : 'rgba(150,150,150,0.2)', alignItems: 'center' }}
+              >
+                <MaterialCommunityIcons name="weather-night" size={32} color={isDark ? '#4FC3F7' : '#888'} style={{ marginBottom: 10 }} />
+                <ThemedText style={{ fontWeight: 'bold', color: isDark ? '#FFF' : '#888' }}>Oscuro</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity onPress={closeColorTutorial} style={{ width: '100%', borderRadius: 16, overflow: 'hidden' }}>
+              <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 16, alignItems: 'center' }}>
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 16 }}>¡Comenzar!</ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       
       <Modal visible={showCouponModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowCouponModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>

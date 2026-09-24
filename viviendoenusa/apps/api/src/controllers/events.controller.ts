@@ -35,6 +35,13 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
+// 🛡️ FUNCIÓN DE SEGURIDAD PARA VALIDAR ENLACES DE GOOGLE REVIEWS
+const isValidGoogleReviewUrl = (url: string) => {
+  if (!url) return false;
+  const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+  return regex.test(url);
+};
+
 // 🛡️ BARRERA DE SANITIZACIÓN PARA OBJETOS
 const sanitizePayload = (data: any) => {
   if (!data || typeof data !== 'object') return data;
@@ -178,12 +185,10 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
     const cleanZipParam = zip ? sanitizeText(String(zip)) : null;
-    // 🚀 NUEVA VALIDACIÓN ANTI-GUEST (aquí tu variable se llama userId)
     const cleanUserId = (userId && userId !== 'undefined' && userId !== 'null' && userId !== '' && !String(userId).startsWith('guest_')) 
       ? sanitizeText(String(userId)) 
       : null;
     
-    // 🚀 Condición segura: Si es invitado (sin userId real), solo filtra por eventos aprobados y vigentes
     let baseConditions = cleanUserId 
       ? and(or(eq(events.approved, true), eq(events.userId, cleanUserId)), sql`${events.dateEvent} >= CURRENT_DATE`)
       : and(eq(events.approved, true), sql`${events.dateEvent} >= CURRENT_DATE`);
@@ -212,7 +217,6 @@ export const getEvents = async (zip?: string, userId?: string) => {
       .where(finalConditions)
       .$dynamic(); 
 
-    // 🚀 ORDENAMIENTO SEGURO
     if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
@@ -260,6 +264,7 @@ export const getEvents = async (zip?: string, userId?: string) => {
             ownerName: nombreUsuario,
             referenceCode: dbPayment?.referenceCode,
             paymentMethod: dbPayment?.paymentMethod || '',
+            googleReviewLink: dbEvent.googleReviewLink || dbEvent.googleUrl || dbEvent.google_review_link
         }; 
     }));
   } catch (error) {
@@ -312,6 +317,7 @@ export const getEventById = async (id: string, userId?: string) => {
         ownerName: nombreUsuario,
         referenceCode: dbPayment?.referenceCode,
         paymentMethod: dbPayment?.paymentMethod || '',
+        googleReviewLink: dbEvent.googleReviewLink
     };
   } catch (error: any) {
     throw new Error(`Error al obtener el evento por ID: ${error.message}`);
@@ -328,6 +334,16 @@ export const createEvent = async (data: any) => {
     const validUserId = sanitizeText(cleanData.userId);
     if (!validUserId) {
       throw new Error("El ID del usuario es obligatorio para registrar un evento.");
+    }
+
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EVENTOS
+    let safeGoogleLink = null;
+    if (cleanData.googleReviewLink) {
+      const trimmedLink = cleanData.googleReviewLink.trim();
+      if (!isValidGoogleReviewUrl(trimmedLink)) {
+        throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+      }
+      safeGoogleLink = trimmedLink;
     }
 
     const planSeleccionado = cleanData.premiumPlan || cleanData.premium_plan || 'basic'; 
@@ -378,6 +394,7 @@ export const createEvent = async (data: any) => {
           premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
           userId: validUserId, 
           approved: false, 
+          googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
         };
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
@@ -429,7 +446,8 @@ export const createEvent = async (data: any) => {
            status: 'pending',
            referenceCode: isCoupon ? realPromoCode : codigoReferencia,
            paymentMethod: isCoupon ? 'Coupon' : metodoPago,
-           message: customMessage 
+           message: customMessage,
+           googleReviewLink: safeGoogleLink
         };
     });
 
@@ -480,6 +498,18 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
     }
 
     const cleanPayload = sanitizePayload(data);
+
+    // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
+    if (cleanPayload.googleReviewLink !== undefined) {
+      if (cleanPayload.googleReviewLink.trim() === '') {
+        cleanPayload.googleReviewLink = null;
+      } else if (isValidGoogleReviewUrl(cleanPayload.googleReviewLink.trim())) {
+        cleanPayload.googleReviewLink = cleanPayload.googleReviewLink.trim();
+      } else {
+        throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+      }
+    }
+
     let pushNotificationData: any = null;
 
     if (cleanPayload.imageEven && typeof cleanPayload.imageEven === 'string' && cleanPayload.imageEven.startsWith('events/')) {

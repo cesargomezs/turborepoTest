@@ -4,7 +4,7 @@ import { lawyers, notifications, users, stores, events, jobs, support, companies
 import { sql, eq, and, isNotNull, inArray } from 'drizzle-orm'; 
 
 // ============================================================================
-// 1. CRON DE VENCIMIENTOS - Corre a la medianoche (00:00)
+// 1. CRON DE VENCIMIENTOS - Corre a la medianoche (00:00) HORA DEL PACÍFICO
 // ============================================================================
 cron.schedule('0 0 * * *', async () => {
   console.log("⏰ [CRON] Buscando suscripciones vencidas o próximas a vencer...");
@@ -99,6 +99,9 @@ cron.schedule('0 0 * * *', async () => {
   } catch (error) {
     console.error("❌ [CRON] Error ejecutando la tarea de vencimientos:", error);
   }
+}, {
+  // 🚀 FIX: Eliminamos 'scheduled: true' para evitar el error de TypeScript y dejamos solo el timezone
+  timezone: "America/Los_Angeles"
 });
 
 
@@ -168,7 +171,6 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
         if (devices && devices.length > 0) {
             const messages = [];
 
-            // 🚀 BUCLE DINÁMICO: Contamos las no leídas por cada usuario antes de enviar
             for (const device of devices) {
                 const [unreadResult] = await db.select({
                     count: sql<number>`count(*)`
@@ -188,7 +190,7 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
                     sound: 'default',
                     title: titleText,
                     body: bodyText,
-                    badge: unreadCount, // 🔴 Globito dinámico real
+                    badge: unreadCount, 
                     data: { type: type, referenceId: promo.id },
                 });
             }
@@ -291,8 +293,11 @@ async function executeMarketingMotor() {
 }
 
 // ============================================================================
-// ⏰ EJECUCIÓN DIARIA OFICIAL (7:00 AM) - CORRIGE EL HORARIO DE LAS 12
+// ⏰ EJECUCIÓN DIARIA OFICIAL (7:00 AM) HORA DEL PACÍFICO
 // ============================================================================
 cron.schedule('0 7 * * *', async () => {
     await executeMarketingMotor();
+}, {
+    // 🚀 FIX: Eliminamos 'scheduled' y garantizamos la zona horaria
+    timezone: "America/Los_Angeles"
 });

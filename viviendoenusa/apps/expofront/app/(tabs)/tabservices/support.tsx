@@ -10,10 +10,11 @@ import MapView from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { createClient } from '@supabase/supabase-js';
+import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMockSelector } from '@/redux/slices';
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import MapComponent from '@/components/Map';
@@ -23,13 +24,6 @@ import { useAppTheme } from '../../../context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
-
-/*
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
-*/
 
 // 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'support') => {
@@ -157,14 +151,16 @@ const SupportFormModal = memo(({
   const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
+  // 🚀 Enlace opcional de Google Reviews
+  const [formGoogleLink, setFormGoogleLink] = useState('');
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // 🚀 CAMUFLAJE: Si es Web, permite suscripción por defecto; Si es Móvil, fuerza a Cupón/Gratis.
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWebLocal ? 'subscription' : 'coupon');
-  const [formPlan, setFormPlan] = useState(isWebLocal ? 'basic' : 'coupon');
+  // 🚀 CAMUFLAJE: En Web y Móvil arranca en cupón por defecto
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
+  const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
 
   const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
@@ -175,7 +171,6 @@ const SupportFormModal = memo(({
   const before = parts[0] || "";
   const after = parts[1] || ""; 
 
-  // 🚀 HELPER ALERTA COMPATIBLE CON WEB
   const triggerAlert = (title: string, message: string) => {
     if (isWebLocal) window.alert(`${title}\n${message}`); 
     else Alert.alert(title, message);
@@ -184,8 +179,9 @@ const SupportFormModal = memo(({
   useEffect(() => {
     if (visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
+      setFormGoogleLink('');
       setFormImage(null); setFormCategoryIdx(1); setFormPayMethod('Zelle');
-      setFormPlan(isWebLocal ? 'basic' : 'coupon'); setUiPayType(isWebLocal ? 'subscription' : 'coupon'); setFormRefCode('');
+      setFormPlan('coupon'); setUiPayType('coupon'); setFormRefCode('');
     }
   }, [visible]);
 
@@ -202,6 +198,17 @@ const SupportFormModal = memo(({
     if (!formRefCode.trim()) {
       const errorMsg = uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.";
       return triggerAlert("Atención", errorMsg);
+    }
+
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE REVIEWS
+    if (formGoogleLink.trim() !== '') {
+      const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+      if (!regex.test(formGoogleLink.trim())) {
+        return triggerAlert(
+          "Enlace Inválido",
+          "Por favor ingresa un enlace oficial de reseñas de Google (ej. https://g.page/r/...)"
+        );
+      }
     }
 
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
@@ -250,13 +257,9 @@ const SupportFormModal = memo(({
       try { const geo = await Location.geocodeAsync(formZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
       
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
-      
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
-      
-      // 🚀 LIMPIEZA TOTAL DEL CUPÓN (Sin "COUPON-")
       const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
-      // 🚀 VARIABLES AJUSTADAS AL BACKEND (nameSupp, descriptionSupp, etc.)
       const payload = { 
         nameSupp: formName.trim(),
         descriptionSupp: formDesc.trim(), 
@@ -274,7 +277,8 @@ const SupportFormModal = memo(({
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', 
         referenceCode: finalRefCode, 
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
-        tariffPlan: (companyTariffs as any)[finalPlan]
+        tariffPlan: (companyTariffs as any)[finalPlan],
+        googleReviewLink: formGoogleLink.trim() // 🚀 SE ENVÍA EL ENLACE AL BACKEND
       };
       
       const response = await fetch(API_STORES_URL, { 
@@ -290,10 +294,8 @@ const SupportFormModal = memo(({
       
       const savedFromDB = await response.json();
 
-      // 🚀 CAPTURAMOS EL ERROR DEL BACKEND SI EL CUPÓN ES INVÁLIDO
       if (!response.ok) throw new Error(savedFromDB.error || t.genericlabel.labelerrorsave);
 
-      // 🚀 PARCHE BOOLEANO ESTRICTO
       const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
 
       const newEntryLocal = { 
@@ -309,19 +311,18 @@ const SupportFormModal = memo(({
         reviews: [], 
         totalReviews: 0, 
         phone: savedFromDB.phone, 
-        status: isBackendApproved ? 'approved' : 'pending', // 👈 Status seguro
+        status: isBackendApproved ? 'approved' : 'pending', 
         userId: currentUserId, 
         timepostEnd: savedFromDB.timepostEnd || null,
         premiumPlan: finalPlan, 
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', 
         referenceCode: finalRefCode, 
-        paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod
+        paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
+        googleReviewLink: formGoogleLink.trim()
       };
 
-      // 🚀 CERRAMOS MODAL
       onSuccess(newEntryLocal, formZip);
 
-      // 🚀 ALERTA DIFERIDA
       setTimeout(() => {
         let successMsg = "";
         if (savedFromDB.message) successMsg = savedFromDB.message;
@@ -388,39 +389,49 @@ const SupportFormModal = memo(({
                 <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.subtext} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
 
-              {/* 🚀 EL CAMUFLAJE: SOLO MOSTRAR OPCIONES DE PAGO SI ES WEB */}
-              {isWebLocal && (
-                <>
-                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                    <TouchableOpacity 
-                      onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                      style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                    >
-                      <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                    </TouchableOpacity>
+              {/* 🚀 NUEVO INPUT: Enlace de Google Review (OPCIONAL) */}
+              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: Colors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
+              <TextInput 
+                style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                placeholder="https://g.page/r/..." 
+                placeholderTextColor={Colors.subtext} 
+                value={formGoogleLink} 
+                onChangeText={setFormGoogleLink} 
+                autoCapitalize="none" 
+                keyboardType="url"
+              />
 
-                    <TouchableOpacity 
-                      onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                      style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                    >
-                      <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
+              {/* 🚀 EL CAMUFLAJE DE PAGO REMOVIDO PARA MOSTRARSE EN TODAS LAS PLATAFORMAS */}
+              <>
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                  </TouchableOpacity>
 
-              {/* RUTA DE SUSCRIPCIÓN */}
-              {uiPayType === 'subscription' && isWebLocal && (
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </>
+
+              {/* RUTA DE SUSCRIPCIÓN DESBLOQUEADA */}
+              {uiPayType === 'subscription' && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                   <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                       {[  
-                          { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc }, 
-                          { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc }, 
-                          { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
+                          { id: 'basic', name: t.categoryplan?.basic || 'Básico', price: companyTariffs.basic, desc: t.categoryplan?.basicdesc || 'Plan básico' }, 
+                          { id: 'premium', name: t.categoryplan?.premium || 'Premium', price: companyTariffs.premium, desc: t.categoryplan?.premiumdesc || 'Plan premium' }, 
+                          { id: 'unlimited', name: t.categoryplan?.unlimited || 'Ilimitado', price: companyTariffs.unlimited, desc: t.categoryplan?.unlimiteddesc || 'Plan ilimitado' }
                       ].map(plan => {
                           const pStyle = planStyles[plan.id as keyof typeof planStyles]; const isSelected = formPlan === plan.id;
                           return (
@@ -448,6 +459,15 @@ const SupportFormModal = memo(({
                         </View>
                       )}
                       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+
+                      {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
+                      <TouchableOpacity 
+                        onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                        style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
+                      >
+                        <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
+                        <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </>
@@ -503,6 +523,7 @@ export default function SupportScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const dispatch = useMockDispatch();
   const paramsGlobal = useLocalSearchParams();
   const rawNotifId = paramsGlobal.id || paramsGlobal.supportId || paramsGlobal.referenceId;
   const notificationId = Array.isArray(rawNotifId) ? rawNotifId[0] : rawNotifId;
@@ -518,6 +539,7 @@ export default function SupportScreen() {
 
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const isGuest = userMetadata?.typeDetail === 'Guest'; 
   
   const ICONS_ARRAY = t.supporttab.categoryListIcon;
   const CATEGORIES_LIST = t.supporttab.categoryList;
@@ -539,7 +561,8 @@ export default function SupportScreen() {
     border: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)', 
     inputBg: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', 
     iconInactive: isDark ? '#B0BEC5' : '#364045',  
-    categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+    categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF',
   };
   
   const [zipCode, setZipCode] = useState('');
@@ -555,6 +578,7 @@ export default function SupportScreen() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const [showReviewInput, setShowReviewInput] = useState(false);
   const [isModalVisible, setModalVisible] = useState(false);
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false);
   
   const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' });
   const [pendingStores, setPendingStores] = useState<any[]>([]);
@@ -685,7 +709,7 @@ export default function SupportScreen() {
           return {
             id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
             lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
-            status: isAppr ? 'approved' : 'pending', ownerName: item.ownerName, premiumPlan: item.premiumPlan, couponCode: item.couponCode, referenceCode: item.referenceCode, paymentMethod: item.paymentMethod, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+            status: isAppr ? 'approved' : 'pending', ownerName: item.ownerName, premiumPlan: item.premiumPlan, couponCode: item.couponCode, referenceCode: item.referenceCode, paymentMethod: item.paymentMethod, googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
           };
         }));
         setPendingStores(mappedData.filter(s => s.status === 'pending'));
@@ -714,7 +738,7 @@ export default function SupportScreen() {
           return {
             id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
             lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
-            status: isAppr ? 'approved' : 'pending', ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+            status: isAppr ? 'approved' : 'pending', premiumPlan: item.premiumPlan, googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
           };
         }));
         const approved = mappedData.filter(s => s.status === 'approved');
@@ -998,7 +1022,12 @@ export default function SupportScreen() {
               </View>
               {!showReviewInput ? (
                 <View style={{ flex: 1 }}>
-                  <TouchableOpacity onPress={() => { const hasReviewed = selectedStore?.reviews?.some((r: any) => r.userId === currentUserId); if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } setShowReviewInput(true); }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                  <TouchableOpacity onPress={() => { 
+                      if (isGuest) { setShowRestrictedModal(true); return; }
+                      const hasReviewed = selectedStore?.reviews?.some((r: any) => r.userId === currentUserId); 
+                      if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } 
+                      setShowReviewInput(true); 
+                    }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} /><ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.genericlabel.labelshareexper}</ThemedText></LinearGradient>
                   </TouchableOpacity>
                   <ScrollView showsVerticalScrollIndicator={false}>
@@ -1058,7 +1087,46 @@ export default function SupportScreen() {
                     setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s)); 
                     setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
                     
-                    Alert.alert(t.genericlabel.labelreviewthanks, t.genericlabel.labelreviewexp);
+                    // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW
+                    const plan = selectedStore.premiumPlan ? String(selectedStore.premiumPlan).toLowerCase() : 'free';
+                    const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
+                    const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+
+                    // ⚠️ true || isPremiumActive para que salte siempre en pruebas. Quitar en prod.
+                    if ((true || isPremiumActive) && commentStr.trim()) {
+                      try {
+                        await Clipboard.setStringAsync(commentStr);
+                      } catch (clipError) {
+                        console.warn("El portapapeles no está permitido en este entorno web, pero el flujo continuará.");
+                      }
+
+                      if (Platform.OS === 'web') {
+                        const confirmWeb = window.confirm(
+                          "🌟 ¡Apoya esta organización en Google!\n\nTu opinión ya se guardó con éxito. Como esta organización es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
+                        );
+                        if (confirmWeb) {
+                          window.open(googleReviewUrl, '_blank');
+                        } else {
+                          window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+                        }
+                      } else {
+                        Alert.alert(
+                          "🌟 ¡Apoya esta organización en Google!",
+                          "Tu opinión ya se guardó con éxito. ¿Te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles).",
+                          [
+                            { text: "No, gracias", style: "cancel" },
+                            { text: "Ir a Google", onPress: () => { Linking.openURL(googleReviewUrl); } }
+                          ]
+                        );
+                      }
+                    } else {
+                      if (Platform.OS === 'web') {
+                        window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+                      } else {
+                        Alert.alert(t.genericlabel.labelreviewthanks, t.genericlabel.labelreviewexp);
+                      }
+                    }
+
                   } catch (e) { Alert.alert("Error", t.genericlabel.labelerrorconection); } finally { setShowReviewInput(false); }
               }} 
               />
@@ -1066,6 +1134,49 @@ export default function SupportScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
+      <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para dejar reseñas y publicar organizaciones, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
       </Modal>
 
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
@@ -1194,7 +1305,17 @@ export default function SupportScreen() {
         </View>
       </ScrollView>
 
-      <TouchableOpacity style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} onPress={() => setModalVisible(true)}>
+      {/* 🚀 BOTÓN FLOTANTE BLOQUEADO PARA INVITADOS */}
+      <TouchableOpacity 
+        style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} 
+        onPress={() => {
+          if (isGuest) {
+            setShowRestrictedModal(true);
+            return;
+          }
+          setModalVisible(true);
+        }}
+      >
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
           <MaterialCommunityIcons name="handshake" size={32} color="#FFF" />
         </LinearGradient>

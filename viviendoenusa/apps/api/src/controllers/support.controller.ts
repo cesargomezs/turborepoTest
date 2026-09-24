@@ -43,6 +43,13 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
+// 🛡️ FUNCIÓN DE SEGURIDAD PARA VALIDAR ENLACES DE GOOGLE REVIEWS
+const isValidGoogleReviewUrl = (url: string) => {
+  if (!url) return false;
+  const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+  return regex.test(url);
+};
+
 // 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
 const getCurrentSupportPrice = async () => {
   try {
@@ -196,7 +203,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         )
       );
       
-      // 🚀 ORDENAMIENTO POR DISTANCIA + REGLAS DE PRIORIDAD
       if (currentUserId) {
         query = query.orderBy(
           distanceFormula,
@@ -218,7 +224,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     } else {
       query = query.where(visibilityCondition);
       
-      // 🚀 ORDENAMIENTO POR REGLAS (PROPIOS > ADMIN > TODOS)
       if (currentUserId) {
         query = query.orderBy(
           sql`CASE 
@@ -256,6 +261,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
           premiumPlan: row.support.premiumPlan || 'basic', 
+          googleReviewLink: row.support.googleReviewLink || null,
           reviews: [], 
           totalRating: 0,
           totalReviews: 0
@@ -352,6 +358,7 @@ export const getSupportById = async (id: string) => {
       approved: isAppr,
       status: isAppr ? 'approved' : 'pending',
       premiumPlan: dbSupport.premiumPlan || 'basic', 
+      googleReviewLink: dbSupport.googleReviewLink ,
       reviews: [],
       totalRating: 0,
       totalReviews: 0           
@@ -424,6 +431,16 @@ export const createSupport = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un contacto de apoyo.");
     }
 
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN APOYO
+    let safeGoogleLink = null;
+    if (data.googleReviewLink) {
+      const trimmedLink = data.googleReviewLink.trim();
+      if (!isValidGoogleReviewUrl(trimmedLink)) {
+        throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+      }
+      safeGoogleLink = trimmedLink;
+    }
+
     const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
     const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
@@ -463,6 +480,7 @@ export const createSupport = async (data: any) => {
         couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
         approved: false, 
+        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
@@ -510,6 +528,7 @@ export const createSupport = async (data: any) => {
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionSupp: safeDesc,
+         googleReviewLink: safeGoogleLink,
          message: customMessage 
       };
     });
@@ -570,6 +589,17 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
       for (const key of allowedFields) {
         if (data && data[key] !== undefined) {
            updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+        }
+      }
+
+      // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
+      if (data && data.googleReviewLink !== undefined) {
+        if (data.googleReviewLink.trim() === '') {
+          updatePayload.googleReviewLink = null;
+        } else if (isValidGoogleReviewUrl(data.googleReviewLink.trim())) {
+          updatePayload.googleReviewLink = data.googleReviewLink.trim();
+        } else {
+          throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
         }
       }
 

@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MapView from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createClient } from '@supabase/supabase-js';
+import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -311,13 +312,18 @@ export default function StoresScreen() {
   const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
+  
+  // 🚀 Enlace opcional de Google Reviews
+  const [formGoogleLink, setFormGoogleLink] = useState('');
+  
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
 
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWeb ? 'subscription' : 'coupon');
-  const [formPlan, setFormPlan] = useState(isWeb ? 'basic' : 'coupon');
+  // 🚀 Cupón por defecto para todas las plataformas
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
+  const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
@@ -340,10 +346,11 @@ export default function StoresScreen() {
 
   const resetForm = () => {
     setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
+    setFormGoogleLink(''); 
     setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); 
     setFormRefCode(''); setFormPayMethod('Zelle'); 
-    setFormPlan(isWeb ? 'basic' : 'coupon'); 
-    setUiPayType(isWeb ? 'subscription' : 'coupon');
+    setFormPlan('coupon'); 
+    setUiPayType('coupon');
   };
 
   useEffect(() => {
@@ -433,6 +440,7 @@ export default function StoresScreen() {
             paymentMethod: item.paymentMethod,
             premiumPlan: item.premiumPlan,
             couponCode: item.couponCode,
+            googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link,
             userId: item.userId || item.user_id,
             timepostEnd: item.timepostEnd || item.timepost_end
           };
@@ -493,6 +501,7 @@ export default function StoresScreen() {
             paymentMethod: item.paymentMethod,
             premiumPlan: item.premiumPlan,
             couponCode: item.couponCode,
+            googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link,
             userId: item.userId || item.user_id,
             timepostEnd: item.timepostEnd || item.timepost_end
           };
@@ -735,6 +744,17 @@ export default function StoresScreen() {
       return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
     }
 
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE REVIEWS
+    if (formGoogleLink.trim() !== '') {
+      const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+      if (!regex.test(formGoogleLink.trim())) {
+        return triggerAlert(
+          "Enlace Inválido",
+          "Por favor ingresa un enlace oficial de reseñas de Google (ej. https://g.page/r/...)"
+        );
+      }
+    }
+
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
     if (containsBadWords(contentToValidate)) {
       return triggerAlert(
@@ -811,7 +831,8 @@ export default function StoresScreen() {
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         premiumPlan: finalPlan,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
-        tariffPlan: (companyTariffs as any)[finalPlan]
+        tariffPlan: (companyTariffs as any)[finalPlan],
+        googleReviewLink: formGoogleLink.trim() // 🚀 SE MANDA EL ENLACE AL BACKEND
       };
 
       const response = await fetch(API_STORES_URL, {
@@ -849,6 +870,7 @@ export default function StoresScreen() {
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         premiumPlan: finalPlan,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
+        googleReviewLink: formGoogleLink.trim(),
         userId: currentUserId,
         timepostEnd: savedFromDB.timepostEnd || null
       };
@@ -1353,9 +1375,52 @@ export default function StoresScreen() {
                           setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
                           setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
 
-                          triggerAlert('¡Gracias!', 'Tu reseña ha sido publicada exitosamente.');
+                          // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW CON SOPORTE WEB/MÓVIL
+                          const plan = selectedStore.premiumPlan ? String(selectedStore.premiumPlan).toLowerCase() : 'free';
+                          const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
+                          const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+
+                          // ⚠️ true || isPremiumActive para que salte siempre en pruebas. Quitar en prod.
+                          if ((true || isPremiumActive) && commentStr.trim()) {
+                            try {
+                              await Clipboard.setStringAsync(commentStr);
+                            } catch (clipError) {
+                              console.warn("El portapapeles no está permitido en este entorno web, pero el flujo continuará.");
+                            }
+
+                            if (Platform.OS === 'web') {
+                              const confirmWeb = window.confirm(
+                                "🌟 ¡Apoya este negocio en Google!\n\nTu opinión ya se guardó con éxito. Como este negocio es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
+                              );
+                              if (confirmWeb) {
+                                window.open(googleReviewUrl, '_blank');
+                              } else {
+                                window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+                              }
+                            } else {
+                              Alert.alert(
+                                "🌟 ¡Apoya este negocio en Google!",
+                                "Tu opinión ya se guardó con éxito. ¿Te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles).",
+                                [
+                                  { text: "No, gracias", style: "cancel" },
+                                  { text: "Ir a Google", onPress: () => { Linking.openURL(googleReviewUrl); } }
+                                ]
+                              );
+                            }
+                          } else {
+                            if (Platform.OS === 'web') {
+                              window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+                            } else {
+                              Alert.alert("¡Gracias!", "Tu reseña se ha publicado exitosamente.");
+                            }
+                          }
+
                         } catch (e) {
-                          triggerAlert("Error", "No se pudo conectar al servidor.");
+                          if (Platform.OS === 'web') {
+                            window.alert("Error de conexión con el servidor.");
+                          } else {
+                            Alert.alert("Error", "No se pudo conectar al servidor.");
+                          }
                         } finally {
                           setShowReviewInput(false);
                         }
@@ -1464,30 +1529,39 @@ export default function StoresScreen() {
                     style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                {isWeb && (
-                  <>
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                      <TouchableOpacity 
-                        onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                        style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                      >
-                        <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
-                        <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
-                      </TouchableOpacity>
+                {/* 🚀 NUEVO INPUT: Enlace de Google Review */}
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: DynamicColors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
+                <TextInput 
+                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  placeholder="https://g.page/r/..." 
+                  placeholderTextColor={DynamicColors.subtext} 
+                  value={formGoogleLink} 
+                  onChangeText={setFormGoogleLink} 
+                  autoCapitalize="none" 
+                  keyboardType="url"
+                />
 
-                      <TouchableOpacity 
-                        onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                        style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                      >
-                        <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
-                        <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                )}
+                {/* 🚀 DESBLOQUEO TOTAL: PAGOS VISIBLES EN IOS, ANDROID Y WEB */}
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
+                  </TouchableOpacity>
 
-                {uiPayType === 'subscription' && isWeb && (
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
+                  </TouchableOpacity>
+                </View>
+
+                {uiPayType === 'subscription' && (
                   <>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                     <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1544,6 +1618,15 @@ export default function StoresScreen() {
                         </View>
                       )}
                       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: DynamicColors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+
+                      {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
+                      <TouchableOpacity 
+                        onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                        style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.accenticon }}
+                      >
+                        <MaterialCommunityIcons name="open-in-new" size={16} color={DynamicColors.accenticon} style={{ marginRight: 6 }} />
+                        <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: DynamicColors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                      </TouchableOpacity>
                     </View>
                   </>
                 )}

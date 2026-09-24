@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import * as ImagePicker from 'expo-image-picker'; 
 import { createClient } from '@supabase/supabase-js';
+import * as Clipboard from 'expo-clipboard'; // 🚀 IMPORTADO PARA COPIAR AL PORTAPAPELES
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -212,12 +213,15 @@ export default function JobsScreen() {
   const [userCompanies, setUserCompanies] = useState<any[]>([]);
   const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '155.00' });
   
+  // 🚀 AÑADIDO CAMPO googleReviewLink AL ESTADO INICIAL DE LA EMPRESA
   const [newCompanyForm, setNewCompanyForm] = useState({ 
-    name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: isWeb ? 'basic' : 'coupon'
+    name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'coupon', googleReviewLink: ''
   });
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
   
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWeb ? 'subscription' : 'coupon');
+  // 🚀 INICIALIZAMOS LOS PAGOS EN CUPÓN PARA CUALQUIER PLATAFORMA (WEB Y MÓVIL)
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
+  const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState('');
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
@@ -379,6 +383,8 @@ export default function JobsScreen() {
             company: item.company || '',
             companyId: item.companyId,
             isCompanyVerified: item.isCompanyVerified || false, 
+            premiumPlan: item.premiumPlan, // 🚀 PARA GOOGLE REVIEWS
+            googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, // 🚀 RECUPERA EL ENLACE DEL NEGOCIO
             category: item.category || 'Otros',
             state: item.stateCountry || 'California',
             city: item.city || '',
@@ -628,6 +634,17 @@ export default function JobsScreen() {
       return;
     }
 
+    // 🚀 VALIDACIÓN DEL ENLACE DE GOOGLE REVIEWS SI EL USUARIO LO DIGITÓ
+    if (newCompanyForm.googleReviewLink.trim() !== '') {
+      const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+      if (!regex.test(newCompanyForm.googleReviewLink.trim())) {
+        return triggerAlert(
+          "Enlace Inválido",
+          "Por favor ingresa un enlace oficial de reseñas de Google (ej. https://g.page/r/...)"
+        );
+      }
+    }
+
     setIsCreatingCompany(true);
     
     try {
@@ -682,6 +699,7 @@ export default function JobsScreen() {
         referenceCode: finalRefCode,
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
+        googleReviewLink: newCompanyForm.googleReviewLink.trim(), // 🚀 SE INCLUYE AL PAYLOAD
         tariffPlan: (companyTariffs as any)[finalPlan]
       };
 
@@ -715,9 +733,9 @@ export default function JobsScreen() {
         contactMethod: 'call'
       }));
       
-      setNewCompanyForm({ name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: isWeb ? 'basic' : 'coupon' });
+      setNewCompanyForm({ name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'coupon', googleReviewLink: '' });
       setFormRefCode('');
-      setUiPayType(isWeb ? 'subscription' : 'coupon');
+      setUiPayType('coupon');
       setFormPayMethod('Zelle');
       setPublishView('form');
       
@@ -940,10 +958,49 @@ export default function JobsScreen() {
           const updatedReviews = [newReviewFormatted, ...prev.reviews];
           return { ...prev, reviews: updatedReviews, rating: newAverage };
       });
-      
+
+      // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW
+      const plan = selectedCompany.premiumPlan ? String(selectedCompany.premiumPlan).toLowerCase() : 'free';
+      const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
+      const googleReviewUrl = selectedCompany.googleReviewLink || selectedCompany.googleUrl || selectedCompany.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+
+      if ((true || isPremiumActive) && reviewForm.text.trim()) {
+        try {
+          await Clipboard.setStringAsync(reviewForm.text);
+        } catch (clipError) {
+          console.warn("El portapapeles no está permitido en este entorno web, pero el flujo continuará.");
+        }
+
+        if (Platform.OS === 'web') {
+          const confirmWeb = window.confirm(
+            "🌟 ¡Apoya esta empresa en Google!\n\nTu opinión ya se guardó con éxito. Como esta empresa es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
+          );
+          if (confirmWeb) {
+            window.open(googleReviewUrl, '_blank');
+          } else {
+            window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+          }
+        } else {
+          Alert.alert(
+            "🌟 ¡Apoya esta empresa en Google!",
+            "Tu opinión ya se guardó con éxito. ¿Te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles).",
+            [
+              { text: "No, gracias", style: "cancel" },
+              { text: "Ir a Google", onPress: () => { Linking.openURL(googleReviewUrl); } }
+            ]
+          );
+        }
+      } else {
+        if (Platform.OS === 'web') {
+          window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+        } else {
+          Alert.alert("¡Gracias!", "Tu reseña ha sido publicada exitosamente.");
+        }
+      }
+
       setReviewForm({ text: '', rating: 0, isAnonymous: false });
       setShowReviewInput(false);
-      triggerAlert("¡Gracias!", "Tu reseña ha sido publicada.");
+      
     } catch (e: any) { triggerAlert("Aviso", e.message); }
   };
 
@@ -976,7 +1033,6 @@ export default function JobsScreen() {
         if (job.companyId) {
             if (!seenCompanies.has(job.companyId)) {
                 const cJobs = filtered.filter(j => j.companyId === job.companyId);
-                // 🚀 AQUÍ ESTÁ LA MAGIA: Calculamos el número real de vacantes activas/filtradas de la compañía
                 grouped.push({ ...job, groupedCount: cJobs.length });
                 seenCompanies.add(job.companyId);
             }
@@ -1290,7 +1346,6 @@ export default function JobsScreen() {
                                 <View style={{ padding: 15, paddingTop: 0 }}>
                                   <ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{job.title}</ThemedText>
                                   
-                                  {/* 🚀 MAGIA UI/UX: HACEMOS QUE EL NOMBRE DE LA EMPRESA SEA UN ENLACE AL PERFIL CORPORATIVO, INCLUSO SI ES 1 SOLA VACANTE */}
                                   <TouchableOpacity 
                                     activeOpacity={0.7} 
                                     onPress={(e) => {
@@ -1796,30 +1851,43 @@ export default function JobsScreen() {
                              />
                          </View>
 
-                         {isWeb && (
-                           <>
-                             <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                               <TouchableOpacity 
-                                 onPress={() => { setUiPayType('coupon'); setNewCompanyForm({...newCompanyForm, premiumPlan: 'coupon'}); setFormRefCode(''); }}
-                                 style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                               >
-                                 <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
-                                 <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
-                               </TouchableOpacity>
+                         {/* 🚀 NUEVO INPUT: Enlace de Google Review (OPCIONAL) */}
+                         <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>Enlace de Google Reviews (Opcional)</ThemedText>
+                         <TextInput 
+                           value={newCompanyForm.googleReviewLink} 
+                           onChangeText={t => setNewCompanyForm({...newCompanyForm, googleReviewLink: t})} 
+                           keyboardType="url" 
+                           autoCapitalize="none"
+                           autoCorrect={false}
+                           placeholder="https://g.page/r/..." 
+                           placeholderTextColor="#999" 
+                           style={{ backgroundColor: DynamicColors.inputBg, padding: 15, borderRadius: 12, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                         />
 
-                               <TouchableOpacity 
-                                 onPress={() => { setUiPayType('subscription'); if(newCompanyForm.premiumPlan === 'coupon') setNewCompanyForm({...newCompanyForm, premiumPlan: 'basic'}); setFormRefCode(''); }}
-                                 style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                               >
-                                 <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
-                                 <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
-                               </TouchableOpacity>
-                             </View>
-                           </>
-                         )}
+                         {/* 🚀 EL CAMUFLAJE DE PAGO REMOVIDO PARA MOSTRARSE EN TODAS LAS PLATAFORMAS */}
+                         <>
+                           <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                             <TouchableOpacity 
+                               onPress={() => { setUiPayType('coupon'); setNewCompanyForm({...newCompanyForm, premiumPlan: 'coupon'}); setFormRefCode(''); }}
+                               style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                             >
+                               <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext} />
+                               <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
+                             </TouchableOpacity>
 
-                         {uiPayType === 'subscription' && isWeb && (
+                             <TouchableOpacity 
+                               onPress={() => { setUiPayType('subscription'); if(newCompanyForm.premiumPlan === 'coupon') setNewCompanyForm({...newCompanyForm, premiumPlan: 'basic'}); setFormRefCode(''); }}
+                               style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                             >
+                               <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
+                               <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
+                             </TouchableOpacity>
+                           </View>
+                         </>
+
+                         {/* RUTA DE SUSCRIPCIÓN DESBLOQUEADA PARA MÓVILES Y WEB */}
+                         {uiPayType === 'subscription' && (
                            <>
                              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                              <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1881,6 +1949,15 @@ export default function JobsScreen() {
                                  </View>
                                )}
                                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: DynamicColors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+
+                               {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
+                               <TouchableOpacity 
+                                 onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                                 style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.accenticon }}
+                               >
+                                 <MaterialCommunityIcons name="open-in-new" size={16} color={DynamicColors.accenticon} style={{ marginRight: 6 }} />
+                                 <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: DynamicColors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                               </TouchableOpacity>
                              </View>
                            </>
                          )}
@@ -1888,10 +1965,7 @@ export default function JobsScreen() {
                          {uiPayType === 'coupon' && (
                            <View style={{ marginBottom: 10 }}>
                              <ThemedText style={{ fontSize: 13, color: DynamicColors.text, marginBottom: 12 }}>
-                               {isWeb 
-                                 ? "Si dispones de un código promocional, escríbelo en el campo inferior para habilitar el registro de tu empresa sin cargos."
-                                 : "Para registrar tu empresa en nuestro directorio, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
-                               }
+                               Si dispones de un código promocional, escríbelo en el campo inferior para habilitar el registro de tu empresa sin cargos.
                              </ThemedText>
                            </View>
                          )}

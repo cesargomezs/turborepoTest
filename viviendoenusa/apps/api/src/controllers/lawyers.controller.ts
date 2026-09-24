@@ -49,6 +49,13 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
+// 🛡️ FUNCIÓN DE SEGURIDAD PARA VALIDAR ENLACES DE GOOGLE REVIEWS
+const isValidGoogleReviewUrl = (url: string) => {
+  if (!url) return false;
+  const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+  return regex.test(url);
+};
+
 // 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
 const getCurrentLawyerPrice = async () => {
   try {
@@ -150,12 +157,10 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
-    // 🚀 NUEVA VALIDACIÓN ANTI-GUEST
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
 
-    // 🚀 Condición segura: Si es invitado (sin userId real), permite ver abogados aprobados sin bloquear
     let baseConditions = cleanUserId 
       ? sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${cleanUserId})`
       : sql`(${lawyers.approved} = true OR ${lawyers.timepostEnd} > NOW())`;
@@ -190,7 +195,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       .where(finalConditions)
       .$dynamic(); 
 
-    // 🚀 ORDENAMIENTO SEGURO
     if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
@@ -226,6 +230,7 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
           status: isAppr ? 'approved' : 'pending',
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
+          googleReviewLink: row.lawyers.googleReviewLink || null,
           reviews: [], 
           totalRating: 0,
           totalReviews: 0
@@ -326,6 +331,7 @@ export const getLawyerByIdWithReviews = async (id: string) => {
       ...dbLawyer, 
       approved: isAppr,
       status: isAppr ? 'approved' : 'pending',
+      googleReviewLink: dbLawyer.googleReviewLink ,
       reviews: [],
       payments: rows[0].payments?.amount,
       totalRating: 0,
@@ -427,6 +433,16 @@ export const createLawyer = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un abogado.");
     }
 
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EL BACKEND
+    let safeGoogleLink = null;
+    if (data.googleReviewLink) {
+      const trimmedLink = data.googleReviewLink.trim();
+      if (!isValidGoogleReviewUrl(trimmedLink)) {
+        throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+      }
+      safeGoogleLink = trimmedLink;
+    }
+
     let cleanImage = sanitizeText(data.imageUrl) || '';
     if (cleanImage.startsWith('lawyers/')) {
       cleanImage = cleanImage.replace('lawyers/', '');
@@ -477,6 +493,7 @@ export const createLawyer = async (data: any) => {
         userId: validUserId, 
         approved: false, 
         estate: finalEstate,
+        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
       };
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
@@ -524,6 +541,7 @@ export const createLawyer = async (data: any) => {
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionLawy: safeDesc,
+         googleReviewLink: safeGoogleLink,
          message: customMessage 
       };
     });
@@ -580,6 +598,17 @@ export const updateLawyer = async (id: string, data: any) => {
         if (data.lat !== undefined) updatePayload.lat = Number(data.lat);
         if (data.lng !== undefined) updatePayload.lng = Number(data.lng);
         if (data.premiumPlan !== undefined) updatePayload.premiumPlan = sanitizeText(data.premiumPlan);
+        
+        // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
+        if (data.googleReviewLink !== undefined) {
+          if (data.googleReviewLink.trim() === '') {
+            updatePayload.googleReviewLink = null;
+          } else if (isValidGoogleReviewUrl(data.googleReviewLink.trim())) {
+            updatePayload.googleReviewLink = data.googleReviewLink.trim();
+          } else {
+            throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+          }
+        }
         
         if (data.description !== undefined || data.descriptionLawy !== undefined) {
           const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionLawy);

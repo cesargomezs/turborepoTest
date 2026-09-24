@@ -25,7 +25,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 // --- VALIDACIONES ---
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
 import badWordsData from '../../../utils/babwords.json';
-import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices'; // 🚀 IMPORTAMOS DISPATCH PARA EL MODAL DE INVITADO
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices'; 
 import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
 
@@ -111,12 +111,11 @@ export default function EventsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const dispatch = useMockDispatch(); // 🚀 IMPORTAMOS DISPATCH
+  const dispatch = useMockDispatch(); 
   
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
   
-  // 🚀 HOOK DE FOCO PARA SABER SI ESTA ES LA PESTAÑA ACTIVA
   const isFocused = useIsFocused();
   const stylesUnified = useUnifiedCardStyles();
 
@@ -134,7 +133,7 @@ export default function EventsScreen() {
   
   const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
-  const isGuest = userMetadata?.typeDetail === 'Guest'; // 🚀 DETECTOR DE INVITADO
+  const isGuest = userMetadata?.typeDetail === 'Guest'; 
 
   useEffect(() => {
     if (!userToken) {
@@ -160,7 +159,7 @@ export default function EventsScreen() {
     iconInactive: isDark ? '#B0BEC5' : '#364045',  
     categoryUnselected: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
     cardBg: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
-    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', // 🚀 COLOR NEUTRO PARA MODAL
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF', 
   };
 
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : width * 0.92);
@@ -179,7 +178,7 @@ export default function EventsScreen() {
   
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [isModalVisible, setModalVisible] = useState(false);
-  const [showRestrictedModal, setShowRestrictedModal] = useState(false); // 🚀 ESTADO PARA EL MODAL RESTRINGIDO
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false); 
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
   const [isPublishing, setIsPublishing] = useState(false);
@@ -189,6 +188,8 @@ export default function EventsScreen() {
   const [formLocation, setFormLocation] = useState('');
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  // 🚀 NUEVO: Link de Google Reviews
+  const [formGoogleLink, setFormGoogleLink] = useState('');
   const [formContactMethod, setFormContactMethod] = useState<'whatsapp' | 'phone'>('whatsapp');
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
@@ -198,9 +199,9 @@ export default function EventsScreen() {
   
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
 
-  // 🚀 CAMUFLAJE: En Web permite suscripción por defecto; en Móvil fuerza a Cupón/Gratis
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWeb ? 'subscription' : 'coupon');
-  const [formPlan, setFormPlan] = useState(isWeb ? 'basic' : 'coupon');
+  // 🚀 Por defecto en ambos (Móvil y Web) arranca en cupón
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
+  const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
@@ -284,7 +285,6 @@ export default function EventsScreen() {
       const data = await res.json();
       
       if (Array.isArray(data)) {
-        // 🚀 FIRMA AL VUELO MASIVA DE IMÁGENES
         const mappedData = await Promise.all(data.map(async (item: any) => {
           let formattedDate = '';
           try {
@@ -499,6 +499,17 @@ export default function EventsScreen() {
       return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.");
     }
 
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE REVIEWS
+    if (formGoogleLink.trim() !== '') {
+      const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+      if (!regex.test(formGoogleLink.trim())) {
+        return triggerAlert(
+          "Enlace Inválido",
+          "Por favor ingresa un enlace oficial de reseñas de Google (ej. https://g.page/r/...)"
+        );
+      }
+    }
+
     const contentToValidate = `${trimmedTitle} ${trimmedDesc} ${trimmedLoc}`;
     if (containsBadWords(contentToValidate)) {
       triggerAlert(t.communitytab?.textInappropriateTittle || "Atención", t.communitytab?.textInappropriateDescription || "Contenido inapropiado detectado.");
@@ -551,6 +562,7 @@ export default function EventsScreen() {
       
       const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
+      // 🚀 SE INCLUYE EL ENLACE EN EL PAYLOAD
       const newEntryPayload = {
         title: trimmedTitle, 
         categoryIdx: formCategoryIdx,
@@ -570,7 +582,8 @@ export default function EventsScreen() {
         premiumPlan: finalPlan,
         estate: userMetadata?.estate || null,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
-        tariffPlan: (companyTariffs as any)[finalPlan]
+        tariffPlan: (companyTariffs as any)[finalPlan],
+        googleReviewLink: formGoogleLink.trim()
       };
 
       const response = await fetch(API_EVENTS_URL, {
@@ -603,7 +616,8 @@ export default function EventsScreen() {
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         premiumPlan: finalPlan,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
-        approved: isBackendApproved
+        approved: isBackendApproved,
+        googleReviewLink: formGoogleLink.trim()
       };
 
       setModalVisible(false);
@@ -681,11 +695,11 @@ export default function EventsScreen() {
 
   const resetForm = () => {
     setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormZip('');
-    setFormPhone(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
+    setFormPhone(''); setFormGoogleLink(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
     setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
     setFormRefCode(''); setFormPayMethod('Zelle'); 
-    setFormPlan(isWeb ? 'basic' : 'coupon'); 
-    setUiPayType(isWeb ? 'subscription' : 'coupon');
+    setFormPlan('coupon'); 
+    setUiPayType('coupon');
   };
 
   const filteredEvents = useMemo(() => 
@@ -958,7 +972,7 @@ export default function EventsScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* MODAL CREAR EVENTO CON CAMUFLAJE */}
+      {/* MODAL CREAR EVENTO CON PAGOS LIBERADOS */}
       <RNModal visible={isModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
@@ -1097,32 +1111,39 @@ export default function EventsScreen() {
                   <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.iconInactive} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                {/* 🚀 CAMUFLAJE: EN WEB MUESTRA BOTONES; EN MÓVIL FORZADO A CUPÓN */}
-                {isWeb && (
-                  <>
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                      <TouchableOpacity 
-                        onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                        style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                      >
-                        <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                        <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                      </TouchableOpacity>
+                {/* 🚀 NUEVO CAMPO: Google Review Link (OPCIONAL) */}
+                <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: Colors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
+                <TextInput 
+                  style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                  placeholder="https://g.page/r/..." 
+                  placeholderTextColor={Colors.subtext} 
+                  value={formGoogleLink} 
+                  onChangeText={setFormGoogleLink} 
+                  autoCapitalize="none" 
+                  keyboardType="url"
+                />
 
-                      <TouchableOpacity 
-                        onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                        style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                      >
-                        <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                        <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                )}
+                {/* 🚀 DESBLOQUEO TOTAL: PAGOS VISIBLES EN IOS, ANDROID Y WEB */}
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                  </TouchableOpacity>
 
-                {/* RUTA DE SUSCRIPCIÓN (SOLO VISIBLE EN WEB) */}
-                {uiPayType === 'subscription' && isWeb && (
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                  </TouchableOpacity>
+                </View>
+
+                {uiPayType === 'subscription' && (
                   <>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                     <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1179,18 +1200,23 @@ export default function EventsScreen() {
                         </View>
                       )}
                       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+
+                      {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
+                      <TouchableOpacity 
+                        onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                        style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
+                      >
+                        <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
+                        <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                      </TouchableOpacity>
                     </View>
                   </>
                 )}
 
-                {/* RUTA DE CUPÓN (VISIBLE EN AMBAS, PERO ES LA ÚNICA EN MÓVIL) */}
                 {uiPayType === 'coupon' && (
                   <View style={{ marginBottom: 10 }}>
                     <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>
-                      {isWeb 
-                        ? "Si dispones de un código promocional o cortesía comunitaria, escríbelo en el campo inferior para habilitar tu registro sin cargos."
-                        : "Para publicar tu evento en nuestra cartelera, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
-                      }
+                      Para publicar tu evento en nuestra cartelera, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior.
                     </ThemedText>
                   </View>
                 )}

@@ -15,6 +15,7 @@ import MapView from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { createClient } from '@supabase/supabase-js';
+import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -246,12 +247,14 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
+  const [formGoogleLink, setFormGoogleLink] = useState('');
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   
-  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>(isWebLocal ? 'subscription' : 'coupon');
-  const [formPlan, setFormPlan] = useState(isWebLocal ? 'basic' : 'coupon');
+  // 🚀 Por defecto arranca en Cupón
+  const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
+  const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
 
   const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
@@ -270,8 +273,9 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   useEffect(() => {
     if(visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
+      setFormGoogleLink('');
       setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); setFormPayMethod('Zelle');
-      setFormPlan(isWebLocal ? 'basic' : 'coupon'); setUiPayType(isWebLocal ? 'subscription' : 'coupon'); setFormRefCode('');
+      setFormPlan('coupon'); setUiPayType('coupon'); setFormRefCode('');
     }
   }, [visible]);
 
@@ -290,6 +294,17 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
 
     if (!formRefCode.trim()) {
       return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
+    }
+
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE
+    if (formGoogleLink.trim() !== '') {
+      const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+      if (!regex.test(formGoogleLink.trim())) {
+        return triggerAlert(
+          "Enlace Inválido",
+          "Por favor ingresa un enlace oficial de reseñas de Google (ej. https://g.page/r/...)"
+        );
+      }
     }
 
     const contentToValidate = `${formName} ${formDesc} ${formAddress}`;
@@ -350,7 +365,8 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         area: PRACTICE_AREAS[formCategoryIdx] || PRACTICE_AREAS[1], zip: formZip, imageUrl: finalImageName,
         lat: lat, lng: lng, phone: fullPhone, userId: currentUserId,
         approved: false, referenceCode: finalRefCode, paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod, durationDays: 30,
-        premiumPlan: finalPlan, couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', tariffPlan: (companyTariffs as any)[finalPlan]
+        premiumPlan: finalPlan, couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', tariffPlan: (companyTariffs as any)[finalPlan],
+        googleReviewLink: formGoogleLink.trim()
       };
 
       const response = await fetch(API_BASE_URL, {
@@ -369,7 +385,8 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         rating: 0, reviews: [], totalReviews: 0, phone: savedFromDB.phone, 
         status: isBackendApproved ? 'approved' : 'pending',
         referenceCode: finalRefCode, paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod, userId: currentUserId, timepostEnd: savedFromDB.timepostEnd || null,
-        premiumPlan: finalPlan, couponCode: uiPayType === 'coupon' ? formRefCode.trim() : ''
+        premiumPlan: finalPlan, couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
+        googleReviewLink: formGoogleLink.trim()
       };
       
       onSuccess(newEntryLocal, formZip);
@@ -452,25 +469,34 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 </TouchableOpacity>
                 <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" keyboardType="phone-pad" placeholderTextColor={Colors.subtext} style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '800', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
+
+              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: Colors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
+              <TextInput 
+                style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
+                placeholder="https://g.page/r/..." 
+                placeholderTextColor={Colors.subtext} 
+                value={formGoogleLink} 
+                onChangeText={setFormGoogleLink} 
+                autoCapitalize="none" 
+                keyboardType="url"
+              />
               
-              {isWebLocal && (
-                <>
-                  <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                    <TouchableOpacity onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
-                      <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                    </TouchableOpacity>
+              <>
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                  </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
-                      <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
+                  <TouchableOpacity onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </>
 
-              {uiPayType === 'subscription' && isWebLocal && (
+              {uiPayType === 'subscription' && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                   <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -517,6 +543,15 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                       </View>
                     )}
                     <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
+                    
+                    {/* 🚀 BOTÓN DE ENLACE DE ZELLE */}
+                    <TouchableOpacity 
+                      onPress={() => RNLinking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                      style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
+                    >
+                      <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
+                      <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                    </TouchableOpacity>
                   </View>
                 </>
               )}
@@ -524,10 +559,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
               {uiPayType === 'coupon' && (
                 <View style={{ marginBottom: 10 }}>
                   <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>
-                    {isWebLocal 
-                      ? "Si dispones de un código promocional o período de cortesía, escríbelo en el campo inferior para habilitar tu registro sin cargos."
-                      : "Para publicar tu perfil en nuestro directorio, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior."
-                    }
+                    Para publicar tu perfil en nuestro directorio, ingresa tu Código de Activación Institucional o Cupón de Cortesía en el campo inferior.
                   </ThemedText>
                 </View>
               )}
@@ -840,6 +872,7 @@ export default function LawyersScreen() {
             userId: item.userId || item.user_id,
             timepostEnd: item.timepostEnd || item.timepost_end,
             premiumPlan: item.premiumPlan, 
+            googleReviewLink: item.googleReviewLink || item.googleUrl,
             couponCode: item.couponCode
           };
         }));
@@ -927,6 +960,7 @@ export default function LawyersScreen() {
             userId: item.userId || item.user_id,
             timepostEnd: item.timepostEnd || item.timepost_end,
             premiumPlan: item.premiumPlan, 
+            googleReviewLink: item.googleReviewLink || item.googleUrl,
             couponCode: item.couponCode 
           };
         }));
@@ -1561,9 +1595,70 @@ export default function LawyersScreen() {
                           setResults(prev => prev.map(s => s.id === selectedReviews.id ? updatedLawyerObj : s));
                           setAllLawyers(prev => prev.map(s => s.id === selectedReviews.id ? updatedLawyerObj : s));
 
-                          Alert.alert((t.lawyerstab as any)?.thanksTitle, (t.lawyerstab as any)?.reviewSuccessMsg );
+                          // =====================================================================
+                          // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW (UNIVERSAL PARA ANDROID, IOS Y WEB)
+                          // =====================================================================
+                          const plan = selectedReviews.premiumPlan ? String(selectedReviews.premiumPlan).toLowerCase() : 'free';
+                          
+                          // Evaluamos el plan real de la BD
+                          const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
+                          const googleReviewUrl = selectedReviews.googleReviewLink || selectedReviews.googleUrl || selectedReviews.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+
+                          // ⚠️ ATENCIÓN: He añadido "true ||" para forzar que SIEMPRE aparezca en tus pruebas actuales, 
+                          // incluso si el abogado que evaluaste tiene un plan gratuito. 
+                          // Cuando estés en producción, quita el "true ||" para que respete solo a los Premium reales.
+                          if ((true || isPremiumActive) && commentStr.trim()) {
+                            
+                            // 1. En Web (localhost) a veces los navegadores bloquean el portapapeles y rompen el código.
+                            // Por eso debe ir siempre envuelto en try/catch para evitar fallos silenciosos.
+                            try {
+                              await Clipboard.setStringAsync(commentStr);
+                            } catch (clipError) {
+                              console.warn("El portapapeles no está permitido en este entorno web, pero el flujo continuará.");
+                            }
+
+                            // 2. Comportamiento dinámico dependiendo si es Navegador o Aplicación Nativa
+                            if (Platform.OS === 'web') {
+                              // En WEB usamos window.confirm porque permite abrir ventanas nuevas (window.open)
+                              // sin ser bloqueado agresivamente por los navegadores como pasa con métodos asíncronos.
+                              const confirmWeb = window.confirm(
+                                "🌟 ¡Apoya este negocio en Google!\n\nTu opinión ya se guardó con éxito. Como este negocio es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
+                              );
+                              if (confirmWeb) {
+                                window.open(googleReviewUrl, '_blank');
+                              } else {
+                                window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+                              }
+                            } else {
+                              // En ANDROID / IOS usamos el Alert nativo que soporta botones de acción fluidos
+                              Alert.alert(
+                                "🌟 ¡Apoya este negocio en Google!",
+                                "Tu opinión ya se guardó con éxito. ¿Te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles).",
+                                [
+                                  { text: "No, gracias", style: "cancel" },
+                                  { 
+                                    text: "Ir a Google", 
+                                    onPress: () => {
+                                      RNLinking.openURL(googleReviewUrl);
+                                    } 
+                                  }
+                                ]
+                              );
+                            }
+                          } else {
+                            if (Platform.OS === 'web') {
+                              window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
+                            } else {
+                              Alert.alert("¡Gracias!", "Tu reseña se ha publicado con éxito.");
+                            }
+                          }
+
                         } catch (e) {
-                          Alert.alert((t.lawyerstab as any)?.errorTitle, (t.lawyerstab as any)?.serverConnectionError);
+                          if (Platform.OS === 'web') {
+                            window.alert("Error de conexión con el servidor.");
+                          } else {
+                            Alert.alert((t.lawyerstab as any)?.errorTitle || "Error", (t.lawyerstab as any)?.serverConnectionError || "Error de red.");
+                          }
                         } finally {
                           setShowReviewInput(false);
                         }

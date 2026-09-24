@@ -10,11 +10,19 @@ const NOMBRE_BUCKET = 'images';
 
 const TEMP_USER_ID = "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
-// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
+// 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA TEXTO REGULAR
 const sanitizeText = (str: any) => {
   if (!str) return null;
   if (typeof str !== 'string') str = String(str);
   return str.replace(/<[^>]*>?/gm, '').trim();
+};
+
+// 🛡️ FUNCIÓN DE SEGURIDAD PARA VALIDAR ENLACES DE GOOGLE REVIEWS
+const isValidGoogleReviewUrl = (url: string) => {
+  if (!url) return false;
+  // Regex oficial para dominios de Google Reviews
+  const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+  return regex.test(url);
 };
 
 // ============================================================================
@@ -171,6 +179,7 @@ export const getCompanies = async (currentUserId?: string) => {
           logoUrl: publicUrl,
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
+          // El asterisco ya extrae googleReviewLink, no requiere un mapeo manual si el schema lo tiene
         });
       }
     }
@@ -189,11 +198,6 @@ export const getCompanyById = async (id: string, currentUserId?: string) => {
   try {
     const cleanId = sanitizeText(id);
     if (!cleanId) return null;
-
-    // 🚀 VALIDACIÓN ANTI-GUEST Y NULOS
-    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
-      ? sanitizeText(String(currentUserId)) 
-      : null;
 
     const rows = await db.select().from(companies)
       .leftJoin(payments, and(eq(payments.entityId, companies.id), eq(payments.entityType, 'company')))
@@ -226,6 +230,16 @@ export const getCompanyById = async (id: string, currentUserId?: string) => {
 // =====================================================================
 export const createCompany = async (data: any) => {
   try {
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EL BACKEND
+    let safeGoogleLink = null;
+    if (data.googleReviewLink) {
+      const trimmedLink = data.googleReviewLink.trim();
+      if (!isValidGoogleReviewUrl(trimmedLink)) {
+        throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+      }
+      safeGoogleLink = trimmedLink;
+    }
+
     let pushNotificationData: any = null; // 🚀 AQUÍ GUARDAMOS EL PAYLOAD PARA EL PUSH
 
     const createdCompanyResult = await db.transaction(async (tx) => {
@@ -292,6 +306,7 @@ export const createCompany = async (data: any) => {
         isVerified: isApproved, 
         premiumPlan: isCoupon ? 'coupon' : selectedPlan, 
         status: isApproved ? 'approved' : 'pending', 
+        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO: ENLACE AL PAYLOAD DE INSERCIÓN
         // 🚀 EL FIX MAESTRO PARA POSTGRES
         timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
         timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
@@ -335,7 +350,7 @@ export const createCompany = async (data: any) => {
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
 
-        // 🚀 NOTIFICACIÓN DE BASE DE DATOS (Solo al dueño, avisando que está en revisión)
+        // 🚀 NOTIFICACIÓN DE BASE DE DATOS
         if (validUserId) {
             await tx.insert(notifications).values({
                 title: "¡Empresa en Revisión! 🏢",
@@ -419,6 +434,17 @@ export const updateCompany = async (idParam: any, dataParam: any) => {
       
       for (const key of allowedFields) {
         if (data && data[key] !== undefined) updatePayload[key] = sanitizeText(data[key]);
+      }
+
+      // 🚀 AÑADIDO: VALIDACIÓN ANTI-XSS PARA EL ENLACE DE GOOGLE REVIEWS EN LA EDICIÓN
+      if (data && data.googleReviewLink !== undefined) {
+        if (data.googleReviewLink.trim() === '') {
+          updatePayload.googleReviewLink = null;
+        } else if (isValidGoogleReviewUrl(data.googleReviewLink.trim())) {
+          updatePayload.googleReviewLink = data.googleReviewLink.trim();
+        } else {
+          throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+        }
       }
 
       if (data && data.logoUrl && typeof data.logoUrl === 'string' && data.logoUrl.startsWith('companies/')) {

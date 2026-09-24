@@ -108,6 +108,7 @@ import {
     zip: text("zip"), // Cambiado a text para evitar problemas de casteo con numeric
     estate: text("estate"),
     approved: boolean("approved").default(false),
+    googleReviewLink: text("google_review_link"),
   });
   
   // 6. TABLA: LIKES
@@ -163,6 +164,7 @@ import {
     timepostEnd: timestamp("timepost_end").defaultNow(),
     approved: boolean("approved").default(false),
     createdAt: timestamp("created_at").defaultNow(),
+    googleReviewLink: text("google_review_link"),
   });
   
   // 9. TABLA: STORES
@@ -184,6 +186,7 @@ import {
     statusId: uuid("status_id").references(() => typeDetail.id, { onDelete: "set null" }),
     timepostEnd: timestamp("timepost_end").defaultNow(),
     approved: boolean("approved").default(false),
+    googleReviewLink: text("google_review_link"),
   });
   
   // 10. TABLA: ENTREPRENEURSHIP
@@ -227,6 +230,7 @@ import {
     approved: boolean("approved").default(false),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
+    googleReviewLink: text("google_review_link"),
   });
   
   // 12. TABLA: JOBS
@@ -335,6 +339,7 @@ export const tariffs = pgTable("tariffs", {
   // Auditoría
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
+  googleReviewLink: text("google_review_link"),
 });
 
 // 16. TABLA: (Terminos y condiciones aceptados por el usuario)

@@ -451,6 +451,7 @@ export default function HomeScreen() {
     router.replace('/');
   };
 
+  // 🚀 LÓGICA DE GOOGLE BLINDADA
   const verifyGoogle = async (id_token: string) => {
     try {
       const pushTokenReal = await getSafePushToken();
@@ -464,9 +465,12 @@ export default function HomeScreen() {
       });
       const dataRes = await res.json();
 
+      // 1. Si es OK y no pide completar perfil, entra de una.
       if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
         await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
-      } else {
+      } 
+      // 2. Si es OK pero explícitamente pide completar el perfil (porque es usuario nuevo).
+      else if (res.ok && dataRes.requiresProfileCompletion) {
         let googleEmail = dataRes.user?.email || dataRes.email || ''; 
         let name = dataRes.user?.firstName || '';
         let lastName = dataRes.user?.lastName || '';
@@ -486,9 +490,13 @@ export default function HomeScreen() {
         setSocialToken(id_token); 
         setAcceptedTerms(false); 
         setShowCompletionModal(true);
+      } 
+      // 3. Cualquier otra cosa es un error real del backend, no lo mandes al modal.
+      else {
+        throw new Error(dataRes.error || "No se pudo autenticar con Google. Intenta nuevamente.");
       }
-    } catch (error) {
-      isWebPlatform ? window.alert("Error de conexión.") : Alert.alert("Error", "No se pudo verificar la cuenta.");
+    } catch (error: any) {
+      isWebPlatform ? window.alert(error.message) : Alert.alert("Error", error.message);
     }
   };
 
@@ -496,6 +504,7 @@ export default function HomeScreen() {
     if (response?.type === 'success') verifyGoogle(response.params.id_token);
   }, [response]);
 
+  // 🚀 LÓGICA DE APPLE BLINDADA
   const handleAppleLogin = async () => {
     try {
       const credential = await AppleAuthentication.signInAsync({
@@ -527,9 +536,12 @@ export default function HomeScreen() {
         });
         const dataRes = await res.json();
 
+        // 1. Si es OK y no pide completar perfil, entra de una.
         if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
           await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
-        } else {
+        } 
+        // 2. Si es OK pero explícitamente pide completar el perfil.
+        else if (res.ok && dataRes.requiresProfileCompletion) {
           if (!appleEmail && dataRes.user?.email) appleEmail = dataRes.user.email;
           if (!name && dataRes.user?.firstName) name = dataRes.user.firstName;
           if (!lastName && dataRes.user?.lastName) lastName = dataRes.user.lastName;
@@ -540,11 +552,15 @@ export default function HomeScreen() {
           setSocialToken(credential.identityToken); 
           setAcceptedTerms(false);
           setShowCompletionModal(true);
+        } 
+        // 3. Cualquier otra cosa es un error.
+        else {
+          throw new Error(dataRes.error || "No se pudo autenticar con Apple. Intenta nuevamente.");
         }
       }
     } catch (e: any) {
       if (e.code !== 'ERR_REQUEST_CANCELED') {
-        const errorMsg = isEnglish ? "Could not sign in with Apple." : "No se pudo iniciar sesión con Apple.";
+        const errorMsg = e.message || (isEnglish ? "Could not sign in with Apple." : "No se pudo iniciar sesión con Apple.");
         isWebPlatform ? window.alert(errorMsg) : Alert.alert("Error", errorMsg);
       }
     }
@@ -1234,7 +1250,7 @@ export default function HomeScreen() {
 
           <View style={{ paddingVertical: 80, backgroundColor: DynamicColors.heroBg, paddingHorizontal: 20, alignItems: 'center' }}>
             <Text accessibilityRole="header" aria-level={2} style={{ fontSize: 32, fontWeight: '900', color: DynamicColors.text, marginBottom: 5, textAlign: 'center' }}>
-              {isEnglish ? "Living in " : "Viviendo en "}<Text style={{ color: '#FF5F6D' }}>USA</Text>
+              {isEnglish ? "Viviendo en " : "Viviendo en "}<Text style={{ color: '#FF5F6D' }}>USA</Text>
             </Text>
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#F5A623', marginBottom: 25, textAlign: 'center' }}>
               {isEnglish ? "The Latino Community App" : "La App de la Comunidad Latina"}
@@ -1244,13 +1260,17 @@ export default function HomeScreen() {
             </Text>
 
             <View style={[styles.landingButtonsContainer, { flexDirection: width > 900 ? 'row' : 'column' }]}>
-              <View style={[styles.storeButtonBlackBig, { opacity: 0.5 }]}>
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => Linking.openURL('https://apps.apple.com/app/viviendo-en-usa-comunidad/id6801644618')}
+                style={[styles.storeButtonBlackBig, { opacity: 1 }]}
+              >
                 <MaterialCommunityIcons name="apple" size={32} color="#FFF" />
                 <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.storeButtonSubBig}>{isEnglish ? "COMING SOON ON" : "PRÓXIMAMENTE EN"}</Text>
+                  <Text style={styles.storeButtonSubBig}>{isEnglish ? "DOWNLOAD ON" : "DISPONIBLE EN"}</Text>
                   <Text style={styles.storeButtonTitleBig}>App Store</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
 
               <View style={[styles.storeButtonBlackBig, { opacity: 0.5 }]}>
                 <MaterialCommunityIcons name="google-play" size={28} color="#FFF" />
@@ -1957,7 +1977,6 @@ export default function HomeScreen() {
                     />
                   </View>
 
-                  {/* 🚀 FECHA DE NACIMIENTO OPCIONAL EN MODAL (INICIA VACÍA Y PERMITE BORRARSE) */}
                   <View style={{ width: '100%' }}>
                     <ThemedText style={styles.labelDate}>{t?.hometab?.dateBirthday || (isEnglish ? "Birthdate (Optional)" : "Fecha de Nacimiento (Opcional)")}</ThemedText>
                     <View style={[styles.dateInput, { borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg, padding: isWebPlatform ? 0 : 12 }]}>

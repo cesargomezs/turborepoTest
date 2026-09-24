@@ -10,7 +10,7 @@ import jwksClient from 'jwks-rsa';
 import { Request, Response } from 'express'; 
 import { AuthRequest } from '../middleware/authMiddleware'; 
 import { logAuditEvent } from '../services/audit.service';
-import crypto from 'crypto'; // 🚀 AÑADIDO: Para solucionar el error de "default ID" en Render
+import crypto from 'crypto'; 
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -55,13 +55,15 @@ const ensureTermsAccepted = async (userId: string, ipAddress?: string | null) =>
         })
         .where(eq(userTermsAcceptance.userId, userId));
     } else {
+      // 🚀 SOLUCIÓN AL ERROR EN RENDER: 
+      // Se omite el campo 'id' para que PostgreSQL genere el UUID (default)
+      // automáticamente. Evitamos usar crypto.randomUUID() en Drizzle.
       await db.insert(userTermsAcceptance)
         .values({
-          id: crypto.randomUUID(), // 🚀 Soluciona el error 'values (default...)'
           userId,
           ipAddress: ipAddress || '0.0.0.0', 
           acceptedAt: new Date(),            
-        });
+        } as any);
     }
   } catch (error: any) {
     console.error("❌ [TÉRMINOS] ERROR ES:", error.message);
@@ -342,7 +344,7 @@ export const authenticateUser = async (credentials: {
     const rows = await db.select().from(users).where(eq(users.email, email));
     let user = rows[0];
     const genericAuthError = "Credenciales incorrectas.";
-    let isBrandNew = false; // 🚀 BANDERA: Detecta si la cuenta acaba de nacer
+    let isBrandNew = false; 
 
     if (!user) {
       if (credentials.isGoogle || credentials.isApple) {
@@ -354,7 +356,7 @@ export const authenticateUser = async (credentials: {
           typeDetail: 'User'
         }).returning();
         user = newUser;
-        isBrandNew = true; // 🚀 Marcamos al usuario como totalmente nuevo
+        isBrandNew = true; 
       } else {
         throw new Error(genericAuthError);
       }
@@ -394,8 +396,6 @@ export const authenticateUser = async (credentials: {
       await db.update(users).set({ failedLoginAttempts: 0, isLocked: false }).where(eq(users.id, user.id));
     }
 
-    // 🚀 FIX CRÍTICO UI/UX: Solo exigimos completar el perfil si la cuenta ES NUEVA.
-    // Si ya inició sesión antes (y omitió los datos), no lo volvemos a molestar.
     const needsProfile = isBrandNew;
     
     const baseSecret = process.env.JWT_SECRET || 'super_viviendoenusa_chimba_2026';

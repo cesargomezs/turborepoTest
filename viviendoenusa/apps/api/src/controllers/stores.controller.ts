@@ -35,6 +35,13 @@ const sanitizeText = (str: any) => {
   return str.replace(/<[^>]*>?/gm, '').trim();
 };
 
+// 🛡️ FUNCIÓN DE SEGURIDAD PARA VALIDAR ENLACES DE GOOGLE REVIEWS
+const isValidGoogleReviewUrl = (url: string) => {
+  if (!url) return false;
+  const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
+  return regex.test(url);
+};
+
 // 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
 const getCurrentStorePrice = async () => {
   try {
@@ -161,12 +168,10 @@ const sendTelegramAlert = async (storeName: string, refCode: string, method: str
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
   try {
     const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
-    // 🚀 NUEVA VALIDACIÓN ANTI-GUEST
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
 
-    // 🚀 Condición segura: Si es invitado (sin userId real), permite ver negocios aprobados de forma pública
     let baseConditions = cleanUserId
       ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${cleanUserId})`
       : sql`(${stores.approved} = true OR ${stores.timepostEnd} > NOW())`;
@@ -200,7 +205,6 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
     .where(finalConditions)
     .$dynamic();
 
-    // 🚀 ORDENAMIENTO SEGURO
     if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
@@ -236,6 +240,7 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
           status: isAppr ? 'approved' : 'pending',
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
+          googleReviewLink: row.stores.googleReviewLink || null,
           reviews: [], 
           totalRating: 0,
           totalReviews: 0
@@ -332,6 +337,7 @@ export const getStoreById = async (id: string) => {
       ...dbStore, 
       approved: isAppr,
       status: isAppr ? 'approved' : 'pending',
+      googleReviewLink: dbStore.googleReviewLink,
       reviews: [],
       totalRating: 0,
       totalReviews: 0           
@@ -399,6 +405,16 @@ export const createStore = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un negocio.");
     }
 
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EL BACKEND
+    let safeGoogleLink = null;
+    if (data.googleReviewLink) {
+      const trimmedLink = data.googleReviewLink.trim();
+      if (!isValidGoogleReviewUrl(trimmedLink)) {
+        throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+      }
+      safeGoogleLink = trimmedLink;
+    }
+
     let cleanImage = sanitizeText(data.imageStores) || '';
     if (cleanImage.startsWith('stores/')) {
       cleanImage = cleanImage.replace('stores/', '');
@@ -446,6 +462,7 @@ export const createStore = async (data: any) => {
         approved: false, 
         createdAt: new Date(),
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
+        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
       };
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
@@ -493,12 +510,12 @@ export const createStore = async (data: any) => {
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
          descriptionStores: safeDesc,
+         googleReviewLink: safeGoogleLink,
          message: customMessage 
       };
     });
 
     if (createdStoreResult) {
-      // 🚀 AWAIT CRÍTICO PARA SERVERLESS
       await sendTelegramAlert(
         createdStoreResult.nameStores,
         createdStoreResult.referenceCode || 'N/A',
@@ -561,6 +578,17 @@ export const updateStore = async (idParam: any, dataParam: any) => {
       
       for (const key of allowedFields) {
         if (data && data[key] !== undefined) updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+      }
+
+      // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
+      if (data && data.googleReviewLink !== undefined) {
+        if (data.googleReviewLink.trim() === '') {
+          updatePayload.googleReviewLink = null;
+        } else if (isValidGoogleReviewUrl(data.googleReviewLink.trim())) {
+          updatePayload.googleReviewLink = data.googleReviewLink.trim();
+        } else {
+          throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+        }
       }
 
       if (data && (data.description !== undefined || data.descriptionStores !== undefined)) {
@@ -634,7 +662,6 @@ export const updateStore = async (idParam: any, dataParam: any) => {
     });
 
     if (pushNotificationData) {
-      // 🚀 AWAIT CRÍTICO PARA SERVERLESS
       await sendMassPushNotification(pushNotificationData).catch(err => console.error("❌ [DEBUG PUSH] Falló:", err));
     }
 
