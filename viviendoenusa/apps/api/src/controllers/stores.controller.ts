@@ -163,21 +163,25 @@ const sendTelegramAlert = async (storeName: string, refCode: string, method: str
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (DEVUELVE ACTIVOS Y PENDIENTES PARA QUE EL FRONT FILTRE)
+// 🔍 1. CONSULTA GENERAL (EL BACKEND RETORNA TODO, EL FRONTEND FILTRA)
 // =====================================================================
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
   try {
-    const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const zip = rawZip && String(rawZip) !== 'undefined' ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
 
+    // 🚀 EL BACKEND SOLO RETORNA LA INFORMACIÓN (ACTIVOS Y PENDIENTES). 
+    // Si hay usuario logueado, trae los pendientes del sistema para que el front valide.
     let baseConditions = cleanUserId 
       ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${cleanUserId})`
       : sql`(${stores.approved} = true OR ${stores.timepostEnd} > NOW())`;
 
     let finalConditions: any = baseConditions;
 
+    // 🚀 SI EL FRONTEND ENVÍA ZIP (BÚSQUEDA NORMAL), FILTRAMOS POR ZONA. 
+    // SI NO ENVÍA ZIP (COMO CUANDO EL ADMIN PIDE LOS PENDIENTES), TRAE TODO.
     if (zip && zip.length === 5) {
       const nearbyZips = zipcodes.radius(zip as any, Number(radiusMiles)); 
       if (nearbyZips && nearbyZips.length > 0) {
