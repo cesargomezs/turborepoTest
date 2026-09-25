@@ -180,7 +180,7 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (CORREGIDA PARA ADMINS SIN FILTRO DE FECHA EN PENDIENTES)
+// 🔍 1. CONSULTA GENERAL (ADMIN Muestra Todo, Usuario Normal filtra por vigencia)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
@@ -191,12 +191,13 @@ export const getEvents = async (zip?: string, userId?: string) => {
     
     let userRole = 'User';
     if (cleanUserId) {
-      const [userRecord] = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId));
+      const [userRecord] = await db.select({ typeDetail: users.typeDetail  }).from(users).where(eq(users.id, cleanUserId));
       userRole = userRecord?.typeDetail || 'User';
     }
     const isUserAdmin = ['sadmin', 'admin'].includes(String(userRole).toLowerCase());
 
-    // Si es administrador, permitimos ver los pendientes globales; si no, aplicamos el filtro normal por fecha y aprobación
+    // 🚀 SI ES ADMIN, TRAE TODO (Aprobados y Pendientes sin restricción de usuario)
+    // SI ES USUARIO NORMAL, SOLO VE LOS APROBADOS VIGENTES O SUS PROPIOS PENDIENTES
     let baseConditions = isUserAdmin
       ? sql`1=1`
       : cleanUserId 
@@ -205,8 +206,7 @@ export const getEvents = async (zip?: string, userId?: string) => {
                         
     let finalConditions: any = baseConditions;
 
-    // Solo aplicamos radio de código postal si el usuario lo ingresó explícitamente y NO es un admin buscando pendientes generales
-    if (cleanZipParam && cleanZipParam.length === 5) {
+    if (!isUserAdmin && cleanZipParam && cleanZipParam.length === 5) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
