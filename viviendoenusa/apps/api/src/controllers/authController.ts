@@ -754,21 +754,33 @@ export const getPlatformStats = async (req: Request, res: Response) => {
 // =====================================================================
 export const getAppConfig = async (req: Request, res: Response) => {
   try {
-    // Usamos SQL plano con ILIKE o LOWER para evitar problemas con 'or'
-    const configs = await db
+    if (!db) {
+      return res.status(500).json({ error: "Base de datos no inicializada" });
+    }
+
+    // Buscamos el registro PayOn en la base de datos
+    const configRecord = await db
       .select({
         typeCode: typeDetail.typeCode,
         statusType: typeDetail.statusType,
         descriptionType: typeDetail.descriptionType,
       })
       .from(typeDetail)
-      .where(
-        sql`LOWER(${typeDetail.typeCode}) = 'payon' OR LOWER(${typeDetail.typeCode}) = 'zelle'`
-      );
+      .where(sql`LOWER(${typeDetail.typeCode}) = 'payon'`)
+      .limit(1);
 
-    return res.status(200).json(configs);
+    // Si no existe el registro, por defecto asumimos pago desactivado o activo según tu estrategia
+    const payOn = configRecord[0] || { statusType: false, descriptionType: '' };
+
+    // Retornamos la respuesta lógica estructurada desde el servidor
+    return res.status(200).json({
+      payOnActive: Boolean(payOn.statusType),
+      zelleLink: payOn.descriptionType || '',
+      message: payOn.statusType ? "Pagos de suscripción habilitados" : "Pagos deshabilitados por normativa"
+    });
+
   } catch (error: any) {
-    console.error("❌ Error obteniendo configuración de la app:", error.message);
-    return res.status(500).json({ error: "Error al obtener la configuración de la app" });
+    console.error("❌ Error en getAppConfig:", error.message);
+    return res.status(500).json({ error: error.message || "Error al obtener la configuración" });
   }
 };

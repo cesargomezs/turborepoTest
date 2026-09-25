@@ -76,7 +76,7 @@ const refreshSupabaseUrl = async (url: string, fallbackFolder = 'lawyers') => {
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/lawyers';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
-const API_CONFIG_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'ß/config'; 
+const API_CONFIG_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/config'; 
 
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
@@ -202,7 +202,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
               <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
 
-            {isWebLocal && appConfig?.payOnActive ? (
+            {(isWebLocal || appConfig?.payOnActive) ? (
               <>
                 <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
                   Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariffs} USD y enviando el comprobante aquí abajo.
@@ -223,7 +223,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
 
             <TextInput 
               style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-              placeholder={isWebLocal && appConfig?.payOnActive ? `# CONFIRMACION DE ${renewPayMethod}...` : 'ESCRIBE TU CÓDIGO AQUÍ...'} placeholderTextColor={Colors.subtext}
+              placeholder={(isWebLocal || appConfig?.payOnActive) ? `# CONFIRMACION DE ${renewPayMethod}...` : 'ESCRIBE TU CÓDIGO AQUÍ...'} placeholderTextColor={Colors.subtext}
               value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
             />
 
@@ -411,6 +411,8 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
     }
   };
 
+  const showSubscriptionOption = isWebLocal || appConfig?.payOnActive;
+
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -482,17 +484,15 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 keyboardType="url"
               />
               
-              {/* 🚀 CONDICIONAL GLOBAL: EL CUPÓN SIEMPRE VISIBLE */}
               <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
               <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                {/* 🚀 BOTÓN CUPÓN SIEMPRE ACTIVO */}
                 <TouchableOpacity onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
                   <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
                   <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
                 </TouchableOpacity>
 
-                {/* 🚀 BOTÓN SUSCRIPCIÓN SOLO SI PayOn ESTÁ ACTIVO */}
-                {appConfig?.payOnActive && (
+                {/* 🚀 SUSCRIPCIÓN VISIBLE EN WEB O SI PAYON ESTÁ ACTIVO */}
+                {showSubscriptionOption && (
                   <TouchableOpacity onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
                     <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
                     <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
@@ -500,7 +500,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 )}
               </View>
 
-              {uiPayType === 'subscription' && appConfig?.payOnActive && (
+              {uiPayType === 'subscription' && showSubscriptionOption && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                   <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -530,7 +530,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                     Realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> escaneando el código QR oficial abajo.
                   </ThemedText>
                   
-                  {/* 🚀 ZELLE: VISIBLE SOLO SI ESTÁ ACTIVO EN LA CONFIGURACIÓN */}
                   {appConfig?.zelleActive && (
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                       <View style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
@@ -540,7 +539,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                   )}
 
                   <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: Colors.border }}>
-                    {/* 🚀 IMAGEN DEL QR DE ZELLE DESDE SUPABASE */}
                     {zelleQrUrl ? (
                       <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
                     ) : (
@@ -550,7 +548,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                     )}
                     <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
                     
-                    {/* 🚀 BOTÓN DE ENLACE DE ZELLE DINÁMICO */}
                     {appConfig?.zelleLink ? (
                         <TouchableOpacity 
                           onPress={() => RNLinking.openURL(appConfig.zelleLink)}
@@ -561,7 +558,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity 
-                          onPress={() => RNLinking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                          onPress={() => RNLinking.openURL('https://viviendoenusa.app')}
                           style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
                         >
                           <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
@@ -699,7 +696,7 @@ export default function LawyersScreen() {
   
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
-  const [appConfig, setAppConfig] = useState({ payOnActive: true, zelleActive: true, zelleLink: '' });
+  const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
   const isZipValid = zipCode.length === 5;
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
@@ -714,7 +711,6 @@ export default function LawyersScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
-  // 🚀 LÓGICA PRINCIPAL DE FILTRADO
   const applyLocalFilters = useCallback((lawyersList: any[], areaName: string, lat: number, lng: number) => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
     
@@ -745,12 +741,11 @@ export default function LawyersScreen() {
     return filtered;
   }, [currentUserId, PRACTICE_AREAS]);
 
-  // 🚀 FETCH DE CONFIGURACIÓN DE LA BASE DE DATOS
   useEffect(() => {
     const fetchAppConfig = async () => {
       try {
         const res = await fetch(API_CONFIG_URL);
-        console.log(res);
+        //console.log("🔧 Configuración obtenida:", res);
         if (res.ok) {
           const data = await res.json();
           const payOnItem = data.find((d: any) => d.typeCode === 'PayOn');
@@ -758,9 +753,8 @@ export default function LawyersScreen() {
           setAppConfig({
             payOnActive: payOnItem ? payOnItem.statusType : true,
             zelleActive: zelleItem ? zelleItem.statusType : true,
-            zelleLink: zelleItem.descriptionType 
+            zelleLink: zelleItem && zelleItem.descriptionType ? zelleItem.descriptionType : ''
           });
-          console.log("✅ Configuración obtenida:", { payOnActive: payOnItem?.statusType, zelleActive: zelleItem?.statusType, zelleLink: zelleItem?.descriptionType });
         }
       } catch (error) {
         console.warn("⚠️ No se pudo obtener la configuración, usando valores por defecto", error);
@@ -769,7 +763,6 @@ export default function LawyersScreen() {
     fetchAppConfig();
   }, []);
 
-  // 🚀 FETCH DEL QR DE ZELLE DESDE SUPABASE
   useEffect(() => {
     const loadZelleQr = async () => {
       try {
@@ -1640,33 +1633,22 @@ export default function LawyersScreen() {
                           setAllLawyers(prev => prev.map(s => s.id === selectedReviews.id ? updatedLawyerObj : s));
 
                           // =====================================================================
-                          // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW (UNIVERSAL PARA ANDROID, IOS Y WEB)
+                          // 🚀 REGLA ESTRICTA: SOLO MOSTRAR GOOGLE REVIEW SI EL PLAN ES PREMIUM O ILIMITADO
                           // =====================================================================
                           const plan = selectedReviews.premiumPlan ? String(selectedReviews.premiumPlan).toLowerCase() : 'free';
-                          
-                          // Evaluamos el plan real de la BD
-                          const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
-                          const googleReviewUrl = selectedReviews.googleReviewLink || selectedReviews.googleUrl || selectedReviews.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+                          const isEligibleForGoogleReview = ['premium', 'unlimited'].includes(plan);
+                          const googleReviewUrl = selectedReviews.googleReviewLink || selectedReviews.googleUrl || selectedReviews.google_review_link;
 
-                          // ⚠️ ATENCIÓN: He añadido "true ||" para forzar que SIEMPRE aparezca en tus pruebas actuales, 
-                          // incluso si el abogado que evaluaste tiene un plan gratuito. 
-                          // Cuando estés en producción, quita el "true ||" para que respete solo a los Premium reales.
-                          if ((true || isPremiumActive) && commentStr.trim()) {
-                            
-                            // 1. En Web (localhost) a veces los navegadores bloquean el portapapeles y rompen el código.
-                            // Por eso debe ir siempre envuelto en try/catch para evitar fallos silenciosos.
+                          if (isEligibleForGoogleReview && googleReviewUrl && commentStr.trim()) {
                             try {
                               await Clipboard.setStringAsync(commentStr);
                             } catch (clipError) {
-                              console.warn("El portapapeles no está permitido en este entorno web, pero el flujo continuará.");
+                              console.warn("Portapapeles bloqueado.");
                             }
 
-                            // 2. Comportamiento dinámico dependiendo si es Navegador o Aplicación Nativa
                             if (Platform.OS === 'web') {
-                              // En WEB usamos window.confirm porque permite abrir ventanas nuevas (window.open)
-                              // sin ser bloqueado agresivamente por los navegadores como pasa con métodos asíncronos.
                               const confirmWeb = window.confirm(
-                                "🌟 ¡Apoya este negocio en Google!\n\nTu opinión ya se guardó con éxito. Como este negocio es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
+                                "🌟 ¡Apoya este negocio en Google!\n\nTu opinión ya se guardó con éxito. Como este negocio es Premium/Ilimitado, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
                               );
                               if (confirmWeb) {
                                 window.open(googleReviewUrl, '_blank');
@@ -1674,7 +1656,6 @@ export default function LawyersScreen() {
                                 window.alert("¡Gracias! Tu reseña se ha publicado con éxito.");
                               }
                             } else {
-                              // En ANDROID / IOS usamos el Alert nativo que soporta botones de acción fluidos
                               Alert.alert(
                                 "🌟 ¡Apoya este negocio en Google!",
                                 "Tu opinión ya se guardó con éxito. ¿Te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles).",
