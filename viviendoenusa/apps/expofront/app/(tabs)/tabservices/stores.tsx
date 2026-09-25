@@ -33,6 +33,7 @@ import { useAppTheme } from '../../../context/ThemeContext';
 
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/stores';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
+const API_CONFIG_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/config';
 
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'stores') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -121,18 +122,18 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   return parseFloat((R * c).toFixed(1));
 };
 
-const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, currentUserId, currentTariff, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, userToken, router }: any) => {
+const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, userToken, router, appConfig }: any) => {
   const isWebLocal = Platform.OS === 'web';
   const [renewRefCode, setRenewRefCode] = useState('');
-  const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
+  const [renewPayMethod, setRenewPayMethod] = useState(appConfig?.zelleActive ? 'Zelle' : '');
   const [isRenewing, setIsRenewing] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setRenewRefCode('');
-      setRenewPayMethod('Zelle');
+      setRenewPayMethod(appConfig?.zelleActive ? 'Zelle' : '');
     }
-  }, [visible]);
+  }, [visible, appConfig]);
 
   const handleRenewSubmit = async () => {
     if (!renewRefCode.trim()) return Alert.alert("Aviso", "Ingresa el código de confirmación.");
@@ -177,18 +178,18 @@ const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, curre
               <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
 
-            {isWebLocal ? (
+            {(isWebLocal || appConfig?.payOnActive) ? (
               <>
                 <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
-                  Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{storeToRenew?.name || storeToRenew?.nameStores}</ThemedText> realizando el pago de ${currentTariff} USD y enviando el comprobante aquí abajo.
+                  Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{storeToRenew?.name || storeToRenew?.nameStores}</ThemedText> realizando el pago de ${currentTariffs} USD y enviando el comprobante aquí abajo.
                 </ThemedText>
                 
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                  {['Zelle', 'Venmo'].map((method) => (
-                    <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
-                      <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
+                  {appConfig?.zelleActive && (
+                    <TouchableOpacity onPress={() => setRenewPayMethod('Zelle')} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === 'Zelle' ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === 'Zelle' ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                      <ThemedText style={{ fontWeight: '900', color: renewPayMethod === 'Zelle' ? Colors.accent : Colors.subtext }}>Zelle</ThemedText>
                     </TouchableOpacity>
-                  ))}
+                  )}
                 </View>
               </>
             ) : (
@@ -199,7 +200,7 @@ const RenewStoreModal = memo(({ visible, onClose, onSuccess, storeToRenew, curre
 
             <TextInput 
               style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-              placeholder={isWebLocal ? `# CONFIRMACION DE ${renewPayMethod}...` : 'ESCRIBE TU CÓDIGO AQUÍ...'} 
+              placeholder={(isWebLocal || appConfig?.payOnActive) ? `# CONFIRMACION DE ${renewPayMethod}...` : 'ESCRIBE TU CÓDIGO AQUÍ...'} 
               placeholderTextColor={Colors.subtext}
               value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
             />
@@ -239,8 +240,8 @@ export default function StoresScreen() {
   const userToken = userMetadata?.token || userMetadata?.accessToken;
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
 
-  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
-  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const userRoleStr = String(userMetadata?.role || userMetadata?.rol || 'User').toLowerCase();
+  const isAdmin = ['sadmin', 'admin'].includes(userRoleStr); 
   const isGuest = userMetadata?.typeDetail === 'Guest'; 
 
   useEffect(() => {
@@ -282,7 +283,6 @@ export default function StoresScreen() {
   ];
 
   const CATEGORIES_LIST = t.storestab.categoryentre || ['Todas'];
-  const CATEGORY_ICONS_DICT = t.storestab.categoryentreicon || {};
 
   const [zipCode, setZipCode] = useState('');
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
@@ -312,20 +312,16 @@ export default function StoresScreen() {
   const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
-  
-  // 🚀 Enlace opcional de Google Reviews
   const [formGoogleLink, setFormGoogleLink] = useState('');
-  
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
 
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
-  
-  // 🚀 Cupón por defecto para todas las plataformas
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
   const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
+  const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
   const [companyTariffs, setCompanyTariffs] = useState({
     coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.56' 
@@ -349,9 +345,45 @@ export default function StoresScreen() {
     setFormGoogleLink(''); 
     setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); 
     setFormRefCode(''); setFormPayMethod('Zelle'); 
-    setFormPlan('coupon'); 
-    setUiPayType('coupon');
+    setFormPlan('coupon'); setUiPayType('coupon');
   };
+
+  useEffect(() => {
+    const fetchAppConfig = async () => {
+      try {
+        const res = await fetch(API_CONFIG_URL);
+        if (res.ok) {
+          const data = await res.json();
+          let isPayOn = false;
+          let isZelle = true;
+          let zLink = '';
+
+          if (Array.isArray(data)) {
+            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+
+            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+            zLink = zelleItem?.descriptionType || '';
+          } 
+          else if (data && typeof data === 'object') {
+            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+            zLink = data.zelleLink || data.descriptionType || '';
+          }
+
+          setAppConfig({
+            payOnActive: isPayOn,
+            zelleActive: isZelle,
+            zelleLink: zLink
+          });
+        }
+      } catch (error) {
+        console.warn("⚠️ Error obteniendo configuración de tiendas:", error);
+      }
+    };
+    fetchAppConfig();
+  }, []);
 
   useEffect(() => {
     const fetchTariff = async () => {
@@ -367,10 +399,11 @@ export default function StoresScreen() {
           if (tariffsData && tariffsData.length > 0 ) {
             setCompanyTariffs({
               coupon: tariffsData[0].coupon,
-              basic: tariffsData[0].basic ,
-              premium: tariffsData[0].premium ,
+              basic: tariffsData[0].basic,
+              premium: tariffsData[0].premium,
               unlimited: tariffsData[0].unlimited 
             });
+            if (tariffsData[0].basic) setCurrentTariff(tariffsData[0].basic);
           }
         }
       } catch (e) {
@@ -446,13 +479,10 @@ export default function StoresScreen() {
           };
         }));
 
-        const approved = mappedData.filter(s => s.status === 'approved');
-        setAllStores(approved);
-        
-        if (!isAdminMode) {
-          setPendingStores(mappedData.filter(s => s.status === 'pending'));
-        }
-        return approved;
+        const approvedOrOwnedPending = mappedData.filter(s => s.status === 'approved' || (s.status === 'pending' && s.userId === currentUserId));
+        setAllStores(approvedOrOwnedPending);
+        setPendingStores(mappedData.filter(s => s.status === 'pending'));
+        return approvedOrOwnedPending;
       }
       return [];
     } catch (e) {
@@ -466,7 +496,7 @@ export default function StoresScreen() {
   const fetchAllPendingStores = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}`, {
+      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}` }
       }); 
@@ -542,6 +572,18 @@ export default function StoresScreen() {
 
     return () => subscription.remove();
   }, [isFocused, zipCode, isAdminMode]);
+
+  useEffect(() => {
+    if (isAdminMode) {
+      fetchAllPendingStores();
+    } else {
+      if (zipCode.length === 5) {
+        fetchStoresData(zipCode);
+      } else {
+        setPendingStores([]);
+      }
+    }
+  }, [isAdminMode]);
 
   const lastProcessedNotifId = useRef<string | null>(null);
 
@@ -623,17 +665,34 @@ export default function StoresScreen() {
     }
   }, []);
 
-  const applyLocalFilters = (storesList: any[], categoryIdx: number, lat: number, lng: number) => {
+  const applyLocalFilters = useCallback((storesList: any[], categoryIdx: number, lat: number, lng: number, adminMode: boolean) => {
     let filtered = (categoryIdx === 0) ? [...storesList] : storesList.filter(l => Number(l.categoryId) === categoryIdx);
     
+    filtered = filtered.filter(item => {
+      const isOwner = item.userId === currentUserId;
+      const isPending = item.status === 'pending';
+      const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) 
+        ? new Date(item.timepostEnd) < new Date() 
+        : false;
+
+      if (isPending) {
+        if (adminMode) return false;
+        return isOwner;
+      }
+
+      if (isExpired && !isOwner) return false;
+
+      return true;
+    });
+
     filtered.sort((a, b) => {
       const aIsOwner = a.userId === currentUserId;
       const aIsExpired = a.timepostEnd ? new Date(a.timepostEnd) < new Date() : false;
-      const aNeedsRenewal = aIsOwner && aIsExpired;
+      const aNeedsRenewal = aIsOwner && aIsExpired && a.status !== 'pending';
 
       const bIsOwner = b.userId === currentUserId;
       const bIsExpired = b.timepostEnd ? new Date(b.timepostEnd) < new Date() : false;
-      const bNeedsRenewal = bIsOwner && bIsExpired;
+      const bNeedsRenewal = bIsOwner && bIsExpired && b.status !== 'pending';
 
       if (aNeedsRenewal && !bNeedsRenewal) return -1;
       if (!aNeedsRenewal && bNeedsRenewal) return 1;
@@ -642,7 +701,7 @@ export default function StoresScreen() {
     });
 
     return filtered;
-  };
+  }, [currentUserId]);
 
   const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string) => {
     const targetZip = forcedZip || zipCode;
@@ -669,7 +728,7 @@ export default function StoresScreen() {
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
 
     const approvedStores = await fetchStoresData(targetZip);
-    const filtered = applyLocalFilters(approvedStores, categoryToSearch, lat, lng);
+    const filtered = applyLocalFilters(approvedStores, categoryToSearch, lat, lng, isAdminMode);
     
     setResults(filtered);
     setMapKey(k => k + 1);
@@ -685,6 +744,8 @@ export default function StoresScreen() {
       }
       setShowMarkers(false);
       setIsFilteredByMap(false);
+    } else if (text.length === 5) {
+      handleSearch(selectedCategoryIdx, text);
     }
   };
 
@@ -702,7 +763,7 @@ export default function StoresScreen() {
     if (isZipValid && allStores.length > 0) {
       const lat = userLocation ? userLocation.latitude : 34.0934;
       const lng = userLocation ? userLocation.longitude : -117.5847;
-      const filtered = applyLocalFilters(allStores, index, lat, lng);
+      const filtered = applyLocalFilters(allStores, index, lat, lng, isAdminMode);
       setResults(filtered);
     } else if (isZipValid) {
       handleSearch(index); 
@@ -744,7 +805,6 @@ export default function StoresScreen() {
       return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE REVIEWS
     if (formGoogleLink.trim() !== '') {
       const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
       if (!regex.test(formGoogleLink.trim())) {
@@ -832,7 +892,7 @@ export default function StoresScreen() {
         premiumPlan: finalPlan,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
         tariffPlan: (companyTariffs as any)[finalPlan],
-        googleReviewLink: formGoogleLink.trim() // 🚀 SE MANDA EL ENLACE AL BACKEND
+        googleReviewLink: formGoogleLink.trim()
       };
 
       const response = await fetch(API_STORES_URL, {
@@ -933,7 +993,7 @@ export default function StoresScreen() {
         if (showMarkers || isZipValid) {
           const lat = userLocation ? userLocation.latitude : 34.0934;
           const lng = userLocation ? userLocation.longitude : -117.5847;
-          const filtered = applyLocalFilters(newAllStores, selectedCategoryIdx, lat, lng);
+          const filtered = applyLocalFilters(newAllStores, selectedCategoryIdx, lat, lng, isAdminMode);
           setResults(filtered);
         }
         setMapKey(k => k + 1);
@@ -961,6 +1021,13 @@ export default function StoresScreen() {
       triggerAlert("Error", "No se pudo rechazar.");
     }
   };
+
+  useEffect(() => {
+    const lat = userLocation ? userLocation.latitude : 34.0934;
+    const lng = userLocation ? userLocation.longitude : -117.5847;
+    const filtered = applyLocalFilters(allStores, selectedCategoryIdx, lat, lng, isAdminMode);
+    setResults(filtered);
+  }, [allStores, selectedCategoryIdx, userLocation, isAdminMode, applyLocalFilters]);
 
   const StoreCard = ({ store, renderAdminControls, isAdminMode }: { store: any, renderAdminControls?: any, isAdminMode?: boolean }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
@@ -1194,7 +1261,7 @@ export default function StoresScreen() {
         onSuccess={() => { setRenewModalVisible(false); handleSearch(); }} 
         storeToRenew={storeToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
         t={t} isDark={isDark} Colors={DynamicColors} orangeGradient={orangeGradient} 
-        isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} userToken={userToken} router={router}
+        isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} userToken={userToken} router={router} appConfig={appConfig}
       />
 
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
@@ -1375,22 +1442,20 @@ export default function StoresScreen() {
                           setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
                           setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
 
-                          // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW CON SOPORTE WEB/MÓVIL
                           const plan = selectedStore.premiumPlan ? String(selectedStore.premiumPlan).toLowerCase() : 'free';
-                          const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
-                          const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+                          const isEligibleForGoogleReview = ['premium', 'unlimited'].includes(plan);
+                          const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link;
 
-                          // ⚠️ true || isPremiumActive para que salte siempre en pruebas. Quitar en prod.
-                          if ((true || isPremiumActive) && commentStr.trim()) {
+                          if (isEligibleForGoogleReview && googleReviewUrl && commentStr.trim()) {
                             try {
                               await Clipboard.setStringAsync(commentStr);
                             } catch (clipError) {
-                              console.warn("El portapapeles no está permitido en este entorno web, pero el flujo continuará.");
+                              console.warn("Portapapeles bloqueado.");
                             }
 
                             if (Platform.OS === 'web') {
                               const confirmWeb = window.confirm(
-                                "🌟 ¡Apoya este negocio en Google!\n\nTu opinión ya se guardó con éxito. Como este negocio es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
+                                "🌟 ¡Apoya este negocio en Google!\n\nTu opinión ya se guardó con éxito. Como este negocio es Premium/Ilimitado, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
                               );
                               if (confirmWeb) {
                                 window.open(googleReviewUrl, '_blank');
@@ -1529,7 +1594,6 @@ export default function StoresScreen() {
                     style={{ flex: 1, color: DynamicColors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                {/* 🚀 NUEVO INPUT: Enlace de Google Review */}
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: DynamicColors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, color: DynamicColors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
@@ -1541,7 +1605,6 @@ export default function StoresScreen() {
                   keyboardType="url"
                 />
 
-                {/* 🚀 DESBLOQUEO TOTAL: PAGOS VISIBLES EN IOS, ANDROID Y WEB */}
                 <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                   <TouchableOpacity 
@@ -1552,16 +1615,18 @@ export default function StoresScreen() {
                     <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                  >
-                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
-                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
-                  </TouchableOpacity>
+                  {(isWeb || appConfig?.payOnActive) && (
+                    <TouchableOpacity 
+                      onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                      style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                    >
+                      <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
+                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
-                {uiPayType === 'subscription' && (
+                {uiPayType === 'subscription' && (isWeb || appConfig?.payOnActive) && (
                   <>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                     <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1601,13 +1666,13 @@ export default function StoresScreen() {
                       Para promocionar tu negocio, realiza el pago de <ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> escaneando el código QR oficial abajo.
                     </ThemedText>
                     
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                      {['Zelle'].map((method) => (
-                        <View key={method} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: DynamicColors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
-                          <ThemedText style={{ fontWeight: '900', color: DynamicColors.accent }}>{method}</ThemedText>
+                    {appConfig?.zelleActive && (
+                      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                        <View style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: DynamicColors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
+                          <ThemedText style={{ fontWeight: '900', color: DynamicColors.accent }}>Zelle</ThemedText>
                         </View>
-                      ))}
-                    </View>
+                      </View>
+                    )}
 
                     <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: DynamicColors.border }}>
                       {zelleQrUrl ? (
@@ -1619,9 +1684,8 @@ export default function StoresScreen() {
                       )}
                       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: DynamicColors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
 
-                      {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
                       <TouchableOpacity 
-                        onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                        onPress={() => Linking.openURL(appConfig.zelleLink || 'https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
                         style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.accenticon }}
                       >
                         <MaterialCommunityIcons name="open-in-new" size={16} color={DynamicColors.accenticon} style={{ marginRight: 6 }} />
@@ -1660,7 +1724,7 @@ export default function StoresScreen() {
                   />
                 </View>
 
-                <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ alignSelf: 'center', marginTop: 10 }}>
+                <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isAdminMode} style={{ alignSelf: 'center', marginTop: 10 }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.storestab?.sendbutton || 'Enviar'}</ThemedText></>}
                   </LinearGradient>
@@ -1672,7 +1736,6 @@ export default function StoresScreen() {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
       <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
@@ -1746,7 +1809,22 @@ export default function StoresScreen() {
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
+                  <TouchableOpacity 
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    onPress={() => { 
+                      if (isAdmin) {
+                        const nextMode = !isAdminMode;
+                        setIsAdminMode(nextMode);
+                        if (nextMode) {
+                          fetchAllPendingStores();
+                        }
+                      } else {
+                        Alert.alert("Aviso", "No cuentas con permisos de administrador.");
+                      }
+                    }}
+                    style={{ padding: 4, zIndex: 999 }}
+                  >
                     <MaterialCommunityIcons name="store-plus-outline" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>
@@ -1754,12 +1832,19 @@ export default function StoresScreen() {
 
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
-                    {isAdminMode && pendingStores.length > 0 && (
-                    <View style={{ marginTop: 20 }}>
+                    {isAdminMode && (
+                    <View style={{ marginTop: 20, marginBottom: 20 }}>
                       <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
-                      {pendingStores.map(store => (
-                        <PendingStoreItem key={store.id} store={store} />
-                      ))}
+                      {pendingStores.length > 0 ? (
+                        pendingStores.map(store => (
+                          <PendingStoreItem key={store.id} store={store} />
+                        ))
+                      ) : (
+                        <View style={{ padding: 20, alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 16 }}>
+                          <MaterialCommunityIcons name="check-circle-outline" size={32} color={DynamicColors.subtext} />
+                          <ThemedText style={{ color: DynamicColors.subtext, marginTop: 8 }}>No hay negocios pendientes por aprobar.</ThemedText>
+                        </View>
+                      )}
                     </View>
                   )} 
                   
@@ -1885,12 +1970,19 @@ export default function StoresScreen() {
                     <View style={{ flex: 1 }}>
                       
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                        {isAdminMode && pendingStores.length > 0 && (
-                          <View style={{ marginTop: 20 }}>
+                        {isAdminMode && (
+                          <View style={{ marginTop: 20, marginBottom: 20 }}>
                             <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>Negocios por Verificar ({pendingStores.length})</ThemedText>
-                            {pendingStores.map(store => (
-                              <PendingStoreItem key={store.id} store={store} />
-                            ))}
+                            {pendingStores.length > 0 ? (
+                              pendingStores.map(store => (
+                                <PendingStoreItem key={store.id} store={store} />
+                              ))
+                            ) : (
+                              <View style={{ padding: 20, alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 16 }}>
+                                <MaterialCommunityIcons name="check-circle-outline" size={32} color={DynamicColors.subtext} />
+                                <ThemedText style={{ color: DynamicColors.subtext, marginTop: 8 }}>No hay negocios pendientes por aprobar.</ThemedText>
+                              </View>
+                            )}
                           </View>
                         )}
                         {results.length > 0 ? (
@@ -1899,7 +1991,7 @@ export default function StoresScreen() {
                             {isFilteredByMap && (
                               <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}>
                                 <MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} />
-                                <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ${t.genericbtn?.viewallresults || 'Ver todos'}`}</ThemedText>
+                                <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ` + (t.genericbtn?.viewallresults || 'Ver todos')}</ThemedText>
                               </TouchableOpacity>
                             )}
                             {results.map((store) => <StoreCard key={store.id} store={store} isAdminMode={isAdminMode} />)}
@@ -1939,7 +2031,6 @@ export default function StoresScreen() {
         </View>
       </ScrollView>
 
-      {/* 🚀 BOTÓN FLOTANTE (FAB) PARA PUBLICAR - BLOQUEADO PARA INVITADOS */}
       <TouchableOpacity 
         style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} 
         onPress={() => {

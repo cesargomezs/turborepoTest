@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
 import { stores, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
-import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { createClient } from '@supabase/supabase-js'; 
 import zipcodes from 'zipcodes'; 
@@ -163,7 +163,7 @@ const sendTelegramAlert = async (storeName: string, refCode: string, method: str
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
+// 🔍 1. CONSULTA GENERAL (DEVUELVE ACTIVOS Y PENDIENTES PARA QUE EL FRONT FILTRE)
 // =====================================================================
 export const getStores = async (rawZip?: string | number, currentUserId?: string) => {
   try {
@@ -172,7 +172,7 @@ export const getStores = async (rawZip?: string | number, currentUserId?: string
       ? sanitizeText(String(currentUserId)) 
       : null;
 
-    let baseConditions = cleanUserId
+    let baseConditions = cleanUserId 
       ? sql`(${stores.approved} = false OR ${stores.timepostEnd} > NOW() OR ${stores.userId} = ${cleanUserId})`
       : sql`(${stores.approved} = true OR ${stores.timepostEnd} > NOW())`;
 
@@ -405,7 +405,6 @@ export const createStore = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un negocio.");
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EL BACKEND
     let safeGoogleLink = null;
     if (data.googleReviewLink) {
       const trimmedLink = data.googleReviewLink.trim();
@@ -462,7 +461,7 @@ export const createStore = async (data: any) => {
         approved: false, 
         createdAt: new Date(),
         premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
-        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
+        googleReviewLink: safeGoogleLink,
       };
       
       const [newStore] = await tx.insert(stores).values(storePayload).returning();
@@ -580,7 +579,6 @@ export const updateStore = async (idParam: any, dataParam: any) => {
         if (data && data[key] !== undefined) updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
       }
 
-      // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
       if (data && data.googleReviewLink !== undefined) {
         if (data.googleReviewLink.trim() === '') {
           updatePayload.googleReviewLink = null;
@@ -629,8 +627,6 @@ export const updateStore = async (idParam: any, dataParam: any) => {
       const store = updated[0];
 
       if (isApproved && !wasApprovedBefore && store) {
-        console.log("✅ [DEBUG PUSH NEGOCIOS] Negocio verificado. Calculando usuarios en zona...");
-
         const titleText = "¡Nuevo Negocio en tu área! 🏪";
         const bodyText = `El negocio ${store.nameStores} ahora es parte de la red. ¡Visita su perfil!`;
 
