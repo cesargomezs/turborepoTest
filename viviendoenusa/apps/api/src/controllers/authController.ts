@@ -766,7 +766,7 @@ export const getAppConfig = async (req: Request, res: Response) => {
         descriptionType: typeDetail.descriptionType,
       })
       .from(typeDetail)
-      .where(sql`LOWER(${typeDetail.typeCode}) = 'payon'`)
+      .where(sql`LOWER(${typeDetail.typeCode}) = 'payon' OR LOWER(${typeDetail.typeCode}) = 'Zelle'` )
       .limit(1);
 
     // Si no existe el registro, por defecto asumimos pago desactivado o activo según tu estrategia

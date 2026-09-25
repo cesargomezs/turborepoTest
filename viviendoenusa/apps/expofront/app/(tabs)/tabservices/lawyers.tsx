@@ -696,7 +696,7 @@ export default function LawyersScreen() {
   
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
-  const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
+  const [appConfig, setAppConfig] = useState({ payOnActive: true, zelleActive: true, zelleLink: '' });
 
   const isZipValid = zipCode.length === 5;
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
@@ -750,13 +750,15 @@ export default function LawyersScreen() {
           //console.log("🔹 JSON recibido del backend:", data); // ¡Miremos qué trae exactamente!
 
           const payOnItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'PayOn') : data;
-          const zelleItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'Zelle') : null;
+          const zelleItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'Zelle') : data;
+          const zelleLink = zelleItem && zelleItem.descriptionType ? zelleItem.descriptionType : (payOnItem?.descriptionType || '');
           
           setAppConfig({
             payOnActive: payOnItem ? payOnItem.statusType : true,
             zelleActive: zelleItem ? zelleItem.statusType : true,
             zelleLink: zelleItem && zelleItem.descriptionType ? zelleItem.descriptionType : (payOnItem?.descriptionType || '')
           });
+          //console.log( "🔹 Configuración de Zelle actualizada:", zelleLink);
         } else {
           console.warn("⚠️ El servidor respondió con un error HTTP:", res.status);
         }
