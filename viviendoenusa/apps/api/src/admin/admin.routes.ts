@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { getAppConfig } from 'src/controllers/authController';
+
 const router = Router();
 
 // ============================================================================
@@ -78,5 +80,7 @@ router.post('/contact', async (req, res) => {
     return res.status(500).json({ error: 'Error interno al enviar el mensaje de contacto.' });
   }
 });
+
+router.get('/api/config', getAppConfig);
 
 export default router;

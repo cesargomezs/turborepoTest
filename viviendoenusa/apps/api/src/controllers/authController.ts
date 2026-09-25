@@ -1,5 +1,5 @@
 import { db } from "../../../../packages/db/src";
-import { users, userDevices, userTermsAcceptance } from "../../../../packages/db/src/schema";
+import { users, userDevices, userTermsAcceptance, typeDetail } from "../../../../packages/db/src/schema";
 import { eq, sql } from "drizzle-orm";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
@@ -746,5 +746,29 @@ export const getPlatformStats = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("❌ Error en getPlatformStats:", error.message);
     return res.status(500).json({ error: "Error al obtener estadísticas" });
+  }
+};
+
+// =====================================================================
+// 🚀 OBTENER CONFIGURACIÓN GLOBAL DE TIPO (PayOn, Zelle, etc.)
+// =====================================================================
+export const getAppConfig = async (req: Request, res: Response) => {
+  try {
+    // Usamos SQL plano con ILIKE o LOWER para evitar problemas con 'or'
+    const configs = await db
+      .select({
+        typeCode: typeDetail.typeCode,
+        statusType: typeDetail.statusType,
+        descriptionType: typeDetail.descriptionType,
+      })
+      .from(typeDetail)
+      .where(
+        sql`LOWER(${typeDetail.typeCode}) = 'payon' OR LOWER(${typeDetail.typeCode}) = 'zelle'`
+      );
+
+    return res.status(200).json(configs);
+  } catch (error: any) {
+    console.error("❌ Error obteniendo configuración de la app:", error.message);
+    return res.status(500).json({ error: "Error al obtener la configuración de la app" });
   }
 };
