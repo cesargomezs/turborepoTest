@@ -180,7 +180,7 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (ADMIN Muestra Todo, Usuario Normal filtra por vigencia)
+// 🔍 1. CONSULTA GENERAL (ADMIN Muestra Todo, Sin Restricción de Usuario)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
@@ -191,13 +191,13 @@ export const getEvents = async (zip?: string, userId?: string) => {
     
     let userRole = 'User';
     if (cleanUserId) {
-      const [userRecord] = await db.select({ typeDetail: users.typeDetail  }).from(users).where(eq(users.id, cleanUserId));
+      const [userRecord] = await db.select({ typeDetail: users.typeDetail}).from(users).where(eq(users.id, cleanUserId));
       userRole = userRecord?.typeDetail || 'User';
     }
     const isUserAdmin = ['sadmin', 'admin'].includes(String(userRole).toLowerCase());
 
-    // 🚀 SI ES ADMIN, TRAE TODO (Aprobados y Pendientes sin restricción de usuario)
-    // SI ES USUARIO NORMAL, SOLO VE LOS APROBADOS VIGENTES O SUS PROPIOS PENDIENTES
+    // 🚀 SI ES ADMIN, NO VALIDA ID DE USUARIO: TRAE TODO (Aprobados y Pendientes globales)
+    // SI ES USUARIO NORMAL, FILTRA POR APROBADOS VIGENTES O SUS PROPIOS PENDIENTES
     let baseConditions = isUserAdmin
       ? sql`1=1`
       : cleanUserId 
