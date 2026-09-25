@@ -745,19 +745,25 @@ export default function LawyersScreen() {
     const fetchAppConfig = async () => {
       try {
         const res = await fetch(API_CONFIG_URL);
-        //console.log("🔧 Configuración obtenida:", res);
+        //console.log("🔹 Status HTTP:", res); // Ver si es 200 o 404
+        
         if (res.ok) {
           const data = await res.json();
-          const payOnItem = data.find((d: any) => d.typeCode === 'PayOn');
-          const zelleItem = data.find((d: any) => d.typeCode === 'Zelle');
+          console.log("🔹 JSON recibido del backend:", data); // ¡Miremos qué trae exactamente!
+
+          const payOnItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'PayOn') : data;
+          const zelleItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'Zelle') : null;
+          
           setAppConfig({
             payOnActive: payOnItem ? payOnItem.statusType : true,
             zelleActive: zelleItem ? zelleItem.statusType : true,
-            zelleLink: zelleItem && zelleItem.descriptionType ? zelleItem.descriptionType : ''
+            zelleLink: zelleItem && zelleItem.descriptionType ? zelleItem.descriptionType : (payOnItem?.descriptionType || '')
           });
+        } else {
+          console.warn("⚠️ El servidor respondió con un error HTTP:", res.status);
         }
       } catch (error) {
-        console.warn("⚠️ No se pudo obtener la configuración, usando valores por defecto", error);
+        console.warn("⚠️ Error en el fetch de configuración:", error);
       }
     };
     fetchAppConfig();
