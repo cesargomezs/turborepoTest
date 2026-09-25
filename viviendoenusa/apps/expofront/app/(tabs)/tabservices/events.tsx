@@ -5,7 +5,7 @@ import {
   TextInput, Image, Alert, ActivityIndicator, Share, Linking,
   Modal as RNModal, KeyboardAvoidingView, ColorValue, Text, AppState
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -98,6 +98,7 @@ const COUNTRIES = [ { code: '+1', flag: '🇺🇸', name: 'USA' }, { code: '+1',
 
 const API_EVENTS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/events';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
+const API_CONFIG_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/config';
 
 const planStyles: any = {
   coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
@@ -131,8 +132,8 @@ export default function EventsScreen() {
   const loggedIn = useMockSelector((state : any) => state.mockAuth.loggedIn);
   const currentUserId = userMetadata?.id || userMetadata?.userId;
   
-  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
-  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const userRoleStr = String(userMetadata?.role || userMetadata?.rol || 'User').toLowerCase();
+  const isAdmin = ['sadmin', 'admin'].includes(userRoleStr); 
   const isGuest = userMetadata?.typeDetail === 'Guest'; 
 
   useEffect(() => {
@@ -188,7 +189,6 @@ export default function EventsScreen() {
   const [formLocation, setFormLocation] = useState('');
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState('');
-  // 🚀 NUEVO: Link de Google Reviews
   const [formGoogleLink, setFormGoogleLink] = useState('');
   const [formContactMethod, setFormContactMethod] = useState<'whatsapp' | 'phone'>('whatsapp');
   const [countryIdx, setCountryIdx] = useState(0); 
@@ -199,11 +199,11 @@ export default function EventsScreen() {
   
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
 
-  // 🚀 Por defecto en ambos (Móvil y Web) arranca en cupón
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
   const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
+  const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -221,6 +221,43 @@ export default function EventsScreen() {
 
   const isBaseFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
   const isFormValid = !!(isBaseFormValid && formRefCode.trim());
+
+  useEffect(() => {
+    const fetchAppConfig = async () => {
+      try {
+        const res = await fetch(API_CONFIG_URL);
+        if (res.ok) {
+          const data = await res.json();
+          let isPayOn = false;
+          let isZelle = true;
+          let zLink = '';
+
+          if (Array.isArray(data)) {
+            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+
+            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+            zLink = zelleItem?.descriptionType || '';
+          } 
+          else if (data && typeof data === 'object') {
+            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+            zLink = data.zelleLink || data.descriptionType || '';
+          }
+
+          setAppConfig({
+            payOnActive: isPayOn,
+            zelleActive: isZelle,
+            zelleLink: zLink
+          });
+        }
+      } catch (error) {
+        console.warn("⚠️ Error obteniendo configuración de eventos:", error);
+      }
+    };
+    fetchAppConfig();
+  }, []);
 
   useEffect(() => {
     const fetchTariff = async () => {
@@ -266,14 +303,12 @@ export default function EventsScreen() {
     loadZelleQr();
   }, []);
 
-  const fetchEvents = async (searchZip?: string, forceAdminFetch: boolean = false) => {
-    if (!forceAdminFetch && (!searchZip || searchZip.trim().length !== 5)) return;
-    
+  const fetchEvents = async (searchZip?: string) => {
     try {
       setIsLoadingPosts(true);
       const url = (searchZip && searchZip.trim().length === 5) 
-          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}` 
-          : API_EVENTS_URL;
+          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}` 
+          : `${API_EVENTS_URL}?userId=${currentUserId}`;
 
       const res = await fetch(url, {
         method: 'GET',
@@ -309,12 +344,14 @@ export default function EventsScreen() {
             paymentMethod: item.paymentMethod,
             premiumPlan: item.premiumPlan,
             couponCode: item.couponCode,
-            approved: isAppr
+            approved: isAppr,
+            status: isAppr ? 'approved' : 'pending',
+            userId: item.userId || item.user_id
           };
         }));
 
-        setEvents(mappedData.filter(e => e.approved === true));
-        setPendingEvents(mappedData.filter(e => e.approved !== true));
+        setEvents(mappedData.filter(e => e.approved === true || (e.status === 'pending' && e.userId === currentUserId)));
+        setPendingEvents(mappedData.filter(e => e.status === 'pending'));
       } else {
         setEvents([]);
         setPendingEvents([]);
@@ -328,32 +365,19 @@ export default function EventsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (isAdminMode) {
-        fetchEvents('', true);
-      } else {
-        if (!zipCode || zipCode.length !== 5) {
-          setEvents([]);
-          setPendingEvents([]);
-        } else {
-          fetchEvents(zipCode, false);
-        }
-      }
-    }, [isAdminMode, zipCode])
+      fetchEvents(zipCode.length === 5 ? zipCode : undefined);
+    }, [zipCode])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (isAdminMode) {
-          fetchEvents('', true);
-        } else if (zipCode && zipCode.length === 5) {
-          fetchEvents(zipCode, false);
-        }
+        fetchEvents(zipCode.length === 5 ? zipCode : undefined);
       }
     });
 
     return () => subscription.remove();
-  }, [isFocused, zipCode, isAdminMode]);
+  }, [isFocused, zipCode]);
 
   useEffect(() => {
     if (eventIdFromNotif) {
@@ -404,7 +428,7 @@ export default function EventsScreen() {
 
                 if (data.zip && String(data.zip).length === 5) {
                   setZipCode(String(data.zip));
-                  fetchEvents(String(data.zip), isAdminMode);
+                  fetchEvents(String(data.zip));
                 }
               }
             } catch (e) {
@@ -415,7 +439,7 @@ export default function EventsScreen() {
         }
       }
     }
-  }, [eventIdFromNotif, events, isAdminMode]); 
+  }, [eventIdFromNotif, events]); 
 
   const handleCloseDetailModal = () => {
     setSelectedEventDetails(null);
@@ -499,7 +523,6 @@ export default function EventsScreen() {
       return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.");
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE REVIEWS
     if (formGoogleLink.trim() !== '') {
       const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
       if (!regex.test(formGoogleLink.trim())) {
@@ -557,12 +580,9 @@ export default function EventsScreen() {
       }
 
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
-
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
-      
       const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
 
-      // 🚀 SE INCLUYE EL ENLACE EN EL PAYLOAD
       const newEntryPayload = {
         title: trimmedTitle, 
         categoryIdx: formCategoryIdx,
@@ -576,7 +596,7 @@ export default function EventsScreen() {
         phone: fullPhone, 
         contactMethod: formContactMethod,
         approved: false, 
-        userId: userMetadata?.id || userMetadata?.userId || null,
+        userId: currentUserId,
         referenceCode: finalRefCode,
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         premiumPlan: finalPlan,
@@ -598,7 +618,6 @@ export default function EventsScreen() {
       if (response.status === 401) { setIsPublishing(false); router.replace('/'); return; }
 
       const savedFromDB = await response.json();
-      
       if (!response.ok) throw new Error(savedFromDB.error || "Error guardando evento");
 
       const isBackendApproved = String(savedFromDB.approved) === 'true' || savedFromDB.approved === 1 || savedFromDB.approved === true;
@@ -617,6 +636,7 @@ export default function EventsScreen() {
         premiumPlan: finalPlan,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
         approved: isBackendApproved,
+        status: isBackendApproved ? 'approved' : 'pending',
         googleReviewLink: formGoogleLink.trim()
       };
 
@@ -625,7 +645,7 @@ export default function EventsScreen() {
       
       if (!zipCode || zipCode.length < 5) {
         setZipCode(trimmedZip);
-        fetchEvents(trimmedZip, isAdminMode);
+        fetchEvents(trimmedZip);
       } else {
         if (isBackendApproved) {
             setEvents(prev => [newEventLocal, ...prev]);
@@ -667,7 +687,7 @@ export default function EventsScreen() {
       if (response.status === 401) { router.replace('/'); return; }
       if (!response.ok) throw new Error("Error en servidor");
       
-      const approvedEvent = { ...event, approved: true };
+      const approvedEvent = { ...event, approved: true, status: 'approved' };
       setEvents(prev => [approvedEvent, ...prev]);
       setPendingEvents(pendingEvents.filter(e => e.id !== event.id));
       triggerAlert("Aprobado", "El evento se ha publicado en la cartelera.");
@@ -697,19 +717,24 @@ export default function EventsScreen() {
     setFormTitle(''); setFormDescription(''); setFormImage(null); setFormLocation(''); setFormZip('');
     setFormPhone(''); setFormGoogleLink(''); setCountryIdx(0); setFormContactMethod('whatsapp'); setFormCategoryIdx(1);
     setFormDate(new Date()); setFormTime(new Date()); setFormTimeEnd(new Date());
-    setFormRefCode(''); setFormPayMethod('Zelle'); 
-    setFormPlan('coupon'); 
-    setUiPayType('coupon');
+    setFormRefCode(''); setFormPayMethod('Zelle'); setFormPlan('coupon'); setUiPayType('coupon');
   };
 
   const filteredEvents = useMemo(() => 
     events.filter(item => {
       const title = item.title || '';
-      return item.approved === true && 
-             (selectedCategoryIdx === 0 || item.category === INTERNAL_CATEGORIES[selectedCategoryIdx]) && 
+      const isOwner = item.userId === currentUserId;
+      const isPending = item.status === 'pending';
+
+      if (isPending) {
+        if (isAdminMode) return false;
+        return isOwner;
+      }
+
+      return (selectedCategoryIdx === 0 || item.category === INTERNAL_CATEGORIES[selectedCategoryIdx]) && 
              title.toLowerCase().includes(searchQuery.toLowerCase());
     }), 
-  [events, selectedCategoryIdx, searchQuery]);
+  [events, selectedCategoryIdx, searchQuery, isAdminMode, currentUserId]);
 
   const PendingEventItem = ({ ev }: { ev: any }) => {
     const [selectedMonths, setSelectedMonths] = useState(1);
@@ -741,6 +766,14 @@ export default function EventsScreen() {
             <ThemedText style={{ fontSize: 12, color: Colors.text, fontWeight: '600', marginLeft: 8 }}>
                Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{ev.referenceCode || 'N/A'}</ThemedText> ({ev.paymentMethod || 'Pago'})
             </ThemedText>
+         </View>
+
+         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
+           {[1, 3, 6, 12].map(m => (
+             <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : Colors.inputBg }}>
+                <ThemedText style={{color: selectedMonths === m ? '#FFF' : Colors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
+             </TouchableOpacity>
+           ))}
          </View>
          
          <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
@@ -798,28 +831,40 @@ export default function EventsScreen() {
                     onChangeText={(text) => {
                       setZipCode(text);
                       if (text.length < 5) {
-                        if (isAdminMode) {
-                            fetchEvents('', true);
-                        } else if (events.length > 0 || pendingEvents.length > 0) {
-                            setEvents([]); 
-                            setPendingEvents([]);
-                        }
+                        setEvents([]); 
+                        setPendingEvents([]);
                       } else if (text.length === 5) {
-                        fetchEvents(text, isAdminMode); 
+                        fetchEvents(text); 
                       }
                     }} 
-                    onSubmitEditing={() => zipCode.length === 5 && fetchEvents(zipCode, isAdminMode)} 
+                    onSubmitEditing={() => zipCode.length === 5 && fetchEvents(zipCode)} 
                     placeholderTextColor={Colors.subtext} 
                   />
-                  <TouchableOpacity onPress={() => fetchEvents(zipCode, isAdminMode)} disabled={zipCode.length !== 5 && !isAdminMode} style={{ width: 42, height: 42, marginLeft: 8 }}>
-                    <LinearGradient colors={(zipCode.length === 5 || isAdminMode) ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
-                      {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={(zipCode.length === 5 || isAdminMode) ? "#fff" : Colors.iconInactive} />}
+                  <TouchableOpacity onPress={() => fetchEvents(zipCode)} disabled={zipCode.length !== 5} style={{ width: 42, height: 42, marginLeft: 8 }}>
+                    <LinearGradient colors={zipCode.length === 5 ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {isLoadingPosts ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={zipCode.length === 5 ? "#fff" : Colors.iconInactive} />}
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
                 
+                {/* 🚀 BOTÓN DE ADMINISTRADOR BLINDADO Y REACTIVO */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
+                  <TouchableOpacity 
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    onPress={() => { 
+                      if (isAdmin) {
+                        const nextMode = !isAdminMode;
+                        setIsAdminMode(nextMode);
+                        if(nextMode) {
+                          fetchEvents(zipCode); 
+                        }
+                      } else {
+                        Alert.alert("Aviso", "No cuentas con permisos de administrador.");
+                      }
+                    }}
+                    style={{ padding: 4, zIndex: 999 }}
+                  >
                     <MaterialCommunityIcons name="calendar-star" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}}/>
                   </TouchableOpacity>
                 </View>
@@ -896,20 +941,27 @@ export default function EventsScreen() {
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                     
-                    {/* EVENTOS PENDIENTES */}
-                    {isAdminMode && pendingEvents.length > 0 && (
+                    {/* EVENTOS PENDIENTES ARRIBA */}
+                    {isAdminMode && (
                       <View style={{ marginBottom: 20 }}>
                         <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>
-                          Revisión ({pendingEvents.length})
+                          Pendientes de Revisión ({pendingEvents.length})
                         </ThemedText>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                          {pendingEvents.map(ev => <PendingEventItem key={ev.id} ev={ev} />)}
-                        </View>
+                        {pendingEvents.length > 0 ? (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                            {pendingEvents.map(ev => <PendingEventItem key={ev.id} ev={ev} />)}
+                          </View>
+                        ) : (
+                          <View style={{ padding: 20, alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 16 }}>
+                            <MaterialCommunityIcons name="check-circle-outline" size={32} color={Colors.subtext} />
+                            <ThemedText style={{ color: Colors.subtext, marginTop: 8 }}>No hay eventos pendientes por aprobar.</ThemedText>
+                          </View>
+                        )}
                       </View>
                     )}
 
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                      {(!zipCode || zipCode.length < 5) && !isAdminMode ? (
+                      {(!zipCode || zipCode.length < 5) ? (
                         <View style={{ flex: 1, alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
                           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
                             <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.subtext} />
@@ -1111,7 +1163,6 @@ export default function EventsScreen() {
                   <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.iconInactive} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
                 </View>
 
-                {/* 🚀 NUEVO CAMPO: Google Review Link (OPCIONAL) */}
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: Colors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
                 <TextInput 
                   style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
@@ -1123,7 +1174,7 @@ export default function EventsScreen() {
                   keyboardType="url"
                 />
 
-                {/* 🚀 DESBLOQUEO TOTAL: PAGOS VISIBLES EN IOS, ANDROID Y WEB */}
+                {/* 🚀 SUSCRIPCIÓN VISIBLE EN WEB O SI PAYON ESTÁ ACTIVO */}
                 <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                   <TouchableOpacity 
@@ -1134,16 +1185,18 @@ export default function EventsScreen() {
                     <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                  >
-                    <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                  </TouchableOpacity>
+                  {(isWeb || appConfig?.payOnActive) && (
+                    <TouchableOpacity 
+                      onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                      style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                    >
+                      <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
-                {uiPayType === 'subscription' && (
+                {uiPayType === 'subscription' && (isWeb || appConfig?.payOnActive) && (
                   <>
                     <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                     <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1183,13 +1236,13 @@ export default function EventsScreen() {
                       Para promocionar tu evento, realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> escaneando el código QR oficial abajo.
                     </ThemedText>
                     
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                      {['Zelle'].map((method) => (
-                        <View key={method} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
-                          <ThemedText style={{ fontWeight: '900', color: Colors.accent }}>{method}</ThemedText>
+                    {appConfig?.zelleActive && (
+                      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                        <View style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
+                          <ThemedText style={{ fontWeight: '900', color: Colors.accent }}>Zelle</ThemedText>
                         </View>
-                      ))}
-                    </View>
+                      </View>
+                    )}
 
                     <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: Colors.border }}>
                       {zelleQrUrl ? (
@@ -1201,9 +1254,8 @@ export default function EventsScreen() {
                       )}
                       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
 
-                      {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
                       <TouchableOpacity 
-                        onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                        onPress={() => Linking.openURL(appConfig.zelleLink || 'https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
                         style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
                       >
                         <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
@@ -1256,11 +1308,10 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
-      {/* 🚀 MODAL DETALLE EXPANDIDO CON FUNCIÓN DE CIERRE LIMPIO */}
+      {/* MODAL DETALLE EXPANDIDO */}
       <RNModal visible={!!selectedEventDetails} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={handleCloseDetailModal} />
           
           <View style={{ width: '92%', height: '80%', borderRadius: 35, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: Colors.border }}>
@@ -1311,7 +1362,6 @@ export default function EventsScreen() {
                   />
                 )}
                 
-                {/* 🚀 Botón de compartir oculto en la versión web */}
                 {!isWeb && (
                   <ActionBtn 
                     minWidth={130} 
@@ -1330,7 +1380,7 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
-      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
+      {/* MODAL ACCESO RESTRINGIDO */}
       <RNModal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '90%', maxWidth: 380, backgroundColor: Colors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
@@ -1400,7 +1450,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
         onPress={() => onOpen(item)} 
         style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
     >
-      {/* 🚀 OFUSCAR EVENTOS PENDIENTES */}
       {isPending && !isAdminMode && (
         <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 , pointerEvents: 'none'}]}  />
       )}
@@ -1476,7 +1525,6 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
             />
           )}
 
-          {/* 🚀 Botón de compartir oculto en la versión web */}
           {!isWeb && (
             <ActionBtn 
               flex={1} 

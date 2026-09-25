@@ -180,7 +180,7 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
+// 🔍 1. CONSULTA GENERAL (CORREGIDA PARA ADMINS SIN FILTRO DE FECHA EN PENDIENTES)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
@@ -189,9 +189,19 @@ export const getEvents = async (zip?: string, userId?: string) => {
       ? sanitizeText(String(userId)) 
       : null;
     
-    let baseConditions = cleanUserId 
-      ? and(or(eq(events.approved, true), eq(events.userId, cleanUserId)), sql`${events.dateEvent} >= CURRENT_DATE`)
-      : and(eq(events.approved, true), sql`${events.dateEvent} >= CURRENT_DATE`);
+    // Verificamos si el usuario es Admin para permitirle ver todos los pendientes
+    let userRole = 'User';
+    if (cleanUserId) {
+      const [userRecord] = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId));
+      userRole = userRecord?.typeDetail || 'User';
+    }
+    const isUserAdmin = ['sadmin', 'admin'].includes(String(userRole).toLowerCase());
+
+    let baseConditions = isUserAdmin
+      ? sql`1=1` // El administrador ve todo para poder revisar y aprobar
+      : cleanUserId 
+        ? and(or(eq(events.approved, true), eq(events.userId, cleanUserId)), sql`${events.dateEvent} >= CURRENT_DATE`)
+        : and(eq(events.approved, true), sql`${events.dateEvent} >= CURRENT_DATE`);
                         
     let finalConditions: any = baseConditions;
 

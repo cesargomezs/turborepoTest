@@ -31,7 +31,11 @@ import { validarImagenEnServidor } from '@/utils/imageValidation';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
-import { supabaseClient } from '../../../utils/supabase';
+
+// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
+const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
+const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
 
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'lawyers') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -486,12 +490,13 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
               
               <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
               <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                {/* 🚀 BOTÓN CUPÓN SIEMPRE ACTIVO */}
                 <TouchableOpacity onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
                   <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
                   <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
                 </TouchableOpacity>
 
-                {/* 🚀 SUSCRIPCIÓN VISIBLE EN WEB O SI PAYON ESTÁ ACTIVO */}
+                {/* 🚀 BOTÓN SUSCRIPCIÓN DINÁMICO */}
                 {showSubscriptionOption && (
                   <TouchableOpacity onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
                     <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
@@ -530,6 +535,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                     Realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> escaneando el código QR oficial abajo.
                   </ThemedText>
                   
+                  {/* 🚀 ZELLE DINÁMICO */}
                   {appConfig?.zelleActive && (
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                       <View style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
@@ -632,8 +638,8 @@ export default function LawyersScreen() {
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
-  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
-  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const userRoleStr = String(userMetadata?.role || userMetadata?.rol || 'User').toLowerCase();
+  const isAdmin = ['sadmin', 'admin'].includes(userRoleStr); 
   const isGuest = userMetadata?.typeDetail === 'Guest'; 
 
   const selectedLanguage = useMockSelector((state: any) => state.language.code);
@@ -696,7 +702,7 @@ export default function LawyersScreen() {
   
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
-  const [appConfig, setAppConfig] = useState({ payOnActive: true, zelleActive: true, zelleLink: '' });
+  const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
   const isZipValid = zipCode.length === 5;
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
@@ -711,7 +717,8 @@ export default function LawyersScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
-  const applyLocalFilters = useCallback((lawyersList: any[], areaName: string, lat: number, lng: number) => {
+  // 🚀 REGLA DE FILTRO QUE DESAPARECE A LOS PENDIENTES SI LA BALANZA ESTÁ PRENDIDA
+  const applyLocalFilters = useCallback((lawyersList: any[], areaName: string, lat: number, lng: number, adminMode: boolean) => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
     
     filtered = filtered.filter(item => {
@@ -720,7 +727,20 @@ export default function LawyersScreen() {
       const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) 
         ? new Date(item.timepostEnd) < new Date() 
         : false;
-      return isOwner || (!isExpired && !isPending); 
+
+      // SI ESTÁ PENDIENTE:
+      if (isPending) {
+        // En modo admin NUNCA mostramos pendientes en la cuadrícula de abajo (ya están en su propia bandeja de arriba)
+        if (adminMode) return false;
+        // Si es usuario normal, solo ve su propio registro pendiente
+        return isOwner;
+      }
+
+      // 2. Si expiró y no es el dueño, nadie más lo ve
+      if (isExpired && !isOwner) return false;
+
+      // 3. Aprobados vigentes los ven todos
+      return true; 
     });
 
     filtered.sort((a, b) => {
@@ -747,23 +767,36 @@ export default function LawyersScreen() {
         const res = await fetch(API_CONFIG_URL);
         if (res.ok) {
           const data = await res.json();
-          //console.log("🔹 JSON recibido del backend:", data); // ¡Miremos qué trae exactamente!
-
-          const payOnItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'PayOn') : data;
-          const zelleItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'Zelle') : data;
-          const zelleLink = zelleItem && zelleItem.descriptionType ? zelleItem.descriptionType : (payOnItem?.descriptionType || '');
           
+          let isPayOn = false;
+          let isZelle = true;
+          let zLink = '';
+
+          if (Array.isArray(data)) {
+            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+
+            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+            zLink = zelleItem?.descriptionType || '';
+          } 
+          else if (data && typeof data === 'object') {
+            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+            zLink = data.zelleLink || data.descriptionType || '';
+          }
+
           setAppConfig({
-            payOnActive: payOnItem ? payOnItem.statusType : true,
-            zelleActive: zelleItem ? zelleItem.statusType : true,
-            zelleLink: zelleItem && zelleItem.descriptionType ? zelleItem.descriptionType : (payOnItem?.descriptionType || '')
+            payOnActive: isPayOn,
+            zelleActive: isZelle,
+            zelleLink: zLink
           });
-          //console.log( "🔹 Configuración de Zelle actualizada:", zelleLink);
+
         } else {
-          console.warn("⚠️ El servidor respondió con un error HTTP:", res.status);
+           console.warn("⚠️ Servidor respondió con error:", res.status);
         }
       } catch (error) {
-        console.warn("⚠️ Error en el fetch de configuración:", error);
+        console.warn("⚠️ Error de red o parseo en config:", error);
       }
     };
     fetchAppConfig();
@@ -842,35 +875,92 @@ export default function LawyersScreen() {
     );
   });
 
+  // 🚀 ESCUCHA EL MODO ADMIN Y LLAMA LA INFO DE INMEDIATO
+  useEffect(() => {
+    if (isAdminMode) {
+      fetchAllPendingLawyers();
+    } else {
+      if (zipCode.length === 5) {
+        fetchLawyersData(zipCode);
+      } else {
+        setPendingLawyers([]);
+      }
+    }
+  }, [isAdminMode]);
+
   useFocusEffect(
     useCallback(() => {
-      if (isAdminMode) {
-        fetchAllPendingLawyers();
-      } else {
-        if (zipCode.length === 5) {
-          fetchLawyersData(zipCode);
-        } else {
-          setPendingLawyers([]);
-        }
+      if (zipCode.length === 5) {
+        fetchLawyersData(zipCode);
       }
-    }, [isAdminMode, zipCode])
+    }, [zipCode])
   );
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === 'active' && isFocused) {
-        if (isAdminMode) {
-          fetchAllPendingLawyers();
-        } else {
-          if (zipCode.length === 5) {
-            fetchLawyersData(zipCode);
-          }
+        if (zipCode.length === 5) {
+          fetchLawyersData(zipCode);
         }
       }
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, [isFocused, isAdminMode, zipCode]);
+  }, [isFocused, zipCode]);
+
+  // 🚀 LA CONSULTA MAGISTRAL CON USERID
+  const fetchAllPendingLawyers = async () => {
+    try {
+      setLoading(true);
+      // 🚀 INYECTANDO EL USERID EN LA RUTA PARA QUE EL BACKEND DEVUELVA LOS PENDIENTES
+      const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      }); 
+      if (res.status === 401) { router.replace('/'); return; }
+
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
+          const freshImage = await refreshSupabaseUrl(rawImage, 'lawyers');
+
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
+
+          return {
+            id: item.id,
+            name: item.nameLawy || 'Sin nombre',
+            description: item.description || item.descriptionLawy || '',
+            address: item.address || item.addressLawy || '',
+            area: item.area || 'General',
+            zip: item.zip,
+            image: freshImage,
+            lat: Number(item.lat) || 34.0934,
+            lng: Number(item.lng) || -117.5847,
+            phone: item.phone || '',
+            rating: Number(item.totalRating) || Number(item.rating) || 0,
+            reviews: Array.isArray(item.reviews) ? item.reviews : [],
+            totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
+            status: isAppr ? 'approved' : 'pending',
+            referenceCode: item.referenceCode,
+            paymentMethod: item.paymentMethod,
+            userId: item.userId || item.user_id,
+            timepostEnd: item.timepostEnd || item.timepost_end,
+            premiumPlan: item.premiumPlan, 
+            googleReviewLink: item.googleReviewLink || item.googleUrl,
+            couponCode: item.couponCode 
+          };
+        }));
+        // Filtramos estricto todos los pendientes para que el admin los vea
+        setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
+      }
+    } catch (e) {
+      console.error("Error obteniendo pendientes admin:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchLawyersData = async (searchZip: string) => {
     try {
@@ -963,57 +1053,6 @@ export default function LawyersScreen() {
 
     await fetchLawyersData(targetZip);
     setMapKey(k => k + 1);
-  };
-
-  const fetchAllPendingLawyers = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_BASE_URL}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
-      }); 
-      if (res.status === 401) { router.replace('/'); return; }
-
-      const data = await res.json();
-      
-      if (Array.isArray(data)) {
-        const mappedData = await Promise.all(data.map(async (item: any) => {
-          const rawImage = item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
-          const freshImage = await refreshSupabaseUrl(rawImage, 'lawyers');
-
-          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
-
-          return {
-            id: item.id,
-            name: item.nameLawy || 'Sin nombre',
-            description: item.description || item.descriptionLawy || '',
-            address: item.address || item.addressLawy || '',
-            area: item.area || 'General',
-            zip: item.zip,
-            image: freshImage,
-            lat: Number(item.lat) || 34.0934,
-            lng: Number(item.lng) || -117.5847,
-            phone: item.phone || '',
-            rating: Number(item.totalRating) || Number(item.rating) || 0,
-            reviews: Array.isArray(item.reviews) ? item.reviews : [],
-            totalReviews: Number(item.totalReviews) || (Array.isArray(item.reviews) ? item.reviews.length : 0),
-            status: isAppr ? 'approved' : 'pending',
-            referenceCode: item.referenceCode,
-            paymentMethod: item.paymentMethod,
-            userId: item.userId || item.user_id,
-            timepostEnd: item.timepostEnd || item.timepost_end,
-            premiumPlan: item.premiumPlan, 
-            googleReviewLink: item.googleReviewLink || item.googleUrl,
-            couponCode: item.couponCode 
-          };
-        }));
-        setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
-      }
-    } catch (e) {
-      console.error("Error obteniendo pendientes:", e);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const getCurrentLocation = async (isManual = false) => {
@@ -1155,10 +1194,10 @@ export default function LawyersScreen() {
     if (!isFilteredByMap) {
       const lat = userLocation ? userLocation.latitude : 34.0934;
       const lng = userLocation ? userLocation.longitude : -117.5847;
-      const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng);
+      const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng, isAdminMode);
       setResults(filtered);
     }
-  }, [allLawyers, selectedArea, userLocation, isFilteredByMap, applyLocalFilters]);
+  }, [allLawyers, selectedArea, userLocation, isFilteredByMap, applyLocalFilters, isAdminMode]);
 
   useEffect(() => {
     Animated.loop(
@@ -1774,7 +1813,16 @@ export default function LawyersScreen() {
                   <TouchableOpacity onPress={() => { setResults([]); setLocalData([]); setPendingLawyers([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
                       <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
+                  {/* 🚀 EL BOTÓN DEL ADMIN VUELVE A LA VIDA INSTANTÁNEAMENTE Y CONSULTA AL BACKEND CON EL USERID */}
+                  <TouchableOpacity onPress={() => { 
+                      if(isAdmin) {
+                        const nextMode = !isAdminMode;
+                        setIsAdminMode(nextMode);
+                        if(nextMode) {
+                          fetchAllPendingLawyers(); 
+                        }
+                      }
+                  }}>
                     <MaterialCommunityIcons name="scale-balance" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
                   </TouchableOpacity>
                 </View>
@@ -1783,12 +1831,20 @@ export default function LawyersScreen() {
               {!isLargeWeb ? (
                 <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   
-                  {isAdminMode && pendingLawyers.length > 0 && (
+                  {/* 🚀 LA BANDEJA DEL ADMIN TE ESPERA CARGADA */}
+                  {isAdminMode && (
                     <View style={{ marginBottom: 20 }}>
                       <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{(t.lawyerstab as any)?.verify || 'Pendientes de Revisión'} ({pendingLawyers.length})</ThemedText>
-                      {pendingLawyers.map(lawyer => (
-                        <PendingLawyerItem key={lawyer.id} lawyer={lawyer} />
-                      ))}
+                      {pendingLawyers.length > 0 ? (
+                        pendingLawyers.map(lawyer => (
+                          <PendingLawyerItem key={lawyer.id} lawyer={lawyer} />
+                        ))
+                      ) : (
+                        <View style={{ padding: 20, alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 16 }}>
+                          <MaterialCommunityIcons name="check-circle-outline" size={32} color={Colors.subtext} />
+                          <ThemedText style={{ color: Colors.subtext, marginTop: 8 }}>No hay registros pendientes en este código postal.</ThemedText>
+                        </View>
+                      )}
                     </View>
                   )}
 
@@ -1869,6 +1925,7 @@ export default function LawyersScreen() {
                             <ThemedText style={{ color: Colors.accenticon, fontWeight: '800', fontSize: 13 }}>{`  ${(t.genericbtn as any)?.viewallresults || 'Ver todos'}`}</ThemedText>
                           </TouchableOpacity>
                         )}
+                        {/* 🚀 LA LISTA NORMAL NUNCA MOSTRARÁ PENDIENTES SI ESTÁ EL MODO ADMIN PRENDIDO */}
                         {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
                       </>
                     ) : (
@@ -1911,12 +1968,21 @@ export default function LawyersScreen() {
                   <View style={{ flex: 1, flexDirection: 'row', marginLeft: 25 }}>
                     <View style={{ flex: 1 }}>
                       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
-                        {isAdminMode && pendingLawyers.length > 0 && (
+                        
+                        {/* 🚀 BANDEJA DE PENDIENTES ARRIBA Y SIEMPRE VISIBLE EN MODO ADMIN */}
+                        {isAdminMode && (
                           <View style={{ marginBottom: 20 }}>
                             <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{(t.lawyerstab as any)?.verify || 'Pendientes de Revisión'} ({pendingLawyers.length})</ThemedText>
-                            {pendingLawyers.map(lawyer => (
-                              <PendingLawyerItem key={lawyer.id} lawyer={lawyer} />
-                            ))}
+                            {pendingLawyers.length > 0 ? (
+                              pendingLawyers.map(lawyer => (
+                                <PendingLawyerItem key={lawyer.id} lawyer={lawyer} />
+                              ))
+                            ) : (
+                              <View style={{ padding: 20, alignItems: 'center', backgroundColor: Colors.inputBg, borderRadius: 16 }}>
+                                <MaterialCommunityIcons name="check-circle-outline" size={32} color={Colors.subtext} />
+                                <ThemedText style={{ color: Colors.subtext, marginTop: 8 }}>No hay registros pendientes en este código postal.</ThemedText>
+                              </View>
+                            )}
                           </View>
                         )}
 
@@ -1929,6 +1995,7 @@ export default function LawyersScreen() {
                                 <ThemedText style={{ color: Colors.accenticon, fontWeight: '800', fontSize: 13 }}>{`  ${(t.genericbtn as any)?.viewallresults || 'Ver todos'}`}</ThemedText>
                               </TouchableOpacity>
                             )}
+                            {/* 🚀 LOS PENDIENTES SE OCULTAN AQUÍ SI ESTÁ LA BALANZA PRENDIDA */}
                             {results.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} />)}
                           </>
                         ) : (
