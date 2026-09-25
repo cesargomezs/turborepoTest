@@ -189,7 +189,6 @@ export const getEvents = async (zip?: string, userId?: string) => {
       ? sanitizeText(String(userId)) 
       : null;
     
-    // Verificamos si el usuario es Admin para permitirle ver todos los pendientes
     let userRole = 'User';
     if (cleanUserId) {
       const [userRecord] = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId));
@@ -197,14 +196,16 @@ export const getEvents = async (zip?: string, userId?: string) => {
     }
     const isUserAdmin = ['sadmin', 'admin'].includes(String(userRole).toLowerCase());
 
+    // Si es administrador, permitimos ver los pendientes globales; si no, aplicamos el filtro normal por fecha y aprobación
     let baseConditions = isUserAdmin
-      ? sql`1=1` // El administrador ve todo para poder revisar y aprobar
+      ? sql`1=1`
       : cleanUserId 
         ? and(or(eq(events.approved, true), eq(events.userId, cleanUserId)), sql`${events.dateEvent} >= CURRENT_DATE`)
         : and(eq(events.approved, true), sql`${events.dateEvent} >= CURRENT_DATE`);
                         
     let finalConditions: any = baseConditions;
 
+    // Solo aplicamos radio de código postal si el usuario lo ingresó explícitamente y NO es un admin buscando pendientes generales
     if (cleanZipParam && cleanZipParam.length === 5) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
@@ -226,25 +227,6 @@ export const getEvents = async (zip?: string, userId?: string) => {
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
       .where(finalConditions)
       .$dynamic(); 
-
-    if (cleanUserId) {
-      query = query.orderBy(
-        sql`CASE 
-              WHEN ${events.userId} = ${cleanUserId} THEN 0 
-              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-              ELSE 2 
-            END`,
-        desc(events.createdAt)
-      );
-    } else {
-      query = query.orderBy(
-        sql`CASE 
-              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
-              ELSE 1 
-            END`,
-        desc(events.createdAt)
-      );
-    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];

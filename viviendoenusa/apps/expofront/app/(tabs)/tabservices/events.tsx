@@ -303,12 +303,16 @@ export default function EventsScreen() {
     loadZelleQr();
   }, []);
 
+  // 🚀 FETCH DE EVENTOS CORREGIDO: PERMITE CARGAR PENDIENTES CON O SIN CÓDIGO POSTAL SI EL ADMIN LO REQUIERE
   const fetchEvents = async (searchZip?: string) => {
     try {
       setIsLoadingPosts(true);
-      const url = (searchZip && searchZip.trim().length === 5) 
-          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}` 
-          : `${API_EVENTS_URL}?userId=${currentUserId}`;
+      
+      // Si hay ZIP de 5 dígitos lo mandamos, si no, consultamos con el userId para que el backend entregue los pendientes del admin
+      let url = `${API_EVENTS_URL}?userId=${currentUserId}`;
+      if (searchZip && searchZip.trim().length === 5) {
+        url = `${API_EVENTS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`;
+      }
 
       const res = await fetch(url, {
         method: 'GET',
@@ -362,6 +366,19 @@ export default function EventsScreen() {
       setIsLoadingPosts(false);
     }
   };
+
+  // 🚀 ESCUCHA EL MODO ADMIN Y ACTUALIZA INMEDIATAMENTE
+  useEffect(() => {
+    if (isAdminMode) {
+      fetchEvents(zipCode.length === 5 ? zipCode : undefined);
+    } else {
+      if (zipCode.length === 5) {
+        fetchEvents(zipCode);
+      } else {
+        setPendingEvents([]);
+      }
+    }
+  }, [isAdminMode]);
 
   useFocusEffect(
     useCallback(() => {
@@ -857,7 +874,7 @@ export default function EventsScreen() {
                         const nextMode = !isAdminMode;
                         setIsAdminMode(nextMode);
                         if(nextMode) {
-                          fetchEvents(zipCode); 
+                          fetchEvents(zipCode.length === 5 ? zipCode : undefined); 
                         }
                       } else {
                         Alert.alert("Aviso", "No cuentas con permisos de administrador.");
@@ -961,7 +978,7 @@ export default function EventsScreen() {
                     )}
 
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                      {(!zipCode || zipCode.length < 5) ? (
+                      {(!zipCode || zipCode.length < 5) && !isAdminMode ? (
                         <View style={{ flex: 1, alignItems: 'center', marginTop: height * 0.05, paddingHorizontal: 30 }}>
                           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
                             <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.subtext} />
