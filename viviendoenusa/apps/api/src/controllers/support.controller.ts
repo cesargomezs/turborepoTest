@@ -155,23 +155,19 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL CON REGLAS DE ORDENAMIENTO (PROPIOS > ADMIN > TODOS)
+// 🔍 1. CONSULTA GENERAL (EL BACKEND RETORNA TODO, EL FRONTEND FILTRA)
 // =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string) => {
   try {
-    const zip = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const zip = rawZip && String(rawZip) !== 'undefined' ? sanitizeText(String(rawZip)) || '' : '';
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
+      ? sanitizeText(String(currentUserId)) 
+      : null;
 
-    const { lat, lng } = await getCoordsFromZip(zip || ''); 
-    const radiusMilesForSearch = 4; 
-
-    const distanceFormula = sql`(
-      3959 * acos(
-        LEAST(1.0, GREATEST(-1.0,
-          cos(radians(${lat}::numeric)) * cos(radians(${support.lat}::numeric)) * cos(radians(${support.lng}::numeric) - radians(${lng}::numeric)) + 
-          sin(radians(${lat}::numeric)) * sin(radians(${support.lat}::numeric))
-        ))
-      )
-    )`;
+    // 🚀 EL BACKEND SOLO RETORNA LA INFORMACIÓN (ACTIVOS Y PENDIENTES)
+    const visibilityCondition = cleanUserId 
+      ? sql`(${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${cleanUserId})`
+      : sql`(${support.approved} = true OR ${support.timepostEnd} > NOW())`;
 
     let query = db
     .select({
@@ -181,7 +177,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       payments: payments,
       users: users,
       reviewers: reviewers,
-      distance: distanceFormula.as('distance')
     })
     .from(support)
     .leftJoin(users, eq(support.userId, users.id))
@@ -191,11 +186,19 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .$dynamic();
 
-    const visibilityCondition = currentUserId
-      ? sql`(${support.approved} = true OR ${support.userId} = ${currentUserId}) AND ${support.timepostEnd} > NOW()`
-      : sql`${support.approved} = true AND ${support.timepostEnd} > NOW()`;
-
     if (zip && zip.length === 5) {
+      const { lat, lng } = await getCoordsFromZip(zip); 
+      const radiusMilesForSearch = 4; 
+
+      const distanceFormula = sql`(
+        3959 * acos(
+          LEAST(1.0, GREATEST(-1.0,
+            cos(radians(${lat}::numeric)) * cos(radians(${support.lat}::numeric)) * cos(radians(${support.lng}::numeric) - radians(${lng}::numeric)) + 
+            sin(radians(${lat}::numeric)) * sin(radians(${support.lat}::numeric))
+          ))
+        )
+      )`;
+
       query = query.where(
         and(
           sql`${distanceFormula} <= ${radiusMilesForSearch}`,
@@ -203,11 +206,11 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         )
       );
       
-      if (currentUserId) {
+      if (cleanUserId) {
         query = query.orderBy(
           distanceFormula,
           sql`CASE 
-                WHEN ${support.userId} = ${currentUserId} THEN 0 
+                WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
                 ELSE 2 
               END`
@@ -224,10 +227,10 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     } else {
       query = query.where(visibilityCondition);
       
-      if (currentUserId) {
+      if (cleanUserId) {
         query = query.orderBy(
           sql`CASE 
-                WHEN ${support.userId} = ${currentUserId} THEN 0 
+                WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
                 ELSE 2 
               END`,
@@ -273,8 +276,10 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
 
         let signedReviewerImage = null;
         if (row.reviewers?.imageUrl) {
-          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
-          if (data?.signedUrl) signedReviewerImage = data.signedUrl;
+          try {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+            if (data?.signedUrl) signedReviewerImage = data.signedUrl;
+          } catch(e) {}
         }
 
         supportsMap.get(supportId).reviews.push({
@@ -308,10 +313,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           const rutaArchivo = supportItem.imageSupp.startsWith('support/') 
               ? supportItem.imageSupp : `support/${supportItem.imageSupp}`;
 
-          const { data, error } = await supabase
-              .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
 
-          if (!error && data) {
+          if (data) {
               return { ...supportItem, image: data.signedUrl, imageSupp: data.signedUrl }; 
           }
       }
@@ -399,8 +403,7 @@ export const getSupportById = async (id: string) => {
         const rutaArchivo = supportFinal.imageSupp.startsWith('support/') 
             ? supportFinal.imageSupp : `support/${supportFinal.imageSupp}`;
 
-        const { data, error } = await supabase
-            .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+        const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
             
         if (!error && data) {
             supportFinal.image = data.signedUrl;
@@ -431,7 +434,6 @@ export const createSupport = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un contacto de apoyo.");
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN APOYO
     let safeGoogleLink = null;
     if (data.googleReviewLink) {
       const trimmedLink = data.googleReviewLink.trim();
@@ -480,7 +482,7 @@ export const createSupport = async (data: any) => {
         couponCode: isCoupon ? realPromoCode : '', 
         estate: data.estate,
         approved: false, 
-        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
+        googleReviewLink: safeGoogleLink, 
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
@@ -553,7 +555,7 @@ export const createSupport = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR CONTACTO DE APOYO (Y DISPARAR PUSH AL APROBAR) - BLINDADO
+// 🔄 4. ACTUALIZAR CONTACTO DE APOYO Y NOTIFICAR (BLINDADO)
 // =====================================================================
 export const updateSupport = async (idParam: any, dataParam: any) => {
   try {
@@ -592,7 +594,6 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
         }
       }
 
-      // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
       if (data && data.googleReviewLink !== undefined) {
         if (data.googleReviewLink.trim() === '') {
           updatePayload.googleReviewLink = null;

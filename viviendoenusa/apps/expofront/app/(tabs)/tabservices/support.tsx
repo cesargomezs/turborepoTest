@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo, useCallback } from 'react';
-import { TouchableOpacity, View, ScrollView, Platform, StyleSheet, useWindowDimensions, Animated, Easing, TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert, Modal, KeyboardAvoidingView, ColorValue, Share, Linking, AppState } from 'react-native';
+import { TouchableOpacity, View, ScrollView, Platform, StyleSheet, useWindowDimensions, Animated, Easing, TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert, Modal, KeyboardAvoidingView, ColorValue, Share, AppState, Linking } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router'; 
@@ -80,7 +80,6 @@ const planStyles: any = {
   unlimited: { selected: '#10B981', unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' }
 };
 
-// 🚀 NUEVA LÓGICA DE VALIDACIÓN CON REGEX
 const containsBadWords = (text: string): boolean => {
   if (!text) return false;
   const wordsInText = text.toLowerCase().match(/\b[\wáéíóúüñ]+\b/g) || [];
@@ -151,14 +150,12 @@ const SupportFormModal = memo(({
   const [formCategoryIdx, setFormCategoryIdx] = useState(1); 
   const [formZip, setFormZip] = useState('');
   const [formPhone, setFormPhone] = useState(''); 
-  // 🚀 Enlace opcional de Google Reviews
   const [formGoogleLink, setFormGoogleLink] = useState('');
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
   const [formPayMethod, setFormPayMethod] = useState('Zelle');
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // 🚀 CAMUFLAJE: En Web y Móvil arranca en cupón por defecto
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
   const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
@@ -200,7 +197,6 @@ const SupportFormModal = memo(({
       return triggerAlert("Atención", errorMsg);
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE REVIEWS
     if (formGoogleLink.trim() !== '') {
       const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
       if (!regex.test(formGoogleLink.trim())) {
@@ -278,7 +274,7 @@ const SupportFormModal = memo(({
         referenceCode: finalRefCode, 
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         tariffPlan: (companyTariffs as any)[finalPlan],
-        googleReviewLink: formGoogleLink.trim() // 🚀 SE ENVÍA EL ENLACE AL BACKEND
+        googleReviewLink: formGoogleLink.trim() 
       };
       
       const response = await fetch(API_STORES_URL, { 
@@ -389,7 +385,6 @@ const SupportFormModal = memo(({
                 <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.subtext} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
 
-              {/* 🚀 NUEVO INPUT: Enlace de Google Review (OPCIONAL) */}
               <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: Colors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
               <TextInput 
                 style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
@@ -401,7 +396,6 @@ const SupportFormModal = memo(({
                 keyboardType="url"
               />
 
-              {/* 🚀 EL CAMUFLAJE DE PAGO REMOVIDO PARA MOSTRARSE EN TODAS LAS PLATAFORMAS */}
               <>
                 <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
@@ -423,7 +417,6 @@ const SupportFormModal = memo(({
                 </View>
               </>
 
-              {/* RUTA DE SUSCRIPCIÓN DESBLOQUEADA */}
               {uiPayType === 'subscription' && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
@@ -460,9 +453,8 @@ const SupportFormModal = memo(({
                       )}
                       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
 
-                      {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
                       <TouchableOpacity 
-                        onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                        onPress={() => RNLinking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
                         style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
                       >
                         <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
@@ -473,14 +465,12 @@ const SupportFormModal = memo(({
                 </>
               )}
 
-              {/* RUTA DE CUPÓN */}
               {uiPayType === 'coupon' && (
                 <View style={{ marginBottom: 10 }}>
                   <ThemedText style={{ fontSize: 13, color: Colors.text, marginBottom: 12 }}>Si dispones de un código promocional, escríbelo en el campo inferior para habilitar tu registro sin cargos.</ThemedText>
                 </View>
               )}
 
-              {/* 🚀 EL INPUT CAMALEÓN */}
               <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
                 <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.accent, marginBottom: 10 }}>
                   {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
@@ -537,8 +527,8 @@ export default function SupportScreen() {
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const { t } = useTranslation();
 
-  const userRole = userMetadata?.role || userMetadata?.rol || 'User'; 
-  const isAdmin = userRole === 'SAdmin' || userRole === 'admin';
+  const userRoleStr = String(userMetadata?.role || userMetadata?.rol || 'User').toLowerCase();
+  const isAdmin = ['sadmin', 'admin'].includes(userRoleStr); 
   const isGuest = userMetadata?.typeDetail === 'Guest'; 
   
   const ICONS_ARRAY = t.supporttab.categoryListIcon;
@@ -595,7 +585,6 @@ export default function SupportScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
-  // 🚀 CARGA DE URL FIRMADA PARA EL QR DE ZELLE DESDE SUPABASE
   useEffect(() => {
     const loadZelleQr = async () => {
       try {
@@ -612,19 +601,27 @@ export default function SupportScreen() {
     loadZelleQr();
   }, []);
 
-  const applyLocalFilters = (supportList: any[], categoryIdx: number, lat: number, lng: number) => {
+  const applyLocalFilters = useCallback((supportList: any[], categoryIdx: number, lat: number, lng: number, adminMode: boolean) => {
     let filtered = (categoryIdx === 0) ? [...supportList] : supportList.filter(l => Number(l.categoryId) === categoryIdx);
     
-    // 🚀 FILTRO ESTRÍCTO PARA EVITAR VER VENCIDOS
     filtered = filtered.filter(item => {
       const isOwner = item.userId === currentUserId;
-      const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) ? new Date(item.timepostEnd) < new Date() : false;
-      return isOwner || !isExpired; 
+      const isPending = item.status === 'pending';
+      const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) 
+        ? new Date(item.timepostEnd) < new Date() 
+        : false;
+
+      if (isPending) {
+        if (adminMode) return false;
+        return isOwner;
+      }
+      if (isExpired && !isOwner) return false;
+      return true;
     });
-    
+
     filtered.sort((a, b) => getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng));
     return filtered;
-  };
+  }, [currentUserId]);
 
   useEffect(() => {
     const fetchTariff = async () => {
@@ -676,51 +673,15 @@ export default function SupportScreen() {
     });
   };
 
-  useEffect(() => { 
-    if (isAdminMode) { 
-      fetchAllPendingSupports(); 
-    } else { 
-      if (zipCode.length !== 5) { 
-        setPendingStores([]); 
-      } else { 
-        fetchSupportData(zipCode); 
-      } 
-    } 
-  }, [isAdminMode]);
-
-  const fetchAllPendingSupports = async () => {
+  const fetchSupportData = async (searchZip?: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_STORES_URL}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
-      });
-      
-      if (res.status === 401) { router.replace('/'); return; }
-
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        const mappedData = await Promise.all(data.map(async (item: any) => {
-          const rawImage = item.imageSupp || item.image || item.imageUrl;
-          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'support') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
-
-          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
-
-          return {
-            id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
-            lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
-            status: isAppr ? 'approved' : 'pending', ownerName: item.ownerName, premiumPlan: item.premiumPlan, couponCode: item.couponCode, referenceCode: item.referenceCode, paymentMethod: item.paymentMethod, googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
-          };
-        }));
-        setPendingStores(mappedData.filter(s => s.status === 'pending'));
+      let url = `${API_STORES_URL}?userId=${currentUserId}`;
+      if (searchZip && searchZip.trim().length === 5) {
+        url = `${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`;
       }
-    } catch (e) { } finally { setLoading(false); }
-  };
 
-  const fetchSupportData = async (searchZip: string) => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`, {
+      const res = await fetch(url, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
       });
@@ -741,14 +702,43 @@ export default function SupportScreen() {
             status: isAppr ? 'approved' : 'pending', premiumPlan: item.premiumPlan, googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
           };
         }));
-        const approved = mappedData.filter(s => s.status === 'approved');
-        setAllStores(approved);
-        if (!isAdminMode) setPendingStores(mappedData.filter(s => s.status === 'pending'));
-        return approved;
+
+        const approvedOrOwnedPending = mappedData.filter(s => s.status === 'approved' || (s.status === 'pending' && s.userId === currentUserId));
+        setAllStores(approvedOrOwnedPending);
+        setPendingStores(mappedData.filter(s => s.status === 'pending'));
+        return approvedOrOwnedPending;
       }
       return [];
     } catch (e) { return []; } finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    if (isAdminMode) {
+      fetchSupportData(zipCode.length === 5 ? zipCode : undefined);
+    } else {
+      if (zipCode.length === 5) {
+        fetchSupportData(zipCode);
+      } else {
+        setPendingStores([]);
+      }
+    }
+  }, [isAdminMode]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSupportData(zipCode.length === 5 ? zipCode : undefined);
+    }, [zipCode])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && isFocused) {
+        fetchSupportData(zipCode.length === 5 ? zipCode : undefined);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isFocused, zipCode]);
 
   const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string) => {
     const targetZip = forcedZip || zipCode;
@@ -761,7 +751,7 @@ export default function SupportScreen() {
     setUserLocation(newCoords); setShowMarkers(true); 
     if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
     const approvedSupport = await fetchSupportData(targetZip);
-    setResults(applyLocalFilters(approvedSupport, categoryToSearch, lat, lng)); setMapKey(k => k + 1);
+    setResults(applyLocalFilters(approvedSupport, categoryToSearch, lat, lng, isAdminMode)); setMapKey(k => k + 1);
   };
 
   const lastProcessedNotifId = useRef<string | null>(null);
@@ -808,7 +798,7 @@ export default function SupportScreen() {
 
   const handleCategorySelect = (index: number) => {
     setSelectedCategoryIdx(index);
-    if (isZipValid && allStores.length > 0) { const lat = userLocation ? userLocation.latitude : 34.0934; const lng = userLocation ? userLocation.longitude : -117.5847; setResults(applyLocalFilters(allStores, index, lat, lng)); } 
+    if (isZipValid && allStores.length > 0) { const lat = userLocation ? userLocation.latitude : 34.0934; const lng = userLocation ? userLocation.longitude : -117.5847; setResults(applyLocalFilters(allStores, index, lat, lng, isAdminMode)); } 
     else if (isZipValid) { handleSearch(index); }
   };
 
@@ -840,7 +830,7 @@ export default function SupportScreen() {
       if (!response.ok) throw new Error(t.genericlabel.labelerrorserver);
       const updatedStoreFromServer = await response.json(); const futureDate = new Date(); futureDate.setMonth(futureDate.getMonth() + durationMonths);
       const approvedStore = { ...store, ...updatedStoreFromServer, status: 'approved', timepostEnd: updatedStoreFromServer.timepostEnd || updatedStoreFromServer.timepost_end || futureDate.toISOString() };
-      if (store.zip === zipCode) { const newAllStores = [approvedStore, ...allStores]; setAllStores(newAllStores); if (showMarkers || isZipValid) { const lat = userLocation ? userLocation.latitude : 34.0934; const lng = userLocation ? userLocation.longitude : -117.5847; setResults(applyLocalFilters(newAllStores, selectedCategoryIdx, lat, lng)); } setMapKey(k => k + 1); }
+      if (store.zip === zipCode) { const newAllStores = [approvedStore, ...allStores]; setAllStores(newAllStores); if (showMarkers || isZipValid) { const lat = userLocation ? userLocation.latitude : 34.0934; const lng = userLocation ? userLocation.longitude : -117.5847; setResults(applyLocalFilters(newAllStores, selectedCategoryIdx, lat, lng, isAdminMode)); } setMapKey(k => k + 1); }
       setPendingStores(pendingStores.filter(s => s.id !== store.id)); Alert.alert(t.genericlabel.labelaprov, t.genericlabel.labelmessajeaprov +` ${durationMonths} `+t.genericlabel.labelmonth);
     } catch (error) { Alert.alert("Error", t.genericlabel.labelaproval); }
   };
@@ -863,11 +853,17 @@ export default function SupportScreen() {
 
   const handleCloseDetailModal = () => { setSelectedDetail(null); lastProcessedNotifId.current = null; router.setParams({ id: '', supportId: '', referenceId: '' }); };
 
+  useEffect(() => {
+    const lat = userLocation ? userLocation.latitude : 34.0934;
+    const lng = userLocation ? userLocation.longitude : -117.5847;
+    const filtered = applyLocalFilters(allStores, selectedCategoryIdx, lat, lng, isAdminMode);
+    setResults(filtered);
+  }, [allStores, selectedCategoryIdx, userLocation, isAdminMode, applyLocalFilters]);
+
   const SupportCard = ({ store, renderAdminControls }: { store: any, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
     const categoryName = CATEGORIES_LIST[store.categoryId] || 'Otros';
     
-    // 🚀 BOOLEANO ESTRICTO APLICADO AQUÍ TAMBIÉN
     const isPending = store.status === 'pending';
     const isOwner = store.userId === currentUserId;
     
@@ -882,7 +878,6 @@ export default function SupportScreen() {
     return (
       <View style={{ borderRadius: 28, overflow: 'hidden' as 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: cardBgColor, borderColor: (isPending || isExpired) ? '#FFB74D' : DynamicColors.border }}>
         
-        {/* 🚀 EFECTO OFUSCAR PARA PENDIENTES */}
         {isPending && !isAdminMode && (
           <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 , pointerEvents: 'none' }]} />
         )}
@@ -1090,10 +1085,10 @@ export default function SupportScreen() {
                     // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW
                     const plan = selectedStore.premiumPlan ? String(selectedStore.premiumPlan).toLowerCase() : 'free';
                     const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
-                    const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+                    const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link;
 
                     // ⚠️ true || isPremiumActive para que salte siempre en pruebas. Quitar en prod.
-                    if ((true || isPremiumActive) && commentStr.trim()) {
+                    if ((true || isPremiumActive) && googleReviewUrl && commentStr.trim()) {
                       try {
                         await Clipboard.setStringAsync(commentStr);
                       } catch (clipError) {
@@ -1102,7 +1097,7 @@ export default function SupportScreen() {
 
                       if (Platform.OS === 'web') {
                         const confirmWeb = window.confirm(
-                          "🌟 ¡Apoya esta organización en Google!\n\nTu opinión ya se guardó con éxito. Como esta organización es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
+                          "🌟 ¡Apoya esta organización en Google!\n\nTu opinión ya se guardó con éxito. Como esta organización es Premium/Ilimitado, ¿te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles)."
                         );
                         if (confirmWeb) {
                           window.open(googleReviewUrl, '_blank');
@@ -1193,7 +1188,18 @@ export default function SupportScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}><MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} /></TouchableOpacity>
                   
-                  <TouchableOpacity onPress={() => { if(isAdmin) setIsAdminMode(!isAdminMode); }}>
+                  <TouchableOpacity 
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    onPress={() => { 
+                      if (isAdmin) {
+                        const nextMode = !isAdminMode;
+                        setIsAdminMode(nextMode);
+                      } else {
+                        Alert.alert("Aviso", "No cuentas con permisos de administrador.");
+                      }
+                    }}
+                  >
                     <MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
                   </TouchableOpacity>
 
@@ -1202,10 +1208,17 @@ export default function SupportScreen() {
 
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
-                  {isAdminMode && pendingStores.length > 0 && (
+                  {isAdminMode && (
                     <View style={{ marginBottom: 20 }}>
                       <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{t.genericbtn.verify} ({pendingStores.length})</ThemedText>
-                      {pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)}
+                      {pendingStores.length > 0 ? (
+                        pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)
+                      ) : (
+                        <View style={{ padding: 20, alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 16 }}>
+                          <MaterialCommunityIcons name="check-circle-outline" size={32} color={DynamicColors.subtext} />
+                          <ThemedText style={{ color: DynamicColors.subtext, marginTop: 8 }}>No hay apoyos pendientes por aprobar.</ThemedText>
+                        </View>
+                      )}
                     </View>
                   )}
                   <TouchableOpacity activeOpacity={0.9} onPress={() => RNLinking.openURL('tel:988')} style={{ marginBottom: 15 }}>
@@ -1281,10 +1294,17 @@ export default function SupportScreen() {
 
                   <View style={{ flex: 1, flexDirection: 'row', marginLeft: 25 }}>
                     <View style={{ flex: 1 }}>
-                      {isAdminMode && pendingStores.length > 0 && (
+                      {isAdminMode && (
                         <View style={{ marginBottom: 20 }}>
                           <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{t.genericbtn.verify} ({pendingStores.length})</ThemedText>
-                          {pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)}
+                          {pendingStores.length > 0 ? (
+                            pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)
+                          ) : (
+                            <View style={{ padding: 20, alignItems: 'center', backgroundColor: DynamicColors.inputBg, borderRadius: 16 }}>
+                              <MaterialCommunityIcons name="check-circle-outline" size={32} color={DynamicColors.subtext} />
+                              <ThemedText style={{ color: DynamicColors.subtext, marginTop: 8 }}>No hay apoyos pendientes por aprobar.</ThemedText>
+                            </View>
+                          )}
                         </View>
                       )}
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
