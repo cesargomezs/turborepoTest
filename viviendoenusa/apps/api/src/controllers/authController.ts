@@ -750,7 +750,7 @@ export const getPlatformStats = async (req: Request, res: Response) => {
 };
 
 // =====================================================================
-// 🚀 OBTENER CONFIGURACIÓN GLOBAL DE TIPO (PayOn, Zelle, etc.)
+// 🚀 OBTENER CONFIGURACIÓN GLOBAL (PayOn y Zelle)
 // =====================================================================
 export const getAppConfig = async (req: Request, res: Response) => {
   try {
@@ -758,25 +758,26 @@ export const getAppConfig = async (req: Request, res: Response) => {
       return res.status(500).json({ error: "Base de datos no inicializada" });
     }
 
-    // Buscamos el registro PayOn en la base de datos
-    const configRecord = await db
+    // Buscamos ambos registros en la base de datos sin límite
+    const configRecords = await db
       .select({
         typeCode: typeDetail.typeCode,
         statusType: typeDetail.statusType,
         descriptionType: typeDetail.descriptionType,
       })
       .from(typeDetail)
-      .where(sql`LOWER(${typeDetail.typeCode}) = 'payon' OR LOWER(${typeDetail.typeCode}) = 'Zelle'` )
-      .limit(1);
+      .where(sql`LOWER(${typeDetail.typeCode}) = 'payon' OR LOWER(${typeDetail.typeCode}) = 'zelle'`);
 
-    // Si no existe el registro, por defecto asumimos pago desactivado o activo según tu estrategia
-    const payOn = configRecord[0] || { statusType: false, descriptionType: '' };
+    // Mapeamos los resultados para encontrarlos fácilmente
+    const payOnItem = configRecords.find((d: any) => d.typeCode?.toLowerCase() === 'payon');
+    const zelleItem = configRecords.find((d: any) => d.typeCode?.toLowerCase() === 'zelle');
 
-    // Retornamos la respuesta lógica estructurada desde el servidor
+    // Estructuramos la respuesta con ambos valores listos para la app
     return res.status(200).json({
-      payOnActive: Boolean(payOn.statusType),
-      zelleLink: payOn.descriptionType || '',
-      message: payOn.statusType ? "Pagos de suscripción habilitados" : "Pagos deshabilitados por normativa"
+      payOnActive: payOnItem ? Boolean(payOnItem.statusType) : false,
+      zelleActive: zelleItem ? Boolean(zelleItem.statusType) : false,
+      zelleLink: zelleItem ? zelleItem.descriptionType : '',
+      message: "Configuración obtenida con éxito"
     });
 
   } catch (error: any) {
