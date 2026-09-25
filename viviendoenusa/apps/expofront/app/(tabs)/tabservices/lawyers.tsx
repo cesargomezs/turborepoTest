@@ -747,7 +747,7 @@ export default function LawyersScreen() {
         const res = await fetch(API_CONFIG_URL);
         if (res.ok) {
           const data = await res.json();
-          console.log("🔹 JSON recibido del backend:", data); // ¡Miremos qué trae exactamente!
+          //console.log("🔹 JSON recibido del backend:", data); // ¡Miremos qué trae exactamente!
 
           const payOnItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'PayOn') : data;
           const zelleItem = Array.isArray(data) ? data.find((d: any) => d.typeCode === 'Zelle') : null;
