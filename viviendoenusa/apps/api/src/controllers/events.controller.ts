@@ -180,7 +180,7 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (ADMIN Muestra Todo, Sin Restricción de Usuario)
+// 🔍 1. CONSULTA GENERAL (DEVUELVE ACTIVOS Y PENDIENTES PARA QUE EL FRONT FILTRE)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
@@ -188,25 +188,14 @@ export const getEvents = async (zip?: string, userId?: string) => {
     const cleanUserId = (userId && userId !== 'undefined' && userId !== 'null' && userId !== '' && !String(userId).startsWith('guest_')) 
       ? sanitizeText(String(userId)) 
       : null;
-    
-    let userRole = 'User';
-    if (cleanUserId) {
-      const [userRecord] = await db.select({ typeDetail: users.typeDetail}).from(users).where(eq(users.id, cleanUserId));
-      userRole = userRecord?.typeDetail || 'User';
-    }
-    const isUserAdmin = ['sadmin', 'admin'].includes(String(userRole).toLowerCase());
 
-    // 🚀 SI ES ADMIN, NO VALIDA ID DE USUARIO: TRAE TODO (Aprobados y Pendientes globales)
-    // SI ES USUARIO NORMAL, FILTRA POR APROBADOS VIGENTES O SUS PROPIOS PENDIENTES
-    let baseConditions = isUserAdmin
-      ? sql`1=1`
-      : cleanUserId 
-        ? and(or(eq(events.approved, true), eq(events.userId, cleanUserId)), sql`${events.dateEvent} >= CURRENT_DATE`)
-        : and(eq(events.approved, true), sql`${events.dateEvent} >= CURRENT_DATE`);
-                        
+    let baseConditions = cleanUserId 
+      ? sql`(${events.approved} = false OR ${events.dateEvent} >= CURRENT_DATE OR ${events.userId} = ${cleanUserId})`
+      : sql`(${events.approved} = true OR ${events.dateEvent} >= CURRENT_DATE)`;
+
     let finalConditions: any = baseConditions;
 
-    if (!isUserAdmin && cleanZipParam && cleanZipParam.length === 5) {
+    if (cleanZipParam && cleanZipParam.length === 5) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
