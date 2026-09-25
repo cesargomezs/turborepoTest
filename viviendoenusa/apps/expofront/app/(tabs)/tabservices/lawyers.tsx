@@ -745,8 +745,6 @@ export default function LawyersScreen() {
     const fetchAppConfig = async () => {
       try {
         const res = await fetch(API_CONFIG_URL);
-        //console.log("🔹 Status HTTP:", res); // Ver si es 200 o 404
-        
         if (res.ok) {
           const data = await res.json();
           console.log("🔹 JSON recibido del backend:", data); // ¡Miremos qué trae exactamente!

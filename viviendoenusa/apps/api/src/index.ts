@@ -134,7 +134,7 @@ app.use('/admin', adminRoutes);
 app.use('/promo-codes', promoCodesRoutes);
 app.get('/config', getAppConfig);
 
-// --- 📱 BUZÓN DE ERRORES DEL FRONTEND (TELEGRAM) ---
+// --- 📱 BUZÓN DE ERRORES DEL FRONTEND (TELEGRAM) --- 
 app.post('/api/crash-report', express.json(), async (req, res) => {
   const { errorMessage, errorStack, deviceInfo, userEmail } = req.body;
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
