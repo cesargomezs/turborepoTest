@@ -81,6 +81,6 @@ router.post('/contact', async (req, res) => {
   }
 });
 
-router.get('/api/config', getAppConfig);
+router.get('/config', getAppConfig);
 
 export default router;

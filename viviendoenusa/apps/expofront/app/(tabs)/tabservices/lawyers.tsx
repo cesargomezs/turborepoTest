@@ -76,6 +76,8 @@ const refreshSupabaseUrl = async (url: string, fallbackFolder = 'lawyers') => {
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/lawyers';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
+const API_CONFIG_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'ß/config'; 
+
 const BANNED_WORDS = Array.isArray(badWordsData.badWordsList) ? badWordsData.badWordsList : []; 
 const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
@@ -141,10 +143,10 @@ const ActionBtn = ({ icon, text, color, bgColor, onPress, flex, width, disabled 
   </TouchableOpacity>
 );
 
-const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets, userToken }: any) => {
+const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, currentUserId, currentTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, insets, userToken, appConfig }: any) => {
   const isWebLocal = Platform.OS === 'web';
   const [renewRefCode, setRenewRefCode] = useState('');
-  const [renewPayMethod, setRenewPayMethod] = useState('Zelle');
+  const [renewPayMethod, setRenewPayMethod] = useState(appConfig?.zelleActive ? 'Zelle' : '');
   const [isRenewing, setIsRenewing] = useState(false);
 
   const triggerAlert = (title: string, message: string) => {
@@ -158,9 +160,9 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   useEffect(() => {
     if (visible) {
       setRenewRefCode('');
-      setRenewPayMethod('Zelle');
+      setRenewPayMethod(appConfig?.zelleActive ? 'Zelle' : '');
     }
-  }, [visible]);
+  }, [visible, appConfig]);
 
   const handleRenewSubmit = async () => {
     if (!renewRefCode.trim()) return triggerAlert((t.lawyerstab as any)?.noticeTitle || "Aviso", (t.lawyerstab as any)?.enterRefCode || "Ingresa el código de confirmación.");
@@ -200,17 +202,17 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
               <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
 
-            {isWebLocal ? (
+            {isWebLocal && appConfig?.payOnActive ? (
               <>
                 <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
                   Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariffs} USD y enviando el comprobante aquí abajo.
                 </ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                  {['Zelle', 'Venmo'].map((method) => (
-                    <TouchableOpacity key={method} onPress={() => setRenewPayMethod(method)} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === method ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
-                      <ThemedText style={{ fontWeight: '900', color: renewPayMethod === method ? Colors.accent : Colors.subtext }}>{method}</ThemedText>
+                  {appConfig?.zelleActive && (
+                    <TouchableOpacity onPress={() => setRenewPayMethod('Zelle')} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: renewPayMethod === 'Zelle' ? Colors.accent : Colors.border, backgroundColor: renewPayMethod === 'Zelle' ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                      <ThemedText style={{ fontWeight: '900', color: renewPayMethod === 'Zelle' ? Colors.accent : Colors.subtext }}>Zelle</ThemedText>
                     </TouchableOpacity>
-                  ))}
+                  )}
                 </View>
               </>
             ) : (
@@ -221,7 +223,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
 
             <TextInput 
               style={{ padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-              placeholder={isWebLocal ? `# CONFIRMACION DE ${renewPayMethod}...` : 'ESCRIBE TU CÓDIGO AQUÍ...'} placeholderTextColor={Colors.subtext}
+              placeholder={isWebLocal && appConfig?.payOnActive ? `# CONFIRMACION DE ${renewPayMethod}...` : 'ESCRIBE TU CÓDIGO AQUÍ...'} placeholderTextColor={Colors.subtext}
               value={renewRefCode} onChangeText={(text) => setRenewRefCode(text.toUpperCase())} autoCapitalize="characters"
             />
 
@@ -238,7 +240,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
   );
 });
 
-const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, companyTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets, userToken, router, zelleQrUrl }: any) => {
+const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, currentTariff, companyTariffs, t, isDark, Colors, orangeGradient, isLargeWeb, isAndroid, isIOS, PRACTICE_AREAS, insets, userToken, router, zelleQrUrl, appConfig }: any) => {
   const isWebLocal = Platform.OS === 'web';
   const [isPublishing, setIsPublishing] = useState(false);
   const [formName, setFormName] = useState('');
@@ -250,9 +252,8 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
   const [formGoogleLink, setFormGoogleLink] = useState('');
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
-  const [formPayMethod, setFormPayMethod] = useState('Zelle');
   
-  // 🚀 Por defecto arranca en Cupón
+  const [formPayMethod, setFormPayMethod] = useState(appConfig?.zelleActive ? 'Zelle' : '');
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
   const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
@@ -274,10 +275,11 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
     if(visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
       setFormGoogleLink('');
-      setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); setFormPayMethod('Zelle');
+      setCountryIdx(0); setFormImage(null); setFormCategoryIdx(1); 
+      setFormPayMethod(appConfig?.zelleActive ? 'Zelle' : '');
       setFormPlan('coupon'); setUiPayType('coupon'); setFormRefCode('');
     }
-  }, [visible]);
+  }, [visible, appConfig]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -296,7 +298,6 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
       return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código válido." : "Ingresa el código de confirmación del pago.");
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE
     if (formGoogleLink.trim() !== '') {
       const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
       if (!regex.test(formGoogleLink.trim())) {
@@ -481,22 +482,25 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 keyboardType="url"
               />
               
-              <>
-                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                  <TouchableOpacity onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
-                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                  </TouchableOpacity>
+              {/* 🚀 CONDICIONAL GLOBAL: EL CUPÓN SIEMPRE VISIBLE */}
+              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                {/* 🚀 BOTÓN CUPÓN SIEMPRE ACTIVO */}
+                <TouchableOpacity onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
+                  <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                </TouchableOpacity>
 
+                {/* 🚀 BOTÓN SUSCRIPCIÓN SOLO SI PayOn ESTÁ ACTIVO */}
+                {appConfig?.payOnActive && (
                   <TouchableOpacity onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }} style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}>
                     <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
                     <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
                   </TouchableOpacity>
-                </View>
-              </>
+                )}
+              </View>
 
-              {uiPayType === 'subscription' && (
+              {uiPayType === 'subscription' && appConfig?.payOnActive && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                   <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -526,15 +530,17 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                     Realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> escaneando el código QR oficial abajo.
                   </ThemedText>
                   
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                    {['Zelle'].map((method) => (
-                      <View key={method} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
-                        <ThemedText style={{ fontWeight: '900', color: Colors.accent }}>{method}</ThemedText>
+                  {/* 🚀 ZELLE: VISIBLE SOLO SI ESTÁ ACTIVO EN LA CONFIGURACIÓN */}
+                  {appConfig?.zelleActive && (
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                      <View style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
+                        <ThemedText style={{ fontWeight: '900', color: Colors.accent }}>Zelle</ThemedText>
                       </View>
-                    ))}
-                  </View>
+                    </View>
+                  )}
 
                   <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: Colors.border }}>
+                    {/* 🚀 IMAGEN DEL QR DE ZELLE DESDE SUPABASE */}
                     {zelleQrUrl ? (
                       <Image source={{ uri: zelleQrUrl }} style={{ width: 180, height: 180, borderRadius: 16 }} resizeMode="contain" />
                     ) : (
@@ -544,14 +550,24 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                     )}
                     <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
                     
-                    {/* 🚀 BOTÓN DE ENLACE DE ZELLE */}
-                    <TouchableOpacity 
-                      onPress={() => RNLinking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
-                      style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
-                    >
-                      <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
-                      <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
-                    </TouchableOpacity>
+                    {/* 🚀 BOTÓN DE ENLACE DE ZELLE DINÁMICO */}
+                    {appConfig?.zelleLink ? (
+                        <TouchableOpacity 
+                          onPress={() => RNLinking.openURL(appConfig.zelleLink)}
+                          style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
+                        >
+                          <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
+                          <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity 
+                          onPress={() => RNLinking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                          style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
+                        >
+                          <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
+                          <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                        </TouchableOpacity>
+                    )}
                   </View>
                 </>
               )}
@@ -683,6 +699,8 @@ export default function LawyersScreen() {
   
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
 
+  const [appConfig, setAppConfig] = useState({ payOnActive: true, zelleActive: true, zelleLink: '' });
+
   const isZipValid = zipCode.length === 5;
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
@@ -695,6 +713,78 @@ export default function LawyersScreen() {
   const ringAnim = useRef(new Animated.Value(0)).current;
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
+
+  // 🚀 LÓGICA PRINCIPAL DE FILTRADO
+  const applyLocalFilters = useCallback((lawyersList: any[], areaName: string, lat: number, lng: number) => {
+    let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
+    
+    filtered = filtered.filter(item => {
+      const isOwner = item.userId === currentUserId;
+      const isPending = item.status === 'pending';
+      const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) 
+        ? new Date(item.timepostEnd) < new Date() 
+        : false;
+      return isOwner || (!isExpired && !isPending); 
+    });
+
+    filtered.sort((a, b) => {
+      const aIsOwner = a.userId === currentUserId;
+      const aIsExpired = a.timepostEnd ? new Date(a.timepostEnd) < new Date() : false;
+      const aNeedsRenewal = aIsOwner && aIsExpired && a.status !== 'pending';
+
+      const bIsOwner = b.userId === currentUserId;
+      const bIsExpired = b.timepostEnd ? new Date(b.timepostEnd) < new Date() : false;
+      const bNeedsRenewal = bIsOwner && bIsExpired && b.status !== 'pending';
+
+      if (aNeedsRenewal && !bNeedsRenewal) return -1;
+      if (!aNeedsRenewal && bNeedsRenewal) return 1;
+
+      return getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng);
+    });
+
+    return filtered;
+  }, [currentUserId, PRACTICE_AREAS]);
+
+  // 🚀 FETCH DE CONFIGURACIÓN DE LA BASE DE DATOS
+  useEffect(() => {
+    const fetchAppConfig = async () => {
+      try {
+        const res = await fetch(API_CONFIG_URL);
+        console.log(res);
+        if (res.ok) {
+          const data = await res.json();
+          const payOnItem = data.find((d: any) => d.typeCode === 'PayOn');
+          const zelleItem = data.find((d: any) => d.typeCode === 'Zelle');
+          setAppConfig({
+            payOnActive: payOnItem ? payOnItem.statusType : true,
+            zelleActive: zelleItem ? zelleItem.statusType : true,
+            zelleLink: zelleItem.descriptionType 
+          });
+          console.log("✅ Configuración obtenida:", { payOnActive: payOnItem?.statusType, zelleActive: zelleItem?.statusType, zelleLink: zelleItem?.descriptionType });
+        }
+      } catch (error) {
+        console.warn("⚠️ No se pudo obtener la configuración, usando valores por defecto", error);
+      }
+    };
+    fetchAppConfig();
+  }, []);
+
+  // 🚀 FETCH DEL QR DE ZELLE DESDE SUPABASE
+  useEffect(() => {
+    const loadZelleQr = async () => {
+      try {
+        if (supabaseClient) {
+          const { data } = await supabaseClient.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
+          if (data?.signedUrl) {
+            setZelleQrUrl(data.signedUrl);
+          }
+        }
+      } catch (error) {
+        console.warn("⚠️ No se pudo obtener la URL firmada de qrzelle.webp", error);
+      }
+    };
+    loadZelleQr();
+  }, []);
 
   const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
     const [rating, setRating] = useState(5);
@@ -782,52 +872,6 @@ export default function LawyersScreen() {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
   }, [isFocused, isAdminMode, zipCode]);
-
-  useEffect(() => {
-    const loadZelleQr = async () => {
-      try {
-        if (supabaseClient) {
-          const { data } = await supabaseClient.storage.from('images').createSignedUrl('logoorimages/qrzelle.webp', 604800);
-          if (data?.signedUrl) {
-            setZelleQrUrl(data.signedUrl);
-          }
-        }
-      } catch (error) {
-        console.warn("⚠️ No se pudo obtener la URL firmada de qrzelle.webp", error);
-      }
-    };
-    loadZelleQr();
-  }, []);
-
-  const applyLocalFilters = (lawyersList: any[], areaName: string, lat: number, lng: number) => {
-    let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
-    
-    filtered = filtered.filter(item => {
-      const isOwner = item.userId === currentUserId;
-      const isPending = item.status === 'pending';
-      const isExpired = (item.timepostEnd && new Date(item.timepostEnd).getFullYear() > 1970) 
-        ? new Date(item.timepostEnd) < new Date() 
-        : false;
-      return isOwner || (!isExpired && !isPending); 
-    });
-
-    filtered.sort((a, b) => {
-      const aIsOwner = a.userId === currentUserId;
-      const aIsExpired = a.timepostEnd ? new Date(a.timepostEnd) < new Date() : false;
-      const aNeedsRenewal = aIsOwner && aIsExpired && a.status !== 'pending';
-
-      const bIsOwner = b.userId === currentUserId;
-      const bIsExpired = b.timepostEnd ? new Date(b.timepostEnd) < new Date() : false;
-      const bNeedsRenewal = bIsOwner && bIsExpired && b.status !== 'pending';
-
-      if (aNeedsRenewal && !bNeedsRenewal) return -1;
-      if (!aNeedsRenewal && bNeedsRenewal) return 1;
-
-      return getDistance(lat, lng, a.lat, a.lng) - getDistance(lat, lng, b.lat, b.lng);
-    });
-
-    return filtered;
-  };
 
   const fetchLawyersData = async (searchZip: string) => {
     try {
@@ -1115,7 +1159,7 @@ export default function LawyersScreen() {
       const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng);
       setResults(filtered);
     }
-  }, [allLawyers, selectedArea, userLocation, isFilteredByMap]);
+  }, [allLawyers, selectedArea, userLocation, isFilteredByMap, applyLocalFilters]);
 
   useEffect(() => {
     Animated.loop(
@@ -1367,7 +1411,7 @@ export default function LawyersScreen() {
         lawyerToRenew={lawyerToRenew} currentUserId={currentUserId} currentTariff={currentTariff} 
         t={t} isDark={isDark} Colors={Colors} orangeGradient={orangeGradient} 
         isLargeWeb={isLargeWeb} isAndroid={isAndroid} isIOS={isIOS} 
-        insets={insets} userToken={userToken}
+        insets={insets} userToken={userToken} appConfig={appConfig}
       />
 
       <SuggestLawyerModal 
@@ -1384,7 +1428,7 @@ export default function LawyersScreen() {
         currentUserId={currentUserId} currentTariff={currentTariff}  companyTariffs={companyTariffs} t={t} isDark={isDark} Colors={Colors} 
         orangeGradient={orangeGradient} isLargeWeb={isLargeWeb} isAndroid={isAndroid} 
         isIOS={isIOS} PRACTICE_AREAS={PRACTICE_AREAS} 
-        insets={insets} userToken={userToken} router={router} zelleQrUrl={zelleQrUrl}
+        insets={insets} userToken={userToken} router={router} zelleQrUrl={zelleQrUrl} appConfig={appConfig}
       />
 
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
