@@ -2,7 +2,7 @@
   "expo": {
     "name": "Viviendo en USA",
     "slug": "viviendoenusa",
-    "version": "1.1.0",
+    "version": "1.0.1",
     "scheme": "viviendoenusa",
     "orientation": "portrait",
     "icon": "./assets/images/backgroundusa.png",
