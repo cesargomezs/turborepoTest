@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker'; 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
 import { createClient } from '@supabase/supabase-js'; 
-import AsyncStorage from '@react-native-async-storage/async-storage'; // 🚀 IMPORTADO PARA EL TUTORIAL
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
 import { Colors } from '../../constants/Colors';
 import { ThemedText } from '../ThemedText';
@@ -136,7 +136,7 @@ const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, 
 };
 
 export default function Header({ title }: { title?: string }) {
-  const { user, token, logout } = useAuth(); 
+  const { user, token, logout } = useAuth();
   const REAL_USER_ID = user?.id;
 
   const { width } = useWindowDimensions();
@@ -156,7 +156,6 @@ export default function Header({ title }: { title?: string }) {
   
   const isGuest = userMetadata?.typeDetail === 'Guest';
 
-  // 🚀 ESTADO PARA EL TUTORIAL DE COLORES EN EL PRIMER INGRESO
   const [showColorTutorial, setShowColorTutorial] = useState(false);
 
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
@@ -221,7 +220,6 @@ export default function Header({ title }: { title?: string }) {
     "Otro"
   ];
 
-  // 🚀 USEEFFECT PARA DETECTAR LA PRIMERA VEZ QUE SE ABRE LA APP
   useEffect(() => {
     const checkFirstLaunchTutorial = async () => {
       try {
@@ -784,7 +782,6 @@ export default function Header({ title }: { title?: string }) {
         </View>
       </BlurView>
 
-      {/* 🚀 MODAL DEL TUTORIAL DE COLORES (PRIMERA VEZ) */}
       <Modal visible={showColorTutorial} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
@@ -1282,7 +1279,6 @@ export default function Header({ title }: { title?: string }) {
                       onPress={() => {
                         closeSettingsModal();
                         dispatch(toggleAuth());
-                        router.replace('/');
                       }}
                       style={{ backgroundColor: '#FF5F6D', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16 }}
                     >

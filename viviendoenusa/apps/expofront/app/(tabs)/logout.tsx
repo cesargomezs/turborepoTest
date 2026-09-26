@@ -17,19 +17,17 @@ export default function LogoutScreen() {
 
     const procesarCierreSesion = async () => {
       try {
-        // 1. Limpiar persistencia local (Web y Móvil)
+        // 1. Limpieza total de almacenamiento local y seguro
         if (Platform.OS === 'web') {
           try {
             localStorage.clear();
             sessionStorage.clear();
-            localStorage.setItem('forceLoginView', 'true');
           } catch (e) {
             console.log("Error limpiando web:", e);
           }
         } else {
           try {
             await AsyncStorage.clear();
-            // Limpieza profunda de SecureStore (vital por la migración reciente en iOS)
             await SecureStore.deleteItemAsync('user_session'); 
             await SecureStore.deleteItemAsync('userToken'); 
           } catch (e) {
@@ -37,39 +35,32 @@ export default function LogoutScreen() {
           }
         }
 
-        // 2. Cerrar sesión en el proveedor con Timeout (Evita que el Invitado se quede pegado)
+        // 2. Limpieza inmediata en Redux para liberar los metadatos del usuario logueado
+        if (isMounted) {
+          dispatch(setUserMetadata({} as any)); 
+          dispatch(toggleAuth()); 
+        }
+
+        // 3. Cierre de sesión del proveedor con tiempo de espera controlado
         if (logout) {
           await Promise.race([
             logout(),
-            new Promise(resolve => setTimeout(resolve, 800)) // Si en 800ms no responde, avanza
-          ]).catch(e => console.log("Aviso logout ignorado:", e));
+            new Promise(resolve => setTimeout(resolve, 300))
+          ]).catch(e => console.log("Logout omitido:", e));
         }
 
-        // 3. Enrutamiento INMEDIATO (Se debe enrutar antes de limpiar Redux para evitar bloqueos)
+        // 4. Redirección limpia y definitiva al directorio raíz
         if (isMounted) {
           if (Platform.OS === 'web') {
-            window.location.replace('/?login=true');
+            window.location.replace('/');
           } else {
-            router.replace('/?login=true');
+            router.replace('/');
           }
         }
-
-        // 4. Limpiar Redux con un ligero retraso para no matar el componente en medio de la navegación
-        setTimeout(() => {
-          if (isMounted) {
-            dispatch(setUserMetadata({} as any)); 
-            dispatch(toggleAuth()); 
-          }
-        }, 150);
         
       } catch (error) {
-        console.error("Error crítico al cerrar sesión:", error);
-        // Fallback de emergencia
-        if (Platform.OS === 'web') {
-          window.location.replace('/?login=true');
-        } else {
-          router.replace('/?login=true');
-        }
+        console.error("Error al salir:", error);
+        router.replace('/');
       }
     };
 

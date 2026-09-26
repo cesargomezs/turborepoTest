@@ -223,6 +223,15 @@ export default function HomeScreen() {
 
   const [showRateButton, setShowRateButton] = useState(false);
 
+  // 🚀 FIX PRINCIPAL: FORZAR APERTURA DE LOGIN CUANDO SE LLAMA DESDE EL FOOTER/HEADER
+  useEffect(() => {
+    if (params?.login === 'true') {
+      setShowWebLanding(false);
+      setShowManualLogin(false);
+      setIsRegistering(false);
+    }
+  }, [params?.login]);
+
   useEffect(() => {
     const checkAppUsageTime = async () => {
       try {
@@ -451,7 +460,6 @@ export default function HomeScreen() {
     router.replace('/');
   };
 
-  // 🚀 LÓGICA DE GOOGLE BLINDADA
   const verifyGoogle = async (id_token: string) => {
     try {
       const pushTokenReal = await getSafePushToken();
@@ -465,11 +473,9 @@ export default function HomeScreen() {
       });
       const dataRes = await res.json();
 
-      // 1. Si es OK y no pide completar perfil, entra de una.
       if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
         await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
       } 
-      // 2. Si es OK pero explícitamente pide completar el perfil (porque es usuario nuevo).
       else if (res.ok && dataRes.requiresProfileCompletion) {
         let googleEmail = dataRes.user?.email || dataRes.email || ''; 
         let name = dataRes.user?.firstName || '';
@@ -491,7 +497,6 @@ export default function HomeScreen() {
         setAcceptedTerms(false); 
         setShowCompletionModal(true);
       } 
-      // 3. Cualquier otra cosa es un error real del backend, no lo mandes al modal.
       else {
         throw new Error(dataRes.error || "No se pudo autenticar con Google. Intenta nuevamente.");
       }
@@ -504,7 +509,6 @@ export default function HomeScreen() {
     if (response?.type === 'success') verifyGoogle(response.params.id_token);
   }, [response]);
 
-  // 🚀 LÓGICA DE APPLE BLINDADA
   const handleAppleLogin = async () => {
     try {
       const credential = await AppleAuthentication.signInAsync({
@@ -536,11 +540,9 @@ export default function HomeScreen() {
         });
         const dataRes = await res.json();
 
-        // 1. Si es OK y no pide completar perfil, entra de una.
         if (res.ok && dataRes.token && !dataRes.requiresProfileCompletion) {
           await handlePostLoginSuccess(dataRes.user, dataRes.token, dataRes);
         } 
-        // 2. Si es OK pero explícitamente pide completar el perfil.
         else if (res.ok && dataRes.requiresProfileCompletion) {
           if (!appleEmail && dataRes.user?.email) appleEmail = dataRes.user.email;
           if (!name && dataRes.user?.firstName) name = dataRes.user.firstName;
@@ -553,7 +555,6 @@ export default function HomeScreen() {
           setAcceptedTerms(false);
           setShowCompletionModal(true);
         } 
-        // 3. Cualquier otra cosa es un error.
         else {
           throw new Error(dataRes.error || "No se pudo autenticar con Apple. Intenta nuevamente.");
         }
@@ -1030,7 +1031,6 @@ export default function HomeScreen() {
           <meta name="twitter:title" content="Viviendo en USA | Directorio Latino y Migrante" />
           <meta name="twitter:description" content="Encuentra abogados, emprendimientos, empleos y red de apoyo para latinos e hispanos en USA." />
           <meta name="twitter:image" content={mainLogoUrl} />
-          {/* 🚀 INYECCIÓN DE CSS PARA FUENTES: Evita el bloqueo del renderizado y el "Flash of Invisible Text" (FOIT) */}
           <style type="text/css">{`
             @font-face {
               font-family: 'Material Design Icons';
@@ -1418,7 +1418,6 @@ export default function HomeScreen() {
       <Head>
         <title>{loggedIn ? 'Panel de Inicio | Viviendo en USA' : 'Ingresar | Viviendo en USA'}</title>
         <meta name="robots" content={loggedIn ? "noindex, nofollow" : "index, follow"} />
-        {/* 🚀 INYECCIÓN DE CSS PARA FUENTES: Evita el bloqueo del renderizado y el "Flash of Invisible Text" (FOIT) */}
         <style type="text/css">{`
           @font-face {
             font-family: 'Material Design Icons';
