@@ -94,6 +94,8 @@ const containsBadWords = (text: string): boolean => {
 const API_JOBS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/jobs';
 const API_COMPANIES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/companies';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
+const API_CONFIG_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/config';
+
 const COUNTRY_CODES = [{ code: '+1', flag: '🇺🇸' }];
 
 export default function JobsScreen() {
@@ -212,8 +214,8 @@ export default function JobsScreen() {
 
   const [userCompanies, setUserCompanies] = useState<any[]>([]);
   const [companyTariffs, setCompanyTariffs] = useState({coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '155.00' });
+  const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
   
-  // 🚀 AÑADIDO CAMPO googleReviewLink AL ESTADO INICIAL DE LA EMPRESA
   const [newCompanyForm, setNewCompanyForm] = useState({ 
     name: '', ein: '', phoneCode: '+1', phone: '', contactMethod: 'call' as 'whatsapp'|'call', email: '', website: '', logoUri: '', logoBase64: '', premiumPlan: 'coupon', googleReviewLink: ''
   });
@@ -250,6 +252,43 @@ export default function JobsScreen() {
   const [reviewForm, setReviewForm] = useState({ text: '', rating: 0, isAnonymous: false });
   
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchAppConfig = async () => {
+      try {
+        const res = await fetch(API_CONFIG_URL);
+        if (res.ok) {
+          const data = await res.json();
+          let isPayOn = false;
+          let isZelle = true;
+          let zLink = '';
+
+          if (Array.isArray(data)) {
+            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+
+            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+            zLink = zelleItem?.descriptionType || '';
+          } 
+          else if (data && typeof data === 'object') {
+            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+            zLink = data.zelleLink || data.descriptionType || '';
+          }
+
+          setAppConfig({
+            payOnActive: isPayOn,
+            zelleActive: isZelle,
+            zelleLink: zLink
+          });
+        }
+      } catch (error) {
+        console.warn("⚠️ Error obteniendo configuración global:", error);
+      }
+    };
+    fetchAppConfig();
+  }, []);
 
   useEffect(() => {
     const loadZelleQr = async () => {
@@ -1864,7 +1903,7 @@ export default function JobsScreen() {
                            style={{ backgroundColor: DynamicColors.inputBg, padding: 15, borderRadius: 12, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                          />
 
-                         {/* 🚀 EL CAMUFLAJE DE PAGO REMOVIDO PARA MOSTRARSE EN TODAS LAS PLATAFORMAS */}
+                         {/* 🚀 MÉTODO DE ACTIVACIÓN SIEMPRE VISIBLE */}
                          <>
                            <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
@@ -1876,18 +1915,20 @@ export default function JobsScreen() {
                                <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? DynamicColors.accent : DynamicColors.subtext }}>Tengo Cupón</ThemedText>
                              </TouchableOpacity>
 
-                             <TouchableOpacity 
-                               onPress={() => { setUiPayType('subscription'); if(newCompanyForm.premiumPlan === 'coupon') setNewCompanyForm({...newCompanyForm, premiumPlan: 'basic'}); setFormRefCode(''); }}
-                               style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                             >
-                               <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
-                               <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
-                             </TouchableOpacity>
+                             {(isWeb || appConfig?.payOnActive) && (
+                               <TouchableOpacity 
+                                 onPress={() => { setUiPayType('subscription'); if(newCompanyForm.premiumPlan === 'coupon') setNewCompanyForm({...newCompanyForm, premiumPlan: 'basic'}); setFormRefCode(''); }}
+                                 style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                               >
+                                 <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext} />
+                                 <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? DynamicColors.accent : DynamicColors.subtext }}>Suscripción</ThemedText>
+                               </TouchableOpacity>
+                             )}
                            </View>
                          </>
 
-                         {/* RUTA DE SUSCRIPCIÓN DESBLOQUEADA PARA MÓVILES Y WEB */}
-                         {uiPayType === 'subscription' && (
+                         {/* RUTA DE SUSCRIPCIÓN DESBLOQUEADA SI PAYON ESTÁ ACTIVO */}
+                         {uiPayType === 'subscription' && (isWeb || appConfig?.payOnActive) && (
                            <>
                              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                              <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1928,17 +1969,19 @@ export default function JobsScreen() {
                                  {t.jobstab.labelregistercomp1}<ThemedText style={{fontWeight:'900', color: DynamicColors.accent}}>${(companyTariffs as any)[newCompanyForm.premiumPlan]} USD</ThemedText> {t.jobstab.labelregistercomp2}  
                              </ThemedText>
                              
-                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                 {['Zelle'].map((method) => (
-                                 <TouchableOpacity 
-                                     key={method}
-                                     onPress={() => setFormPayMethod(method)} 
-                                     style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
-                                 >
-                                     <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText>
-                                 </TouchableOpacity>
-                                 ))}
-                             </View>
+                             {appConfig?.zelleActive && (
+                               <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                                   {['Zelle'].map((method) => (
+                                   <TouchableOpacity 
+                                       key={method}
+                                       onPress={() => setFormPayMethod(method)} 
+                                       style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: formPayMethod === method ? DynamicColors.accent : DynamicColors.border, backgroundColor: formPayMethod === method ? (isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)') : DynamicColors.inputBg }}
+                                   >
+                                       <ThemedText style={{ fontWeight: '900', color: formPayMethod === method ? DynamicColors.accent : DynamicColors.subtext }}>{method}</ThemedText>
+                                   </TouchableOpacity>
+                                   ))}
+                               </View>
+                             )}
 
                              <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: DynamicColors.border }}>
                                {zelleQrUrl ? (
@@ -1952,7 +1995,7 @@ export default function JobsScreen() {
 
                                {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
                                <TouchableOpacity 
-                                 onPress={() => Linking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                                 onPress={() => Linking.openURL(appConfig.zelleLink || 'https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
                                  style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.accenticon }}
                                >
                                  <MaterialCommunityIcons name="open-in-new" size={16} color={DynamicColors.accenticon} style={{ marginRight: 6 }} />
@@ -2303,7 +2346,8 @@ export default function JobsScreen() {
               </View>
               {!showReviewInput ? (
                 <View style={{ flex: 1 }}>
-                  <TouchableOpacity onPress={() => { 
+                  <TouchableOpacity 
+                    onPress={() => { 
                       if (isGuest) {
                         setShowRestrictedModal(true);
                         return;
@@ -2311,7 +2355,9 @@ export default function JobsScreen() {
                       const hasReviewed = selectedCompany?.reviews?.some((r: any) => r.userId === currentUserId); 
                       if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } 
                       setShowReviewInput(true); 
-                    }} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                    }} 
+                    style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
+                  >
                     <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>
@@ -2332,7 +2378,7 @@ export default function JobsScreen() {
                              ) : (
                                <MaterialCommunityIcons name="account-circle" size={24} color={DynamicColors.subtext} />
                              )}
-                             <ThemedText style={{ color: DynamicColors.text, fontSize: 12, fontStyle: 'italic' }}>{r.userName || r.name || 'Anónimo'}</ThemedText>
+                             <ThemedText style={{ color: DynamicColors.text, fontSize: 12, fontStyle: 'italic' }}>{r.name || r.userName || 'Anónimo'}</ThemedText>
                            </View>
                          </View>
                          <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.text}</ThemedText>

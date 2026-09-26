@@ -290,7 +290,7 @@ export const createCompany = async (data: any) => {
 
         // 🚀 Nace pendiente de revisión para cumplir con Apple
         isApproved = false;
-        customMessage = "¡Cupón VIP aplicado! Tu empresa ha sido registrada y está pendiente de revisión.";
+        customMessage = "¡Cupón aplicado! Tu empresa ha sido registrada y está pendiente de revisión.";
       }
       
       const companyPayload: any = {

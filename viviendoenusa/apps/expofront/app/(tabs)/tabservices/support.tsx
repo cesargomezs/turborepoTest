@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo, useCallback } from 'react';
-import { TouchableOpacity, View, ScrollView, Platform, StyleSheet, useWindowDimensions, Animated, Easing, TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert, Modal, KeyboardAvoidingView, ColorValue, Share, AppState, Linking } from 'react-native';
+import { TouchableOpacity, View, ScrollView, Platform, StyleSheet, useWindowDimensions, Animated, Easing, TextInput, ActivityIndicator, Image, Linking as RNLinking, Alert, Modal, KeyboardAvoidingView, ColorValue, Share, AppState } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router'; 
@@ -699,7 +699,11 @@ export default function SupportScreen() {
           return {
             id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
             lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
-            status: isAppr ? 'approved' : 'pending', premiumPlan: item.premiumPlan, googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+            status: isAppr ? 'approved' : 'pending', premiumPlan: item.premiumPlan, 
+            couponCode: item.couponCode,                     // 🚀 CORREGIDO: SE MAPEA EL CUPÓN
+            referenceCode: item.referenceCode,               // 🚀 CORREGIDO: SE MAPEA LA REFERENCIA DE PAGO
+            paymentMethod: item.paymentMethod,               // 🚀 CORREGIDO: SE MAPEA EL METODO DE PAGO
+            googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
           };
         }));
 
@@ -720,6 +724,8 @@ export default function SupportScreen() {
         fetchSupportData(zipCode);
       } else {
         setPendingStores([]);
+        setAllStores([]);
+        setResults([]);
       }
     }
   }, [isAdminMode]);
@@ -914,7 +920,15 @@ export default function SupportScreen() {
             {store.premiumPlan && ( <View style={{ backgroundColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.unselected(isDark) || DynamicColors.inputBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: planStyles[store.premiumPlan as keyof typeof planStyles]?.selected || DynamicColors.border }}><ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: planStyles[store.premiumPlan as keyof typeof planStyles]?.selected || DynamicColors.subtext }}> {(t.genericlabel?.lableplan || 'PLAN ') + store.premiumPlan.toUpperCase()}</ThemedText></View> )}
         </View>
         {store.couponCode ? ( <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}><MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" /><ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>Cupón: <ThemedText style={{color: '#4CAF50', fontWeight: '900'}}>{store.couponCode}</ThemedText></ThemedText></View> ) : null}
-        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}><MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" /><ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{store.referenceCode || 'N/A'}</ThemedText> ({store.paymentMethod || 'Pago'})</ThemedText></View>
+        
+        {/* 🚀 AQUÍ APLICAMOS EL VALOR MAPEDO DESDE LA RESPUESTA DE LA API */}
+        <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
+           <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
+           <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
+              Ref: <ThemedText style={{color: '#FFB74D', fontWeight: '900'}}>{store.referenceCode || 'N/A'}</ThemedText> ({store.paymentMethod || 'Pago'})
+           </ThemedText>
+        </View>
+        
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
             {[1, 3, 6, 12].map(m => ( <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}><ThemedText style={{color: selectedMonths === m ? '#FFFFFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText></TouchableOpacity> ))}
         </View>
@@ -1110,7 +1124,7 @@ export default function SupportScreen() {
                           "Tu opinión ya se guardó con éxito. ¿Te gustaría pegar tu comentario directamente en su perfil de Google? (El texto ya fue copiado a tu portapapeles).",
                           [
                             { text: "No, gracias", style: "cancel" },
-                            { text: "Ir a Google", onPress: () => { Linking.openURL(googleReviewUrl); } }
+                            { text: "Ir a Google", onPress: () => { RNLinking.openURL(googleReviewUrl); } }
                           ]
                         );
                       }
@@ -1210,7 +1224,7 @@ export default function SupportScreen() {
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   {isAdminMode && (
                     <View style={{ marginBottom: 20 }}>
-                      <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{t.genericbtn.verify} ({pendingStores.length})</ThemedText>
+                      <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{t.genericlabel.labelcheckpay} ({pendingStores.length})</ThemedText>
                       {pendingStores.length > 0 ? (
                         pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)
                       ) : (
