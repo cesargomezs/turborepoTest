@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 import { useAuth } from '@/context/AuthContext'; 
 import { useMockDispatch, setUserMetadata, toggleAuth } from '../../redux/slices'; 
@@ -15,48 +17,59 @@ export default function LogoutScreen() {
 
     const procesarCierreSesion = async () => {
       try {
+        // 1. Limpiar persistencia local (Web y Móvil)
         if (Platform.OS === 'web') {
-          // 🚀 Destrucción total del almacenamiento web para evitar sesiones fantasma
           try {
             localStorage.clear();
             sessionStorage.clear();
-            
-            // Forzamos la bandera de vista de login
             localStorage.setItem('forceLoginView', 'true');
           } catch (e) {
-            console.log("Error limpiando almacenamiento web:", e);
+            console.log("Error limpiando web:", e);
+          }
+        } else {
+          try {
+            await AsyncStorage.clear();
+            // Limpieza profunda de SecureStore (vital por la migración reciente en iOS)
+            await SecureStore.deleteItemAsync('user_session'); 
+            await SecureStore.deleteItemAsync('userToken'); 
+          } catch (e) {
+            console.log("Error limpiando móvil:", e);
           }
         }
 
-        // Ejecutamos el cierre de sesión del proveedor de autenticación
+        // 2. Cerrar sesión en el proveedor con Timeout (Evita que el Invitado se quede pegado)
         if (logout) {
-          await logout();
+          await Promise.race([
+            logout(),
+            new Promise(resolve => setTimeout(resolve, 800)) // Si en 800ms no responde, avanza
+          ]).catch(e => console.log("Aviso logout ignorado:", e));
         }
 
+        // 3. Enrutamiento INMEDIATO (Se debe enrutar antes de limpiar Redux para evitar bloqueos)
         if (isMounted) {
-          dispatch(setUserMetadata({} as any)); 
-          dispatch(toggleAuth()); 
-        }
-
-        // 🚀 FIX: Un pequeño retraso para que Redux limpie el estado antes de que Expo Router navegue.
-        // Esto evita el choque que congelaba la pantalla.
-        setTimeout(() => {
           if (Platform.OS === 'web') {
             window.location.replace('/?login=true');
           } else {
             router.replace('/?login=true');
+          }
+        }
+
+        // 4. Limpiar Redux con un ligero retraso para no matar el componente en medio de la navegación
+        setTimeout(() => {
+          if (isMounted) {
+            dispatch(setUserMetadata({} as any)); 
+            dispatch(toggleAuth()); 
           }
         }, 150);
         
       } catch (error) {
-        console.error("Error al cerrar sesión:", error);
-        setTimeout(() => {
-          if (Platform.OS === 'web') {
-            window.location.replace('/?login=true');
-          } else {
-            router.replace('/?login=true');
-          }
-        }, 150);
+        console.error("Error crítico al cerrar sesión:", error);
+        // Fallback de emergencia
+        if (Platform.OS === 'web') {
+          window.location.replace('/?login=true');
+        } else {
+          router.replace('/?login=true');
+        }
       }
     };
 
@@ -79,7 +92,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    // 🚀 FIX: Cambiado a transparente para evitar el pantallazo azul oscuro.
     backgroundColor: 'transparent', 
   }
 });

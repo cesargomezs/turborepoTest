@@ -100,7 +100,6 @@ cron.schedule('0 0 * * *', async () => {
     console.error("❌ [CRON] Error ejecutando la tarea de vencimientos:", error);
   }
 }, {
-  // 🚀 FIX: Eliminamos 'scheduled: true' para evitar el error de TypeScript y dejamos solo el timezone
   timezone: "America/Los_Angeles"
 });
 
@@ -235,12 +234,13 @@ async function executeMarketingMotor() {
     
     await launchGeoMarketingCampaign(activeStores, "store", "name");
 
+    // 🚀 CORREGIDO: SE CAMBIÓ ${events.timepostEnd} POR${events.createdAt} PARA CALCULAR BIEN DESDE LA RADICACIÓN
     const activeEvents = await db.select({
       id: events.id,
       title: events.title, 
       premiumPlan: events.premiumPlan,
       zip: events.zip,
-      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.timepostEnd})` 
+      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.createdAt})` 
       })
       .from(events)
       .where(
@@ -298,6 +298,5 @@ async function executeMarketingMotor() {
 cron.schedule('0 7 * * *', async () => {
     await executeMarketingMotor();
 }, {
-    // 🚀 FIX: Eliminamos 'scheduled' y garantizamos la zona horaria
     timezone: "America/Los_Angeles"
 });
