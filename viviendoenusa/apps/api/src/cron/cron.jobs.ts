@@ -103,27 +103,133 @@ cron.schedule('0 0 * * *', async () => {
   timezone: "America/Los_Angeles"
 });
 
+// ============================================================================
+// 2. MOTOR DE RECORDATORIOS PARA EVENTOS (CUENTA REGRESIVA HACIA EL FUTURO)
+// ============================================================================
+async function launchEventReminders() {
+    console.log("📅 [CRON EVENTOS] Calculando días faltantes para eventos activos...");
+
+    const activeEvents = await db.select({
+        id: events.id,
+        title: events.title,
+        premiumPlan: events.premiumPlan,
+        zip: events.zip,
+        // Matemática exacta: Fechas enteras para cuenta regresiva
+        daysLeft: sql<number>`DATE(${events.dateEvent}) - CURRENT_DATE`
+    })
+    .from(events)
+    .where(
+        and(
+            eq(events.approved, true),
+            sql`DATE(${events.dateEvent}) >= CURRENT_DATE`
+        )
+    );
+
+    if (activeEvents.length === 0) return;
+
+    for (const event of activeEvents) {
+        if (!event.zip) continue;
+
+        const daysLeft = Number(event.daysLeft);
+        const plan = event.premiumPlan ? event.premiumPlan.toLowerCase() : 'free';
+
+        let shouldNotify = false;
+        let bodyText = "";
+        const titleText = "Recordatorio de Evento 📅";
+
+        // Parámetros estrictos de envío según el plan del evento
+        if (plan === 'unlimited' || plan === 'premium') {
+            if ([7, 3, 1, 0].includes(daysLeft)) shouldNotify = true;
+        } else if (plan === 'basic' || plan === 'intermediate') {
+            if ([3, 0].includes(daysLeft)) shouldNotify = true;
+        } else {
+            if (daysLeft === 0) shouldNotify = true;
+        }
+
+        if (!shouldNotify) continue;
+
+        if (daysLeft === 0) {
+            bodyText = `¡Es hoy! No te pierdas: ${event.title}`;
+        } else if (daysLeft === 1) {
+            bodyText = `¡Falta solo 1 día para: ${event.title}!`;
+        } else {
+            bodyText = `¡Faltan solo ${daysLeft} días para: ${event.title}!`;
+        }
+
+        const nearbyUsers = await db.select({ id: users.id })
+            .from(users)
+            .where(and(isNotNull(users.zip), eq(users.zip, event.zip)));
+
+        if (nearbyUsers.length === 0) continue;
+
+        const notificationsToInsert = nearbyUsers.map(u => ({
+            userId: u.id,
+            title: titleText,
+            description: bodyText,
+            referenceId: event.id,
+            type: "event",
+            isRead: false
+        }));
+
+        await db.insert(notifications).values(notificationsToInsert);
+        console.log(`📣 Recordatorio de Evento guardado para ${nearbyUsers.length} usuarios en el ZIP ${event.zip}: ${bodyText}`);
+
+        const userIds = nearbyUsers.map(u => u.id);
+        const devices = await db.select().from(userDevices).where(inArray(userDevices.userId, userIds));
+
+        if (devices && devices.length > 0) {
+            const messages = [];
+
+            for (const device of devices) {
+                const [unreadResult] = await db.select({ count: sql<number>`count(*)` })
+                .from(notifications)
+                .where(and(eq(notifications.userId, device.userId), eq(notifications.isRead, false)));
+
+                const unreadCount = Number(unreadResult?.count) || 1;
+
+                messages.push({
+                    to: device.expoPushToken,
+                    sound: 'default',
+                    title: titleText,
+                    body: bodyText,
+                    badge: unreadCount, 
+                    data: { type: "event", referenceId: event.id },
+                });
+            }
+
+            const chunks = [];
+            for (let i = 0; i < messages.length; i += 100) chunks.push(messages.slice(i, i + 100));
+
+            for (const chunk of chunks) {
+                try {
+                    await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
+                        body: JSON.stringify(chunk),
+                    });
+                } catch (e) {
+                    console.error("❌ Error enviando PUSH de Eventos:", e);
+                }
+            }
+        }
+    }
+}
 
 // ============================================================================
-// 2. MOTOR DE MARKETING POR CÓDIGO POSTAL
+// 3. MOTOR DE MARKETING (TIENDAS, EMPLEOS, APOYOS, ABOGADOS)
 // ============================================================================
-
 async function launchGeoMarketingCampaign(activePromotions: any[], type: string, itemNameKey: string) {
     const promosForToday = activePromotions.filter(promo => {
         const days = promo.daysActive ? Math.floor(promo.daysActive) : 0; 
         const plan = promo.premiumPlan ? promo.premiumPlan.toLowerCase() : 'free';
 
-        // Unlimited (4 al mes): Notifica días 0, 7, 14, 21, 28...
+        // 🚀 Reglas exactas de periodos de notificación para Planes Premium
         if (plan === 'unlimited' || plan === 'premium') return days % 7 === 0;       
-        // Basic (2 al mes): Notifica días 0, 15, 30...
         if (plan === 'basic' || plan === 'intermediate') return days % 15 === 0; 
-        // Free / Coupon (1 al mes): Notifica solo el día de creación
         if (plan === 'free' || plan === 'coupon') return days === 0; 
         
         return false;
     });
-
-    console.log(`🔍 [DEBUG] Revisando categoría ${type}: Encontramos ${activePromotions.length} activos, pero solo ${promosForToday.length} cumplen la regla de los días para notificarse hoy.`);
 
     if (promosForToday.length === 0) return; 
 
@@ -159,13 +265,8 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
             console.log(`📣 Marketing guardado para ${nearbyUsers.length} usuarios en el ZIP ${promo.zip} para ${itemName}`);
         }
 
-        // ====================================================================
-        // 🚀 ENVÍO REAL DE PUSH NOTIFICATIONS A LOS DISPOSITIVOS
-        // ====================================================================
         const userIds = nearbyUsers.map(u => u.id);
-        const devices = await db.select()
-                                .from(userDevices)
-                                .where(inArray(userDevices.userId, userIds));
+        const devices = await db.select().from(userDevices).where(inArray(userDevices.userId, userIds));
 
         if (devices && devices.length > 0) {
             const messages = [];
@@ -195,26 +296,19 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
             }
 
             const chunks = [];
-            for (let i = 0; i < messages.length; i += 100) {
-                chunks.push(messages.slice(i, i + 100));
-            }
+            for (let i = 0; i < messages.length; i += 100) chunks.push(messages.slice(i, i + 100));
 
             for (const chunk of chunks) {
                 try {
                     await fetch('https://exp.host/--/api/v2/push/send', {
                         method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Accept-encoding': 'gzip, deflate',
-                            'Content-Type': 'application/json',
-                        },
+                        headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
                         body: JSON.stringify(chunk),
                     });
                 } catch (e) {
                     console.error("❌ Error enviando PUSH en CRON Marketing:", e);
                 }
             }
-            console.log(`📲 PUSH enviado a ${devices.length} dispositivos para la promo ${promo.id}`);
         }
     }
 }
@@ -224,68 +318,73 @@ async function executeMarketingMotor() {
   console.log("🚀 [CRON MARKETING] Iniciando cruce por código postal (ZIP)...");
 
   try {
+    // 🛡️ TIENDAS: Verificamos días enteros y que la suscripción siga activa (timepostEnd)
     const activeStores = await db.select({
         id: stores.id,
         name: stores.nameStores,
         premiumPlan: stores.premiumPlan, 
         zip: stores.zip,
-        daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${stores.createdAt})`
-    }).from(stores).where(eq(stores.approved, true));
-    
+        daysActive: sql<number>`CURRENT_DATE - DATE(${stores.createdAt})`
+    }).from(stores).where(
+        and(
+            eq(stores.approved, true),
+            sql`DATE(${stores.timepostEnd}) >= CURRENT_DATE`
+        )
+    );
     await launchGeoMarketingCampaign(activeStores, "store", "name");
 
-    // 🚀 CORREGIDO: SE CAMBIÓ ${events.timepostEnd} POR${events.createdAt} PARA CALCULAR BIEN DESDE LA RADICACIÓN
-    const activeEvents = await db.select({
-      id: events.id,
-      title: events.title, 
-      premiumPlan: events.premiumPlan,
-      zip: events.zip,
-      daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${events.createdAt})` 
-      })
-      .from(events)
-      .where(
-          and(
-              eq(events.approved, true),
-              sql`${events.dateEvent} >= CURRENT_DATE`
-          )
-      );
-  
-    await launchGeoMarketingCampaign(activeEvents, "event", "title");
+    // 🛡️ EVENTOS: Ejecutamos el módulo especial aislado
+    await launchEventReminders();
 
+    // 🛡️ EMPLEOS: La vigencia y el plan dependen de la compañía asociada
     const activeJobs = await db.select({
         id: jobs.id,
         title: jobs.title,
         premiumPlan: companies.premiumPlan,
         zip: jobs.zip,
-        daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${jobs.createdAt})`
+        daysActive: sql<number>`CURRENT_DATE - DATE(${jobs.createdAt})`
     })
     .from(jobs)
     .leftJoin(companies, eq(jobs.companyId, companies.id))
-    .where(eq(jobs.approved, true));
-    
+    .where(
+        and(
+            eq(jobs.approved, true),
+            sql`DATE(${companies.timepostEnd}) >= CURRENT_DATE`
+        )
+    );
     await launchGeoMarketingCampaign(activeJobs, "job", "title");
 
+    // 🛡️ APOYO (DONACIONES): Verificamos días enteros y vigencia
     const activeSupport = await db.select({
         id: support.id,
         name: support.nameSupp,
         premiumPlan: support.premiumPlan,
         zip: support.zip,
-        daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${support.createdAt})`
-    }).from(support).where(eq(support.approved, true));
-    
+        daysActive: sql<number>`CURRENT_DATE - DATE(${support.createdAt})`
+    }).from(support).where(
+        and(
+            eq(support.approved, true),
+            sql`DATE(${support.timepostEnd}) >= CURRENT_DATE`
+        )
+    );
     await launchGeoMarketingCampaign(activeSupport, "support", "name");
 
+    // 🛡️ ABOGADOS: Verificamos días enteros y vigencia
     const activeLawyers = await db.select({
         id: lawyers.id,
         nameLawy: lawyers.nameLawy,
         premiumPlan: lawyers.premiumPlan,
         zip: lawyers.zip,
-        daysActive: sql<number>`EXTRACT(DAY FROM CURRENT_DATE - ${lawyers.createdAt})` 
-    }).from(lawyers).where(eq(lawyers.approved, true));
-    
+        daysActive: sql<number>`CURRENT_DATE - DATE(${lawyers.createdAt})` 
+    }).from(lawyers).where(
+        and(
+            eq(lawyers.approved, true),
+            sql`DATE(${lawyers.timepostEnd}) >= CURRENT_DATE`
+        )
+    );
     await launchGeoMarketingCampaign(activeLawyers, "lawyer", "nameLawy");
 
-    console.log("✅ [CRON MARKETING] Las 5 categorías procesadas exitosamente.\n");
+    console.log("✅ [CRON MARKETING] Las 5 categorías procesadas exitosamente y filtradas por vigencia.\n");
 
   } catch (error) {
     console.error("❌ [CRON MARKETING] Error ejecutando la tarea:", error);
