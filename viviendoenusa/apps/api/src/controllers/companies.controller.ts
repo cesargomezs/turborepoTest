@@ -20,7 +20,6 @@ const sanitizeText = (str: any) => {
 // 🛡️ FUNCIÓN DE SEGURIDAD PARA VALIDAR ENLACES DE GOOGLE REVIEWS
 const isValidGoogleReviewUrl = (url: string) => {
   if (!url) return false;
-  // Regex oficial para dominios de Google Reviews
   const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
   return regex.test(url);
 };
@@ -43,7 +42,6 @@ const sendPushNotification = async (payload: { title: string, body: string, refe
 
     const messages = [];
 
-    // 🚀 BUCLE DINÁMICO: Consultamos las no leídas del dueño antes de armar el paquete
     for (const device of devices) {
       const [unreadResult] = await db.select({
         count: sql<number>`count(*)`
@@ -63,7 +61,7 @@ const sendPushNotification = async (payload: { title: string, body: string, refe
         sound: 'default',
         title: payload.title,
         body: payload.body,
-        badge: unreadCount, // 🔴 Globito dinámico real para el dueño
+        badge: unreadCount, 
         data: { type: "company", referenceId: payload.referenceId },
       });
     }
@@ -85,7 +83,6 @@ const sendPushNotification = async (payload: { title: string, body: string, refe
   }
 };
 
-// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA EMPRESAS
 const sendTelegramAlert = async (companyName: string, refCode: string, method: string) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -112,7 +109,6 @@ const sendTelegramAlert = async (companyName: string, refCode: string, method: s
   }
 };
 
-// 💰 EXTRAE LOS 3 PRECIOS DE LA BASE DE DATOS
 const getCurrentCompanyPrices = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
@@ -140,11 +136,10 @@ const getCurrentCompanyPrices = async () => {
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL DE EMPRESAS (OPTIMIZADA PARA INVITADOS)
+// 🔍 1. CONSULTA GENERAL DE EMPRESAS
 // =====================================================================
 export const getCompanies = async (currentUserId?: string) => {
   try {
-    // 🚀 VALIDACIÓN ANTI-GUEST
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
@@ -154,7 +149,6 @@ export const getCompanies = async (currentUserId?: string) => {
       .orderBy(desc(companies.createdAt))
       .$dynamic();
 
-    // 🚀 Solo filtra si es un usuario válido
     if (cleanUserId) {
       query = query.where(eq(companies.userId, cleanUserId));
     }
@@ -179,7 +173,6 @@ export const getCompanies = async (currentUserId?: string) => {
           logoUrl: publicUrl,
           referenceCode: row.payments?.referenceCode || null,
           paymentMethod: row.payments?.paymentMethod || null,
-          // El asterisco ya extrae googleReviewLink, no requiere un mapeo manual si el schema lo tiene
         });
       }
     }
@@ -192,7 +185,7 @@ export const getCompanies = async (currentUserId?: string) => {
 };
 
 // =====================================================================
-// 🔍 2. CONSULTAR EMPRESA POR ID (OPTIMIZADA PARA INVITADOS)
+// 🔍 2. CONSULTAR EMPRESA POR ID
 // =====================================================================
 export const getCompanyById = async (id: string, currentUserId?: string) => {
   try {
@@ -207,7 +200,6 @@ export const getCompanyById = async (id: string, currentUserId?: string) => {
     
     const company = rows[0].companies;
 
-    // 🚀 FIRMA AL VUELO DE SUPABASE
     if (company.logoUrl && !company.logoUrl.startsWith('http')) {
         const cleanName = company.logoUrl.startsWith('companies/') ? company.logoUrl : `companies/${company.logoUrl}`;
         const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(cleanName, 3600);
@@ -226,11 +218,10 @@ export const getCompanyById = async (id: string, currentUserId?: string) => {
 };
 
 // =====================================================================
-// 📥 CREAR EMPRESA (CUPÓN DIRECTO + MODO PENDIENTE + PUSH AL DUEÑO)
+// 📥 CREAR EMPRESA (FIX DEL PAGO: SIN NULLS EXPLÍCITOS EN FECHAS)
 // =====================================================================
 export const createCompany = async (data: any) => {
   try {
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EL BACKEND
     let safeGoogleLink = null;
     if (data.googleReviewLink) {
       const trimmedLink = data.googleReviewLink.trim();
@@ -240,7 +231,7 @@ export const createCompany = async (data: any) => {
       safeGoogleLink = trimmedLink;
     }
 
-    let pushNotificationData: any = null; // 🚀 AQUÍ GUARDAMOS EL PAYLOAD PARA EL PUSH
+    let pushNotificationData: any = null; 
 
     const createdCompanyResult = await db.transaction(async (tx) => {
       let finalLogoUrl = sanitizeText(data.logoUrl) || '';
@@ -270,16 +261,12 @@ export const createCompany = async (data: any) => {
       const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
       const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
 
-      // 🚀 1. MAGIA DEL CUPÓN
       const isCoupon = selectedPlan === 'coupon' || metodoPago === 'coupon' || selectedPlan === 'cupon' || metodoPago === 'cupon';
-
-      // 🚀 2. EXTRAER EL CÓDIGO REAL LIMPIO
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
       let isApproved = false;
       let customMessage = "Suscripción en Revisión. Tu empresa ha sido registrada.";
 
-      // 🚀 3. VALIDACIÓN ESTRICTA EN LA BASE DE DATOS
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
@@ -288,11 +275,11 @@ export const createCompany = async (data: any) => {
         if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
         if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
 
-        // 🚀 Nace pendiente de revisión para cumplir con Apple
         isApproved = false;
         customMessage = "¡Cupón aplicado! Tu empresa ha sido registrada y está pendiente de revisión.";
       }
       
+      // 🚀 FIX: Objeto de empresa base sin nulls explícitos en fechas
       const companyPayload: any = {
         userId: validUserId,
         name: sanitizeText(data.name) || 'Empresa Sin Nombre',
@@ -306,15 +293,18 @@ export const createCompany = async (data: any) => {
         isVerified: isApproved, 
         premiumPlan: isCoupon ? 'coupon' : selectedPlan, 
         status: isApproved ? 'approved' : 'pending', 
-        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO: ENLACE AL PAYLOAD DE INSERCIÓN
-        // 🚀 EL FIX MAESTRO PARA POSTGRES
-        timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
-        timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
+        googleReviewLink: safeGoogleLink
       };
+
+      // Se asignan las fechas dinámicamente solo si es necesario (cuando es cupón)
+      if (isCoupon) {
+        companyPayload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
+        companyPayload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
+      }
 
       const [newCompany] = await tx.insert(companies).values(companyPayload).returning();
 
-      // 🚀 4. GUARDAR EL PAGO
+      // 🚀 4. GUARDAR EL PAGO (FIX: EVITAMOS ENVIAR EXPLICITAMENTE NULLS)
       if (codigoReferencia || realPromoCode) {
         const prices = await getCurrentCompanyPrices();
         let amountToPay = prices.basic;
@@ -329,16 +319,20 @@ export const createCompany = async (data: any) => {
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
           amount: String(isCoupon ? "0.00" : amountToPay), 
           durationDays: 30, 
-          status: isCoupon ? "approved" : "pending",
-          approvedAt: isCoupon ? sql`NOW()` : null,
-          timepostEnd: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null,
-          timepost_end: isCoupon ? sql`NOW() + INTERVAL '1 month'` : null
+          status: isCoupon ? "approved" : "pending"
         };
+
+        // Si es cupón, se aprueba de inmediato y se asignan las fechas. 
+        // Si no es cupón, no asignamos approvedAt ni timepostEnd, evitando el crasheo en BD.
+        if (isCoupon) {
+          paymentPayload.approvedAt = sql`NOW()`;
+          paymentPayload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
+          paymentPayload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
+        }
 
         await tx.insert(payments).values(paymentPayload);
       }
 
-      // 🚀 5. QUEMAR EL CUPÓN Y CREAR NOTIFICACIONES
       if (isCoupon) {
         await tx.update(promoCodes)
         .set({
@@ -350,7 +344,6 @@ export const createCompany = async (data: any) => {
         })
         .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
 
-        // 🚀 NOTIFICACIÓN DE BASE DE DATOS
         if (validUserId) {
             await tx.insert(notifications).values({
                 title: "¡Empresa en Revisión! 🏢",
@@ -360,7 +353,6 @@ export const createCompany = async (data: any) => {
                 userId: validUserId, 
             });
 
-            // 🚀 PREPARAMOS EL PAYLOAD PARA EL PUSH NOTIFICATION
             pushNotificationData = {
                 title: "¡Empresa en Revisión! 🏢",
                 body: `El perfil de ${newCompany.name} ha sido recibido y será aprobado pronto.`,
@@ -379,14 +371,12 @@ export const createCompany = async (data: any) => {
       };
     });
 
-      // 🚀 DISPARAMOS LOS PUSH FUERA DE LA TRANSACCIÓN SI FUE CUPÓN
       if (pushNotificationData) {
         sendPushNotification(pushNotificationData).catch(err => {
            console.error("❌ [DEBUG PUSH EMPRESAS] Falló el Push Notification en creación por cupón:", err);
         });
       }
 
-      // 🚀 ALERTA DE TELEGRAM SIEMPRE PARA EL ADMIN
       if (createdCompanyResult) {
         sendTelegramAlert(
           createdCompanyResult.name,
@@ -426,7 +416,7 @@ export const updateCompany = async (idParam: any, dataParam: any) => {
       data = idParam.body;
     }
 
-    let pushNotificationData: any = null; // 🚀 PAYLOAD PARA PUSH
+    let pushNotificationData: any = null; 
 
     const updatedCompanyResult = await db.transaction(async (tx) => {
       const updatePayload: any = { updatedAt: new Date() };
@@ -436,7 +426,6 @@ export const updateCompany = async (idParam: any, dataParam: any) => {
         if (data && data[key] !== undefined) updatePayload[key] = sanitizeText(data[key]);
       }
 
-      // 🚀 AÑADIDO: VALIDACIÓN ANTI-XSS PARA EL ENLACE DE GOOGLE REVIEWS EN LA EDICIÓN
       if (data && data.googleReviewLink !== undefined) {
         if (data.googleReviewLink.trim() === '') {
           updatePayload.googleReviewLink = null;
@@ -451,7 +440,6 @@ export const updateCompany = async (idParam: any, dataParam: any) => {
         updatePayload.logoUrl = data.logoUrl.replace('companies/', '');
       }
 
-      // 🚀 CORRECCIÓN TYPESCRIPT
       const isApproved = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
 
       if (isApproved) {
@@ -494,7 +482,6 @@ export const updateCompany = async (idParam: any, dataParam: any) => {
                 userId: ownerId, 
             });
 
-            // 🚀 PREPARAMOS EL PUSH PARA LA APROBACIÓN MANUAL
             pushNotificationData = {
                 title: titleText,
                 body: bodyText,
@@ -508,7 +495,6 @@ export const updateCompany = async (idParam: any, dataParam: any) => {
       return updated[0] || null;
     });
 
-    // 🚀 DISPARAMOS LOS PUSH FUERA DE LA TRANSACCIÓN
     if (pushNotificationData) {
       sendPushNotification(pushNotificationData).catch(err => console.error("❌ [DEBUG PUSH EMPRESAS] Falló:", err));
     }
