@@ -1172,8 +1172,8 @@ export default function SupportScreen() {
                     setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
                     
                     const plan = selectedStore.premiumPlan ? String(selectedStore.premiumPlan).toLowerCase() : 'free';
-                    const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
-                    const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link;
+                    const isPremiumActive = ['premium', 'unlimited'].includes(plan);
+                    const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link || 'https://g.page/r/CXrYzP8Yb7XzECE/review';
 
                     if ((true || isPremiumActive) && googleReviewUrl && commentStr.trim()) {
                       try {

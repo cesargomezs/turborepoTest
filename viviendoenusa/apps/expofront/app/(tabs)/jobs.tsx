@@ -1000,8 +1000,8 @@ export default function JobsScreen() {
 
       // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW
       const plan = selectedCompany.premiumPlan ? String(selectedCompany.premiumPlan).toLowerCase() : 'free';
-      const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
-      const googleReviewUrl = selectedCompany.googleReviewLink || selectedCompany.googleUrl || selectedCompany.google_review_link || 'https://g.page/r/CW_DRejJgHTZECE/review';
+      const isPremiumActive = ['unlimited', 'premium'].includes(plan);
+      const googleReviewUrl = selectedCompany.googleReviewLink || selectedCompany.googleUrl || selectedCompany.google_review_link || 'https://g.page/r/CXrYzP8Yb7XzECE/review';
 
       if ((true || isPremiumActive) && reviewForm.text.trim()) {
         try {

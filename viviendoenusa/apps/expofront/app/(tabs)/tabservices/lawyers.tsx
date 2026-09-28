@@ -1682,7 +1682,7 @@ export default function LawyersScreen() {
                           // =====================================================================
                           const plan = selectedReviews.premiumPlan ? String(selectedReviews.premiumPlan).toLowerCase() : 'free';
                           const isEligibleForGoogleReview = ['premium', 'unlimited'].includes(plan);
-                          const googleReviewUrl = selectedReviews.googleReviewLink || selectedReviews.googleUrl || selectedReviews.google_review_link;
+                          const googleReviewUrl = selectedReviews.googleReviewLink || selectedReviews.googleUrl || selectedReviews.google_review_link || 'https://g.page/r/CXrYzP8Yb7XzECE/review';
 
                           if (isEligibleForGoogleReview && googleReviewUrl && commentStr.trim()) {
                             try {

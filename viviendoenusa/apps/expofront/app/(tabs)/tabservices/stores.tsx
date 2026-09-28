@@ -1444,7 +1444,7 @@ export default function StoresScreen() {
 
                           const plan = selectedStore.premiumPlan ? String(selectedStore.premiumPlan).toLowerCase() : 'free';
                           const isEligibleForGoogleReview = ['premium', 'unlimited'].includes(plan);
-                          const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link;
+                          const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link || 'https://g.page/r/CXrYzP8Yb7XzECE/review';
 
                           if (isEligibleForGoogleReview && googleReviewUrl && commentStr.trim()) {
                             try {
