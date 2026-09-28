@@ -25,7 +25,6 @@ import { useAuth } from '@/context/AuthContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
 
-// 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'support') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
   if (!supabaseClient) return url;
@@ -72,6 +71,7 @@ const COUNTRIES = [{ code: '+1', flag: '🇺🇸', name: 'USA' }];
 
 const API_STORES_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/support';
 const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs';
+const API_CONFIG_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/config';
 
 const planStyles: any = {
   coupon: { selected: '#EA8D2D', unselected: (isDark: boolean) => isDark ? 'rgba(234, 141, 45, 0.15)' : 'rgba(234, 141, 45, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
@@ -141,7 +141,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
 const SupportFormModal = memo(({
   visible, onClose, onSuccess, currentUserId, userToken, userMetadata, companyTariffs,
   t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
-  CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height, zelleQrUrl 
+  CATEGORIES_LIST, ICONS_ARRAY, COUNTRIES, height, zelleQrUrl, appConfig 
 }: any) => {
   const isWebLocal = Platform.OS === 'web';
   const [formName, setFormName] = useState('');
@@ -153,20 +153,17 @@ const SupportFormModal = memo(({
   const [formGoogleLink, setFormGoogleLink] = useState('');
   const [countryIdx, setCountryIdx] = useState(0); 
   const [formImage, setFormImage] = useState<string | null>(null);
-  const [formPayMethod, setFormPayMethod] = useState('Zelle');
-  const [isPublishing, setIsPublishing] = useState(false);
-
+  
+  const [formPayMethod, setFormPayMethod] = useState(appConfig?.zelleActive ? 'Zelle' : '');
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
   const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
   const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
-  const textlabel = t.genericlabel.labelmessagepay || "";
-  const parts = textlabel.split("{amount}");
-  const before = parts[0] || "";
-  const after = parts[1] || ""; 
+  const showSubscriptionOption = isWebLocal || appConfig?.payOnActive;
 
   const triggerAlert = (title: string, message: string) => {
     if (isWebLocal) window.alert(`${title}\n${message}`); 
@@ -177,10 +174,11 @@ const SupportFormModal = memo(({
     if (visible) {
       setFormName(''); setFormDesc(''); setFormAddress(''); setFormZip(''); setFormPhone(''); 
       setFormGoogleLink('');
-      setFormImage(null); setFormCategoryIdx(1); setFormPayMethod('Zelle');
+      setFormImage(null); setFormCategoryIdx(1); 
+      setFormPayMethod(appConfig?.zelleActive ? 'Zelle' : '');
       setFormPlan('coupon'); setUiPayType('coupon'); setFormRefCode('');
     }
-  }, [visible]);
+  }, [visible, appConfig]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.7 });
@@ -254,7 +252,7 @@ const SupportFormModal = memo(({
       
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
-      const finalRefCode = uiPayType === 'coupon' ? formRefCode.trim().toUpperCase() : formRefCode;
+      const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
 
       const payload = { 
         nameSupp: formName.trim(),
@@ -309,7 +307,7 @@ const SupportFormModal = memo(({
         phone: savedFromDB.phone, 
         status: isBackendApproved ? 'approved' : 'pending', 
         userId: currentUserId, 
-        timepostEnd: savedFromDB.timepostEnd || null,
+        timepostEnd: savedFromDB.timepostEnd || savedFromDB.timepost_end || null,
         premiumPlan: finalPlan, 
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '', 
         referenceCode: finalRefCode, 
@@ -396,17 +394,17 @@ const SupportFormModal = memo(({
                 keyboardType="url"
               />
 
-              <>
-                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                  <TouchableOpacity 
-                    onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                  >
-                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                  </TouchableOpacity>
+              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                <TouchableOpacity 
+                  onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                  style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                >
+                  <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                  <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                </TouchableOpacity>
 
+                {showSubscriptionOption && (
                   <TouchableOpacity 
                     onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
                     style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
@@ -414,10 +412,10 @@ const SupportFormModal = memo(({
                     <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
                     <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
                   </TouchableOpacity>
-                </View>
-              </>
+                )}
+              </View>
 
-              {uiPayType === 'subscription' && (
+              {uiPayType === 'subscription' && showSubscriptionOption && (
                 <>
                   <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
                   <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -436,12 +434,17 @@ const SupportFormModal = memo(({
                   </View>
                   
                   <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                    <ThemedText style={{ fontSize: 17, fontWeight: '900', marginBottom: 10, color: Colors.accent }}>{t.genericlabel.labelcheckpay}</ThemedText>
-                    <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>{before}<ThemedText style={{ fontWeight: '900', color: Colors.accent }}>${(companyTariffs as any)[formPlan]} USD</ThemedText>{after} escaneando el código QR oficial abajo.</ThemedText>
+                    <ThemedText style={{ fontSize: 15, marginBottom: 15, lineHeight: 18, color: Colors.text }}>
+                      Realiza el pago de <ThemedText style={{fontWeight:'900', color: Colors.accent}}>${(companyTariffs as any)[formPlan] || '0.00'} USD</ThemedText> escaneando el código QR oficial abajo.
+                    </ThemedText>
                     
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                      {['Zelle'].map((method) => ( <View key={method} style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}><ThemedText style={{ fontWeight: '900', color: Colors.accent }}>{method}</ThemedText></View> ))}
-                    </View>
+                    {appConfig?.zelleActive && (
+                      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                        <View style={{ flex: 1, padding: 12, borderRadius: 14, borderWidth: 1, alignItems: 'center', borderColor: Colors.accent, backgroundColor: isDark ? 'rgba(255, 95, 109, 0.1)' : 'rgba(255, 95, 109, 0.05)' }}>
+                          <ThemedText style={{ fontWeight: '900', color: Colors.accent }}>Zelle</ThemedText>
+                        </View>
+                      </View>
+                    )}
 
                     <View style={{ alignItems: 'center', marginVertical: 15, padding: 10, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 24, borderWidth: 1, borderColor: Colors.border }}>
                       {zelleQrUrl ? (
@@ -453,13 +456,23 @@ const SupportFormModal = memo(({
                       )}
                       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Colors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
 
-                      <TouchableOpacity 
-                        onPress={() => RNLinking.openURL('https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
-                        style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
-                      >
-                        <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
-                        <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
-                      </TouchableOpacity>
+                      {appConfig?.zelleLink ? (
+                        <TouchableOpacity 
+                          onPress={() => RNLinking.openURL(appConfig.zelleLink)}
+                          style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
+                        >
+                          <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
+                          <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity 
+                          onPress={() => RNLinking.openURL('https://viviendoenusa.app')}
+                          style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.accenticon }}
+                        >
+                          <MaterialCommunityIcons name="open-in-new" size={16} color={Colors.accenticon} style={{ marginRight: 6 }} />
+                          <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: Colors.accenticon }}>Abrir enlace de pago Zelle</ThemedText>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
                 </>
@@ -486,7 +499,7 @@ const SupportFormModal = memo(({
                     fontSize: 16,
                     ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) 
                   }} 
-                  placeholder={uiPayType === 'coupon' ? 'ESCRIBE TU CÓDIGO AQUÍ...' : `# CONFIRMACION DE ${formPayMethod}...`} 
+                  placeholder={uiPayType === 'coupon' ? 'ESCRIBE TU CÓDIGO AQUÍ...' : `# CONFIRMACION DE ZELLE...`} 
                   placeholderTextColor={Colors.subtext}
                   value={formRefCode} 
                   onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
@@ -494,9 +507,10 @@ const SupportFormModal = memo(({
                 />
               </View>
 
-              <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ marginTop: 20, alignSelf: 'center' }}>
-                <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}<ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.genericbtn.sendrequest}</ThemedText>
+              <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ marginTop: 20, alignSelf: 'center', width: '100%' }}>
+                <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                  {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
+                  <ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t.genericbtn.sendrequest}</ThemedText>
                 </LinearGradient>
               </TouchableOpacity>
             </ScrollView>
@@ -574,6 +588,7 @@ export default function SupportScreen() {
   const [pendingStores, setPendingStores] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
+  const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
   const isZipValid = zipCode.length === 5;
@@ -584,6 +599,37 @@ export default function SupportScreen() {
   const ringAnim = useRef(new Animated.Value(0)).current;
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    const fetchAppConfig = async () => {
+      try {
+        const res = await fetch(API_CONFIG_URL);
+        if (res.ok) {
+          const data = await res.json();
+          let isPayOn = false;
+          let isZelle = true;
+          let zLink = '';
+
+          if (Array.isArray(data)) {
+            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+
+            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+            zLink = zelleItem?.descriptionType || '';
+          } 
+          else if (data && typeof data === 'object') {
+            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+            zLink = data.zelleLink || data.descriptionType || '';
+          }
+
+          setAppConfig({ payOnActive: isPayOn, zelleActive: isZelle, zelleLink: zLink });
+        }
+      } catch (error) { console.warn("⚠️ Error cargando config de soporte:", error); }
+    };
+    fetchAppConfig();
+  }, []);
 
   useEffect(() => {
     const loadZelleQr = async () => {
@@ -673,6 +719,35 @@ export default function SupportScreen() {
     });
   };
 
+  const fetchAllPendingStores = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_STORES_URL}?userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      if (res.status === 401) { router.replace('/'); return; }
+
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.imageSupp || item.image || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'support') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
+
+          return {
+            id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
+            lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
+            status: isAppr ? 'approved' : 'pending', premiumPlan: item.premiumPlan, couponCode: item.couponCode, referenceCode: item.referenceCode, paymentMethod: item.paymentMethod,
+            googleReviewLink: item.googleReviewLink || item.googleUrl, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
+          };
+        }));
+        setPendingStores(mappedData.filter(s => s.status === 'pending'));
+      }
+    } catch (e) { console.error("Error obteniendo pendientes support admin:", e); }
+    finally { setLoading(false); }
+  };
+
   const fetchSupportData = async (searchZip?: string) => {
     try {
       setLoading(true);
@@ -700,16 +775,16 @@ export default function SupportScreen() {
             id: item.id, name: item.nameSupp || item.name || 'Sin nombre', description: item.descriptionSupp || item.description || '', address: item.addressSupp || item.address || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
             lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: Array.isArray(item.reviews) ? item.reviews : [], totalReviews: Number(item.totalReviews) || 0,
             status: isAppr ? 'approved' : 'pending', premiumPlan: item.premiumPlan, 
-            couponCode: item.couponCode,                     // 🚀 CORREGIDO: SE MAPEA EL CUPÓN
-            referenceCode: item.referenceCode,               // 🚀 CORREGIDO: SE MAPEA LA REFERENCIA DE PAGO
-            paymentMethod: item.paymentMethod,               // 🚀 CORREGIDO: SE MAPEA EL METODO DE PAGO
+            couponCode: item.couponCode,                     
+            referenceCode: item.referenceCode,               
+            paymentMethod: item.paymentMethod,               
             googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, ownerName: item.ownerName, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd || item.timepost_end
           };
         }));
 
         const approvedOrOwnedPending = mappedData.filter(s => s.status === 'approved' || (s.status === 'pending' && s.userId === currentUserId));
         setAllStores(approvedOrOwnedPending);
-        setPendingStores(mappedData.filter(s => s.status === 'pending'));
+        if (!isAdminMode) setPendingStores(mappedData.filter(s => s.status === 'pending'));
         return approvedOrOwnedPending;
       }
       return [];
@@ -718,7 +793,7 @@ export default function SupportScreen() {
 
   useEffect(() => {
     if (isAdminMode) {
-      fetchSupportData(zipCode.length === 5 ? zipCode : undefined);
+      fetchAllPendingStores();
     } else {
       if (zipCode.length === 5) {
         fetchSupportData(zipCode);
@@ -732,14 +807,14 @@ export default function SupportScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchSupportData(zipCode.length === 5 ? zipCode : undefined);
+      if (zipCode.length === 5) fetchSupportData(zipCode);
     }, [zipCode])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        fetchSupportData(zipCode.length === 5 ? zipCode : undefined);
+        if (zipCode.length === 5) fetchSupportData(zipCode);
       }
     });
 
@@ -921,7 +996,6 @@ export default function SupportScreen() {
         </View>
         {store.couponCode ? ( <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.1)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.5)' }}><MaterialCommunityIcons name="ticket-percent" size={18} color="#4CAF50" /><ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>Cupón: <ThemedText style={{color: '#4CAF50', fontWeight: '900'}}>{store.couponCode}</ThemedText></ThemedText></View> ) : null}
         
-        {/* 🚀 AQUÍ APLICAMOS EL VALOR MAPEDO DESDE LA RESPUESTA DE LA API */}
         <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.15)', padding: 10, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 183, 77, 0.5)' }}>
            <MaterialCommunityIcons name="bank-transfer" size={18} color="#FFB74D" />
            <ThemedText style={{ fontSize: 12, color: DynamicColors.text, fontWeight: '600', marginLeft: 8 }}>
@@ -977,6 +1051,7 @@ export default function SupportScreen() {
         COUNTRIES={COUNTRIES}
         height={height} 
         zelleQrUrl={zelleQrUrl}
+        appConfig={appConfig}
       />
 
       <Modal visible={!!selectedDetail} transparent animationType="fade" statusBarTranslucent>
@@ -1096,18 +1171,14 @@ export default function SupportScreen() {
                     setResults(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s)); 
                     setAllStores(prev => prev.map(s => s.id === selectedStore.id ? updatedStoreObj : s));
                     
-                    // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW
                     const plan = selectedStore.premiumPlan ? String(selectedStore.premiumPlan).toLowerCase() : 'free';
                     const isPremiumActive = ['unlimited', 'premium', 'basic', 'intermediate'].includes(plan);
                     const googleReviewUrl = selectedStore.googleReviewLink || selectedStore.googleUrl || selectedStore.google_review_link;
 
-                    // ⚠️ true || isPremiumActive para que salte siempre en pruebas. Quitar en prod.
                     if ((true || isPremiumActive) && googleReviewUrl && commentStr.trim()) {
                       try {
                         await Clipboard.setStringAsync(commentStr);
-                      } catch (clipError) {
-                        console.warn("El portapapeles no está permitido en este entorno web, pero el flujo continuará.");
-                      }
+                      } catch (clipError) { }
 
                       if (Platform.OS === 'web') {
                         const confirmWeb = window.confirm(
@@ -1145,7 +1216,6 @@ export default function SupportScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
       <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
@@ -1339,7 +1409,6 @@ export default function SupportScreen() {
         </View>
       </ScrollView>
 
-      {/* 🚀 BOTÓN FLOTANTE BLOQUEADO PARA INVITADOS */}
       <TouchableOpacity 
         style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]} 
         onPress={() => {
