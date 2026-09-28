@@ -59,7 +59,8 @@ cron.schedule('0 0 * * *', async () => {
                   description: `Tu perfil de abogado (${lawyer.nameLawy}) vencerá pronto. ¡Renuévalo para no perder visibilidad!`,
                   referenceId: lawyer.id,
                   type: "lawyer",
-                  isRead: false 
+                  isRead: false,
+                  visibleAt: new Date()
                 });
                 console.log(`🔔 Alerta de vencimiento diario guardada para: ${lawyer.nameLawy}`);
             }
@@ -88,7 +89,8 @@ cron.schedule('0 0 * * *', async () => {
                   description: `Tu perfil (${lawyer.nameLawy}) ya no es público por vencimiento. Renueva tu pago para reactivarlo.`,
                   referenceId: lawyer.id, 
                   type: "lawyer",
-                  isRead: false
+                  isRead: false,
+                  visibleAt: new Date()
                 });
                 console.log(`🔔 Alerta de perfil ya vencido guardada para: ${lawyer.nameLawy}`);
             }
@@ -104,17 +106,16 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // ============================================================================
-// 2. MOTOR DE RECORDATORIOS PARA EVENTOS (CUENTA REGRESIVA HACIA EL FUTURO)
+// 2. MOTOR DE RECORDATORIOS PARA EVENTOS (BLINDADO CONTRA DUPLICADOS Y FUTUROS)
 // ============================================================================
 async function launchEventReminders() {
-    console.log("📅 [CRON EVENTOS] Calculando días faltantes para eventos activos...");
+    console.log("📅 [CRON EVENTOS] Calculando cuenta regresiva exacta para eventos...");
 
     const activeEvents = await db.select({
         id: events.id,
         title: events.title,
         premiumPlan: events.premiumPlan,
         zip: events.zip,
-        // Matemática exacta: Fechas enteras para cuenta regresiva
         daysLeft: sql<number>`DATE(${events.dateEvent}) - CURRENT_DATE`
     })
     .from(events)
@@ -137,7 +138,6 @@ async function launchEventReminders() {
         let bodyText = "";
         const titleText = "Recordatorio de Evento 📅";
 
-        // Parámetros estrictos de envío según el plan del evento
         if (plan === 'unlimited' || plan === 'premium') {
             if ([7, 3, 1, 0].includes(daysLeft)) shouldNotify = true;
         } else if (plan === 'basic' || plan === 'intermediate') {
@@ -162,56 +162,60 @@ async function launchEventReminders() {
 
         if (nearbyUsers.length === 0) continue;
 
-        const notificationsToInsert = nearbyUsers.map(u => ({
-            userId: u.id,
-            title: titleText,
-            description: bodyText,
-            referenceId: event.id,
-            type: "event",
-            isRead: false
-        }));
-
-        await db.insert(notifications).values(notificationsToInsert);
-        console.log(`📣 Recordatorio de Evento guardado para ${nearbyUsers.length} usuarios en el ZIP ${event.zip}: ${bodyText}`);
-
-        const userIds = nearbyUsers.map(u => u.id);
-        const devices = await db.select().from(userDevices).where(inArray(userDevices.userId, userIds));
-
-        if (devices && devices.length > 0) {
-            const messages = [];
-
-            for (const device of devices) {
-                const [unreadResult] = await db.select({ count: sql<number>`count(*)` })
+        for (const u of nearbyUsers) {
+            // 🛡️ BLINDAJE ANTIDUPLICADOS: Verificamos si ya existe una notificación idéntica para este usuario y evento hoy
+            const [existingNotif] = await db.select({ id: notifications.id })
                 .from(notifications)
-                .where(and(eq(notifications.userId, device.userId), eq(notifications.isRead, false)));
+                .where(
+                    and(
+                        eq(notifications.userId, u.id),
+                        eq(notifications.referenceId, event.id),
+                        eq(notifications.type, "event"),
+                        sql`DATE(${notifications.createdAt}) = CURRENT_DATE`
+                    )
+                )
+                .limit(1);
 
-                const unreadCount = Number(unreadResult?.count) || 1;
-
-                messages.push({
-                    to: device.expoPushToken,
-                    sound: 'default',
+            if (!existingNotif) {
+                await db.insert(notifications).values({
+                    userId: u.id,
                     title: titleText,
-                    body: bodyText,
-                    badge: unreadCount, 
-                    data: { type: "event", referenceId: event.id },
+                    description: bodyText,
+                    referenceId: event.id,
+                    type: "event",
+                    isRead: false,
+                    visibleAt: new Date()
                 });
-            }
 
-            const chunks = [];
-            for (let i = 0; i < messages.length; i += 100) chunks.push(messages.slice(i, i + 100));
+                // Enviar Push unitaria o controlada al dispositivo de este usuario
+                const [device] = await db.select().from(userDevices).where(eq(userDevices.userId, u.id)).limit(1);
+                if (device?.expoPushToken) {
+                    const [unreadResult] = await db.select({ count: sql<number>`count(*)` })
+                        .from(notifications)
+                        .where(and(eq(notifications.userId, u.id), eq(notifications.isRead, false)));
 
-            for (const chunk of chunks) {
-                try {
-                    await fetch('https://exp.host/--/api/v2/push/send', {
-                        method: 'POST',
-                        headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
-                        body: JSON.stringify(chunk),
-                    });
-                } catch (e) {
-                    console.error("❌ Error enviando PUSH de Eventos:", e);
+                    const unreadCount = Number(unreadResult?.count) || 1;
+
+                    try {
+                        await fetch('https://exp.host/--/api/v2/push/send', {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                to: device.expoPushToken,
+                                sound: 'default',
+                                title: titleText,
+                                body: bodyText,
+                                badge: unreadCount,
+                                data: { type: "event", referenceId: event.id },
+                            }),
+                        });
+                    } catch (e) {
+                        console.error("❌ Error enviando PUSH individual de Eventos:", e);
+                    }
                 }
             }
         }
+        console.log(`📣 Recordatorio de Evento procesado para el ZIP ${event.zip}: ${bodyText}`);
     }
 }
 
@@ -223,7 +227,6 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
         const days = promo.daysActive ? Math.floor(promo.daysActive) : 0; 
         const plan = promo.premiumPlan ? promo.premiumPlan.toLowerCase() : 'free';
 
-        // 🚀 Reglas exactas de periodos de notificación para Planes Premium
         if (plan === 'unlimited' || plan === 'premium') return days % 7 === 0;       
         if (plan === 'basic' || plan === 'intermediate') return days % 15 === 0; 
         if (plan === 'free' || plan === 'coupon') return days === 0; 
@@ -251,62 +254,55 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
         const titleText = `📍 En tu área: ${itemName}`;
         const bodyText = `¡Este servicio está disponible en tu código postal (${promo.zip})! Aprovecha lo que ofrece hoy.`;
         
-        const notificationsToInsert = nearbyUsers.map(u => ({
-            userId: u.id,
-            title: titleText,
-            description: bodyText,
-            referenceId: promo.id,
-            type: type,
-            isRead: false
-        }));
-
-        if (notificationsToInsert.length > 0) {
-            await db.insert(notifications).values(notificationsToInsert);
-            console.log(`📣 Marketing guardado para ${nearbyUsers.length} usuarios en el ZIP ${promo.zip} para ${itemName}`);
-        }
-
-        const userIds = nearbyUsers.map(u => u.id);
-        const devices = await db.select().from(userDevices).where(inArray(userDevices.userId, userIds));
-
-        if (devices && devices.length > 0) {
-            const messages = [];
-
-            for (const device of devices) {
-                const [unreadResult] = await db.select({
-                    count: sql<number>`count(*)`
-                })
+        for (const u of nearbyUsers) {
+            // 🛡️ BLINDAJE ANTIDUPLICADOS DIARIO PARA MARKETING
+            const [existingNotif] = await db.select({ id: notifications.id })
                 .from(notifications)
                 .where(
                     and(
-                        eq(notifications.userId, device.userId),
-                        eq(notifications.isRead, false)
+                        eq(notifications.userId, u.id),
+                        eq(notifications.referenceId, promo.id),
+                        eq(notifications.type, type),
+                        sql`DATE(${notifications.createdAt}) = CURRENT_DATE`
                     )
-                );
+                )
+                .limit(1);
 
-                const unreadCount = Number(unreadResult?.count) || 1;
-
-                messages.push({
-                    to: device.expoPushToken,
-                    sound: 'default',
+            if (!existingNotif) {
+                await db.insert(notifications).values({
+                    userId: u.id,
                     title: titleText,
-                    body: bodyText,
-                    badge: unreadCount, 
-                    data: { type: type, referenceId: promo.id },
+                    description: bodyText,
+                    referenceId: promo.id,
+                    type: type,
+                    isRead: false,
+                    visibleAt: new Date()
                 });
-            }
 
-            const chunks = [];
-            for (let i = 0; i < messages.length; i += 100) chunks.push(messages.slice(i, i + 100));
+                const [device] = await db.select().from(userDevices).where(eq(userDevices.userId, u.id)).limit(1);
+                if (device?.expoPushToken) {
+                    const [unreadResult] = await db.select({ count: sql<number>`count(*)` })
+                        .from(notifications)
+                        .where(and(eq(notifications.userId, u.id), eq(notifications.isRead, false)));
 
-            for (const chunk of chunks) {
-                try {
-                    await fetch('https://exp.host/--/api/v2/push/send', {
-                        method: 'POST',
-                        headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
-                        body: JSON.stringify(chunk),
-                    });
-                } catch (e) {
-                    console.error("❌ Error enviando PUSH en CRON Marketing:", e);
+                    const unreadCount = Number(unreadResult?.count) || 1;
+
+                    try {
+                        await fetch('https://exp.host/--/api/v2/push/send', {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                to: device.expoPushToken,
+                                sound: 'default',
+                                title: titleText,
+                                body: bodyText,
+                                badge: unreadCount,
+                                data: { type: type, referenceId: promo.id },
+                            }),
+                        });
+                    } catch (e) {
+                        console.error("❌ Error enviando PUSH de Marketing:", e);
+                    }
                 }
             }
         }
@@ -318,7 +314,6 @@ async function executeMarketingMotor() {
   console.log("🚀 [CRON MARKETING] Iniciando cruce por código postal (ZIP)...");
 
   try {
-    // 🛡️ TIENDAS: Verificamos días enteros y que la suscripción siga activa (timepostEnd)
     const activeStores = await db.select({
         id: stores.id,
         name: stores.nameStores,
@@ -333,10 +328,8 @@ async function executeMarketingMotor() {
     );
     await launchGeoMarketingCampaign(activeStores, "store", "name");
 
-    // 🛡️ EVENTOS: Ejecutamos el módulo especial aislado
     await launchEventReminders();
 
-    // 🛡️ EMPLEOS: La vigencia y el plan dependen de la compañía asociada
     const activeJobs = await db.select({
         id: jobs.id,
         title: jobs.title,
@@ -354,7 +347,6 @@ async function executeMarketingMotor() {
     );
     await launchGeoMarketingCampaign(activeJobs, "job", "title");
 
-    // 🛡️ APOYO (DONACIONES): Verificamos días enteros y vigencia
     const activeSupport = await db.select({
         id: support.id,
         name: support.nameSupp,
@@ -369,7 +361,6 @@ async function executeMarketingMotor() {
     );
     await launchGeoMarketingCampaign(activeSupport, "support", "name");
 
-    // 🛡️ ABOGADOS: Verificamos días enteros y vigencia
     const activeLawyers = await db.select({
         id: lawyers.id,
         nameLawy: lawyers.nameLawy,
@@ -384,7 +375,7 @@ async function executeMarketingMotor() {
     );
     await launchGeoMarketingCampaign(activeLawyers, "lawyer", "nameLawy");
 
-    console.log("✅ [CRON MARKETING] Las 5 categorías procesadas exitosamente y filtradas por vigencia.\n");
+    console.log("✅ [CRON MARKETING] Las 5 categorías procesadas exitosamente.\n");
 
   } catch (error) {
     console.error("❌ [CRON MARKETING] Error ejecutando la tarea:", error);
