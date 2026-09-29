@@ -2,7 +2,7 @@
   "expo": {
     "name": "Viviendo en USA",
     "slug": "viviendoenusa",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "scheme": "viviendoenusa",
     "orientation": "portrait",
     "icon": "./assets/images/backgroundusa.png",
@@ -18,9 +18,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.viviendoenusa.expofront",
-      "buildNumber": "22",
+      "buildNumber": "23",
       "usesAppleSignIn": true,
       "infoPlist": {
+        "CFBundleDevelopmentRegion": "es",
+        "CFBundleAllowMixedLocalizations": true,
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación actual para calcular un radio de búsqueda de 20 millas y mostrarte recursos locales específicos, por ejemplo, encontrar oficinas de abogados de inmigración o ferias comunitarias cercanas a tu vecindario.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación actual para calcular un radio de búsqueda de 20 millas y mostrarte recursos locales específicos, por ejemplo, encontrar oficinas de abogados de inmigración o ferias comunitarias cercanas a tu vecindario."
