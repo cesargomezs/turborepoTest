@@ -88,6 +88,26 @@ const globalLimiter = rateLimit({
 app.use(globalLimiter);
 
 // ============================================================================
+// ⏱️ TIMEOUT: PREVENCIÓN DE CONGELAMIENTO EN FRONTEND (COLD STARTS RENDER)
+// ============================================================================
+app.use((req, res, next) => {
+  // Límite estricto de 10 segundos (10000 milisegundos)
+  req.setTimeout(10000, () => {
+    const err: any = new Error('Timeout: La petición tardó demasiado.');
+    err.status = 408;
+    next(err);
+  });
+  
+  res.setTimeout(10000, () => {
+    const err: any = new Error('Timeout: El servidor en Render tardó más de 10s en responder.');
+    err.status = 503;
+    next(err);
+  });
+  
+  next();
+});
+
+// ============================================================================
 // ☁️ 2. CONFIGURACIONES DE NUBE E IA
 // ============================================================================
 
