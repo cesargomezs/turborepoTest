@@ -4,10 +4,10 @@ import { lawyers, notifications, users, stores, events, jobs, support, companies
 import { sql, eq, and, isNotNull, inArray } from 'drizzle-orm'; 
 
 // ============================================================================
-// 1. CRON DE VENCIMIENTOS - Corre a la medianoche (00:00) HORA DEL PACÍFICO
+// 1. CRON DE VENCIMIENTOS - Corre a la medianoche (00:00) HORA DE CALIFORNIA (PST)
 // ============================================================================
 cron.schedule('0 0 * * *', async () => {
-  console.log("⏰ [CRON] Buscando suscripciones vencidas o próximas a vencer...");
+  console.log("⏰ [CRON] Buscando suscripciones vencidas o próximas a vencer (Reloj: California)...");
 
   try {
     const expiringSoon = await db.select({
@@ -19,7 +19,8 @@ cron.schedule('0 0 * * *', async () => {
     .where(
         and(
             eq(lawyers.approved, true),
-            sql`DATE(${lawyers.timepostEnd}) > CURRENT_DATE AND DATE(${lawyers.timepostEnd}) <= CURRENT_DATE + INTERVAL '5 days'`
+            // 🛡️ FECHAS BLINDADAS A HORA DE CALIFORNIA
+            sql`DATE(${lawyers.timepostEnd} AT TIME ZONE 'America/Los_Angeles') > DATE(NOW() AT TIME ZONE 'America/Los_Angeles') AND DATE(${lawyers.timepostEnd} AT TIME ZONE 'America/Los_Angeles') <= DATE(NOW() AT TIME ZONE 'America/Los_Angeles') + INTERVAL '5 days'`
         )
     );
 
@@ -32,7 +33,8 @@ cron.schedule('0 0 * * *', async () => {
     .where(
         and(
             eq(lawyers.approved, true),
-            sql`DATE(${lawyers.timepostEnd}) <= CURRENT_DATE`
+            // 🛡️ FECHAS BLINDADAS A HORA DE CALIFORNIA
+            sql`DATE(${lawyers.timepostEnd} AT TIME ZONE 'America/Los_Angeles') <= DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
         )
     );
 
@@ -47,7 +49,7 @@ cron.schedule('0 0 * * *', async () => {
                 and(
                   eq(notifications.referenceId, lawyer.id),
                   eq(notifications.type, "lawyer"), 
-                  sql`DATE(${notifications.createdAt}) = CURRENT_DATE`
+                  sql`DATE(${notifications.createdAt} AT TIME ZONE 'America/Los_Angeles') = DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
                 )
               )
               .limit(1);
@@ -77,7 +79,7 @@ cron.schedule('0 0 * * *', async () => {
                 and(
                   eq(notifications.referenceId, lawyer.id),
                   eq(notifications.type, "lawyer"), 
-                  sql`DATE(${notifications.createdAt}) = CURRENT_DATE`
+                  sql`DATE(${notifications.createdAt} AT TIME ZONE 'America/Los_Angeles') = DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
                 )
               )
               .limit(1);
@@ -106,23 +108,23 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // ============================================================================
-// 2. MOTOR DE RECORDATORIOS PARA EVENTOS (BLINDADO CONTRA DUPLICADOS Y FUTUROS)
+// 2. MOTOR DE RECORDATORIOS PARA EVENTOS
 // ============================================================================
 async function launchEventReminders() {
-    console.log("📅 [CRON EVENTOS] Calculando cuenta regresiva exacta para eventos...");
+    console.log("📅 [CRON EVENTOS] Calculando cuenta regresiva exacta para eventos (Reloj: California)...");
 
     const activeEvents = await db.select({
         id: events.id,
         title: events.title,
         premiumPlan: events.premiumPlan,
         zip: events.zip,
-        daysLeft: sql<number>`DATE(${events.dateEvent}) - CURRENT_DATE`
+        daysLeft: sql<number>`DATE(${events.dateEvent} AT TIME ZONE 'America/Los_Angeles') - DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
     })
     .from(events)
     .where(
         and(
             eq(events.approved, true),
-            sql`DATE(${events.dateEvent}) >= CURRENT_DATE`
+            sql`DATE(${events.dateEvent} AT TIME ZONE 'America/Los_Angeles') >= DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
         )
     );
 
@@ -163,7 +165,6 @@ async function launchEventReminders() {
         if (nearbyUsers.length === 0) continue;
 
         for (const u of nearbyUsers) {
-            // 🛡️ BLINDAJE ANTIDUPLICADOS: Verificamos si ya existe una notificación idéntica para este usuario y evento hoy
             const [existingNotif] = await db.select({ id: notifications.id })
                 .from(notifications)
                 .where(
@@ -171,7 +172,7 @@ async function launchEventReminders() {
                         eq(notifications.userId, u.id),
                         eq(notifications.referenceId, event.id),
                         eq(notifications.type, "event"),
-                        sql`DATE(${notifications.createdAt}) = CURRENT_DATE`
+                        sql`DATE(${notifications.createdAt} AT TIME ZONE 'America/Los_Angeles') = DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
                     )
                 )
                 .limit(1);
@@ -187,7 +188,6 @@ async function launchEventReminders() {
                     visibleAt: new Date()
                 });
 
-                // Enviar Push unitaria o controlada al dispositivo de este usuario
                 const [device] = await db.select().from(userDevices).where(eq(userDevices.userId, u.id)).limit(1);
                 if (device?.expoPushToken) {
                     const [unreadResult] = await db.select({ count: sql<number>`count(*)` })
@@ -255,7 +255,6 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
         const bodyText = `¡Este servicio está disponible en tu código postal (${promo.zip})! Aprovecha lo que ofrece hoy.`;
         
         for (const u of nearbyUsers) {
-            // 🛡️ BLINDAJE ANTIDUPLICADOS DIARIO PARA MARKETING
             const [existingNotif] = await db.select({ id: notifications.id })
                 .from(notifications)
                 .where(
@@ -263,7 +262,7 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
                         eq(notifications.userId, u.id),
                         eq(notifications.referenceId, promo.id),
                         eq(notifications.type, type),
-                        sql`DATE(${notifications.createdAt}) = CURRENT_DATE`
+                        sql`DATE(${notifications.createdAt} AT TIME ZONE 'America/Los_Angeles') = DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
                     )
                 )
                 .limit(1);
@@ -311,7 +310,7 @@ async function launchGeoMarketingCampaign(activePromotions: any[], type: string,
 
 // 🚀 FUNCIÓN PRINCIPAL QUE AGRUPA TODAS LAS CATEGORÍAS
 async function executeMarketingMotor() {
-  console.log("🚀 [CRON MARKETING] Iniciando cruce por código postal (ZIP)...");
+  console.log("🚀 [CRON MARKETING] Iniciando cruce por código postal (Reloj: California)...");
 
   try {
     const activeStores = await db.select({
@@ -319,11 +318,11 @@ async function executeMarketingMotor() {
         name: stores.nameStores,
         premiumPlan: stores.premiumPlan, 
         zip: stores.zip,
-        daysActive: sql<number>`CURRENT_DATE - DATE(${stores.createdAt})`
+        daysActive: sql<number>`DATE(NOW() AT TIME ZONE 'America/Los_Angeles') - DATE(${stores.createdAt} AT TIME ZONE 'America/Los_Angeles')`
     }).from(stores).where(
         and(
             eq(stores.approved, true),
-            sql`DATE(${stores.timepostEnd}) >= CURRENT_DATE`
+            sql`DATE(${stores.timepostEnd} AT TIME ZONE 'America/Los_Angeles') >= DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
         )
     );
     await launchGeoMarketingCampaign(activeStores, "store", "name");
@@ -335,14 +334,14 @@ async function executeMarketingMotor() {
         title: jobs.title,
         premiumPlan: companies.premiumPlan,
         zip: jobs.zip,
-        daysActive: sql<number>`CURRENT_DATE - DATE(${jobs.createdAt})`
+        daysActive: sql<number>`DATE(NOW() AT TIME ZONE 'America/Los_Angeles') - DATE(${jobs.createdAt} AT TIME ZONE 'America/Los_Angeles')`
     })
     .from(jobs)
     .leftJoin(companies, eq(jobs.companyId, companies.id))
     .where(
         and(
             eq(jobs.approved, true),
-            sql`DATE(${companies.timepostEnd}) >= CURRENT_DATE`
+            sql`DATE(${companies.timepostEnd} AT TIME ZONE 'America/Los_Angeles') >= DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
         )
     );
     await launchGeoMarketingCampaign(activeJobs, "job", "title");
@@ -352,11 +351,11 @@ async function executeMarketingMotor() {
         name: support.nameSupp,
         premiumPlan: support.premiumPlan,
         zip: support.zip,
-        daysActive: sql<number>`CURRENT_DATE - DATE(${support.createdAt})`
+        daysActive: sql<number>`DATE(NOW() AT TIME ZONE 'America/Los_Angeles') - DATE(${support.createdAt} AT TIME ZONE 'America/Los_Angeles')`
     }).from(support).where(
         and(
             eq(support.approved, true),
-            sql`DATE(${support.timepostEnd}) >= CURRENT_DATE`
+            sql`DATE(${support.timepostEnd} AT TIME ZONE 'America/Los_Angeles') >= DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
         )
     );
     await launchGeoMarketingCampaign(activeSupport, "support", "name");
@@ -366,11 +365,11 @@ async function executeMarketingMotor() {
         nameLawy: lawyers.nameLawy,
         premiumPlan: lawyers.premiumPlan,
         zip: lawyers.zip,
-        daysActive: sql<number>`CURRENT_DATE - DATE(${lawyers.createdAt})` 
+        daysActive: sql<number>`DATE(NOW() AT TIME ZONE 'America/Los_Angeles') - DATE(${lawyers.createdAt} AT TIME ZONE 'America/Los_Angeles')` 
     }).from(lawyers).where(
         and(
             eq(lawyers.approved, true),
-            sql`DATE(${lawyers.timepostEnd}) >= CURRENT_DATE`
+            sql`DATE(${lawyers.timepostEnd} AT TIME ZONE 'America/Los_Angeles') >= DATE(NOW() AT TIME ZONE 'America/Los_Angeles')`
         )
     );
     await launchGeoMarketingCampaign(activeLawyers, "lawyer", "nameLawy");
@@ -383,7 +382,7 @@ async function executeMarketingMotor() {
 }
 
 // ============================================================================
-// ⏰ EJECUCIÓN DIARIA OFICIAL (7:00 AM) HORA DEL PACÍFICO
+// ⏰ EJECUCIÓN DIARIA OFICIAL (7:00 AM) HORA DE CALIFORNIA (PST/PDT)
 // ============================================================================
 cron.schedule('0 7 * * *', async () => {
     await executeMarketingMotor();
