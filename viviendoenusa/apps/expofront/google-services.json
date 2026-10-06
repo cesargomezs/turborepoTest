@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "504369739440",
+    "project_id": "viviendoenusaapp",
+    "storage_bucket": "viviendoenusaapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:504369739440:android:7b16b84e38c705b7d9ad75",
+        "android_client_info": {
+          "package_name": "com.viviendoenusa.expofront"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAAghDO36fU0KX7qZKgu1NIl6LJhZEKNG8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
