@@ -28,16 +28,31 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication'; 
+import Constants from 'expo-constants'; // <-- IMPORTACIÓN AGREGADA AQUÍ
 
 let Notifications: any = null;
 let Device: any = null;
-let StoreReview: any = null; 
+let StoreReview: any = null;
 
 if (Platform.OS !== 'web') {
   try {
-    Notifications = require('expo-notifications');
+    // Estos se cargan normal
     Device = require('expo-device');
-    StoreReview = require('expo-store-review'); 
+    StoreReview = require('expo-store-review');
+
+    // Blindaje para Android Expo Go
+    const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+
+    if (Platform.OS === 'android' && isExpoGo) {
+        console.log("⚠️ Omitiendo expo-notifications en index.tsx (Android Expo Go).");
+        Notifications = {
+            addNotificationReceivedListener: () => ({ remove: () => {} }),
+            addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+            setNotificationHandler: () => {},
+        };
+    } else {
+        Notifications = require('expo-notifications');
+    }
   } catch (error) {
     console.log("Faltan los módulos nativos en el binario.");
   }

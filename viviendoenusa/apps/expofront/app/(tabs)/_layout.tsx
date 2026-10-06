@@ -96,8 +96,14 @@ export default function TabLayout() {
     const isAndroid = Platform.OS === 'android';
     const isIOS = Platform.OS === 'ios';
     
-    const BASE_HEIGHT = 48;
-    const bottomOffset = insets.bottom > 0 ? insets.bottom : (isAndroid ? 12 : 10);
+    // Altura base un poco mayor para darle respiro a los íconos
+    const BASE_HEIGHT = 50; 
+    
+    // 🔥 COLCHÓN AGRESIVO PARA ANDROID (Especial para Huawei/Tablets)
+    // Si Android detecta la barra, le sumamos 15px extra obligatorios. 
+    // Si se hace el loco y devuelve 0, le metemos 40px de espacio a la fuerza.
+    const androidBottomPadding = insets.bottom > 0 ? (insets.bottom + 1) : 35; 
+    const bottomOffset = isAndroid ? androidBottomPadding : (insets.bottom > 0 ? insets.bottom : 10);
 
     return StyleSheet.flatten([
       {
@@ -105,11 +111,11 @@ export default function TabLayout() {
         bottom: 0,
         left: 0,
         right: 0,
-        elevation: 0,
+        elevation: 0, 
         borderTopWidth: 0,
         backgroundColor: 'transparent', 
         height: BASE_HEIGHT + bottomOffset, 
-        paddingBottom: isIOS ? insets.bottom / 1.5 : bottomOffset,
+        paddingBottom: isIOS ? insets.bottom / 1.5 : androidBottomPadding,
         paddingTop: 12,
       },
       Media.styles.view,

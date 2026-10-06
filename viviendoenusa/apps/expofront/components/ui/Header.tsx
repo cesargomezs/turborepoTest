@@ -26,6 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
 import { createClient } from '@supabase/supabase-js'; 
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
+import Constants from 'expo-constants';
 
 import { Colors } from '../../constants/Colors';
 import { ThemedText } from '../ThemedText';
@@ -41,14 +42,35 @@ import { handleUniversalShare } from '../../utils/shareHelper';
 
 LogBox.ignoreLogs(['expo-notifications']);
 
+// --- INICIO DEL PARCHE QUIRÚRGICO DE NOTIFICACIONES ---
 let Notifications: any = null;
+let Device: any = null;       // <-- DECLARACIÓN AGREGADA
+let StoreReview: any = null;  // <-- DECLARACIÓN AGREGADA
+
 if (Platform.OS !== 'web') {
   try {
-    Notifications = require('expo-notifications');
+    // Estos dos se cargan normal porque no están bloqueados por Expo Go
+    Device = require('expo-device');
+    StoreReview = require('expo-store-review');
+
+    // Aplicamos el parche solo para Notifications
+    const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+
+    if (Platform.OS === 'android' && isExpoGo) {
+        console.log("⚠️ Omitiendo expo-notifications en Header (Android Expo Go).");
+        Notifications = {
+            addNotificationReceivedListener: () => ({ remove: () => {} }),
+            addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+            setNotificationHandler: () => {},
+        };
+    } else {
+        Notifications = require('expo-notifications');
+    }
   } catch (error) {
-    console.log("Faltan los módulos nativos de notificaciones en el binario.");
+    console.log("Faltan los módulos nativos en el binario.");
   }
 }
+// --- FIN DEL PARCHE ---
 
 import badWordsData from '../../utils/babwords.json';
 
