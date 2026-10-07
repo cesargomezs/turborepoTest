@@ -35,7 +35,12 @@
       },
       "package": "com.viviendoenusa.expofront",
       "googleServicesFile": "./google-services.json", 
-      "versionCode": 1
+      "versionCode": 1,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAH9kMQE1MHpWtn6OZZoW71yu4qVocNAMI"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/images/backgroundusa.png",
@@ -55,7 +60,6 @@
       "expo-asset",
       "expo-font",
       "expo-notifications",
-      "expo-sharing",
       "expo-apple-authentication",
       [
         "expo-file-system",

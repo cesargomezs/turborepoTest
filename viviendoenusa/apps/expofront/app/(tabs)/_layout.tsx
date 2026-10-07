@@ -47,16 +47,13 @@ export default function TabLayout() {
   useEffect(() => {
     let guestTimer: any;
     
-    // Si está logueado y es invitado, arranca el reloj
     if (loggedIn && isGuest) {
       guestTimer = setTimeout(() => {
-        // Alerta de que se acabó el tiempo
         if (Platform.OS === 'web') {
           window.alert("Tu tiempo de exploración ha terminado. ¡Regístrate gratis para seguir descubriendo Viviendo en USA!");
-          // Destruimos la sesión simulada
           dispatch(setUserMetadata({} as any));
           dispatch(toggleAuth());
-          window.location.replace('/?login=true'); // Lo mandamos directo al login
+          window.location.replace('/?login=true'); 
         } else {
           Alert.alert(
             "¡Tiempo Expirado!",
@@ -71,10 +68,8 @@ export default function TabLayout() {
             }]
           );
         }
-      }, 4 * 60 * 1000); // 4 minutos exactos en milisegundos (240,000 ms)
+      }, 4 * 60 * 1000); 
     }
-
-    // Limpiamos el temporizador si el componente se desmonta o el usuario sale antes
     return () => clearTimeout(guestTimer);
   }, [loggedIn, isGuest, dispatch]);
 
@@ -93,17 +88,13 @@ export default function TabLayout() {
       } as ViewStyle; 
     } 
     
-    const isAndroid = Platform.OS === 'android';
-    const isIOS = Platform.OS === 'ios';
+    // 🔥 PARCHE AGRESIVO PARA ANDROID
+    // Extraemos la altura de los botones físicos (insets.bottom) y le sumamos espacio de respiro.
+    const androidSafeArea = Math.max(insets.bottom, 15);
+    const iosSafeArea = Math.max(insets.bottom, 20);
     
-    // Altura base un poco mayor para darle respiro a los íconos
-    const BASE_HEIGHT = 50; 
-    
-    // 🔥 COLCHÓN AGRESIVO PARA ANDROID (Especial para Huawei/Tablets)
-    // Si Android detecta la barra, le sumamos 15px extra obligatorios. 
-    // Si se hace el loco y devuelve 0, le metemos 40px de espacio a la fuerza.
-    const androidBottomPadding = insets.bottom > 0 ? (insets.bottom + 1) : 35; 
-    const bottomOffset = isAndroid ? androidBottomPadding : (insets.bottom > 0 ? insets.bottom : 10);
+    // Altura base obligatoria para que quepan los íconos
+    const BASE_HEIGHT = 65; 
 
     return StyleSheet.flatten([
       {
@@ -113,10 +104,12 @@ export default function TabLayout() {
         right: 0,
         elevation: 0, 
         borderTopWidth: 0,
-        backgroundColor: 'transparent', 
-        height: BASE_HEIGHT + bottomOffset, 
-        paddingBottom: isIOS ? insets.bottom / 1.5 : androidBottomPadding,
-        paddingTop: 12,
+        backgroundColor: 'transparent',
+        // Se calcula el alto total sumando la altura base y el margen de seguridad de los botones 
+        height: BASE_HEIGHT + (Platform.OS === 'android' ? androidSafeArea : iosSafeArea),
+        // Se empujan los íconos hacia arriba dinámicamente según el dispositivo
+        paddingBottom: Platform.OS === 'android' ? androidSafeArea : iosSafeArea,
+        paddingTop: 10,
       },
       Media.styles.view,
       { display: (loggedIn ? 'flex' : 'none') as any },
@@ -135,7 +128,7 @@ export default function TabLayout() {
         animation: 'fade', 
         tabBarStyle: getTabBarStyle(),
         tabBarLabelStyle: {
-          marginBottom: Platform.OS === 'ios' ? 4 : 0,
+          marginBottom: Platform.OS === 'ios' ? 4 : 2,
           fontSize: 11,
           fontWeight: '600'
         }
@@ -164,7 +157,7 @@ export default function TabLayout() {
           ),
           tabBarLabelStyle: {
             color: isServiceSubScreen ? activeColor : inactiveColor,
-            marginBottom: Platform.OS === 'ios' ? 4 : 0,
+            marginBottom: Platform.OS === 'ios' ? 4 : 2,
           }
         }}
       />
@@ -179,7 +172,6 @@ export default function TabLayout() {
         }}
       />
       
-      {/* 🚀 PESTAÑA DINÁMICA: "Salir" para usuarios, "Entrar" para invitados */}
       <Tabs.Screen
         name="logout"
         options={{
@@ -190,7 +182,6 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => {
-            // 🚀 Permitimos que navegue libremente al archivo logout.tsx sin bloquearlo
             if (Platform.OS === 'web') {
               window.location.href = '/logout';
             }

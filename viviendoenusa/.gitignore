@@ -27,12 +27,17 @@ out/
 build
 dist
 
-
-# Debug
+# Debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# Misc
+# Misc & OS
 .DS_Store
 *.pem
+
+# IDEs & Android Studio
+.idea/
+*.iml
+.vscode/

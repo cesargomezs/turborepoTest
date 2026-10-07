@@ -15,6 +15,9 @@ env
 ios
 android
 
+.idea/
+android/
+
 # macOS
 .DS_Store
 
