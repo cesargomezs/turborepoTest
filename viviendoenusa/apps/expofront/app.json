@@ -34,8 +34,13 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.viviendoenusa.expofront",
-      "googleServicesFile": "./google-services.json", 
+      "googleServicesFile": "./google-services.json",
       "versionCode": 1,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAH9kMQE1MHpWtn6OZZoW71yu4qVocNAMI"
@@ -59,13 +64,18 @@
       ],
       "expo-asset",
       "expo-font",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/backgroundusa.png",
+          "color": "#FF5F6D"
+        }
+      ],
       "expo-apple-authentication",
       [
-        "expo-file-system",
+        "expo-image-picker",
         {
-          "photosPermission": "Permitir a Viviendo en USA acceder a tus fotos.",
-          "savePhotosPermission": "Permitir a Viviendo en USA guardar fotos."
+          "photosPermission": "Permitir a Viviendo en USA acceder a tus fotos."
         }
       ],
       [
