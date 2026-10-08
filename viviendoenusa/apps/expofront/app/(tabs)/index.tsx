@@ -1082,7 +1082,7 @@ export default function HomeScreen() {
 
             <View style={{ position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               
-              {/* NUEVO: Botón Califícanos (Solo Web) */}
+              {/* Botón Califícanos (Solo Web) */}
               {isWebPlatform && width > 768 && (
                 <TouchableOpacity 
                   onPress={handleRateApp}
@@ -1341,68 +1341,44 @@ export default function HomeScreen() {
                </TouchableOpacity>
              </View>
 
-             {/* CONTENEDOR DE ACCIONES INFERIORES */}
-             <View style={{ 
-               flexDirection: isLargeWeb ? 'row' : 'column', 
-               gap: 16, 
-               marginBottom: 25, 
-               alignItems: 'center', 
-               justifyContent: 'center',
-               width: '100%',
-               maxWidth: 480 /* Limita el ancho para que los botones no se estiren demasiado */
-             }}>
-               {showRateButton && (
+             {/* BOTÓN CALIFÍCANOS CENTRADO Y ÚNICO */}
+             {showRateButton && (
+               <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 25, width: '100%' }}>
                  <TouchableOpacity 
                    onPress={handleRateApp}
-                   style={{ 
-                     flex: 1, 
-                     width: isLargeWeb ? undefined : '100%',
-                     flexDirection: 'row', 
-                     alignItems: 'center', 
-                     justifyContent: 'center',
-                     backgroundColor: 'rgba(245, 166, 35, 0.08)', 
-                     paddingHorizontal: 16, 
-                     paddingVertical: 12, 
-                     borderRadius: 100, 
-                     borderWidth: 1, 
-                     borderColor: 'rgba(245, 166, 35, 0.4)' 
-                   }}
+                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 166, 35, 0.08)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 100, borderWidth: 1, borderColor: 'rgba(245, 166, 35, 0.4)' }}
                  >
                    <MaterialCommunityIcons name="star-outline" size={18} color="#F5A623" />
                    <Text style={{ color: '#F5A623', marginLeft: 8, fontWeight: '700', fontSize: 13, letterSpacing: 0.3 }}>
                      {isEnglish ? "Rate Us" : "Califícanos"}
                    </Text>
                  </TouchableOpacity>
-               )}
+               </View>
+             )}
 
-               {isWebPlatform && (
-                 <TouchableOpacity 
-                 onPress={() => { window.location.href = '/eliminar-cuenta/'; }}
-                 style={{ 
-                   flex: 1, 
-                   width: isLargeWeb ? undefined : '100%',
-                   flexDirection: 'row', 
-                   alignItems: 'center', 
-                   justifyContent: 'center',
-                   backgroundColor: 'rgba(255, 95, 109, 0.1)', /* Tinte rojizo sutil */
-                   paddingHorizontal: 16, 
-                   paddingVertical: 12, 
-                   borderRadius: 100, 
-                   borderWidth: 1, 
-                   borderColor: 'rgba(255, 95, 109, 0.3)' /* Borde rojizo sutil */
-                 }}
-               >
-                 <MaterialCommunityIcons name="shield-account-outline" size={18} color="#FF5F6D" />
-                 <Text style={{ color: '#FF5F6D', marginLeft: 8, fontWeight: '600', fontSize: 13, letterSpacing: 0.3 }}>
-                   {isEnglish ? "Privacy (Delete Account)" : "Privacidad (Baja)"}
-                 </Text>
-               </TouchableOpacity>
-               )}
-             </View>
-
-             <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 20 }}>
+             <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 12 }}>
                 {t?.hometab?.copyright || '© 2026 Viviendo en USA. Todos los derechos reservados.'}
              </Text>
+             
+             {/* ENLACES LEGALES (Solo Web) - TEXTO PLANO DISCRETO Y ELEGANTE */}
+             {isWebPlatform && (
+               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: 14, marginBottom: 25 }}>
+                 <TouchableOpacity onPress={() => { window.location.href = '/politica-de-privacidad/'; }}>
+                   <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500', letterSpacing: 0.2 }}>
+                     {isEnglish ? "Privacy Policy" : "Política de Privacidad"}
+                   </Text>
+                 </TouchableOpacity>
+                 
+                 <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 13 }}>•</Text>
+                 
+                 <TouchableOpacity onPress={() => { window.location.href = '/eliminar-cuenta/'; }}>
+                   <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500', letterSpacing: 0.2 }}>
+                     {isEnglish ? "Delete Account" : "Eliminar Cuenta"}
+                   </Text>
+                 </TouchableOpacity>
+               </View>
+             )}
+             
              <View style={{ width: 60, height: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
           </View>
         </ScrollView>
