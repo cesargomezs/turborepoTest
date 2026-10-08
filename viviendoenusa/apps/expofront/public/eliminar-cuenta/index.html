@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eliminación de Cuenta | Viviendo en USA</title>
+  <link rel="icon" type="image/x-icon" href="./backgroundusa.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between selection:bg-blue-100 selection:text-blue-900">
+
+  <!-- Barra de navegación -->
+  <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <a href="https://viviendoenusa.app" class="flex items-center gap-3 group">
+        <div class="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200 bg-white flex items-center justify-center shrink-0">
+          <img 
+            id="appLogo"
+            src="./backgroundusa.png" 
+            alt="Logo Viviendo en USA" 
+            class="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform"
+          />
+        </div>
+        <div class="flex flex-col">
+          <span class="font-extrabold text-slate-900 tracking-tight text-lg leading-tight">Viviendo en USA</span>
+          <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Centro de Seguridad</span>
+        </div>
+      </a>
+
+      <a 
+        href="https://viviendoenusa.app" 
+        class="text-xs sm:text-sm font-semibold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-slate-100"
+      >
+        <span>Ir a la web principal</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <!-- Contenedor central -->
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12 w-full flex-1">
+    
+    <!-- Encabezado de la página -->
+    <div class="mb-8">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 mb-3">
+        <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+        Política de Retención y Supresión de Datos (Google Play & App Store)
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+        Eliminación de Cuenta y Datos Personales
+      </h1>
+      <p class="mt-2 text-base text-slate-600 max-w-2xl leading-relaxed">
+        En <strong>Viviendo en USA</strong> garantizamos tu derecho a solicitar la baja definitiva de tu cuenta y el borrado permanente de tu información personal, accesible directamente desde la web sin necesidad de tener la app instalada en tu teléfono.
+      </p>
+    </div>
+
+    <!-- Módulos de Información -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+      
+      <!-- Qué se elimina -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-slate-900 mb-2">Información suprimida permanentemente</h2>
+          <ul class="space-y-2.5 text-sm text-slate-600">
+            <li class="flex items-start gap-2">
+              <svg class="w-4 h-4 text-rose-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span><strong>Perfil del usuario:</strong> Nombre, apellidos, correo electrónico registrado, número de teléfono y foto de perfil.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <svg class="w-4 h-4 text-rose-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span><strong>Tokens y credenciales:</strong> Tokens de acceso JWT, sesiones activas e identificadores de notificaciones push.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <svg class="w-4 h-4 text-rose-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span><strong>Contenido publicado:</strong> Negocios, clasificados, eventos o comentarios asociados a tu perfil.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Plazos y Conservación legal -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-slate-900 mb-2">Plazos de trámite y retención legal</h2>
+          <ul class="space-y-2.5 text-sm text-slate-600">
+            <li class="flex items-start gap-2">
+              <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span><strong>Plazo de ejecución:</strong> Tu cuenta es deshabilitada de inmediato y la eliminación física concluye en un plazo máximo de <strong>15 a 30 días naturales</strong>.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span><strong>Obligaciones regulatorias:</strong> Registros derivados de transacciones o requerimientos de auditoría legal se conservarán disociados y anonimizados según lo exige la ley.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Generador de Solicitud Directa -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-md p-6 sm:p-8">
+      <div class="border-b border-slate-100 pb-5 mb-6">
+        <h2 class="text-xl font-bold text-slate-900">Formulario Directo de Solicitud</h2>
+        <p class="text-sm text-slate-500 mt-1">
+          Ingresa el correo con el que te diste de alta para crear automáticamente la petición formal dirigida a soporte.
+        </p>
+      </div>
+
+      <form id="deleteRequestForm" class="space-y-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label for="accountEmail" class="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Correo de la cuenta *
+            </label>
+            <input 
+              type="email" 
+              id="accountEmail" 
+              required 
+              placeholder="tu-correo@ejemplo.com"
+              class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-sm transition-all"
+            />
+          </div>
+          <div>
+            <label for="accountName" class="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+              Nombre registrado (Opcional)
+            </label>
+            <input 
+              type="text" 
+              id="accountName" 
+              placeholder="Tu nombre en la app"
+              class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-sm transition-all"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label for="deleteReason" class="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+            Motivo o comentarios adicionales (Opcional)
+          </label>
+          <textarea 
+            id="deleteReason" 
+            rows="2" 
+            placeholder="Describe brevemente la razón de la solicitud..."
+            class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-sm transition-all"
+          ></textarea>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2">
+          <button 
+            type="submit" 
+            class="w-full sm:w-auto px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 text-sm"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            <span>Generar y Enviar Correo</span>
+          </button>
+
+          <button 
+            type="button" 
+            id="copyTemplateBtn"
+            class="w-full sm:w-auto px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-all text-sm flex items-center justify-center gap-2 border border-slate-200"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+            <span id="copyBtnText">Copiar Plantilla</span>
+          </button>
+        </div>
+
+        <p class="text-xs text-slate-500 mt-2">
+          Buzón de recepción: <strong class="text-slate-700">soporte@viviendoenusa.app</strong>. Para corroborar la titularidad, el correo debe originarse desde la misma dirección registrada en la aplicación.
+        </p>
+      </form>
+    </div>
+
+  </main>
+
+  <!-- Pie de Página -->
+  <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+    <div class="max-w-4xl mx-auto px-4">
+      <p>© 2026 Viviendo en USA. Todos los derechos reservados.</p>
+      <div class="mt-2 flex justify-center gap-4 text-slate-400">
+        <a href="https://viviendoenusa.app" class="hover:text-blue-600 transition-colors">Términos de Servicio</a>
+        <span>•</span>
+        <a href="https://viviendoenusa.app" class="hover:text-blue-600 transition-colors">Política de Privacidad</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Script de Interacción -->
+  <script>
+    const form = document.getElementById('deleteRequestForm');
+    const copyBtn = document.getElementById('copyTemplateBtn');
+    const copyBtnText = document.getElementById('copyBtnText');
+
+    function buildTemplate() {
+      const email = document.getElementById('accountEmail').value.trim() || '[Tu correo]';
+      const name = document.getElementById('accountName').value.trim() || '[Tu nombre]';
+      const reason = document.getElementById('deleteReason').value.trim() || 'No especificado';
+
+      const subject = encodeURIComponent('Solicitud de eliminación de cuenta - Viviendo en USA');
+      const body = encodeURIComponent(
+        `Hola equipo de soporte de Viviendo en USA,\n\n` +
+        `Solicito la eliminación definitiva de mi cuenta y de todos los datos personales asociados conforme a las directivas de privacidad.\n\n` +
+        `Datos de la cuenta:\n` +
+        `- Correo registrado: ${email}\n` +
+        `- Nombre/Alias: ${name}\n` +
+        `- Motivo: ${reason}\n\n` +
+        `Confirmo que envío esta solicitud desde el correo titular registrado en la plataforma.\n\n` +
+        `Saludos,`
+      );
+
+      const rawText = 
+        `Asunto: Solicitud de eliminación de cuenta - Viviendo en USA\nDestinatario: soporte@viviendoenusa.app\n\n` +
+        `Hola equipo de soporte de Viviendo en USA,\n\n` +
+        `Solicito la eliminación definitiva de mi cuenta y de todos los datos personales asociados conforme a las directivas de privacidad.\n\n` +
+        `Datos de la cuenta:\n` +
+        `- Correo registrado: ${email}\n` +
+        `- Nombre/Alias: ${name}\n` +
+        `- Motivo: ${reason}\n\n` +
+        `Confirmo que envío esta solicitud desde el correo titular registrado en la plataforma.`;
+
+      return { subject, body, rawText };
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const { subject, body } = buildTemplate();
+      window.location.href = `mailto:soporte@viviendoenusa.app?subject=${subject}&body=${body}`;
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      const { rawText } = buildTemplate();
+      try {
+        await navigator.clipboard.writeText(rawText);
+        copyBtnText.innerText = '¡Copiado con éxito!';
+        copyBtn.classList.add('bg-emerald-100', 'text-emerald-800', 'border-emerald-300');
+        setTimeout(() => {
+          copyBtnText.innerText = 'Copiar Plantilla';
+          copyBtn.classList.remove('bg-emerald-100', 'text-emerald-800', 'border-emerald-300');
+        }, 3000);
+      } catch (err) {
+        alert('Copia el texto manualmente y envíalo a soporte@viviendoenusa.app');
+      }
+    });
+  </script>
+</body>
+</html>

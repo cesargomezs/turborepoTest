@@ -28,7 +28,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication'; 
-import Constants from 'expo-constants'; // <-- IMPORTACIÓN AGREGADA AQUÍ
+import Constants from 'expo-constants';
 
 let Notifications: any = null;
 let Device: any = null;
@@ -1082,6 +1082,17 @@ export default function HomeScreen() {
 
             <View style={{ position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               
+              {/* NUEVO: Botón Califícanos (Solo Web) */}
+              {isWebPlatform && width > 768 && (
+                <TouchableOpacity 
+                  onPress={handleRateApp}
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#F5A623', gap: 6 }}
+                >
+                  <MaterialCommunityIcons name="star-outline" size={16} color="#F5A623" />
+                  <Text style={{ color: '#F5A623', fontSize: 12, fontWeight: '800' }}>{isEnglish ? "Rate Us" : "Califícanos"}</Text>
+                </TouchableOpacity>
+              )}
+
               {width > 768 && (
                 <TouchableOpacity 
                   onPress={() => setShowContactModal(true)}
@@ -1330,17 +1341,64 @@ export default function HomeScreen() {
                </TouchableOpacity>
              </View>
 
-             {showRateButton && (
-               <TouchableOpacity 
-                 onPress={handleRateApp}
-                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginBottom: 25, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
+             {/* CONTENEDOR DE ACCIONES INFERIORES */}
+             <View style={{ 
+               flexDirection: isLargeWeb ? 'row' : 'column', 
+               gap: 16, 
+               marginBottom: 25, 
+               alignItems: 'center', 
+               justifyContent: 'center',
+               width: '100%',
+               maxWidth: 480 /* Limita el ancho para que los botones no se estiren demasiado */
+             }}>
+               {showRateButton && (
+                 <TouchableOpacity 
+                   onPress={handleRateApp}
+                   style={{ 
+                     flex: 1, 
+                     width: isLargeWeb ? undefined : '100%',
+                     flexDirection: 'row', 
+                     alignItems: 'center', 
+                     justifyContent: 'center',
+                     backgroundColor: 'rgba(245, 166, 35, 0.08)', 
+                     paddingHorizontal: 16, 
+                     paddingVertical: 12, 
+                     borderRadius: 100, 
+                     borderWidth: 1, 
+                     borderColor: 'rgba(245, 166, 35, 0.4)' 
+                   }}
+                 >
+                   <MaterialCommunityIcons name="star-outline" size={18} color="#F5A623" />
+                   <Text style={{ color: '#F5A623', marginLeft: 8, fontWeight: '700', fontSize: 13, letterSpacing: 0.3 }}>
+                     {isEnglish ? "Rate Us" : "Califícanos"}
+                   </Text>
+                 </TouchableOpacity>
+               )}
+
+               {isWebPlatform && (
+                 <TouchableOpacity 
+                 onPress={() => { window.location.href = '/eliminar-cuenta/'; }}
+                 style={{ 
+                   flex: 1, 
+                   width: isLargeWeb ? undefined : '100%',
+                   flexDirection: 'row', 
+                   alignItems: 'center', 
+                   justifyContent: 'center',
+                   backgroundColor: 'rgba(255, 95, 109, 0.1)', /* Tinte rojizo sutil */
+                   paddingHorizontal: 16, 
+                   paddingVertical: 12, 
+                   borderRadius: 100, 
+                   borderWidth: 1, 
+                   borderColor: 'rgba(255, 95, 109, 0.3)' /* Borde rojizo sutil */
+                 }}
                >
-                 <MaterialCommunityIcons name="star-outline" size={20} color="#F5A623" />
-                 <Text style={{ color: '#FFF', marginLeft: 8, fontWeight: '600', fontSize: 13 }}>
-                   {isEnglish ? "Rate Us" : "Califícanos"}
+                 <MaterialCommunityIcons name="shield-account-outline" size={18} color="#FF5F6D" />
+                 <Text style={{ color: '#FF5F6D', marginLeft: 8, fontWeight: '600', fontSize: 13, letterSpacing: 0.3 }}>
+                   {isEnglish ? "Privacy (Delete Account)" : "Privacidad (Baja)"}
                  </Text>
                </TouchableOpacity>
-             )}
+               )}
+             </View>
 
              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 20 }}>
                 {t?.hometab?.copyright || '© 2026 Viviendo en USA. Todos los derechos reservados.'}
