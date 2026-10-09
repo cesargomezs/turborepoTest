@@ -28,6 +28,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication'; 
+import { GoogleSignin } from '@react-native-google-signin/google-signin'; // <-- NUEVA LIBRERÍA NATIVA
 import Constants from 'expo-constants';
 
 let Notifications: any = null;
@@ -326,6 +327,7 @@ export default function HomeScreen() {
 
   const isSubmitDisabled = isRegistering && (!acceptedTerms || !isPasswordStrong);
 
+  // Mantiene el flujo web/iOS intacto
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
@@ -334,6 +336,15 @@ export default function HomeScreen() {
       scheme: 'com.viviendoenusa.expofront'
     }),
   });
+
+  // <-- CONFIGURACIÓN NATIVA PARA ANDROID
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      GoogleSignin.configure({
+        webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
+      });
+    }
+  }, []);
 
   const scrollToBottom = () => { landingScrollRef.current?.scrollToEnd({ animated: true }); };
   const closeDatePickerIOS = () => { setShowDatePicker(false); };
@@ -476,6 +487,33 @@ export default function HomeScreen() {
     }
     setShowWebLanding(false);
     router.replace('/');
+  };
+
+  // <-- MANEJADOR UNIFICADO PARA GOOGLE
+  const handleGoogleLogin = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        const userInfo = await GoogleSignin.signIn();
+        
+        // El "as any" calma a TypeScript para compatibilidad con todas las versiones de la librería
+        const idToken = userInfo.data?.idToken || (userInfo as any).idToken; 
+        
+        if (idToken) {
+          verifyGoogle(idToken);
+        } else {
+          throw new Error("No se pudo obtener el token de acceso de Google.");
+        }
+      } catch (error: any) {
+        console.error("Error en inicio de sesión de Google (Android Nativo):", error);
+        if (error.code !== 'SIGN_IN_CANCELLED' && error.code !== '12501') {
+          Alert.alert("Error de Google", error.message || "Error al iniciar sesión con Google de forma nativa");
+        }
+      }
+    } else {
+      // Para Web y iOS se mantiene intacto el promptAsync original
+      promptAsync();
+    }
   };
 
   const verifyGoogle = async (id_token: string) => {
@@ -1809,7 +1847,7 @@ export default function HomeScreen() {
                                       <Text style={styles.primaryText}>{t?.hometab?.registerhome || (isEnglish ? "Register" : "Crear Cuenta")}</Text>
                                     </LinearGradient>
                                   </TouchableOpacity>
-                                  <TouchableOpacity disabled={!request || isSubmitDisabled} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 15 }, isSubmitDisabled && { opacity: 0.4 }]} onPress={() => promptAsync()}>
+                                  <TouchableOpacity disabled={(Platform.OS !== 'android' && !request) || isSubmitDisabled} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 15 }, isSubmitDisabled && { opacity: 0.4 }]} onPress={handleGoogleLogin}>
                                     <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
                                     <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Continue with Google" : "Continuar con Google")}</Text>
                                   </TouchableOpacity>
@@ -1834,7 +1872,7 @@ export default function HomeScreen() {
                               ) : (
                                 !showManualLogin ? (
                                   <View style={{ width: '100%' }}>
-                                    <TouchableOpacity disabled={!request} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 0 }]} onPress={() => promptAsync()}>
+                                    <TouchableOpacity disabled={Platform.OS !== 'android' && !request} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 0 }]} onPress={handleGoogleLogin}>
                                       <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
                                       <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Continue with Google" : "Continuar con Google")}</Text>
                                     </TouchableOpacity>
@@ -1888,7 +1926,7 @@ export default function HomeScreen() {
                                       <View style={{ flex: 1, height: 1, backgroundColor: DynamicColors.border }} />
                                     </View>
 
-                                    <TouchableOpacity disabled={!request} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 0 }]} onPress={() => promptAsync()}>
+                                    <TouchableOpacity disabled={Platform.OS !== 'android' && !request} style={[styles.socialButton, { borderColor: DynamicColors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff', marginTop: 0 }]} onPress={handleGoogleLogin}>
                                       <MaterialCommunityIcons name="google" size={20} color={isDark ? '#fff' : '#4285F4'} />
                                       <Text style={[styles.socialText, { color: DynamicColors.text }]}>{t?.hometab?.googleacount || (isEnglish ? "Google" : "Google")}</Text>
                                     </TouchableOpacity>
