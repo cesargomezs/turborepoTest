@@ -78,7 +78,7 @@ const getCurrentEventPrice = async () => {
       return activeTariff[0].price;
     }
   } catch (error) {
-    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $50.00 por defecto");
+    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando \$50.00 por defecto");
   }
   return "50.00";
 };
@@ -189,9 +189,11 @@ export const getEvents = async (zip?: string, userId?: string) => {
       ? sanitizeText(String(userId)) 
       : null;
 
+    // 🚀 FIX: Se cambió el OR por AND para asegurar que SÓLO traiga eventos vigentes. 
+    // Si hay un userId válido, se le permite ver todos sus eventos (incluyendo pasados o pendientes).
     let baseConditions = cleanUserId 
-      ? sql`(${events.approved} = false OR ${events.dateEvent} >= CURRENT_DATE OR ${events.userId} = ${cleanUserId})`
-      : sql`(${events.approved} = true OR ${events.dateEvent} >= CURRENT_DATE)`;
+      ? sql`((${events.approved} = true AND ${events.dateEvent} >= CURRENT_DATE) OR ${events.userId} = ${cleanUserId})`
+      : sql`(${events.approved} = true AND ${events.dateEvent} >= CURRENT_DATE)`;
 
     let finalConditions: any = baseConditions;
 
@@ -206,16 +208,16 @@ export const getEvents = async (zip?: string, userId?: string) => {
     }
 
     let query = db
-      .select({
-        events: events,
-        users: users,
-        payments: payments,
-      })
-      .from(events)
-      .leftJoin(users, eq(events.userId, users.id)) 
-      .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
-      .where(finalConditions)
-      .$dynamic(); 
+    .select({
+      events: events,
+      users: users,
+      payments: payments,
+    })
+    .from(events)
+    .leftJoin(users, eq(events.userId, users.id)) 
+    .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
+    .where(finalConditions)
+    .$dynamic();
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
@@ -375,7 +377,7 @@ export const createEvent = async (data: any) => {
           premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
           userId: validUserId, 
           approved: false, 
-          googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
+          googleReviewLink: safeGoogleLink, 
         };
 
         const [newEvent] = await tx.insert(events).values(payload).returning();
@@ -397,11 +399,11 @@ export const createEvent = async (data: any) => {
               status: isCoupon ? "approved" : "pending"
             };
 
+            // 🚀 FIX: Los eventos SIEMPRE vencen el día del evento. Eliminado el "+ INTERVAL '1 month'" 
             if (isCoupon) {
               paymentPayload.approvedAt = sql`NOW()`;
-              paymentPayload.timepostEnd = sql`NOW() + INTERVAL '1 month'`;
-              paymentPayload.timepost_end = sql`NOW() + INTERVAL '1 month'`;
-            } else if (eventDate) {
+            }
+            if (eventDate) {
               paymentPayload.timepostEnd = eventDate;
               paymentPayload.timepost_end = eventDate;
             }
