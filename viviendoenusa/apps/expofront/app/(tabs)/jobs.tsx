@@ -253,40 +253,42 @@ export default function JobsScreen() {
   
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
 
-  useEffect(() => {
-    const fetchAppConfig = async () => {
-      try {
-        const res = await fetch(API_CONFIG_URL);
-        if (res.ok) {
-          const data = await res.json();
-          let isPayOn = false;
-          let isZelle = true;
-          let zLink = '';
+  // 🚀 Función separada para poder llamarla al abrir el modal si falla el internet inicial
+  const fetchAppConfig = async () => {
+    try {
+      const res = await fetch(API_CONFIG_URL);
+      if (res.ok) {
+        const data = await res.json();
+        let isPayOn = false;
+        let isZelle = true;
+        let zLink = '';
 
-          if (Array.isArray(data)) {
-            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
-            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+        if (Array.isArray(data)) {
+          const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+          const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
 
-            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
-            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
-            zLink = zelleItem?.descriptionType || '';
-          } 
-          else if (data && typeof data === 'object') {
-            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
-            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
-            zLink = data.zelleLink || data.descriptionType || '';
-          }
-
-          setAppConfig({
-            payOnActive: isPayOn,
-            zelleActive: isZelle,
-            zelleLink: zLink
-          });
+          isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+          isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+          zLink = zelleItem?.descriptionType || '';
+        } 
+        else if (data && typeof data === 'object') {
+          isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+          isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+          zLink = data.zelleLink || data.descriptionType || '';
         }
-      } catch (error) {
-        console.warn("⚠️ Error obteniendo configuración global:", error);
+
+        setAppConfig({
+          payOnActive: isPayOn,
+          zelleActive: isZelle,
+          zelleLink: zLink
+        });
       }
-    };
+    } catch (error) {
+      console.warn("⚠️ Error obteniendo configuración global:", error);
+    }
+  };
+
+  useEffect(() => {
     fetchAppConfig();
   }, []);
 
@@ -1093,7 +1095,6 @@ export default function JobsScreen() {
   const activeCount = companyJobs.filter(j => j.isOpen).length;
 
   const PendingCompanyItem = ({ comp }: { comp: any }) => {
-    const [selectedMonths, setSelectedMonths] = useState(1);
     const cardBgColor = isDark ? '#1E1E1E' : '#FFFFFF';
 
     return (
@@ -1147,19 +1148,12 @@ export default function JobsScreen() {
                </ThemedText>
             </View>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-              {[1, 3, 6, 12].map(m => (
-                <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : DynamicColors.inputBg }}>
-                   <ThemedText style={{color: selectedMonths === m ? '#FFF' : DynamicColors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
-            
+            {/* 🚀 ELIMINADA LA SECCIÓN DE MESES AQUÍ, SOLO BOTONES DE APROBAR/RECHAZAR */}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity onPress={() => handleRejectCompany(comp.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
                 <ThemedText style={{color:'#FFF', fontWeight:'bold', fontSize: 14}}>{(t.genericbtn as any)?.rejectbtn || "Rechazar"}</ThemedText>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleApproveCompany(comp.id, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+              <TouchableOpacity onPress={() => handleApproveCompany(comp.id, 1)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
                 <ThemedText style={{color:'#FFF', fontWeight:'bold', fontSize: 14}}>{(t.genericbtn as any)?.aprovedbtn || "Aprobar"}</ThemedText>
               </TouchableOpacity>
             </View>
@@ -1469,6 +1463,7 @@ export default function JobsScreen() {
             setShowRestrictedModal(true);
             return;
           }
+          fetchAppConfig(); // 🚀 ¡Consulta la validación de pagos cada vez que se presiona!
           fetchUserCompanies(); 
           setPublishView('company_list'); 
           setModalVisible(true); 

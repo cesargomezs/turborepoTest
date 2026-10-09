@@ -761,44 +761,46 @@ export default function LawyersScreen() {
     return filtered;
   }, [currentUserId, PRACTICE_AREAS]);
 
-  useEffect(() => {
-    const fetchAppConfig = async () => {
-      try {
-        const res = await fetch(API_CONFIG_URL);
-        if (res.ok) {
-          const data = await res.json();
-          
-          let isPayOn = false;
-          let isZelle = true;
-          let zLink = '';
+  // 🚀 FUNCIÓN SEPARADA PARA LLAMARLA AL ABRIR EL MODAL
+  const fetchAppConfig = async () => {
+    try {
+      const res = await fetch(API_CONFIG_URL);
+      if (res.ok) {
+        const data = await res.json();
+        
+        let isPayOn = false;
+        let isZelle = true;
+        let zLink = '';
 
-          if (Array.isArray(data)) {
-            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
-            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+        if (Array.isArray(data)) {
+          const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+          const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
 
-            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
-            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
-            zLink = zelleItem?.descriptionType || '';
-          } 
-          else if (data && typeof data === 'object') {
-            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
-            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
-            zLink = data.zelleLink || data.descriptionType || '';
-          }
-
-          setAppConfig({
-            payOnActive: isPayOn,
-            zelleActive: isZelle,
-            zelleLink: zLink
-          });
-
-        } else {
-           console.warn("⚠️ Servidor respondió con error:", res.status);
+          isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+          isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+          zLink = zelleItem?.descriptionType || '';
+        } 
+        else if (data && typeof data === 'object') {
+          isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+          isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+          zLink = data.zelleLink || data.descriptionType || '';
         }
-      } catch (error) {
-        console.warn("⚠️ Error de red o parseo en config:", error);
+
+        setAppConfig({
+          payOnActive: isPayOn,
+          zelleActive: isZelle,
+          zelleLink: zLink
+        });
+
+      } else {
+         console.warn("⚠️ Servidor respondió con error:", res.status);
       }
-    };
+    } catch (error) {
+      console.warn("⚠️ Error de red o parseo en config:", error);
+    }
+  };
+
+  useEffect(() => {
     fetchAppConfig();
   }, []);
 
@@ -2041,6 +2043,7 @@ export default function LawyersScreen() {
             setShowRestrictedModal(true);
             return;
           }
+          fetchAppConfig(); // 🚀 ¡Consulta la validación de pagos cada vez que se presiona!
           setModalVisible(true);
         }}
       >
