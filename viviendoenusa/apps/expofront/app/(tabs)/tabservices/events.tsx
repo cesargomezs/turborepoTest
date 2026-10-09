@@ -222,40 +222,42 @@ export default function EventsScreen() {
   const isBaseFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
   const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
-  useEffect(() => {
-    const fetchAppConfig = async () => {
-      try {
-        const res = await fetch(API_CONFIG_URL);
-        if (res.ok) {
-          const data = await res.json();
-          let isPayOn = false;
-          let isZelle = true;
-          let zLink = '';
+  // 🚀 Función separada para poder llamarla al abrir el modal si falla el internet inicial
+  const fetchAppConfig = async () => {
+    try {
+      const res = await fetch(API_CONFIG_URL);
+      if (res.ok) {
+        const data = await res.json();
+        let isPayOn = false;
+        let isZelle = true;
+        let zLink = '';
 
-          if (Array.isArray(data)) {
-            const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
-            const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
+        if (Array.isArray(data)) {
+          const payOnItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'payon');
+          const zelleItem = data.find((d: any) => String(d.typeCode).toLowerCase() === 'zelle');
 
-            isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
-            isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
-            zLink = zelleItem?.descriptionType || '';
-          } 
-          else if (data && typeof data === 'object') {
-            isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
-            isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
-            zLink = data.zelleLink || data.descriptionType || '';
-          }
-
-          setAppConfig({
-            payOnActive: isPayOn,
-            zelleActive: isZelle,
-            zelleLink: zLink
-          });
+          isPayOn = payOnItem ? (payOnItem.statusType === true || String(payOnItem.statusType).toLowerCase() === 'true' || payOnItem.statusType === 1) : false;
+          isZelle = zelleItem ? (zelleItem.statusType === true || String(zelleItem.statusType).toLowerCase() === 'true' || zelleItem.statusType === 1) : true;
+          zLink = zelleItem?.descriptionType || '';
+        } 
+        else if (data && typeof data === 'object') {
+          isPayOn = data.payOnActive === true || String(data.payOnActive).toLowerCase() === 'true';
+          isZelle = data.zelleActive === true || String(data.zelleActive).toLowerCase() === 'true';
+          zLink = data.zelleLink || data.descriptionType || '';
         }
-      } catch (error) {
-        console.warn("⚠️ Error obteniendo configuración de eventos:", error);
+
+        setAppConfig({
+          payOnActive: isPayOn,
+          zelleActive: isZelle,
+          zelleLink: zLink
+        });
       }
-    };
+    } catch (error) {
+      console.warn("⚠️ Error obteniendo configuración de eventos:", error);
+    }
+  };
+
+  useEffect(() => {
     fetchAppConfig();
   }, []);
 
@@ -303,15 +305,23 @@ export default function EventsScreen() {
     loadZelleQr();
   }, []);
 
-  // 🚀 FETCH DE EVENTOS CORREGIDO: PERMITE CARGAR PENDIENTES CON O SIN CÓDIGO POSTAL SI EL ADMIN LO REQUIERE
+  // 🚀 FETCH DE EVENTOS CORREGIDO: NO ENVÍA userId SI ES ADMIN
   const fetchEvents = async (searchZip?: string) => {
     try {
       setIsLoadingPosts(true);
       
-      // Si hay ZIP de 5 dígitos lo mandamos, si no, consultamos con el userId para que el backend entregue los pendientes del admin
-      let url = `${API_EVENTS_URL}?userId=${currentUserId}`;
-      if (searchZip && searchZip.trim().length === 5) {
-        url = `${API_EVENTS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`;
+      let url = API_EVENTS_URL;
+      
+      if (isAdminMode) {
+        // Si es admin, pedimos TODOS los eventos (sin filtrar por usuario)
+        url = (searchZip && searchZip.trim().length === 5)
+          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}`
+          : API_EVENTS_URL;
+      } else {
+        // Si es usuario normal, filtramos estrictamente por su userId
+        url = (searchZip && searchZip.trim().length === 5)
+          ? `${API_EVENTS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`
+          : `${API_EVENTS_URL}?userId=${currentUserId}`;
       }
 
       const res = await fetch(url, {
@@ -754,8 +764,6 @@ export default function EventsScreen() {
   [events, selectedCategoryIdx, searchQuery, isAdminMode, currentUserId]);
 
   const PendingEventItem = ({ ev }: { ev: any }) => {
-    const [selectedMonths, setSelectedMonths] = useState(1);
-    
     const adminControls = () => (
        <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 15 }}>
          
@@ -785,19 +793,12 @@ export default function EventsScreen() {
             </ThemedText>
          </View>
 
-         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-           {[1, 3, 6, 12].map(m => (
-             <TouchableOpacity key={m} onPress={() => setSelectedMonths(m)} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: selectedMonths === m ? '#4CAF50' : Colors.inputBg }}>
-                <ThemedText style={{color: selectedMonths === m ? '#FFF' : Colors.text, fontWeight: 'bold', fontSize: 12}}>{m}M</ThemedText>
-             </TouchableOpacity>
-           ))}
-         </View>
-         
+         {/* 🚀 ELIMINADA LA SECCIÓN DE MESES AQUÍ, SOLO BOTONES DE APROBAR/RECHAZAR */}
          <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
            <TouchableOpacity onPress={() => rejectEvent(ev.id)} style={{ flex: 1, backgroundColor: '#FF5252', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
              <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize: 16}}>Rechazar</Text>
            </TouchableOpacity>
-           <TouchableOpacity onPress={() => approveEvent(ev, selectedMonths)} style={{ flex: 1, backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+           <TouchableOpacity onPress={() => approveEvent(ev, 1)} style={{ flex: 1, backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
              <Text style={{color:'#FFFFFF', fontWeight:'bold', fontSize: 16}}>Aprobar</Text>
            </TouchableOpacity>
          </View>
@@ -871,11 +872,8 @@ export default function EventsScreen() {
                     hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                     onPress={() => { 
                       if (isAdmin) {
-                        const nextMode = !isAdminMode;
-                        setIsAdminMode(nextMode);
-                        if(nextMode) {
-                          fetchEvents(zipCode.length === 5 ? zipCode : undefined); 
-                        }
+                        // Solo actualizamos el estado; el useEffect hará el fetchEvents automático
+                        setIsAdminMode(!isAdminMode); 
                       } else {
                         Alert.alert("Aviso", "No cuentas con permisos de administrador.");
                       }
@@ -1032,6 +1030,7 @@ export default function EventsScreen() {
             setShowRestrictedModal(true);
             return;
           }
+          fetchAppConfig(); // 🚀 ¡Recarga la validación de pagos en caso de desconexión!
           setModalVisible(true);
         }} 
         style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}

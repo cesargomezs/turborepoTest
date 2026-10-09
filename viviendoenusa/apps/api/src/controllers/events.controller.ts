@@ -189,11 +189,11 @@ export const getEvents = async (zip?: string, userId?: string) => {
       ? sanitizeText(String(userId)) 
       : null;
 
-    // 🚀 FIX: Se cambió el OR por AND para asegurar que SÓLO traiga eventos vigentes. 
-    // Si hay un userId válido, se le permite ver todos sus eventos (incluyendo pasados o pendientes).
+    // 🚀 FIX: Si hay userId (usuario normal), ve los aprobados vigentes y los suyos propios.
+    // Si NO hay userId (modo admin), ve los aprobados vigentes Y TODOS los pendientes por revisar.
     let baseConditions = cleanUserId 
       ? sql`((${events.approved} = true AND ${events.dateEvent} >= CURRENT_DATE) OR ${events.userId} = ${cleanUserId})`
-      : sql`(${events.approved} = true AND ${events.dateEvent} >= CURRENT_DATE)`;
+      : sql`(${events.approved} = true AND ${events.dateEvent} >= CURRENT_DATE) OR ${events.approved} = false`;
 
     let finalConditions: any = baseConditions;
 
