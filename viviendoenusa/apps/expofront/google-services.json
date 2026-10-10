@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "504369739440-7igsgc7vu7i2gpp2om0147ubftqddtua.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.viviendoenusa.expofront",
+            "certificate_hash": "2edec97bfaec64ac6e791b90a31924f89dc311d1"
+          }
+        },
+        {
+          "client_id": "504369739440-u5kajri2hc5oo9525rmnkej7819bu1hf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.viviendoenusa.expofront",
+            "certificate_hash": "922b7cc3dca32846e43e5d5bbe67d7db75bd6d21"
+          }
+        },
+        {
           "client_id": "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
           "client_type": 3
         }
