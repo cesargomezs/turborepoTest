@@ -329,7 +329,7 @@ export default function HomeScreen() {
 
   // Mantiene el flujo web/iOS intacto
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
+    webClientId: "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
     iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_ANDROID_CLIENT_ID,
     redirectUri: AuthSession.makeRedirectUri({
@@ -341,7 +341,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (Platform.OS === 'android') {
       GoogleSignin.configure({
-        webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
+        webClientId: "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
       });
     }
   }, []);
