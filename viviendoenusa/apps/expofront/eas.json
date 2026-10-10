@@ -4,7 +4,10 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend.onrender.com",
-        "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f"
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f",
+        "EXPO_PUBLIC_WEB_CLIENT_ID": "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
+        "EXPO_PUBLIC_IOS_CLIENT_ID": "504369739440-9q0jcvlj0snqokbfml6mectpu65sfnqt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ANDROID_CLIENT_ID": "504369739440-7igsgc7vu7i2gpp2om0147ubftqddtua.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "app-bundle"
@@ -27,7 +30,10 @@
       },
       "env": {
         "EXPO_PUBLIC_URL_BACKEND": "https://viviendoenusa-backend.onrender.com",
-        "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f"
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "486f501f-ae6e-484d-92ab-5a9c40319e6f",
+        "EXPO_PUBLIC_WEB_CLIENT_ID": "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
+        "EXPO_PUBLIC_IOS_CLIENT_ID": "504369739440-9q0jcvlj0snqokbfml6mectpu65sfnqt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ANDROID_CLIENT_ID": "504369739440-7igsgc7vu7i2gpp2om0147ubftqddtua.apps.googleusercontent.com"
       }
     }
   },
