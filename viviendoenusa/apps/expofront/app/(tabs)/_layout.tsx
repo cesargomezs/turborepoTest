@@ -16,7 +16,6 @@ import {
   setUserMetadata
 } from '../../redux/slices';
 
-// 🚀 IMPORTAMOS EL CONTEXTO GLOBAL
 import { useAppTheme } from '../../context/ThemeContext'; 
 
 export default function TabLayout() {
@@ -24,26 +23,20 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets(); 
   
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
-  
-  // 🚀 Verificamos si el usuario actual es un Invitado (Guest)
   const isGuest = useMockSelector((state: any) => 
     state.mockAuth?.userMetadata?.typeDetail === 'Guest' || 
     state.mockAuth?.user?.typeDetail === 'Guest'
   );
 
   const dispatch = useMockDispatch();
-
-  // 🚀 LEEMOS EL TEMA DESDE EL CONTEXTO
   const { isDark } = useAppTheme();
   
   const segments = useSegments();
   const isServiceSubScreen = segments.includes('lawyers') || segments.includes('community') || segments.includes('donations') || segments.includes('events') || segments.includes('stores') || segments.includes('entrepreneurs') || segments.includes('support');
 
-  // 🚀 COLORES DE ALTO CONTRASTE
   const activeColor = isDark ? '#4FC3F7' : '#007AFF'; 
   const inactiveColor = isDark ? '#CFD8DC' : '#3c3c3c'; 
 
-  // 🚀 TEMPORIZADOR DE INVITADO (4 MINUTOS)
   useEffect(() => {
     let guestTimer: any;
     
@@ -87,14 +80,12 @@ export default function TabLayout() {
         paddingHorizontal: '20%' as any, 
       } as ViewStyle; 
     } 
-    
-    // 🔥 PARCHE AGRESIVO PARA ANDROID
-    // Extraemos la altura de los botones físicos (insets.bottom) y le sumamos espacio de respiro.
-    const androidSafeArea = Math.max(insets.bottom, 15);
-    const iosSafeArea = Math.max(insets.bottom, 20);
-    
-    // Altura base obligatoria para que quepan los íconos
-    const BASE_HEIGHT = 65; 
+
+    // 🔥 CÁLCULO EXCLUSIVO PARA IOS PARA BAJAR LOS ÍCONOS
+    // Si el iPhone tiene "notch/isla" (insets.bottom > 0), le restamos 15px al espacio de abajo
+    // para que los íconos bajen más pegados al borde del teléfono, dándole más aire a la tarjeta.
+    const iosPaddingBottom = insets.bottom > 0 ? insets.bottom - 8 : 10;
+    const iosHeight = insets.bottom > 0 ? 55 + iosPaddingBottom : 65;
 
     return StyleSheet.flatten([
       {
@@ -105,11 +96,10 @@ export default function TabLayout() {
         elevation: 0, 
         borderTopWidth: 0,
         backgroundColor: 'transparent',
-        // Se calcula el alto total sumando la altura base y el margen de seguridad de los botones 
-        height: BASE_HEIGHT + (Platform.OS === 'android' ? androidSafeArea : iosSafeArea),
-        // Se empujan los íconos hacia arriba dinámicamente según el dispositivo
-        paddingBottom: Platform.OS === 'android' ? androidSafeArea : iosSafeArea,
-        paddingTop: 10,
+        // Aplicamos la altura y el padding restado SOLO a iOS. Android queda blindado.
+        height: Platform.OS === 'android' ? 70 : iosHeight,
+        paddingBottom: Platform.OS === 'android' ? 10 : iosPaddingBottom,
+        paddingTop: Platform.OS === 'android' ? 10 : 5,
       },
       Media.styles.view,
       { display: (loggedIn ? 'flex' : 'none') as any },
@@ -128,7 +118,7 @@ export default function TabLayout() {
         animation: 'fade', 
         tabBarStyle: getTabBarStyle(),
         tabBarLabelStyle: {
-          marginBottom: Platform.OS === 'ios' ? 4 : 2,
+          marginBottom: Platform.OS === 'ios' ? 0 : 2,
           fontSize: 11,
           fontWeight: '600'
         }
@@ -157,7 +147,7 @@ export default function TabLayout() {
           ),
           tabBarLabelStyle: {
             color: isServiceSubScreen ? activeColor : inactiveColor,
-            marginBottom: Platform.OS === 'ios' ? 4 : 2,
+            marginBottom: Platform.OS === 'ios' ? 0 : 2,
           }
         }}
       />
@@ -189,7 +179,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Pantallas ocultas */}
       <Tabs.Screen name="tabservices/lawyers" options={{ title: t?.servicestab?.service1 || 'Abogados', href: null }} />
       <Tabs.Screen name="tabservices/community" options={{ title: t?.servicestab?.service2 || 'Comunidad', href: null }} />
       <Tabs.Screen name="tabservices/donations" options={{ title: t?.servicestab?.service3 || 'Donaciones', href: null }} />

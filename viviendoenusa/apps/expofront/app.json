@@ -2,7 +2,7 @@
   "expo": {
     "name": "Viviendo en USA",
     "slug": "viviendoenusa",
-    "version": "1.1.5",
+    "version": "1.1.6",
     "scheme": "viviendoenusa",
     "orientation": "portrait",
     "icon": "./assets/images/backgroundusa.png",
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.viviendoenusa.expofront",
-      "buildNumber": "24",
+      "buildNumber": "25",
       "usesAppleSignIn": true,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -36,7 +36,7 @@
       },
       "package": "com.viviendoenusa.expofront",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 1,
+      "versionCode": 3,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",

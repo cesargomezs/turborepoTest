@@ -26,7 +26,6 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
 import { createClient } from '@supabase/supabase-js'; 
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
-import Constants from 'expo-constants';
 
 import { Colors } from '../../constants/Colors';
 import { ThemedText } from '../ThemedText';
@@ -42,35 +41,14 @@ import { handleUniversalShare } from '../../utils/shareHelper';
 
 LogBox.ignoreLogs(['expo-notifications']);
 
-// --- INICIO DEL PARCHE QUIRÚRGICO DE NOTIFICACIONES ---
 let Notifications: any = null;
-let Device: any = null;       // <-- DECLARACIÓN AGREGADA
-let StoreReview: any = null;  // <-- DECLARACIÓN AGREGADA
-
 if (Platform.OS !== 'web') {
   try {
-    // Estos dos se cargan normal porque no están bloqueados por Expo Go
-    Device = require('expo-device');
-    StoreReview = require('expo-store-review');
-
-    // Aplicamos el parche solo para Notifications
-    const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
-
-    if (Platform.OS === 'android' && isExpoGo) {
-        console.log("⚠️ Omitiendo expo-notifications en Header (Android Expo Go).");
-        Notifications = {
-            addNotificationReceivedListener: () => ({ remove: () => {} }),
-            addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
-            setNotificationHandler: () => {},
-        };
-    } else {
-        Notifications = require('expo-notifications');
-    }
+    Notifications = require('expo-notifications');
   } catch (error) {
-    console.log("Faltan los módulos nativos en el binario.");
+    console.log("Faltan los módulos nativos de notificaciones en el binario.");
   }
 }
-// --- FIN DEL PARCHE ---
 
 import badWordsData from '../../utils/babwords.json';
 
@@ -158,7 +136,7 @@ const SwipeableNotificationItem = ({ children, onSwipeRight }: { children: any, 
 };
 
 export default function Header({ title }: { title?: string }) {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout } = useAuth(); 
   const REAL_USER_ID = user?.id;
 
   const { width } = useWindowDimensions();
@@ -241,6 +219,29 @@ export default function Header({ title }: { title?: string }) {
     "Privacidad / Seguridad",
     "Otro"
   ];
+
+  // --- CANDADO PARA INVITADOS ---
+  const handleGuestRestriction = () => {
+    if (isWeb) {
+      window.alert("🔒 Función Exclusiva\n\nRegístrate o inicia sesión para acceder a notificaciones y soporte técnico.");
+    } else {
+      Alert.alert(
+        "🔒 Función Exclusiva",
+        "Regístrate o inicia sesión para usar esta función.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { 
+            text: "Iniciar Sesión", 
+            onPress: () => { 
+              closeSettingsModal(); 
+              dispatch(toggleAuth()); 
+              router.replace('/');
+            } 
+          }
+        ]
+      );
+    }
+  };
 
   useEffect(() => {
     const checkFirstLaunchTutorial = async () => {
@@ -761,7 +762,12 @@ export default function Header({ title }: { title?: string }) {
 
   return (
     <View style={{ width: '100%', backgroundColor: 'transparent' }}>
-      <BlurView tint={isDark ? 'dark' : 'light'} intensity={Platform.OS === 'ios' ? 85 : 100} style={{ paddingTop: insets.top }} className="border-b border-white/10">
+      <BlurView 
+        tint={isDark ? 'dark' : 'light'} 
+        intensity={Platform.OS === 'ios' ? 85 : 100} 
+        style={Platform.OS === 'android' ? { paddingTop: Math.max(insets.top, 40), paddingBottom: 15 } : { paddingTop: insets.top }} 
+        className="border-b border-white/10"
+      >
         <View style={[styles.headerRow, isWeb && { paddingBottom: 15 }]}>
          <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: 8 }}>
             <TouchableOpacity activeOpacity={0.8} onPress={() => setSettingsModalVisible(true)} style={[styles.avatarContainer, { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }]}>
@@ -779,21 +785,45 @@ export default function Header({ title }: { title?: string }) {
           
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <TouchableOpacity 
-                onPress={() => setShowITSupportModal(true)} 
+                onPress={() => {
+                  if (isGuest) {
+                    handleGuestRestriction();
+                  } else {
+                    setShowITSupportModal(true);
+                  }
+                }} 
                 activeOpacity={0.7} 
                 style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
               >
                 <MaterialCommunityIcons size={22} style={{ color: isDark ? '#4FC3F7' : '#007AFF' , fontWeight: 'bold' }} name="headset" />
             </TouchableOpacity>
 
-            {!isGuest && (
-              <TouchableOpacity onPress={() => { fetchNotifications(); setNotifModalVisible(true); }} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}>
-                <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread ? "bell-ring" : "bell-outline"} />
-                {hasUnread && <View style={styles.unreadBadge} />}
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity 
+              onPress={() => {
+                if (isGuest) {
+                  handleGuestRestriction();
+                } else {
+                  fetchNotifications(); 
+                  setNotifModalVisible(true);
+                }
+              }} 
+              activeOpacity={0.7} 
+              style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', position: 'relative' }]}
+            >
+              <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name={hasUnread && !isGuest ? "bell-ring" : "bell-outline"} />
+              {hasUnread && !isGuest && <View style={styles.unreadBadge} />}
+            </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setSettingsModalVisible(true)} activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+            <TouchableOpacity 
+                onPress={() => {
+                  if (isGuest) {
+                    handleGuestRestriction();
+                  } else {
+                    fetchNotifications(); 
+                    setSettingsModalVisible(true);
+                  }
+                }} 
+                activeOpacity={0.7} style={[styles.actionButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
               <MaterialCommunityIcons size={22} color={Colors[localTheme].text} name="cog" />
             </TouchableOpacity>
           </View>
@@ -1301,6 +1331,7 @@ export default function Header({ title }: { title?: string }) {
                       onPress={() => {
                         closeSettingsModal();
                         dispatch(toggleAuth());
+                        router.replace('/');
                       }}
                       style={{ backgroundColor: '#FF5F6D', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 16 }}
                     >
