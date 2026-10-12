@@ -3,7 +3,7 @@
     "name": "Viviendo en USA",
     "slug": "viviendoenusa",
     "version": "1.1.6",
-    "scheme": "viviendoenusa",
+    "scheme": "com.googleusercontent.apps.504369739440-9q0jcvlj05nqokbfml6mectpu65sfnqt",
     "orientation": "portrait",
     "icon": "./assets/images/backgroundusa.png",
     "userInterfaceStyle": "light",
@@ -26,7 +26,14 @@
         "CFBundleAllowMixedLocalizations": true,
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación actual para calcular un radio de búsqueda de 20 millas y mostrarte recursos locales específicos, por ejemplo, encontrar oficinas de abogados de inmigración o ferias comunitarias cercanas a tu vecindario.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación actual para calcular un radio de búsqueda de 20 millas y mostrarte recursos locales específicos, por ejemplo, encontrar oficinas de abogados de inmigración o ferias comunitarias cercanas a tu vecindario."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Viviendo en USA utiliza tu ubicación actual para calcular un radio de búsqueda de 20 millas y mostrarte recursos locales específicos, por ejemplo, encontrar oficinas de abogados de inmigración o ferias comunitarias cercanas a tu vecindario.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.504369739440-9q0jcvlj05nqokbfml6mectpu65sfnqt"
+            ]
+          }
+        ]
       }
     },
     "android": {

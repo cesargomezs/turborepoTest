@@ -327,13 +327,13 @@ export default function HomeScreen() {
 
   const isSubmitDisabled = isRegistering && (!acceptedTerms || !isPasswordStrong);
 
-  // Mantiene el flujo web/iOS intacto
+  // 🚀 ¡AQUÍ ESTÁ LA SOLUCIÓN! HARDCODEAMOS LOS IDs PARA EVITAR QUE SE PIERDAN AL COMPILAR
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
-    iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_ANDROID_CLIENT_ID,
+    iosClientId: "504369739440-9q0jcvlj05nqokbfml6mectpu65sfnqt.apps.googleusercontent.com",
+    androidClientId: "504369739440-7igsgc7vu7i2gpp2om0147ubftqddtua.apps.googleusercontent.com",
     redirectUri: AuthSession.makeRedirectUri({
-      scheme: 'com.viviendoenusa.expofront'
+      scheme: 'com.googleusercontent.apps.504369739440-9q0jcvlj05nqokbfml6mectpu65sfnqt'
     }),
   });
 
