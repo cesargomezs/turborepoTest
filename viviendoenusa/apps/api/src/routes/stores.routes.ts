@@ -6,7 +6,8 @@ import {
     updateStore, 
     deleteStore,
     createStoreReview,
-    renewStore 
+    renewStore,
+    reportContent // 🚀 Nueva función importada
 } from '../controllers/stores.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
@@ -68,6 +69,24 @@ router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => 
     return res.status(201).json(newReview);
   } catch (error: any) {
     console.error("❌ Error en POST /stores/reviews:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// 🚨 POST: Reportar contenido (DMCA/Inapropiado)
+router.post('/reports', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const result = await reportContent(payload);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /stores/reports:", error.message);
     return res.status(400).json({ error: error.message });
   }
 });

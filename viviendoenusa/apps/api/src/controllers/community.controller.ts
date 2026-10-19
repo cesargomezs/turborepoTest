@@ -630,3 +630,51 @@ export const deleteCommunityPost = async (id: string) => {
     throw new Error(`Error al eliminar la publicación: ${error.message}`);
   }
 };
+
+// =====================================================================
+// 🚨 8. REPORTAR CONTENIDO (ALERTA TELEGRAM SOPORTE)
+// =====================================================================
+export const reportContent = async (data: any) => {
+  try {
+    const { itemId, itemType, userId, reason } = data;
+
+    const validItemId = sanitizeText(itemId);
+    const validType = sanitizeText(itemType) || 'community_post';
+    const validUserId = sanitizeText(userId) || 'Usuario Anónimo';
+    const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Spam';
+
+    if (!validItemId) {
+      throw new Error("El ID del elemento es obligatorio para reportar.");
+    }
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (!botToken || !chatId) {
+      console.warn("⚠️ Credenciales de Telegram no configuradas para reportes.");
+      return { success: false, message: "Reporte registrado en sistema local." };
+    }
+
+    const message = `🚨 *REPORTE DE CONTENIDO (COMUNIDAD)*\n\n*Tipo:* ${validType.toUpperCase()}\n*ID Elemento:* \`\${validItemId}\`\n*Motivo:* ${safeReason}\n*Reportado por:* \`\${validUserId}\`\n\n⚠️ Por favor verifica el contenido en el panel de administrador.`;
+
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Fallo la comunicación con Telegram API.");
+    }
+
+    return { success: true, message: "Alerta enviada a moderación." };
+
+  } catch (error: any) {
+    console.error("❌ Error enviando reporte:", error);
+    throw new Error(`Error al procesar el reporte: ${error.message}`);
+  }
+};

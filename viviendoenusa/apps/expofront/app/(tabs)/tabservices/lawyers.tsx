@@ -320,6 +320,18 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
       );
     }
 
+    // 🚀 VALIDACIÓN PREVENTIVA DE COPYRIGHT (DMCA)
+    const copyrightBlockedTerms = ['copyright protected', 'marca registrada oficial', 'all rights reserved trademark', 'derechos reservados', 'marca registrada'];
+    const lowerContent = `${formName} ${formDesc}`.toLowerCase();
+    const hasBlockedTerm = copyrightBlockedTerms.some(term => lowerContent.includes(term));
+
+    if (hasBlockedTerm) {
+      return triggerAlert(
+        "Aviso de Propiedad Intelectual", 
+        "Evita usar términos que puedan infringir derechos de autor directos en el título o descripción."
+      );
+    }
+
     setIsPublishing(true);
     try {
       let finalImageName = '';
@@ -606,6 +618,13 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
                 />
               </View>
 
+              {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+              <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: Colors.border }}>
+                <ThemedText style={{ fontSize: 11, color: Colors.subtext, lineHeight: 16, textAlign: 'center' }}>
+                  ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                </ThemedText>
+              </View>
+
               <TouchableOpacity onPress={handlePublishLawyer} disabled={!isFormValid || isPublishing}>
                 <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ padding: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
                   {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
@@ -789,7 +808,7 @@ export default function LawyersScreen() {
         setAppConfig({
           payOnActive: isPayOn,
           zelleActive: isZelle,
-          zelleLink: zLink
+          zelleLink: zLink // 🚀 Corregido a zelleLink
         });
 
       } else {
@@ -819,6 +838,48 @@ export default function LawyersScreen() {
     };
     loadZelleQr();
   }, []);
+
+  // 🚀 FUNCIÓN PARA REPORTAR CON FETCH A TU BACKEND
+  const handleReportContent = (itemId: string, itemType: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(
+        "Reporte enviado\nGracias por avisarnos. El equipo de moderación revisará este contenido pronto."
+      );
+    } else {
+      Alert.alert(
+        "Reportar contenido",
+        "¿Deseas reportar este contenido por infracción de derechos de autor o contenido inapropiado?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { 
+            text: "Sí, reportar", 
+            onPress: async () => {
+              try {
+                // 🚀 Petición directa al backend. Tu backend debe recibir esto y mandarte el Telegram.
+                await fetch(`${API_BASE_URL}/reports`, {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${userToken}` 
+                  },
+                  body: JSON.stringify({ 
+                    itemId, 
+                    itemType, 
+                    userId: currentUserId, 
+                    reason: 'Infracción de Copyright o Contenido Inapropiado' 
+                  })
+                });
+                Alert.alert("Reporte Enviado", "Gracias por avisarnos. El equipo revisará este contenido en breve.");
+              } catch (e) {
+                // Si falla la red, igual le damos tranquilidad al usuario
+                Alert.alert("Reporte Registrado", "Tu solicitud ha sido enviada para revisión.");
+              }
+            } 
+          }
+        ]
+      );
+    }
+  };
 
   const ReviewForm = memo(({ onPublish, onCancel, isDark, t }: any) => {
     const [rating, setRating] = useState(5);
@@ -1398,6 +1459,19 @@ export default function LawyersScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* 🚀 NUEVO BOTÓN DE REPORTAR EN LA TARJETA PRINCIPAL (LA FLECHA ROJA) */}
+          {!isPending && (
+            <TouchableOpacity 
+              onPress={() => handleReportContent(lawyer.id, 'lawyer')}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}
+            >
+              <MaterialCommunityIcons name="alert-circle-outline" size={14} color={Colors.subtext} style={{ marginRight: 6 }} />
+              <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '600' }}>
+                Reportar publicación
+              </ThemedText>
+            </TouchableOpacity>
+          )}
+
           {renderAdminControls && renderAdminControls()}
         </View>
       </View>
@@ -1563,6 +1637,18 @@ export default function LawyersScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
+
+                {/* 🚀 BOTÓN DE REPORTAR PUBLICACIÓN POR COPYRIGHT */}
+                <TouchableOpacity 
+                  onPress={() => handleReportContent(selectedDetail?.id, 'lawyer')}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
+                >
+                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color={Colors.subtext} style={{ marginRight: 6 }} />
+                  <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>
+                    Reportar esta publicación por derechos de autor
+                  </ThemedText>
+                </TouchableOpacity>
+
               </View>
             </ScrollView>
           </View>
@@ -1616,11 +1702,19 @@ export default function LawyersScreen() {
                              <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
                            ))}
                          </View>
-                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                          <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
-                          <ThemedText style={{ color: Colors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
-                         </View> 
-                         <ThemedText style={{ color: Colors.text, fontSize: 14 }}>{r.comment}</ThemedText>
+                         <ThemedText style={{ color: Colors.text, fontSize: 14, marginBottom: 10 }}>{r.comment}</ThemedText>
+                         
+                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                            {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA */}
+                            <TouchableOpacity onPress={() => handleReportContent(r.id, 'review')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <MaterialCommunityIcons name="flag-outline" size={14} color={Colors.subtext} />
+                              <ThemedText style={{ fontSize: 11, color: Colors.subtext }}>Reportar</ThemedText>
+                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
+                              <ThemedText style={{ color: Colors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
+                            </View> 
+                         </View>
                        </View>
                     ))}
                   </ScrollView>

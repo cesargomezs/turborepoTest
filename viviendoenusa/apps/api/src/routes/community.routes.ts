@@ -6,7 +6,8 @@ import {
   createCommunityReview,
   updateCommunityPost,
   deleteCommunityPost,
-  handlePostVote 
+  handlePostVote,
+  reportContent // 🚀 Nueva función importada
 } from '../controllers/community.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
@@ -84,11 +85,29 @@ router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// 🚨 5. REPORTAR CONTENIDO (DMCA/Inapropiado)
+router.post('/reports', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const result = await reportContent(payload);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /community/reports:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
+});
+
 // ==========================================
 // 📌 RUTAS DINÁMICAS (Con /:id - Van al final)
 // ==========================================
 
-// 🔍 5. OBTENER UN POST POR SU ID
+// 🔍 6. OBTENER UN POST POR SU ID
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -105,7 +124,7 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 6. ACTUALIZAR UN POST EXISTENTE (Ruta corregida con argumentos limpios)
+// 🔄 7. ACTUALIZAR UN POST EXISTENTE (Ruta corregida con argumentos limpios)
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -122,7 +141,7 @@ router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🗑️ 7. ELIMINAR UN POST
+// 🗑️ 8. ELIMINAR UN POST
 router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;

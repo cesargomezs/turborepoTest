@@ -5,23 +5,22 @@ import {
   createJob, 
   updateJob, 
   deleteJob,
-  createJobReview
+  createJobReview,
+  reportContent // 🚀 Nueva función importada
 } from '../controllers/jobs.controller';
-import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; // 🚀 Importamos seguridad
+import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
 // 🔍 GET: Obtener todas las ofertas de empleo
 router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura para evitar string | string[]
     const zipParam = req.query.zip;
     const zipCode = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined); 
     
     const userIdParam = req.query.userId;
     const queryUserId = typeof userIdParam === 'string' ? userIdParam : (Array.isArray(userIdParam) ? userIdParam[0] as string : undefined); 
     
-    // 🚀 Priorizamos el userId validado del token
     const currentUserId = req.user?.id || req.user?.userId || queryUserId;
 
     const jobsList = await getJobs(zipCode, currentUserId);
@@ -35,7 +34,6 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
 // 📥 POST: Crear vacante (Ahora auto-aprobada si la empresa es Premium)
 router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Inyectamos el creador desde el token
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
       ...req.body,
@@ -55,7 +53,6 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
 // ⭐ POST: Crear reseña (Bloqueo inteligente por compañía)
 router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Inyectamos el autor desde el token
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
       ...req.body,
@@ -72,10 +69,27 @@ router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => 
   }
 });
 
+// 🚨 POST: Reportar contenido (DMCA/Inapropiado)
+router.post('/reports', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const result = await reportContent(payload);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /jobs/reports:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
+});
+
 // 🔍 GET: Obtener una vacante específica
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 🚀 Extracción segura del ID
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
 

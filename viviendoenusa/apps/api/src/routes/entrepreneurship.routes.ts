@@ -7,7 +7,8 @@ import {
   deleteEntrepreneurship,
   createEntrepreneurshipReview, 
   voteEntrepreneurship,          
-  getEntrepreneurshipsByIds
+  getEntrepreneurshipsByIds,
+  reportContent // 🚀 Nueva función importada
 } from '../controllers/entrepreneurship.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
@@ -65,6 +66,39 @@ router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error("❌ Error en POST /entrepreneurship/vote:", error.message);
     res.status(400).json({ error: error.message });
+  }
+});
+
+// 🚨 POST: Reportar contenido (DMCA/Inapropiado)
+router.post('/reports', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const result = await reportContent(payload);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /entrepreneurship/reports:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// 🚀 POST: Cargar elementos guardados
+router.post('/batch', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const userId = userIdFromToken || req.body.userId;
+
+    const { ids } = req.body;
+    const items = await getEntrepreneurshipsByIds(ids, userId);
+    res.json(items);
+  } catch (error: any) {
+    console.error("❌ Error en POST /entrepreneurship/batch:", error.message);
+    res.status(500).json({ error: 'Error al cargar guardados' });
   }
 });
 
@@ -143,21 +177,6 @@ router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error(`❌ Error en DELETE /entrepreneurship/${req.params.id}:`, error.message);
     res.status(400).json({ error: error.message });
-  }
-});
-
-// 🚀 POST: Cargar elementos guardados
-router.post('/batch', verifyToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const userIdFromToken = req.user?.id || req.user?.userId;
-    const userId = userIdFromToken || req.body.userId;
-
-    const { ids } = req.body;
-    const items = await getEntrepreneurshipsByIds(ids, userId);
-    res.json(items);
-  } catch (error: any) {
-    console.error("❌ Error en POST /entrepreneurship/batch:", error.message);
-    res.status(500).json({ error: 'Error al cargar guardados' });
   }
 });
 

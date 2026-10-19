@@ -6,7 +6,8 @@ import {
     updateLawyer, 
     deleteLawyer,
     createRating,
-    renewLawyer
+    renewLawyer,
+    reportContent // 🚀 Importamos la nueva función del controlador
 } from '../controllers/lawyers.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
@@ -114,6 +115,24 @@ router.post('/:id/renew', verifyToken, async (req: AuthRequest, res: Response) =
     if (error.message.includes("utilizado") || error.message.includes("unique")) {
        return res.status(409).json({ error: error.message });
     }
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// 🚨 POST: Reportar contenido (DMCA/Inapropiado)
+router.post('/reports', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const result = await reportContent(payload);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /lawyers/reports:", error.message);
     return res.status(400).json({ error: error.message });
   }
 });

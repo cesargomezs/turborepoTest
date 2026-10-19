@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import {
   getDonations,
-  getDonationById, // 🚀 1. IMPORTAMOS LA NUEVA FUNCIÓN
+  getDonationById, 
   createDonation,
   updateDonationStatus,
-  deleteDonation
+  deleteDonation,
+  reportContent // 🚀 IMPORTAMOS LA NUEVA FUNCIÓN
 } from '../controllers/donations.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware';
 
@@ -50,11 +51,29 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// 🚨 3. REPORTAR CONTENIDO (DMCA/Inapropiado)
+router.post('/reports', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userIdFromToken = req.user?.id || req.user?.userId;
+
+    const payload = {
+      ...req.body,
+      userId: userIdFromToken || req.body.userId
+    };
+
+    const result = await reportContent(payload);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /donations/reports:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
+});
+
 // ==========================================
 // 📌 RUTAS DINÁMICAS (Con /:id - Van al final)
 // ==========================================
 
-// 🔍 2.5 OBTENER UNA DONACIÓN POR ID (Para Notificaciones Push)
+// 🔍 4. OBTENER UNA DONACIÓN POR ID (Para Notificaciones Push)
 router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -72,7 +91,7 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 3. ACTUALIZAR ESTADO O APROBACIÓN DE LA DONACIÓN
+// 🔄 5. ACTUALIZAR ESTADO O APROBACIÓN DE LA DONACIÓN
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -91,7 +110,7 @@ router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 4. ACTUALIZAR ESTADO ESPECÍFICO (COMPATIBILIDAD CON RUTA /status)
+// 🔄 6. ACTUALIZAR ESTADO ESPECÍFICO (COMPATIBILIDAD CON RUTA /status)
 router.put('/:id/status', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -110,7 +129,7 @@ router.put('/:id/status', verifyToken, async (req: AuthRequest, res: Response) =
   }
 });
 
-// 🗑️ 5. ELIMINAR UNA DONACIÓN
+// 🗑️ 7. ELIMINAR UNA DONACIÓN
 router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
