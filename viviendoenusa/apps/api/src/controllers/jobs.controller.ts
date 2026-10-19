@@ -631,7 +631,7 @@ export const deleteJob = async (id: string) => {
 };
 
 // =====================================================================
-// 🚨 7. REPORTAR CONTENIDO (CON NOMBRES REALES Y CONSULTAS SEGURAS)
+// 🚨 7. REPORTAR CONTENIDO (CORREGIDO Y OPTIMIZADO)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
@@ -667,15 +667,25 @@ export const reportContent = async (data: any) => {
       }
     }
 
-    // 2. Consultar el título del empleo reportado en la tabla jobs
-    let reportedTitle = `Empleo ID: ${validItemId}`;
+    // 2. Consultar el contenido real según si es un empleo o una reseña
+    let reportedContent = `ID: ${validItemId}`;
     try {
-      const itemRows = await db.select({ title: jobs.title }).from(jobs).where(eq(jobs.id, validItemId)).limit(1);
-      if (itemRows && itemRows.length > 0 && itemRows[0].title) {
-        reportedTitle = itemRows[0].title;
+      if (validType === 'review') {
+        const reviewRows = await db.select({
+          comment: reviewsTable.comment
+        }).from(reviewsTable).where(eq(reviewsTable.id, validItemId)).limit(1);
+
+        if (reviewRows && reviewRows.length > 0) {
+          reviewRows[0].comment || `Reseña ID: ${validItemId}`;
+        }
+      } else {
+        const jobRows = await db.select({ title: jobs.title, nameJobs: jobs.nameJobs }).from(jobs).where(eq(jobs.id, validItemId)).limit(1);
+        if (jobRows && jobRows.length > 0) {
+          reportedContent = jobRows[0].title || jobRows[0].nameJobs || `Empleo ID: ${validItemId}`;
+        }
       }
     } catch (e) {
-      console.warn("⚠️ No se pudo obtener el título del empleo reportado", e);
+      console.warn("⚠️ No se pudo obtener el contenido del elemento reportado", e);
     }
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -686,10 +696,10 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    // 3. Mensaje claro con template literals limpios y nativos
-    const message = `🚨 *REPORTE DE CONTENIDO (EMPLEOS)*\n\n` +
+    // 3. Mensaje con interpolación correcta (sin caracteres literales extraños)
+    const message = `🚨 *REPORTE DE CONTENIDO (${validType.toUpperCase()})*\n\n` +
                     `📌 *Módulo:* ${validType.toUpperCase()}\n` +
-                    `🏷️ *Elemento:* "${reportedTitle}"\n` +
+                    `🏷️ *Elemento:* "${reportedContent}"\n` +
                     `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
                     `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
                     `⚠️ *Motivo:* ${safeReason}\n\n` +

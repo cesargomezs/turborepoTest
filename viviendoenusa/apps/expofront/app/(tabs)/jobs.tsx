@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import * as ImagePicker from 'expo-image-picker'; 
 import { createClient } from '@supabase/supabase-js';
-import * as Clipboard from 'expo-clipboard'; // 🚀 IMPORTADO PARA COPIAR AL PORTAPAPELES
+import * as Clipboard from 'expo-clipboard'; 
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -128,9 +128,13 @@ export default function JobsScreen() {
   
   const isSuperAdmin = !isGuest && (userMetadata?.role === 'SAdmin' || userMetadata?.email === 'cesargomez853@gmail.com');
 
+  // 🚀 PROTECCIÓN DE NAVEGACIÓN SEGURA (EVITA EL ERROR DE ROOT LAYOUT)
   useEffect(() => {
     if (!userToken && !isGuest) {
-      router.replace('/');
+      const timer = setTimeout(() => {
+        router.replace('/');
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [userToken, isGuest]);
   
@@ -221,7 +225,6 @@ export default function JobsScreen() {
   });
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
   
-  // 🚀 INICIALIZAMOS LOS PAGOS EN CUPÓN PARA CUALQUIER PLATAFORMA (WEB Y MÓVIL)
   const [uiPayType, setUiPayType] = useState<'subscription' | 'coupon'>('coupon');
   const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState('');
@@ -253,7 +256,12 @@ export default function JobsScreen() {
   
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
 
-  // 🚀 Función separada para poder llamarla al abrir el modal si falla el internet inicial
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [itemToReport, setItemToReport] = useState<any>(null);
+  const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
   const fetchAppConfig = async () => {
     try {
       const res = await fetch(API_CONFIG_URL);
@@ -408,7 +416,8 @@ export default function JobsScreen() {
                text: r.review || r.comment || '',
                image: freshReviewImage,
                userName: r.userName || r.name || 'Anónimo',
-               displayTime: r.displayTime || ''
+               displayTime: r.displayTime || '',
+               userId: r.userId || r.user_id
              };
           })) : [];
 
@@ -424,8 +433,8 @@ export default function JobsScreen() {
             company: item.company || '',
             companyId: item.companyId,
             isCompanyVerified: item.isCompanyVerified || false, 
-            premiumPlan: item.premiumPlan, // 🚀 PARA GOOGLE REVIEWS
-            googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, // 🚀 RECUPERA EL ENLACE DEL NEGOCIO
+            premiumPlan: item.premiumPlan, 
+            googleReviewLink: item.googleReviewLink || item.googleUrl || item.google_review_link, 
             category: item.category || 'Otros',
             state: item.stateCountry || 'California',
             city: item.city || '',
@@ -581,6 +590,37 @@ export default function JobsScreen() {
     else { Alert.alert(title, message); }
   };
 
+// 🚀 FUNCIÓN DE REPORTE CORREGIDA (APUNTA SIEMPRE AL ENDPOINT VÁLIDO /jobs/reports)
+const handleReportSubmit = async () => {
+  if (!itemToReport) return;
+  setIsSubmittingReport(true);
+  try {
+    const response = await fetch(`${API_JOBS_URL}/reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userToken}`
+      },
+      body: JSON.stringify({
+        itemId: itemToReport.id,
+        itemType: itemToReport.itemType || 'job',
+        userId: currentUserId,
+        reason: reportReason
+      })
+    });
+
+    if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+    triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+    setReportModalVisible(false);
+    setItemToReport(null);
+  } catch (error: any) {
+    triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+  } finally {
+    setIsSubmittingReport(false);
+  }
+};
+
   const toggleNewJobShift = (shift: string) => {
       setNewJob(prev => {
           const exists = prev.shifts.includes(shift);
@@ -675,7 +715,6 @@ export default function JobsScreen() {
       return;
     }
 
-    // 🚀 VALIDACIÓN DEL ENLACE DE GOOGLE REVIEWS SI EL USUARIO LO DIGITÓ
     if (newCompanyForm.googleReviewLink.trim() !== '') {
       const regex = /^https:\/\/(g\.page\/r\/|search\.google\.com\/local\/writereview|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)/i;
       if (!regex.test(newCompanyForm.googleReviewLink.trim())) {
@@ -740,7 +779,7 @@ export default function JobsScreen() {
         referenceCode: finalRefCode,
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         couponCode: uiPayType === 'coupon' ? formRefCode.trim() : '',
-        googleReviewLink: newCompanyForm.googleReviewLink.trim(), // 🚀 SE INCLUYE AL PAYLOAD
+        googleReviewLink: newCompanyForm.googleReviewLink.trim(), 
         tariffPlan: (companyTariffs as any)[finalPlan]
       };
 
@@ -1000,7 +1039,6 @@ export default function JobsScreen() {
           return { ...prev, reviews: updatedReviews, rating: newAverage };
       });
 
-      // 🚀 LÓGICA DE CONVERSIÓN GOOGLE REVIEW
       const plan = selectedCompany.premiumPlan ? String(selectedCompany.premiumPlan).toLowerCase() : 'free';
       const isPremiumActive = ['unlimited', 'premium'].includes(plan);
       const googleReviewUrl = selectedCompany.googleReviewLink || selectedCompany.googleUrl || selectedCompany.google_review_link || 'https://g.page/r/CXrYzP8Yb7XzECE/review';
@@ -1148,7 +1186,6 @@ export default function JobsScreen() {
                </ThemedText>
             </View>
 
-            {/* 🚀 ELIMINADA LA SECCIÓN DE MESES AQUÍ, SOLO BOTONES DE APROBAR/RECHAZAR */}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity onPress={() => handleRejectCompany(comp.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
                 <ThemedText style={{color:'#FFF', fontWeight:'bold', fontSize: 14}}>{(t.genericbtn as any)?.rejectbtn || "Rechazar"}</ThemedText>
@@ -1167,7 +1204,6 @@ export default function JobsScreen() {
   return (
     <View style={styles.container}>
       
-      {/* 🚀 MODAL ELEGANTE DE ACCESO RESTRINGIDO PARA INVITADOS */}
       <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
@@ -1206,6 +1242,54 @@ export default function JobsScreen() {
               </TouchableOpacity>
             </View>
 
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO (CONECTADO Y FUNCIONAL) */}
+      <Modal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: DynamicColors.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '900', color: DynamicColors.text }}>Reportar Contenido</ThemedText>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={DynamicColors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginBottom: 15 }}>
+              Selecciona el motivo por el cual deseas reportar este contenido. Nuestro equipo lo revisará de inmediato.
+            </ThemedText>
+
+            {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información falsa o engañosa', 'El contenido ya no es válido'].map((reasonOption, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                onPress={() => setReportReason(reasonOption)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < 3 ? 1 : 0, borderBottomColor: DynamicColors.border }}
+              >
+                <MaterialCommunityIcons 
+                  name={reportReason === reasonOption ? "radiobox-marked" : "radiobox-blank"} 
+                  size={20} 
+                  color={reportReason === reasonOption ? DynamicColors.accent : DynamicColors.subtext} 
+                  style={{ marginRight: 10 }}
+                />
+                <ThemedText style={{ fontSize: 14, color: DynamicColors.text, fontWeight: reportReason === reasonOption ? '700' : '400' }}>
+                  {reasonOption}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity 
+              onPress={handleReportSubmit} 
+              disabled={isSubmittingReport}
+              style={{ marginTop: 20, backgroundColor: DynamicColors.accent, borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 15 }}>Enviar Reporte</ThemedText>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1431,17 +1515,31 @@ export default function JobsScreen() {
                                     <TouchableOpacity onPress={() => handleContact('call', job.phoneCode, job.phone)} disabled={!job.isOpen} style={{ flex: 1.1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: '#E3F2FD', opacity: !job.isOpen ? 0.4 : 1 }}>
                                       <MaterialCommunityIcons name="phone" size={18} color="#1976D2" />
                                       <ThemedText style={{ marginLeft: 8, fontSize: 13, fontWeight: '800', color: '#1976D2' }}>
-                                          {t.genericbtn.call}
+                                          Llamar
                                       </ThemedText>
                                     </TouchableOpacity>
                                 </View>
 
-                                {(isOwner || isSuperAdmin) && job.groupedCount <= 1 && !isGuest && (
+                                {(isOwner || isAdmin || isSuperAdmin) && !isGuest && (
                                     <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ width: '100%', marginTop: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.5)' : 'rgba(76, 175, 80, 0.5)', backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.05)' : 'rgba(76, 175, 80, 0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
                                         <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={18} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 6}} />
                                         <ThemedText numberOfLines={1} style={{ color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: '900', fontSize: 13, textAlign: 'center', flexShrink: 1 }}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
                                     </TouchableOpacity>
                                 )}
+
+                                {/* 🚀 ENLACE INFERIOR DE REPORTE (CONECTADO Y FUNCIONAL) */}
+                                {!isOwner && (
+                                  <TouchableOpacity 
+                                    onPress={() => { setItemToReport(job); setReportModalVisible(true); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
+                                  >
+                                    <MaterialCommunityIcons name="alert-circle-outline" size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+                                    <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
+                                      Reportar publicación
+                                    </ThemedText>
+                                  </TouchableOpacity>
+                                )}
+
                               </View>
                             </View>
                           );
@@ -1463,7 +1561,7 @@ export default function JobsScreen() {
             setShowRestrictedModal(true);
             return;
           }
-          fetchAppConfig(); // 🚀 ¡Consulta la validación de pagos cada vez que se presiona!
+          fetchAppConfig(); 
           fetchUserCompanies(); 
           setPublishView('company_list'); 
           setModalVisible(true); 
@@ -1557,7 +1655,7 @@ export default function JobsScreen() {
                                       <ThemedText numberOfLines={1} style={{fontSize: 12, fontWeight: 'bold', color: DynamicColors.text, textAlign: 'center', flexShrink: 1}}>Ver Info</ThemedText>
                                   </TouchableOpacity>
 
-                                  {(isJobOwner || isSuperAdmin) && !isGuest && (
+                                  {(isJobOwner || isAdmin || isSuperAdmin) && !isGuest && (
                                       <TouchableOpacity onPress={() => toggleJobStatus(job.id, job.isOpen)} style={{ flex: 1, height: 40, borderRadius: 12, backgroundColor: job.isOpen ? 'rgba(255, 82, 82, 0.1)' : 'rgba(76, 175, 80, 0.1)', borderWidth: 1, borderColor: job.isOpen ? 'rgba(255, 82, 82, 0.3)' : 'rgba(76, 175, 80, 0.3)', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 4 }}>
                                           <MaterialCommunityIcons name={job.isOpen ? "close-circle-outline" : "refresh-circle"} size={16} color={job.isOpen ? '#FF5252' : '#4CAF50'} style={{marginRight: 4}} />
                                           <ThemedText numberOfLines={1} style={{color: job.isOpen ? '#FF5252' : '#4CAF50', fontWeight: 'bold', fontSize: 12, textAlign: 'center', flexShrink: 1}}>{job.isOpen ? t.jobstab.closevacanse : t.jobstab.reopenvacanse}</ThemedText>
@@ -1662,13 +1760,14 @@ export default function JobsScreen() {
                         <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: DynamicColors.text }}>{t.jobstab.viewreviews}</ThemedText>
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => handleContact('call', selectedJobDetail?.phoneCode, selectedJobDetail?.phone)} disabled={!selectedJobDetail?.isOpen} style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: '#E3F2FD', opacity: !selectedJobDetail?.isOpen ? 0.4 : 1 }}>
+                    <TouchableOpacity onPress={() => handleContact('call', selectedJobDetail?.phoneCode, selectedJobDetail?.phone)} disabled={!selectedJobDetail?.isOpen} style={{ flex: 1.1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: '#E3F2FD', opacity: !selectedJobDetail?.isOpen ? 0.4 : 1 }}>
                         <MaterialCommunityIcons name="phone" size={18} color="#1976D2" />
-                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: '#1976D2' }}>
+                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: '800', color: '#1976D2' }}>
                             Llamar
                         </ThemedText>
                     </TouchableOpacity>
                 </View>
+
               </View>
             </ScrollView>
           </View>
@@ -1885,7 +1984,6 @@ export default function JobsScreen() {
                              />
                          </View>
 
-                         {/* 🚀 NUEVO INPUT: Enlace de Google Review (OPCIONAL) */}
                          <ThemedText style={{ fontSize: 15, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>Enlace de Google Reviews (Opcional)</ThemedText>
                          <TextInput 
                            value={newCompanyForm.googleReviewLink} 
@@ -1898,7 +1996,6 @@ export default function JobsScreen() {
                            style={{ backgroundColor: DynamicColors.inputBg, padding: 15, borderRadius: 12, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                          />
 
-                         {/* 🚀 MÉTODO DE ACTIVACIÓN SIEMPRE VISIBLE */}
                          <>
                            <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
@@ -1922,7 +2019,6 @@ export default function JobsScreen() {
                            </View>
                          </>
 
-                         {/* RUTA DE SUSCRIPCIÓN DESBLOQUEADA SI PAYON ESTÁ ACTIVO */}
                          {uiPayType === 'subscription' && (isWeb || appConfig?.payOnActive) && (
                            <>
                              <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: DynamicColors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
@@ -1988,9 +2084,8 @@ export default function JobsScreen() {
                                )}
                                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: DynamicColors.subtext, marginTop: 8 }}>Escanea para realizar tu transferencia</ThemedText>
 
-                               {/* 🚀 BOTÓN DE ENLACE DIRECTO DE PAGO ZELLE */}
                                <TouchableOpacity 
-                                 onPress={() => Linking.openURL(appConfig.zelleLink || 'https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50IiwidG9rZW4iOiI5NTEyNTg2MDE2In0=')}
+                                 onPress={() => Linking.openURL(appConfig.zelleLink || 'https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiQ0VTQVIiLCJhY3Rpb24iOiJwYXltZW50Iid0b2tlbiI6Ijk1MTI1ODYwMTYifQ==')}
                                  style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: isDark ? 'rgba(79, 195, 247, 0.2)' : 'rgba(0,128,181,0.1)', borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.accenticon }}
                                >
                                  <MaterialCommunityIcons name="open-in-new" size={16} color={DynamicColors.accenticon} style={{ marginRight: 6 }} />
@@ -2058,7 +2153,7 @@ export default function JobsScreen() {
                           ) : (
                               <View style={{ flex: 1, flexDirection:'row', alignItems:'center', paddingHorizontal: 14, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}>
                                   <MaterialCommunityIcons name={cat.icon as any} size={16} style={{marginRight:6,color: DynamicColors.text }} />
-                                  <ThemedText style={{ fontSize: 13, fontWeight: 'bold', color: DynamicColors.text }}>{cat.id}</ThemedText>
+                                  <ThemedText style={{ color: DynamicColors.text, fontSize: 13, fontWeight: 'bold' }}>{cat.id}</ThemedText>
                               </View>
                           )}
                         </TouchableOpacity>
@@ -2323,7 +2418,7 @@ export default function JobsScreen() {
           </View>
       </Modal>
 
-      {/* MODAL RESEÑAS EMPRESA */}
+      {/* MODAL RESEÑAS EMPRESA CON OPCIÓN DE REPORTAR CADA RESEÑA (CORREGIDO EL EVENTO ONPRESS) */}
       <Modal visible={!!selectedCompany} transparent animationType="slide" statusBarTranslucent>
         <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
@@ -2377,6 +2472,23 @@ export default function JobsScreen() {
                            </View>
                          </View>
                          <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.text}</ThemedText>
+                         
+                         {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA DENTRO DEL MODAL (CONECTADO CORRECTAMENTE) */}
+                         {r.userId !== currentUserId && (
+                           <TouchableOpacity 
+                             onPress={() => { 
+                               setItemToReport({ id: r.id, itemType: 'review' }); 
+                               setSelectedCompany(null); 
+                               setReportModalVisible(true); 
+                             }}
+                             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
+                           >
+                             <MaterialCommunityIcons name="alert-circle-outline" size={13} color={DynamicColors.subtext} style={{ marginRight: 4 }} />
+                             <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext, fontWeight: '600' }}>
+                               Reportar reseña
+                             </ThemedText>
+                           </TouchableOpacity>
+                         )}
                        </View>
                     ))}
                   </ScrollView>

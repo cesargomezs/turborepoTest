@@ -212,6 +212,12 @@ export default function EventsScreen() {
   const [pendingEvents, setPendingEvents] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [itemToReport, setItemToReport] = useState<any>(null);
+  const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
   const [currentTariff, setCurrentTariff] = useState<string>("50.00");
   const [companyTariffs, setCompanyTariffs] = useState({
     coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.00' 
@@ -222,7 +228,6 @@ export default function EventsScreen() {
   const isBaseFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
   const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
-  // 🚀 Función separada para poder llamarla al abrir el modal si falla el internet inicial
   const fetchAppConfig = async () => {
     try {
       const res = await fetch(API_CONFIG_URL);
@@ -305,7 +310,6 @@ export default function EventsScreen() {
     loadZelleQr();
   }, []);
 
-  // 🚀 FETCH DE EVENTOS CORREGIDO: NO ENVÍA userId SI ES ADMIN
   const fetchEvents = async (searchZip?: string) => {
     try {
       setIsLoadingPosts(true);
@@ -313,12 +317,10 @@ export default function EventsScreen() {
       let url = API_EVENTS_URL;
       
       if (isAdminMode) {
-        // Si es admin, pedimos TODOS los eventos (sin filtrar por usuario)
         url = (searchZip && searchZip.trim().length === 5)
           ? `${API_EVENTS_URL}?zip=${searchZip.trim()}`
           : API_EVENTS_URL;
       } else {
-        // Si es usuario normal, filtramos estrictamente por su userId
         url = (searchZip && searchZip.trim().length === 5)
           ? `${API_EVENTS_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`
           : `${API_EVENTS_URL}?userId=${currentUserId}`;
@@ -377,7 +379,6 @@ export default function EventsScreen() {
     }
   };
 
-  // 🚀 ESCUCHA EL MODO ADMIN Y ACTUALIZA INMEDIATAMENTE
   useEffect(() => {
     if (isAdminMode) {
       fetchEvents(zipCode.length === 5 ? zipCode : undefined);
@@ -518,6 +519,37 @@ export default function EventsScreen() {
     else Alert.alert(title, message);
   };
 
+  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO
+  const handleReportSubmit = async () => {
+    if (!itemToReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const response = await fetch(`${API_EVENTS_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemToReport.id,
+          itemType: 'event',
+          userId: currentUserId,
+          reason: reportReason
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+      triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+      setReportModalVisible(false);
+      setItemToReport(null);
+    } catch (error: any) {
+      triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const handleShare = async (event: any) => {
     await handleUniversalShare({
       title: event.title,
@@ -579,7 +611,7 @@ export default function EventsScreen() {
 
         const formData = new FormData();
         const filename = formImage.split('/').pop() || 'evento.jpg';
-        const match = /\.(\w+)$/.exec(filename);
+        const match = /\.(\w+)\$/.exec(filename);
         const type = match ? `image/${match[1]}` : `image/jpeg`;
 
         if (Platform.OS === 'web') {
@@ -822,6 +854,7 @@ export default function EventsScreen() {
             handleShare={handleShare}
             isAdminMode={isAdminMode}
             currentUserId={currentUserId}
+            onReport={(eventItem: any) => { setItemToReport(eventItem); setReportModalVisible(true); }}
         />
     );
   };
@@ -872,7 +905,6 @@ export default function EventsScreen() {
                     hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                     onPress={() => { 
                       if (isAdmin) {
-                        // Solo actualizamos el estado; el useEffect hará el fetchEvents automático
                         setIsAdminMode(!isAdminMode); 
                       } else {
                         Alert.alert("Aviso", "No cuentas con permisos de administrador.");
@@ -1011,6 +1043,7 @@ export default function EventsScreen() {
                             handleShare={handleShare}
                             isAdminMode={isAdminMode}
                             currentUserId={currentUserId}
+                            onReport={(eventItem: any) => { setItemToReport(eventItem); setReportModalVisible(true); }}
                           />
                         ))
                       )}
@@ -1030,7 +1063,7 @@ export default function EventsScreen() {
             setShowRestrictedModal(true);
             return;
           }
-          fetchAppConfig(); // 🚀 ¡Recarga la validación de pagos en caso de desconexión!
+          fetchAppConfig(); 
           setModalVisible(true);
         }} 
         style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}
@@ -1439,6 +1472,54 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
+      <RNModal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: Colors.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '900', color: Colors.text }}>Reportar Contenido</ThemedText>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: Colors.subtext, marginBottom: 15 }}>
+              Selecciona el motivo por el cual deseas reportar este evento. Nuestro equipo lo revisará de inmediato.
+            </ThemedText>
+
+            {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información de contacto falsa', 'El evento ha sido cancelado'].map((reasonOption, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                onPress={() => setReportReason(reasonOption)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < 3 ? 1 : 0, borderBottomColor: Colors.border }}
+              >
+                <MaterialCommunityIcons 
+                  name={reportReason === reasonOption ? "radiobox-marked" : "radiobox-blank"} 
+                  size={20} 
+                  color={reportReason === reasonOption ? Colors.accent : Colors.subtext} 
+                  style={{ marginRight: 10 }}
+                />
+                <ThemedText style={{ fontSize: 14, color: Colors.text, fontWeight: reportReason === reasonOption ? '700' : '400' }}>
+                  {reasonOption}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity 
+              onPress={handleReportSubmit} 
+              disabled={isSubmittingReport}
+              style={{ marginTop: 20, backgroundColor: Colors.accent, borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 15 }}>Enviar Reporte</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </RNModal>
+
       {isWeb && (
         <style dangerouslySetInnerHTML={{ __html: `
           .native-web-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
@@ -1449,7 +1530,7 @@ export default function EventsScreen() {
   );
 }
 
-const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls, isWeb, handleShare, isAdminMode, currentUserId }: any) => {
+const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, ActionBtn, t, categoryLabels, internalCategories, renderAdminControls, isWeb, handleShare, isAdminMode, currentUserId, onReport }: any) => {
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
   
@@ -1480,10 +1561,18 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
       )}
 
       <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-          <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>
-            {catLabel.toUpperCase()}
-          </ThemedText>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+            <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>
+              {catLabel.toUpperCase()}
+            </ThemedText>
+          </View>
+          {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
+          {!isOwner && (
+            <TouchableOpacity onPress={() => onReport && onReport(item)} style={{ padding: 4, opacity: 0.7 }}>
+              <MaterialCommunityIcons name="flag-outline" size={18} color={Colors.subtext} />
+            </TouchableOpacity>
+          )}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
           <MaterialCommunityIcons name="calendar-month" size={14} color="#FFB300" />

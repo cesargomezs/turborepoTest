@@ -193,6 +193,12 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [itemToReport, setItemToReport] = useState<any>(null);
+  const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
   const hasInitialized = useRef(false);
 
   const fetchSingleDonation = async (id: string) => {
@@ -331,6 +337,37 @@ export default function DonationsScreen() {
     else Alert.alert(title, message);
   };
 
+  // 🚀 FUNCIÓN PARA ENVIAR EL REPORTE
+  const handleReportSubmit = async () => {
+    if (!itemToReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const response = await fetch(`${API_DONATIONS_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemToReport.id,
+          itemType: 'donation',
+          userId: currentUserId,
+          reason: reportReason
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+      triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+      setReportModalVisible(false);
+      setItemToReport(null);
+    } catch (error: any) {
+      triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const approveDonation = async (id: string) => {
     try {
       const response = await fetch(`${API_DONATIONS_URL}/${id}`, {
@@ -435,7 +472,7 @@ export default function DonationsScreen() {
 
       const formData = new FormData();
       const filename = formImage.split('/').pop() || 'imagen.jpg';
-      const match = /\.(\w+)$/.exec(filename);
+      const match = /\.(\w+)\$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
       if (Platform.OS === 'web') {
@@ -768,7 +805,11 @@ export default function DonationsScreen() {
                             t={t}
                             categoryLabels={CATEGORY_LABELS}
                             isWeb={isWeb} 
-                            handleShare={handleShare} 
+                            handleShare={handleShare}
+                            onReport={(donationItem: any) => {
+                              setItemToReport(donationItem);
+                              setReportModalVisible(true);
+                            }} 
                           />
                         )) : (
                           <View style={{ flex: 1, alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
@@ -898,12 +939,61 @@ export default function DonationsScreen() {
           </TouchableOpacity>
         </View>
       </RNModal>
+
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
+      <RNModal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: DynamicColors.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '900', color: DynamicColors.text }}>Reportar Contenido</ThemedText>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={DynamicColors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginBottom: 15 }}>
+              Selecciona el motivo por el cual deseas reportar esta donación. Nuestro equipo lo revisará de inmediato.
+            </ThemedText>
+
+            {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información de contacto falsa', 'El artículo ya no está disponible'].map((reasonOption, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                onPress={() => setReportReason(reasonOption)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < 3 ? 1 : 0, borderBottomColor: DynamicColors.border }}
+              >
+                <MaterialCommunityIcons 
+                  name={reportReason === reasonOption ? "radiobox-marked" : "radiobox-blank"} 
+                  size={20} 
+                  color={reportReason === reasonOption ? DynamicColors.accent : DynamicColors.subtext} 
+                  style={{ marginRight: 10 }}
+                />
+                <ThemedText style={{ fontSize: 14, color: DynamicColors.text, fontWeight: reportReason === reasonOption ? '700' : '400' }}>
+                  {reasonOption}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity 
+              onPress={handleReportSubmit} 
+              disabled={isSubmittingReport}
+              style={{ marginTop: 20, backgroundColor: DynamicColors.accent, borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 15 }}>Enviar Reporte</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </RNModal>
+
     </View>
   );
 }
 
 // --- 3. COMPONENTE DE TARJETA DE DONACIÓN ---
-const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels, isWeb, handleShare }: any) => {
+const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark, Colors, orangeGradient, stylesUnified, onPreview, onToggleStatus, t, categoryLabels, isWeb, handleShare, onReport }: any) => {
   
   const safeOwnerName = item.ownerName || item.userId || 'Usuario';
   const isOwner = item.userId === currentUserId;
@@ -945,8 +1035,18 @@ const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark
             {isOwner ? ((t?.donationstab as any)?.username || 'Mío') : safeOwnerName}
           </ThemedText>
         </View>
-        <View style={{ backgroundColor: 'rgba(255,95,109,0.12)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
-          <ThemedText style={{ fontSize: 12, color: Colors.accent, fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
+        
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={{ backgroundColor: 'rgba(255,95,109,0.12)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
+            <ThemedText style={{ fontSize: 12, color: Colors.accent, fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
+          </View>
+
+          {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
+          {!isOwner && (
+            <TouchableOpacity onPress={() => onReport(item)} style={{ padding: 4, opacity: 0.7 }}>
+              <MaterialCommunityIcons name="flag-outline" size={18} color={Colors.subtext} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

@@ -590,6 +590,12 @@ export default function SupportScreen() {
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
   const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [itemToReport, setItemToReport] = useState<any>(null);
+  const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
   const isZipValid = zipCode.length === 5;
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
@@ -898,6 +904,42 @@ export default function SupportScreen() {
     });
   };
 
+  const triggerAlert = (title: string, message: string) => {
+    if (isWeb) window.alert(`${title}\n${message}`); 
+    else Alert.alert(title, message);
+  };
+
+  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO
+  const handleReportSubmit = async () => {
+    if (!itemToReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const response = await fetch(`${API_STORES_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemToReport.id,
+          itemType: 'support',
+          userId: currentUserId,
+          reason: reportReason
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+      triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+      setReportModalVisible(false);
+      setItemToReport(null);
+    } catch (error: any) {
+      triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const approveStore = async (store: any, durationMonths: number) => {
     try {
       const response = await fetch(`${API_STORES_URL}/${store.id}`, { 
@@ -967,7 +1009,20 @@ export default function SupportScreen() {
         
         {isPending && isOwner && ( <View style={{ backgroundColor: 'rgba(255, 183, 77, 0.1)', padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 183, 77, 0.2)', flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="clock-outline" size={20} color="#FFB74D" /><ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginLeft: 8, fontSize: 13, flexShrink: 1 }}>{t.genericlabel.labelaprovaladmin}</ThemedText></View> )}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
-          <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}><ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText></View>
+          
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+              <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
+            </View>
+
+            {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
+            {!isOwner && (
+              <TouchableOpacity onPress={() => { setItemToReport(store); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+                <MaterialCommunityIcons name="flag-outline" size={18} color={DynamicColors.subtext} />
+              </TouchableOpacity>
+            )}
+          </View>
+
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}><MaterialCommunityIcons name="star" size={14} color="#FFB300" /><ThemedText style={{ color: DynamicColors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>{displayRating}</ThemedText></View>
         </View>
         <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedDetail(store)} style={{ width: '100%', height: 140, opacity: fadeCard ? 0.6 : 1 }}>
@@ -1257,6 +1312,54 @@ export default function SupportScreen() {
         </View>
       </Modal>
 
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
+      <Modal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: DynamicColors.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '900', color: DynamicColors.text }}>Reportar Contenido</ThemedText>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={DynamicColors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginBottom: 15 }}>
+              Selecciona el motivo por el cual deseas reportar este contacto de apoyo. Nuestro equipo lo revisará de inmediato.
+            </ThemedText>
+
+            {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información de contacto falsa', 'El contacto ya no está disponible'].map((reasonOption, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                onPress={() => setReportReason(reasonOption)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < 3 ? 1 : 0, borderBottomColor: DynamicColors.border }}
+              >
+                <MaterialCommunityIcons 
+                  name={reportReason === reasonOption ? "radiobox-marked" : "radiobox-blank"} 
+                  size={20} 
+                  color={reportReason === reasonOption ? DynamicColors.accent : DynamicColors.subtext} 
+                  style={{ marginRight: 10 }}
+                />
+                <ThemedText style={{ fontSize: 14, color: DynamicColors.text, fontWeight: reportReason === reasonOption ? '700' : '400' }}>
+                  {reasonOption}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity 
+              onPress={handleReportSubmit} 
+              disabled={isSubmittingReport}
+              style={{ marginTop: 20, backgroundColor: DynamicColors.accent, borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 15 }}>Enviar Reporte</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border }}>
@@ -1303,7 +1406,7 @@ export default function SupportScreen() {
                         </View>
                       )}
                     </View>
-                  )}
+                  )} 
                   <TouchableOpacity activeOpacity={0.9} onPress={() => RNLinking.openURL('tel:988')} style={{ marginBottom: 15 }}>
                     <LinearGradient colors={['#FF416C', '#FF4B2B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center' }}>
                       <View style={{ position: 'relative', width: 48, height: 48, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
@@ -1368,7 +1471,17 @@ export default function SupportScreen() {
                         const iconName = ICONS_ARRAY[index] || 'heart'; const isActive = selectedCategoryIdx === index;
                         return (
                           <TouchableOpacity key={index} onPress={() => handleCategorySelect(index)} style={{ marginRight: 0, borderRadius: 16, overflow: 'hidden', height: 48, marginBottom: 10, borderWidth: isActive ? 0 : 1, borderColor: DynamicColors.border }}>
-                            {isActive ? ( <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}><MaterialCommunityIcons name={iconName as any} size={18} color="#FFF" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{area}</ThemedText></LinearGradient> ) : ( <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}><MaterialCommunityIcons name={iconName as any} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} /><ThemedText style={{ color: DynamicColors.text, fontWeight: '600', fontSize: 14 }}>{area}</ThemedText></View> )}
+                            {isActive ? (
+                              <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}>
+                                <MaterialCommunityIcons name={iconName as any} size={18} color="#FFF" style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>{area}</ThemedText>
+                              </LinearGradient>
+                            ) : (
+                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, backgroundColor: DynamicColors.inputBg }}>
+                                <MaterialCommunityIcons name={iconName as any} size={18} color={DynamicColors.text} style={{ marginRight: 10 }} />
+                                <ThemedText style={{ color: DynamicColors.text, fontWeight: '600', fontSize: 14 }}>{area}</ThemedText>
+                              </View>
+                            )}
                           </TouchableOpacity>
                         );
                       })}
@@ -1392,7 +1505,7 @@ export default function SupportScreen() {
                       )}
                       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
                         {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 12 }}>{results.length} {t.genericbtn.results || "resultados"} </ThemedText>}
-                        {isFilteredByMap && ( <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} /><ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{t.genericbtn.viewall || "Ver todos"}</ThemedText></TouchableOpacity> )}
+                        {isFilteredByMap && ( <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.12)' : 'rgba(0,128,181,0.08)', paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accent }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accent} /><ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ` + (t.genericbtn?.viewallresults || 'Ver todos')}</ThemedText></TouchableOpacity> )}
                         {results.map((store) => <SupportCard key={store.id} store={store} />)}
                       </ScrollView>
                     </View>

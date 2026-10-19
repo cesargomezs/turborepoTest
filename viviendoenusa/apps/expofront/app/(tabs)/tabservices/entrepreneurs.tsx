@@ -34,13 +34,6 @@ import { supabaseClient } from '../../../utils/supabase';
 // =====================================================================
 const API_ENTREPRENEURSHIP_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/entrepreneurship';
 
-/*
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
-*/
-
 // 🚀 FUNCIÓN PURIFICADORA DE URLs CADUCADAS
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'entrepreneurship') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -108,7 +101,7 @@ const containsBadWords = (text: string): boolean => {
 const formatCount = (count: number) => {
   if (!count) return '0';
   if (count >= 1000) {
-    return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return (count / 1000).toFixed(1).replace(/\.0\$/, '') + 'k';
   }
   return count.toString();
 };
@@ -216,14 +209,12 @@ export default function EntrepreneurshipScreen() {
   const stylesUnified = useUnifiedCardStyles();
   const router = useRouter();
   
-  // 🚀 2. EXTRAEMOS EL ID DE LA PUSH Y EL ZIP DEL USUARIO
   const { id: openStoreId } = useLocalSearchParams();
   const loggedIn = useMockSelector((state: any) => state.mockAuth.loggedIn);
   const userMetadata = useMockSelector((state: any) => state.mockAuth.userMetadata) as any;
   const userToken = userMetadata?.token || userMetadata?.accessToken; 
   const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
 
-  // 🚀 ADMIN CHECK SEGURO
   const userEmailClean = userMetadata?.email || '';
   const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
@@ -250,7 +241,6 @@ export default function EntrepreneurshipScreen() {
   const isAndroid  = Platform.OS === 'android';
   const isIOS      = Platform.OS === 'ios';
 
-  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN (?. || [])
   const CATEGORIES = t?.entrepreneurshiptab?.categoryentre || ['General'];
   const CATEGORY_ICONS_DICT: Record<string, string> = t?.entrepreneurshiptab?.categoryentreicon || {};
 
@@ -299,6 +289,12 @@ export default function EntrepreneurshipScreen() {
   const [formZip, setFormZip] = useState('');
   const [formImage, setFormImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [itemToReport, setItemToReport] = useState<Emprendimiento | null>(null);
+  const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const isZipValid = zipCode.length === 5;
   const triggerAlert = (title: string, msg: string) => Platform.OS === 'web' ? window.alert(`${title}\n${msg}`) : Alert.alert(title, msg);
@@ -837,6 +833,37 @@ export default function EntrepreneurshipScreen() {
     } catch (error) { Alert.alert("Error", "No se pudo rechazar."); }
   };
 
+  // 🚀 FUNCIÓN PARA ENVIAR EL REPORTE
+  const handleReportSubmit = async () => {
+    if (!itemToReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemToReport.id,
+          itemType: 'entrepreneurship',
+          userId: currentUserId,
+          reason: reportReason
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+      triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+      setReportModalVisible(false);
+      setItemToReport(null);
+    } catch (error: any) {
+      triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const ActionBtnLine = ({ icon, text, color, bgColor, onPress }: any) => (
     <TouchableOpacity onPress={onPress} style={{ flexGrow: 1, flexBasis: 80, height: 40, paddingHorizontal: 8, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: bgColor, marginBottom: 8, marginRight: 6 }}>
        <MaterialCommunityIcons name={icon} size={16} color={color} />
@@ -849,6 +876,7 @@ export default function EntrepreneurshipScreen() {
     const categoryIcon = CATEGORY_ICONS_DICT[categoryName] || ICONS_ARRAY[item.categoryId] || 'store';
     const isPending = item.status === 'pending';
     const cardBgColor = isPending ? (isDark ? '#1E1E1E' : '#FFFFFF') : DC.cardBg;
+    const isOwner = item.userId === currentUserId;
 
     return (
       <TouchableOpacity activeOpacity={0.93} onPress={() => { setDetailItem(item); setShowReviewInput(false); }}
@@ -866,9 +894,19 @@ export default function EntrepreneurshipScreen() {
         )}
         
         <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', opacity: isPending ? 0.6 : 1 }}>
-          <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-            <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+              <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
+            </View>
+
+            {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
+            {!isOwner && (
+              <TouchableOpacity onPress={() => { setItemToReport(item); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+                <MaterialCommunityIcons name="flag-outline" size={18} color={DC.subtext} />
+              </TouchableOpacity>
+            )}
           </View>
+
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
             <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
             <ThemedText style={{ marginLeft: 4, fontSize: 13, fontWeight: '900', color: DC.text }}>{item.rating > 0 ? item.rating.toFixed(1) : "Nuevo"}</ThemedText>
@@ -1442,6 +1480,54 @@ export default function EntrepreneurshipScreen() {
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      </RNModal>
+
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
+      <RNModal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: DC.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '900', color: DC.text }}>Reportar Contenido</ThemedText>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={DC.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: DC.subtext, marginBottom: 15 }}>
+              Selecciona el motivo por el cual deseas reportar este emprendimiento. Nuestro equipo lo revisará de inmediato.
+            </ThemedText>
+
+            {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información de contacto falsa', 'El negocio ya no existe'].map((reasonOption, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                onPress={() => setReportReason(reasonOption)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < 3 ? 1 : 0, borderBottomColor: DC.border }}
+              >
+                <MaterialCommunityIcons 
+                  name={reportReason === reasonOption ? "radiobox-marked" : "radiobox-blank"} 
+                  size={20} 
+                  color={reportReason === reasonOption ? DC.accent : DC.subtext} 
+                  style={{ marginRight: 10 }}
+                />
+                <ThemedText style={{ fontSize: 14, color: DC.text, fontWeight: reportReason === reasonOption ? '700' : '400' }}>
+                  {reasonOption}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity 
+              onPress={handleReportSubmit} 
+              disabled={isSubmittingReport}
+              style={{ marginTop: 20, backgroundColor: DC.accent, borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 15 }}>Enviar Reporte</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </RNModal>
     </View>
