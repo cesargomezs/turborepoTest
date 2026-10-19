@@ -77,7 +77,7 @@ const getCurrentLawyerPrice = async () => {
       return activeTariff[0].price;
     }
   } catch (error) {
-    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando $50.00 por defecto");
+    console.warn("⚠️ Error obteniendo tarifa dinámica con JOIN, usando \$50.00 por defecto");
   }
   return "50.00";
 };
@@ -884,7 +884,7 @@ export const renewLawyer = async (id: string, data: any) => {
 };
 
 // =====================================================================
-// 🚩 8. REPORTAR CONTENIDO (ALERTA TELEGRAM SOPORTE)
+// 🚨 REPORTE DE CONTENIDO (CON NOMBRES REALES Y CONSULTAS SEGURAS)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
@@ -892,14 +892,45 @@ export const reportContent = async (data: any) => {
 
     const validItemId = sanitizeText(itemId);
     const validType = sanitizeText(itemType) || 'lawyer';
-    const validUserId = sanitizeText(userId) || 'Usuario Anónimo';
-    const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Spam';
+    const validUserId = sanitizeText(userId);
+    const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Contenido Inapropiado';
 
     if (!validItemId) {
       throw new Error("El ID del elemento es obligatorio para reportar.");
     }
 
-    // Configuración del bot de Telegram
+    // 1. Consultar el nombre y correo del usuario que reporta
+    let reporterName = "Usuario Anónimo";
+    let reporterEmail = "No disponible";
+    if (validUserId) {
+      try {
+        const uRecords = await db.select({
+          name: users.name,
+          lastName: users.lastName,
+          email: users.email
+        }).from(users).where(eq(users.id, validUserId)).limit(1);
+
+        if (uRecords && uRecords.length > 0) {
+          const uRecord = uRecords[0];
+          reporterName = `${uRecord.name || ''} ${uRecord.lastName || ''}`.trim() || "Usuario";
+          reporterEmail = uRecord.email || "No disponible";
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo obtener info del usuario que reporta", e);
+      }
+    }
+
+    // 2. Consultar el nombre del abogado directamente de la tabla lawyers
+    let reportedName = `Abogado ID: ${validItemId}`;
+    try {
+      const itemRows = await db.select({ name: lawyers.nameLawy }).from(lawyers).where(eq(lawyers.id, validItemId)).limit(1);
+      if (itemRows && itemRows.length > 0 && itemRows[0].name) {
+        reportedName = itemRows[0].name;
+      }
+    } catch (e) {
+      console.warn("⚠️ No se pudo obtener el nombre del abogado reportado", e);
+    }
+
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
 
@@ -908,10 +939,15 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    // Estructura del mensaje de alerta
-    const message = `🚨 *REPORTE DE CONTENIDO (DMCA/SPAM)*\n\n*Tipo:* ${validType.toUpperCase()}\n*ID Elemento:* \`\${validItemId}\`\n*Motivo:* ${safeReason}\n*Reportado por:* \`\${validUserId}\`\n\n⚠️ Por favor verifica el contenido en el panel de administrador y elimínalo si infringe las normas o derechos de autor.`;
+    // 3. Mensaje claro con template literals limpios y nativos
+    const message = `🚨 *REPORTE DE CONTENIDO (DMCA/MODERACIÓN)*\n\n` +
+                    `📌 *Módulo:* ${validType.toUpperCase()}\n` +
+                    `🏷️ *Elemento:* "${reportedName}"\n` +
+                    `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
+                    `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
+                    `⚠️ *Motivo:* ${safeReason}\n\n` +
+                    `Por favor verifica el contenido en el panel de administrador para evaluar si infringe las normas.`;
 
-    // Enviar alerta a Telegram
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

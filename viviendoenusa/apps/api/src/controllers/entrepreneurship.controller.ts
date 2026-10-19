@@ -801,7 +801,7 @@ export const getEntrepreneurshipsByIds = async (ids: string[], userId?: string) 
 };
 
 // =====================================================================
-// 🚨 9. REPORTAR CONTENIDO (ALERTA TELEGRAM SOPORTE)
+// 🚨 9. REPORTAR CONTENIDO (CON NOMBRES REALES Y CONSULTAS SEGURAS)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
@@ -809,11 +809,43 @@ export const reportContent = async (data: any) => {
 
     const validItemId = sanitizeText(itemId);
     const validType = sanitizeText(itemType) || 'entrepreneurship';
-    const validUserId = sanitizeText(userId) || 'Usuario Anónimo';
+    const validUserId = sanitizeText(userId);
     const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Spam';
 
     if (!validItemId) {
       throw new Error("El ID del elemento es obligatorio para reportar.");
+    }
+
+    // 1. Consultar el nombre y correo del usuario que reporta
+    let reporterName = "Usuario Anónimo";
+    let reporterEmail = "No disponible";
+    if (validUserId) {
+      try {
+        const uRecords = await db.select({
+          name: users.name,
+          lastName: users.lastName,
+          email: users.email
+        }).from(users).where(eq(users.id, validUserId)).limit(1);
+
+        if (uRecords && uRecords.length > 0) {
+          const uRecord = uRecords[0];
+          reporterName = `${uRecord.name || ''} ${uRecord.lastName || ''}`.trim() || "Usuario";
+          reporterEmail = uRecord.email || "No disponible";
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo obtener info del usuario que reporta", e);
+      }
+    }
+
+    // 2. Consultar el nombre del emprendimiento reportado en la tabla entrepreneurship
+    let reportedName = `Emprendimiento ID: ${validItemId}`;
+    try {
+      const itemRows = await db.select({ name: entrepreneurship.nameEntrepren }).from(entrepreneurship).where(eq(entrepreneurship.id, validItemId)).limit(1);
+      if (itemRows && itemRows.length > 0 && itemRows[0].name) {
+        reportedName = itemRows[0].name;
+      }
+    } catch (e) {
+      console.warn("⚠️ No se pudo obtener el nombre del emprendimiento reportado", e);
     }
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -824,7 +856,14 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    const message = `🚨 *REPORTE DE CONTENIDO (EMPRENDIMIENTOS)*\n\n*Tipo:* ${validType.toUpperCase()}\n*ID Elemento:* \`\${validItemId}\`\n*Motivo:* ${safeReason}\n*Reportado por:* \`\${validUserId}\`\n\n⚠️ Por favor verifica el contenido en el panel de administrador.`;
+    // 3. Mensaje claro con template literals limpios y nativos
+    const message = `🚨 *REPORTE DE CONTENIDO (EMPRENDIMIENTOS)*\n\n` +
+                    `📌 *Módulo:* ${validType.toUpperCase()}\n` +
+                    `🏷️ *Elemento:* "${reportedName}"\n` +
+                    `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
+                    `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
+                    `⚠️ *Motivo:* ${safeReason}\n\n` +
+                    `Por favor verifica el contenido en el panel de administrador.`;
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',

@@ -144,7 +144,6 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
       ? sanitizeText(String(currentUserId)) 
       : null;
 
-    // 🚀 Condición segura: Si es invitado (sin userId real), solo trae empleos abiertos de empresas aprobadas.
     let baseConditions = cleanUserId 
       ? sql`(${jobs.userId} = ${cleanUserId} OR (${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL)))`
       : sql`(${jobs.isOpen} = true AND (${companies.status} = 'approved' OR ${jobs.companyId} IS NULL))`;
@@ -177,7 +176,6 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
     .where(finalConditions)
     .$dynamic();
 
-    // 🚀 ORDENAMIENTO SEGURO
     if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 
@@ -266,6 +264,7 @@ export const getJobs = async (rawZip?: string | number, currentUserId?: string) 
     return [];
   }
 };
+
 // =====================================================================
 // 🔍 2. CONSULTA INDIVIDUAL POR ID
 // =====================================================================
@@ -354,7 +353,6 @@ export const createJob = async (data: any) => {
       if (!resolvedZip || resolvedZip.trim() === '') {
         const [creator] = await tx.select({ zip: users.zip }).from(users).where(eq(users.id, validUserId));
         resolvedZip = creator?.zip || '';
-        console.log(`⚠️ Zip vacío en la oferta. Usando el Zip del dueño de la empresa: ${resolvedZip}`);
       }
 
       const { lat, lng } = getCoordsFromZip(resolvedZip);
@@ -384,8 +382,6 @@ export const createJob = async (data: any) => {
       };
 
       const [newJob] = await tx.insert(jobs).values(jobPayload).returning();
-
-      console.log("✅ [DEBUG PUSH EMPLEOS] Oferta publicada. Calculando candidatos en zona...");
 
       const titleText = "¡Nueva Oferta de Empleo! 💼";
       const bodyText = `${jobPayload.company} busca: ${jobPayload.title}. ¡Aplica ya!`;
@@ -635,7 +631,7 @@ export const deleteJob = async (id: string) => {
 };
 
 // =====================================================================
-// 🚨 7. REPORTAR CONTENIDO (ALERTA TELEGRAM SOPORTE)
+// 🚨 7. REPORTAR CONTENIDO (CON NOMBRES REALES Y CONSULTAS SEGURAS)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
@@ -643,11 +639,43 @@ export const reportContent = async (data: any) => {
 
     const validItemId = sanitizeText(itemId);
     const validType = sanitizeText(itemType) || 'job';
-    const validUserId = sanitizeText(userId) || 'Usuario Anónimo';
+    const validUserId = sanitizeText(userId);
     const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Spam';
 
     if (!validItemId) {
       throw new Error("El ID del elemento es obligatorio para reportar.");
+    }
+
+    // 1. Consultar el nombre y correo del usuario que reporta
+    let reporterName = "Usuario Anónimo";
+    let reporterEmail = "No disponible";
+    if (validUserId) {
+      try {
+        const uRecords = await db.select({
+          name: users.name,
+          lastName: users.lastName,
+          email: users.email
+        }).from(users).where(eq(users.id, validUserId)).limit(1);
+
+        if (uRecords && uRecords.length > 0) {
+          const uRecord = uRecords[0];
+          reporterName = `${uRecord.name || ''} ${uRecord.lastName || ''}`.trim() || "Usuario";
+          reporterEmail = uRecord.email || "No disponible";
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo obtener info del usuario que reporta", e);
+      }
+    }
+
+    // 2. Consultar el título del empleo reportado en la tabla jobs
+    let reportedTitle = `Empleo ID: ${validItemId}`;
+    try {
+      const itemRows = await db.select({ title: jobs.title }).from(jobs).where(eq(jobs.id, validItemId)).limit(1);
+      if (itemRows && itemRows.length > 0 && itemRows[0].title) {
+        reportedTitle = itemRows[0].title;
+      }
+    } catch (e) {
+      console.warn("⚠️ No se pudo obtener el título del empleo reportado", e);
     }
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -658,7 +686,14 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    const message = `🚨 *REPORTE DE CONTENIDO (EMPLEOS)*\n\n*Tipo:* ${validType.toUpperCase()}\n*ID Elemento:* \`\${validItemId}\`\n*Motivo:* ${safeReason}\n*Reportado por:* \`\${validUserId}\`\n\n⚠️ Por favor verifica el contenido en el panel de administrador.`;
+    // 3. Mensaje claro con template literals limpios y nativos
+    const message = `🚨 *REPORTE DE CONTENIDO (EMPLEOS)*\n\n` +
+                    `📌 *Módulo:* ${validType.toUpperCase()}\n` +
+                    `🏷️ *Elemento:* "${reportedTitle}"\n` +
+                    `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
+                    `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
+                    `⚠️ *Motivo:* ${safeReason}\n\n` +
+                    `Por favor verifica el contenido en el panel de administrador.`;
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
