@@ -590,36 +590,36 @@ export default function JobsScreen() {
     else { Alert.alert(title, message); }
   };
 
-// 🚀 FUNCIÓN DE REPORTE CORREGIDA (APUNTA SIEMPRE AL ENDPOINT VÁLIDO /jobs/reports)
-const handleReportSubmit = async () => {
-  if (!itemToReport) return;
-  setIsSubmittingReport(true);
-  try {
-    const response = await fetch(`${API_JOBS_URL}/reports`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userToken}`
-      },
-      body: JSON.stringify({
-        itemId: itemToReport.id,
-        itemType: itemToReport.itemType || 'job',
-        userId: currentUserId,
-        reason: reportReason
-      })
-    });
+  // 🚀 FUNCIÓN DE REPORTE CORREGIDA (APUNTA SIEMPRE AL ENDPOINT VÁLIDO /jobs/reports)
+  const handleReportSubmit = async () => {
+    if (!itemToReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const response = await fetch(`${API_JOBS_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemToReport.id,
+          itemType: itemToReport.itemType || 'job',
+          userId: currentUserId,
+          reason: reportReason
+        })
+      });
 
-    if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+      if (!response.ok) throw new Error("No se pudo enviar el reporte.");
 
-    triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
-    setReportModalVisible(false);
-    setItemToReport(null);
-  } catch (error: any) {
-    triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
-  } finally {
-    setIsSubmittingReport(false);
-  }
-};
+      triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+      setReportModalVisible(false);
+      setItemToReport(null);
+    } catch (error: any) {
+      triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
 
   const toggleNewJobShift = (shift: string) => {
       setNewJob(prev => {

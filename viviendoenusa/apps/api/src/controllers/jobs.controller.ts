@@ -631,7 +631,7 @@ export const deleteJob = async (id: string) => {
 };
 
 // =====================================================================
-// 🚨 7. REPORTAR CONTENIDO (CORREGIDO Y OPTIMIZADO)
+// 🚨 7. REPORTAR CONTENIDO (ORGANIZADO Y OPTIMIZADO)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
@@ -667,25 +667,46 @@ export const reportContent = async (data: any) => {
       }
     }
 
-    // 2. Consultar el contenido real según si es un empleo o una reseña
+    // 2. Consultar el contenido real y la compañía asociada según corresponda
     let reportedContent = `ID: ${validItemId}`;
+    let associatedCompany = "No aplica";
+
     try {
       if (validType === 'review') {
         const reviewRows = await db.select({
-          comment: reviewsTable.comment
-        }).from(reviewsTable).where(eq(reviewsTable.id, validItemId)).limit(1);
+          comment: reviewsTable.comment,
+          companyName: companies.name
+        })
+        .from(reviewsTable)
+        .leftJoin(ratingTable, eq(reviewsTable.relationshipId, ratingTable.id))
+        .leftJoin(jobs, eq(ratingTable.referenceId, jobs.id))
+        .leftJoin(companies, eq(jobs.companyId, companies.id))
+        .where(eq(reviewsTable.id, validItemId))
+        .limit(1);
 
         if (reviewRows && reviewRows.length > 0) {
-          reviewRows[0].comment || `Reseña ID: ${validItemId}`;
+          reportedContent = reviewRows[0].comment ||`Reseña ID: ${validItemId}`;
+          associatedCompany = reviewRows[0].companyName || "Compañía Directa";
         }
       } else {
-        const jobRows = await db.select({ title: jobs.title, nameJobs: jobs.nameJobs }).from(jobs).where(eq(jobs.id, validItemId)).limit(1);
+        const jobRows = await db.select({ 
+          title: jobs.title, 
+          nameJobs: jobs.nameJobs,
+          companyName: companies.name,
+          fallbackCompany: jobs.company
+        })
+        .from(jobs)
+        .leftJoin(companies, eq(jobs.companyId, companies.id))
+        .where(eq(jobs.id, validItemId))
+        .limit(1);
+
         if (jobRows && jobRows.length > 0) {
           reportedContent = jobRows[0].title || jobRows[0].nameJobs || `Empleo ID: ${validItemId}`;
+          associatedCompany = jobRows[0].companyName || jobRows[0].fallbackCompany || "Sin Empresa";
         }
       }
     } catch (e) {
-      console.warn("⚠️ No se pudo obtener el contenido del elemento reportado", e);
+      console.warn("⚠️ No se pudo obtener el contenido o compañía del elemento reportado", e);
     }
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -696,10 +717,11 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    // 3. Mensaje con interpolación correcta (sin caracteres literales extraños)
+    // 3. Mensaje estructurado, limpio y con interpolación correcta asegurada
     const message = `🚨 *REPORTE DE CONTENIDO (${validType.toUpperCase()})*\n\n` +
                     `📌 *Módulo:* ${validType.toUpperCase()}\n` +
-                    `🏷️ *Elemento:* "${reportedContent}"\n` +
+                    `🏢 *Compañía / Origen:* ${associatedCompany}\n` +
+                    `🏷️ *Contenido:* "${reportedContent}"\n` +
                     `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
                     `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
                     `⚠️ *Motivo:* ${safeReason}\n\n` +
