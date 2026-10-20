@@ -1041,7 +1041,7 @@ const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark
             <ThemedText style={{ fontSize: 12, color: Colors.accent, fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
           </View>
 
-          {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
+          {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
           {!isOwner && (
             <TouchableOpacity onPress={() => onReport(item)} style={{ padding: 4, opacity: 0.7 }}>
               <MaterialCommunityIcons name="flag-outline" size={18} color={Colors.subtext} />

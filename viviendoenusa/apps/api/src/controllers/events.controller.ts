@@ -1,6 +1,7 @@
 import { db } from "../../../../packages/db/src"; 
-import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
+import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
 import { eq, desc, asc, sql, and, inArray, or } from "drizzle-orm"; 
+import { alias } from "drizzle-orm/pg-core";
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; 
 
@@ -9,6 +10,8 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const radiusMiles = process.env.RADIUMILE || 20; 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const NOMBRE_BUCKET = 'images'; 
+
+const reviewers = alias(users, 'reviewers');
 
 // =====================================================================
 // 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
@@ -130,8 +133,6 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
       chunks.push(messages.slice(i, i + 100));
     }
 
-    console.log(`📱 [PUSH MASIVO EVENTOS] Enviando ${messages.length} notificaciones en la zona...`);
-
     for (const chunk of chunks) {
       await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
@@ -143,14 +144,13 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         body: JSON.stringify(chunk),
       });
     }
-    console.log(`✅ [PUSH MASIVO EVENTOS] ¡Envío completado exitosamente!`);
   } catch (error) {
     console.error("❌ [PUSH MASIVO EVENTOS] Error enviando notificaciones:", error);
   }
 };
 
 // =====================================================================
-// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM PARA EVENTOS
+// 📲 ALERTA DE TELEGRAM PARA EVENTOS
 // =====================================================================
 const sendTelegramAlert = async (userId: string, zip: string, eventName: string, method: string, refCode: string) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -180,7 +180,7 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (DEVUELVE ACTIVOS Y PENDIENTES PARA QUE EL FRONT FILTRE)
+// 🔍 1. CONSULTA GENERAL (CON RESEÑAS AGREGADAS)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
@@ -189,8 +189,6 @@ export const getEvents = async (zip?: string, userId?: string) => {
       ? sanitizeText(String(userId)) 
       : null;
 
-    // 🚀 FIX: Si hay userId (usuario normal), ve los aprobados vigentes y los suyos propios.
-    // Si NO hay userId (modo admin), ve los aprobados vigentes Y TODOS los pendientes por revisar.
     let baseConditions = cleanUserId 
       ? sql`((${events.approved} = true AND ${events.dateEvent} >= CURRENT_DATE) OR ${events.userId} = ${cleanUserId})`
       : sql`(${events.approved} = true AND ${events.dateEvent} >= CURRENT_DATE) OR ${events.approved} = false`;
@@ -212,44 +210,102 @@ export const getEvents = async (zip?: string, userId?: string) => {
       events: events,
       users: users,
       payments: payments,
+      rating: ratingTable,
+      reviews: reviewsTable,
+      reviewers: reviewers,
     })
     .from(events)
     .leftJoin(users, eq(events.userId, users.id)) 
     .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
+    .leftJoin(ratingTable, eq(ratingTable.referenceId, events.id)) 
+    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+    .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .where(finalConditions)
     .$dynamic();
+
+    if (cleanUserId) {
+      query = query.orderBy(
+        sql`CASE WHEN ${events.userId} = ${cleanUserId} THEN 0 WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 ELSE 2 END`,
+        desc(events.id)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 ELSE 1 END`,
+        desc(events.id)
+      );
+    }
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
 
-    return await Promise.all(rows.map(async (row: any) => {
-        const dbEvent = row.events;
+    const itemsMap = new Map<string, any>();
+
+    for (const row of rows) {
+      const itemId = row.events.id;
+
+      if (!itemsMap.has(itemId)) {
+        const dbEvent = row.events as any;
         const dbUser = row.users;
         const dbPayment = row.payments;
 
-        const nombreUsuario = dbUser?.name || dbUser?.firstName || dbUser?.first_name || dbUser?.full_name || 'Usuario Anónimo';
+        const isAppr = dbEvent.approved === true || String(dbEvent.approved).toLowerCase() === 'true';
+        const nombreUsuario = dbUser?.name || 'Usuario Anónimo';
+
+        itemsMap.set(itemId, {
+          ...dbEvent,
+          approved: isAppr,
+          status: isAppr ? 'approved' : 'pending',
+          ownerName: nombreUsuario,
+          referenceCode: dbPayment?.referenceCode,
+          paymentMethod: dbPayment?.paymentMethod || '',
+          googleReviewLink: dbEvent.googleReviewLink || dbEvent.googleUrl || dbEvent.google_review_link,
+          reviews: [],
+          rating: 0,
+          totalReviews: 0
+        });
+      }
+
+      if (row.rating && row.rating.id) {
+        const reviewerUser = row.reviewers;
+        let signedImageUrl = null;
+        if (reviewerUser?.imageUrl) {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/' + reviewerUser.imageUrl, 3600);
+          if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        }
         
-        const fileName = dbEvent.imageEven;
+        const commentText = row.reviews?.comment || '';
+        const name = reviewerUser ? `${reviewerUser.name || ''} ${reviewerUser.lastName?.substring(0, 1) || ''}`.trim() : 'Anónimo';
+
+        itemsMap.get(itemId).reviews.push({
+           ...row.rating,
+           stars: Number(row.rating.rating) || 0,
+           comment: commentText, 
+           name: name,
+           image: signedImageUrl,
+           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    }
+
+    const finalListPromises = Array.from(itemsMap.values()).map(async item => {
+        item.totalReviews = item.reviews.length;
+        item.rating = item.totalReviews > 0 
+          ? Math.round((item.reviews.reduce((sum: number, r: any) => sum + r.stars, 0) / item.totalReviews) * 10) / 10 
+          : 0;
+
+        const fileName = item.imageEven;
         let publicUrl = fileName; 
 
         if (fileName && typeof fileName === 'string' && fileName.trim() !== '' && !fileName.startsWith('http')) {
-            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(`events/${fileName.replace('events/', '')}`, 3600); 
-            if (data?.signedUrl) publicUrl = data.signedUrl;
+            const cleanName = fileName.replace('events/', '');
+            const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(`events/${cleanName}`, 3600); 
+            if (!error && data?.signedUrl) publicUrl = data.signedUrl;
         }
 
-        const isAppr = dbEvent.approved === true || String(dbEvent.approved).toLowerCase() === 'true';
+        return { ...item, imageEven: publicUrl, imageUrl: publicUrl }; 
+    });
 
-        return { 
-            ...dbEvent,
-            approved: isAppr,
-            status: isAppr ? 'approved' : 'pending',
-            imageEven: publicUrl, 
-            ownerName: nombreUsuario,
-            referenceCode: dbPayment?.referenceCode,
-            paymentMethod: dbPayment?.paymentMethod || '',
-            googleReviewLink: dbEvent.googleReviewLink || dbEvent.googleUrl || dbEvent.google_review_link
-        }; 
-    }));
+    return await Promise.all(finalListPromises);
   } catch (error) {
     console.error("❌ Error en getEvents:", error);
     return [];
@@ -257,7 +313,7 @@ export const getEvents = async (zip?: string, userId?: string) => {
 };
 
 // =====================================================================
-// 🔍 2. CONSULTA INDIVIDUAL POR ID CON PAGOS
+// 🔍 2. CONSULTA INDIVIDUAL POR ID (CON RESEÑAS AGREGADAS)
 // =====================================================================
 export const getEventById = async (id: string, userId?: string) => {
   try {
@@ -265,10 +321,20 @@ export const getEventById = async (id: string, userId?: string) => {
     if (!cleanId) return null;
 
     const rows = await db
-      .select()
+      .select({
+        events: events,
+        users: users,
+        payments: payments,
+        rating: ratingTable,
+        reviews: reviewsTable,
+        reviewers: reviewers,
+      })
       .from(events)
       .leftJoin(users, eq(events.userId, users.id))
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, events.id)) 
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
       .where(eq(events.id, cleanId));
 
     if (!rows || rows.length === 0) return null;
@@ -277,38 +343,69 @@ export const getEventById = async (id: string, userId?: string) => {
     const dbUser = rows[0].users;
     const dbPayment = rows[0].payments;
     const nombreUsuario = dbUser?.name || 'Usuario Anónimo';
-
-    let publicUrl = dbEvent.imageEven;
-
-    if (publicUrl && typeof publicUrl === 'string' && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
-        const cleanName = publicUrl.replace('events/', '');
-        const { data, error } = await supabase.storage
-            .from(NOMBRE_BUCKET).createSignedUrl(`events/${cleanName}`, 3600);
-            
-        if (!error && data?.signedUrl) {
-            publicUrl = data.signedUrl;
-        }
-    }
-
     const isAppr = dbEvent.approved === true || String(dbEvent.approved).toLowerCase() === 'true';
 
-    return {
+    const itemFinal: any = {
         ...dbEvent,
         approved: isAppr,
         status: isAppr ? 'approved' : 'pending',
-        imageEven: publicUrl,
         ownerName: nombreUsuario,
         referenceCode: dbPayment?.referenceCode,
         paymentMethod: dbPayment?.paymentMethod || '',
-        googleReviewLink: dbEvent.googleReviewLink
+        googleReviewLink: dbEvent.googleReviewLink,
+        reviews: [],
+        rating: 0,
+        totalReviews: 0
     };
+
+    for (const row of rows) {
+      if (row.rating && row.rating.id) {
+        const reviewerUser = row.reviewers;
+        let signedImageUrl = null;
+        if (reviewerUser?.imageUrl) {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/' + reviewerUser.imageUrl, 3600);
+            if (data?.signedUrl) signedImageUrl = data.signedUrl;
+        }
+
+        const commentText = row.reviews?.comment || '';
+        const namePart = reviewerUser?.name || reviewerUser?.lastName || 'Anónimo';
+        const lastNamePart = reviewerUser?.lastName ? reviewerUser.lastName.substring(0, 1) : '';
+
+        itemFinal.reviews.push({
+          ...row.rating,
+          stars: Number(row.rating.rating) || 0,
+          comment: commentText,
+          name: `${namePart} ${lastNamePart}`.trim(),
+          image: signedImageUrl,
+          displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    }
+
+    itemFinal.totalReviews = itemFinal.reviews.length;
+    if (itemFinal.totalReviews > 0) {
+      const sum = itemFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+      itemFinal.rating = Math.round((sum / itemFinal.totalReviews) * 10) / 10;
+    }
+
+    let publicUrl = dbEvent.imageEven;
+    if (publicUrl && typeof publicUrl === 'string' && publicUrl.trim() !== '' && !publicUrl.startsWith('http')) {
+        const cleanName = publicUrl.replace('events/', '');
+        const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(`events/${cleanName}`, 3600);
+        if (!error && data?.signedUrl) publicUrl = data.signedUrl;
+    }
+
+    itemFinal.imageEven = publicUrl;
+    itemFinal.imageUrl = publicUrl;
+
+    return itemFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener el evento por ID: ${error.message}`);
   }
 };
 
 // =====================================================================
-// 📥 3. CREAR EVENTO (NACE PENDIENTE + ALERTA TELEGRAM)
+// 📥 3. CREAR EVENTO
 // =====================================================================
 export const createEvent = async (data: any) => {
   try {
@@ -319,7 +416,6 @@ export const createEvent = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un evento.");
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EVENTOS
     let safeGoogleLink = null;
     if (cleanData.googleReviewLink) {
       const trimmedLink = cleanData.googleReviewLink.trim();
@@ -399,7 +495,6 @@ export const createEvent = async (data: any) => {
               status: isCoupon ? "approved" : "pending"
             };
 
-            // 🚀 FIX: Los eventos SIEMPRE vencen el día del evento. Eliminado el "+ INTERVAL '1 month'" 
             if (isCoupon) {
               paymentPayload.approvedAt = sql`NOW()`;
             }
@@ -456,7 +551,7 @@ export const createEvent = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR EVENTO (DISPARA NOTIFICACIONES AL APROBAR) - BLINDADO
+// 🔄 4. ACTUALIZAR O RENOVAR EVENTO (Modificar imagen, descripción o fecha)
 // =====================================================================
 export const updateEvent = async (idParam: any, dataParam: any) => {
   let cleanId: string = "";
@@ -482,7 +577,6 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
     const cleanPayload = sanitizePayload(data);
 
-    // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
     if (cleanPayload.googleReviewLink !== undefined) {
       if (cleanPayload.googleReviewLink.trim() === '') {
         cleanPayload.googleReviewLink = null;
@@ -505,6 +599,8 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
     const wasApprovedBefore = existingEvent.approved === true;
 
     const eventResult = await db.transaction(async (tx) => {
+        
+        // 🚀 Si están modificando y aprobando de nuevo para el otro año, reseteamos la creación
         if (cleanPayload.approved === true) {
             cleanPayload.createdAt = new Date();
         }
@@ -514,13 +610,16 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
         if (!event) throw new Error("No se pudo encontrar el evento actualizado");
 
-        if (cleanPayload.approved === true) {
+        // Si se cambia la fecha del evento, actualizamos también el vencimiento en la tabla de pagos
+        if (cleanPayload.dateEvent || cleanPayload.approved === true) {
             const expirationDate = event.dateEvent ? new Date(event.dateEvent) : new Date();
 
-            const paymentUpdatePayload: any = { 
-                status: 'approved', 
-                approvedAt: new Date()
-            };
+            const paymentUpdatePayload: any = {};
+            
+            if (cleanPayload.approved === true) {
+                paymentUpdatePayload.status = 'approved';
+                paymentUpdatePayload.approvedAt = new Date();
+            }
 
             if ('timepostEnd' in payments) paymentUpdatePayload.timepostEnd = expirationDate;
             else if ('timepost_end' in payments) paymentUpdatePayload.timepost_end = expirationDate;
@@ -533,6 +632,7 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
         const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true';
 
         if (isApprovedNow && !wasApprovedBefore && event && event.dateEvent) {
+            // ... lógica de envío de push notifications y recordatorios programados (intacta)
             const today = new Date();
             const eventDate = new Date(event.dateEvent);
             const diffTime = eventDate.getTime() - today.getTime();
@@ -580,7 +680,6 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
                 }
             }
 
-            console.log("✅ [DEBUG PUSH EVENTOS] Evento aprobado. Buscando usuarios cercanos...");
             const titleText = "¡Nuevo Evento en tu área! 🎉";
             const bodyText = `Se ha publicado: ${event.title}. ¡Revisa los detalles!`;
             let usersToNotify: { id: string }[] = [];
@@ -614,7 +713,7 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
                     return payload;
                 });
 
-                await db.insert(notifications).values(massNotifs);
+                await tx.insert(notifications).values(massNotifs);
 
                 pushNotificationData = {
                     title: titleText,
@@ -651,5 +750,194 @@ export const deleteEvent = async (id: string) => {
     return deleted[0] || null;
   } catch (error: any) {
     throw new Error(`Error al eliminar el evento: ${error.message}`);
+  }
+};
+
+// =====================================================================
+// 📥 5. CREAR RESEÑA PARA EVENTO
+// =====================================================================
+export const createEventReview = async (data: any) => {
+  try {
+    const validUserId = data.userId;
+    if (!validUserId) {
+        throw new Error("Se requiere iniciar sesión para dejar una reseña.");
+    } 
+
+    const existingReview = await db
+      .select()
+      .from(ratingTable)
+      .where(
+        and(
+          eq(ratingTable.referenceId, data.reference_id),
+          eq(ratingTable.userId, validUserId)
+        )
+      )
+      .limit(1);
+
+    if (existingReview.length > 0) {
+      throw new Error("Ya has escrito una reseña para este evento.");
+    }
+
+    const ratingPayload: any = {
+      rating: String(data.stars || 5),
+      userId: validUserId,
+      referenceId: data.reference_id, 
+      typeEntry: 'event'
+    };
+
+    const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
+    const generatedRatingId = newRating[0].id;
+
+    let savedComment = '';
+    if (data.comment && data.comment.trim() !== '') {
+      const reviewPayload: any = {
+        userId: validUserId,
+        comment: data.comment,
+        relationshipId: generatedRatingId,
+        typeDetailId: '035118eb-612e-41a2-ac95-b4f339b4e388' 
+      };
+
+      const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
+      savedComment = newReview[0].comment || '';
+    }
+
+    const [userRecord] = await db.select({
+      name: users.name,
+      lastName: users.lastName,
+      imageUrl: users.imageUrl
+    }).from(users).where(eq(users.id, validUserId));
+
+    let signedImageUrl = null;
+    if (userRecord && userRecord.imageUrl) {
+      const rutaArchivo = userRecord.imageUrl.startsWith('users/') 
+        ? userRecord.imageUrl 
+        : `users/${userRecord.imageUrl}`;
+      const { data: storageData } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+      if (storageData) signedImageUrl = storageData.signedUrl;
+    }
+
+    const formattedName = userRecord 
+      ? `${userRecord.name} ${userRecord.lastName ? userRecord.lastName.substring(0, 1) : ''}`
+      : 'Usuario';
+
+    return {
+      id: generatedRatingId,
+      stars: Number(newRating[0].rating),
+      comment: savedComment,
+      name: formattedName,
+      image: signedImageUrl,
+      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+  } catch (error: any) { 
+    console.error("❌ Error en createEventReview:", error);
+    throw error; 
+  }
+};
+
+// =====================================================================
+// 🚨 6. REPORTAR CONTENIDO DE EVENTO O RESEÑA
+// =====================================================================
+export const reportContent = async (data: any) => {
+  try {
+    const { itemId, itemType, userId, reason } = data;
+
+    const validItemId = sanitizeText(itemId);
+    const validType = sanitizeText(itemType) || 'event';
+    const validUserId = sanitizeText(userId);
+    const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Spam';
+
+    if (!validItemId) {
+      throw new Error("El ID del elemento es obligatorio para reportar.");
+    }
+
+    let reporterName = "Usuario Anónimo";
+    let reporterEmail = "No disponible";
+    if (validUserId) {
+      try {
+        const uRecords = await db.select({
+          name: users.name,
+          lastName: users.lastName,
+          email: users.email
+        }).from(users).where(eq(users.id, validUserId)).limit(1);
+
+        if (uRecords && uRecords.length > 0) {
+          const uRecord = uRecords[0];
+          reporterName = `${uRecord.name || ''} ${uRecord.lastName || ''}`.trim() || "Usuario";
+          reporterEmail = uRecord.email || "No disponible";
+        }
+      } catch (e) {
+        console.warn("⚠️ No se pudo obtener info del usuario que reporta", e);
+      }
+    }
+
+    let reportedContent = `ID: ${validItemId}`;
+    let associatedCompany = "No aplica";
+
+    try {
+      if (validType === 'review') {
+        const reviewRows = await db.select({
+          comment: reviewsTable.comment,
+          eventName: events.title
+        })
+        .from(reviewsTable)
+        .leftJoin(ratingTable, eq(reviewsTable.relationshipId, ratingTable.id))
+        .leftJoin(events, eq(ratingTable.referenceId, events.id))
+        .where(eq(reviewsTable.id, validItemId))
+        .limit(1);
+
+        if (reviewRows && reviewRows.length > 0) {
+          reportedContent = reviewRows[0].comment || `Reseña ID: ${validItemId}`;
+          associatedCompany = reviewRows[0].eventName || "Evento Desconocido";
+        }
+      } else {
+        const itemRows = await db.select({ name: events.title }).from(events).where(eq(events.id, validItemId)).limit(1);
+        if (itemRows && itemRows.length > 0 && itemRows[0].name) {
+          reportedContent = itemRows[0].name;
+          associatedCompany = itemRows[0].name;
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ No se pudo obtener el contenido del evento o reseña reportada", e);
+    }
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (!botToken || !chatId) {
+      console.warn("⚠️ Credenciales de Telegram no configuradas para reportes.");
+      return { success: false, message: "Reporte registrado en sistema local." };
+    }
+
+    const message = `🚨 *REPORTE DE CONTENIDO (${validType.toUpperCase()})*
+
+📌 *Módulo:* EVENTOS
+🏢 *Evento / Origen:* ${associatedCompany}
+🏷️ *Contenido:* "${reportedContent}"
+🆔 *ID Elemento:* \`\${validItemId}\`
+👤 *Reportado por:* ${reporterName} (${reporterEmail})
+⚠️ *Motivo:* ${safeReason}
+
+Por favor verifica el contenido en el panel de administrador.`;
+
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Fallo la comunicación con Telegram API.");
+    }
+
+    return { success: true, message: "Alerta enviada a moderación." };
+
+  } catch (error: any) {
+    console.error("❌ Error enviando reporte:", error);
+    throw new Error(`Error al procesar el reporte: ${error.message}`);
   }
 };

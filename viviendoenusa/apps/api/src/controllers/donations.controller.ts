@@ -551,14 +551,16 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    // 3. Mensaje claro con template literals limpios y nativos
-    const message = `🚨 *REPORTE DE CONTENIDO (DONACIONES)*\n\n` +
-                    `📌 *Módulo:* ${validType.toUpperCase()}\n` +
-                    `🏷️ *Elemento:* "${reportedTitle}"\n` +
-                    `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
-                    `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
-                    `⚠️ *Motivo:* ${safeReason}\n\n` +
-                    `Por favor verifica el contenido en el panel de administrador.`;
+    // 3. Mensaje claro y limpio usando template literals multi-línea
+    const message = `🚨 *REPORTE DE CONTENIDO (${validType.toUpperCase()})*
+
+📌 *Módulo:* ${validType.toUpperCase()}
+🏷️ *Contenido:* "${reportedTitle}"
+🆔 *ID Elemento:* \`\${validItemId}\`
+👤 *Reportado por:* ${reporterName} (${reporterEmail})
+⚠️ *Motivo:* ${safeReason}
+
+Por favor verifica el contenido en el panel de administrador.`;
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
