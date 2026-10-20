@@ -27,11 +27,6 @@ import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
 
-/*
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;*/
-
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'community') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
   if (!supabaseClient) return url;
@@ -133,21 +128,18 @@ const getRelativeTime = (dateString: string | Date) => {
   return past.toLocaleDateString();
 };
 
-// 🚀 FUNCIÓN PARA TRADUCIR EL TAG DEL BACKEND AL IDIOMA ACTUAL DE MANERA SEGURA
 const getTranslatedTag = (backendTag: string, t: any) => {
   if (!backendTag) return '';
   const clean = backendTag.trim().toLowerCase();
   
   const typepost = t?.communitytab?.typepost || [];
 
-  // Si estamos en español, buscamos su equivalente
   if (typepost.includes('Experiencia')) {
     if (clean === 'experience' || clean === 'experiencia') return typepost[1] || 'Experiencia';
     if (clean === 'question' || clean === 'preguntas' || clean === 'pregunta') return typepost[2] || 'Pregunta';
     if (clean === 'advice' || clean === 'consejos' || clean === 'consejo') return typepost[3] || 'Consejo';
   }
   
-  // Si estamos en inglés, buscamos su equivalente
   if (typepost.includes('Experience')) {
     if (clean === 'experiencia' || clean === 'experience') return typepost[1] || 'Experience';
     if (clean === 'pregunta' || clean === 'preguntas' || clean === 'question') return typepost[2] || 'Question';
@@ -176,7 +168,6 @@ export default function CommunityScreen() {
   const userZip = userMetadata?.zip || userMetadata?.zipcode || '';
   const loggedIn = useMockSelector((state) => state.mockAuth.loggedIn);
 
-  // 🚀 ADMIN CHECK SEGURO
   const userEmailClean = userMetadata?.email || '';
   const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
@@ -231,7 +222,6 @@ export default function CommunityScreen() {
     'Advice': 'Advice', 'Consejo': 'Advice'
   };
 
-  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
   const subCategories = [
     { id: t?.communitytab?.subCategories?.[0] || 'General', icon: 'earth' }, 
     { id: t?.communitytab?.subCategories?.[1] || 'Comida', icon: 'silverware-fork-knife' },
@@ -245,7 +235,6 @@ export default function CommunityScreen() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [zipCode, setZipCode] = useState(''); 
 
-  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
   const defaultTag = (t?.communitytab?.typepostAdd?.length > 0) ? t?.communitytab?.typepostAdd[0] : 'Experience';
   const [selectedTag, setSelectedTag] = useState(defaultTag); 
   const [selectedSubCategory, setSelectedSubCategory] = useState('All'); 
@@ -264,6 +253,12 @@ export default function CommunityScreen() {
   const [visibleComments, setVisibleComments] = useState<Record<string, boolean>>({});
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
+
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [itemToReport, setItemToReport] = useState<any>(null);
+  const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const hasInitialized = useRef(false);
 
@@ -353,7 +348,9 @@ export default function CommunityScreen() {
 
       const textResponse = await response.text();
       
-      if (!textResponse) {
+      // 🚀 VALIDACIÓN DE SEGURIDAD: Si empieza con '<', es HTML (Error del servidor)
+      if (!textResponse || textResponse.trim().startsWith('<')) {
+        console.warn("⚠️ El servidor backend devolvió HTML en lugar de JSON (posible error 502/404 o Render dormido).");
         setPosts([]);
         setPendingPosts([]);
         return;
@@ -413,6 +410,8 @@ export default function CommunityScreen() {
       }
     } catch (error) {
       console.error("Error cargando posts de la comunidad:", error);
+      setPosts([]);
+      setPendingPosts([]);
     } finally {
       setLoadingPosts(false);
     }
@@ -494,6 +493,37 @@ export default function CommunityScreen() {
     else { Alert.alert(title, message); }
   };
 
+  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO
+  const handleReportSubmit = async () => {
+    if (!itemToReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const response = await fetch(`${API_COMMUNITY_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemToReport.id,
+          itemType: itemToReport.itemType || 'community',
+          userId: currentUserId,
+          reason: reportReason
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+      triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+      setReportModalVisible(false);
+      setItemToReport(null);
+    } catch (error: any) {
+      triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const handleShare = async (post: any) => {
     await handleUniversalShare({
       title: `Comunidad - ${getTranslatedTag(post.tag, t)} • ${post.subCategory}`,
@@ -531,7 +561,7 @@ export default function CommunityScreen() {
 
         const formData = new FormData();
         const filename = selectedImage.split('/').pop() || 'imagen.jpg';
-        const match = /\.(\w+)$/.exec(filename);
+        const match = /\.(\w+)\$/.exec(filename);
         const type = match ? `image/${match[1]}` : `image/jpeg`;
 
         if (Platform.OS === 'web') {
@@ -673,7 +703,8 @@ export default function CommunityScreen() {
         createdAt: rawCreatedAt,
         displayTime: getRelativeTime(rawCreatedAt),
         userName: savedReview.userName || userMetadata?.name || 'Usuario',
-        image: savedReview.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg'
+        image: savedReview.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
+        userId: currentUserId
       };
 
       setComments(prev => ({
@@ -1107,6 +1138,8 @@ export default function CommunityScreen() {
                         <View style={isLargeWeb ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
                           {filteredPosts.map(post => {
                             const isPending = post.status === 'pending';
+                            const isOwner = post.userId === currentUserId;
+
                             return (
                               <View 
                                 key={post.id} 
@@ -1121,7 +1154,7 @@ export default function CommunityScreen() {
                                   </View>
                                 )}
                                 
-                                <View style={[styles.postHeaderRow, { opacity: isPending ? 0.6 : 1 }]}>
+                                <View style={[styles.postHeaderRow, { opacity: isPending ? 0.6 : 1, alignItems: 'center' }]}>
                                   <ThemedText style={styles.tagText}>#{getTranslatedTag(post.tag, t)} • {post.subCategory}</ThemedText>
                                   <ThemedText style={styles.timeText}>{post.displayTime}</ThemedText>
                                 </View>
@@ -1164,6 +1197,13 @@ export default function CommunityScreen() {
                                         {c.text}
                                       </ThemedText>
                                     </ThemedText>
+
+                                    {/* 🚀 BOTÓN DE REPORTAR COMENTARIO EN COMUNIDAD */}
+                                    {c.userId !== currentUserId && (
+                                      <TouchableOpacity onPress={() => { setItemToReport({ id: c.id, itemType: 'review' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.6 }}>
+                                        <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} />
+                                      </TouchableOpacity>
+                                    )}
                                   </View>
                                       ))
                                     ) : 
@@ -1180,25 +1220,40 @@ export default function CommunityScreen() {
                                     </TouchableOpacity>
                                   </View>
                                 )}
-                                <View style={[styles.postFooter, { marginTop: 10, opacity: isPending ? 0.4 : 1 }]}>
-                                  <View style={styles.reaccionGroup}>
-                                    <TouchableOpacity disabled={isPending} onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
-                                      <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
-                                      <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes || 0}</ThemedText>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity disabled={isPending} onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
-                                      <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive} />
-                                      <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive }]}>{(comments[post.id] || []).length}</ThemedText>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity disabled={isPending} onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
-                                      <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
-                                      <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes || 0}</ThemedText>
-                                    </TouchableOpacity>
+                                <View style={[styles.postFooter, { marginTop: 10, opacity: isPending ? 0.4 : 1, flexDirection: 'column', alignItems: 'stretch' }]}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                    <View style={styles.reaccionGroup}>
+                                      <TouchableOpacity disabled={isPending} onPress={() => handleVote(post.id, 'like')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'like' ? '#1976D2' : 'rgba(25, 118, 210, 0.1)' }]}>
+                                        <MaterialCommunityIcons name="thumb-up" size={14} color={post.userVote === 'like' ? '#fff' : '#1976D2'} />
+                                        <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'like' ? '#fff' : '#1976D2' }]}>{post.likes || 0}</ThemedText>
+                                      </TouchableOpacity>
+                                      <TouchableOpacity disabled={isPending} onPress={() => setVisibleComments(v => ({...v, [post.id]: !v[post.id]}))} style={[styles.reaccionBtn, { backgroundColor: visibleComments[post.id] ? (isDark ? '#FFF' : '#000') : 'rgba(128,128,128,0.1)' }]}>
+                                        <MaterialCommunityIcons name="comment-text-multiple" size={14} color={visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive} />
+                                        <ThemedText style={[styles.reaccionCount, { color: visibleComments[post.id] ? (isDark ? '#000' : '#FFF') : Colors.iconInactive }]}>{(comments[post.id] || []).length}</ThemedText>
+                                      </TouchableOpacity>
+                                      <TouchableOpacity disabled={isPending} onPress={() => handleVote(post.id, 'dislike')} style={[styles.reaccionBtn, { backgroundColor: post.userVote === 'dislike' ? '#FA8072' : 'rgba(250, 128, 114, 0.1)' }]}>
+                                        <MaterialCommunityIcons name="thumb-down" size={14} color={post.userVote === 'dislike' ? '#fff' : '#FA8072'} />
+                                        <ThemedText style={[styles.reaccionCount, { color: post.userVote === 'dislike' ? '#fff' : '#FA8072' }]}>{post.dislikes || 0}</ThemedText>
+                                      </TouchableOpacity>
+                                    </View>
+
+                                    {!isWeb && (
+                                      <TouchableOpacity disabled={isPending} onPress={() => handleShare(post)}>
+                                        <MaterialCommunityIcons name="share-variant" size={18} color={Colors.iconInactive} />
+                                      </TouchableOpacity>
+                                    )}
                                   </View>
 
-                                  {!isWeb && (
-                                    <TouchableOpacity disabled={isPending} onPress={() => handleShare(post)}>
-                                      <MaterialCommunityIcons name="share-variant" size={18} color={Colors.iconInactive} />
+                                  {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA EN COMUNIDAD */}
+                                  {!isOwner && (
+                                    <TouchableOpacity 
+                                      onPress={() => { setItemToReport({ ...post, itemType: 'community' }); setReportModalVisible(true); }}
+                                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}
+                                    >
+                                      <MaterialCommunityIcons name="flag-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
+                                      <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>
+                                        Reportar publicación
+                                      </ThemedText>
                                     </TouchableOpacity>
                                   )}
                                 </View>
@@ -1386,6 +1441,55 @@ export default function CommunityScreen() {
           {imageToView && <Image source={{ uri: imageToView }} style={{ width: '100%', height: '80%', resizeMode: 'contain' }} />}
         </View>
       </RNModal>
+
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
+      <RNModal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: Colors.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '900', color: Colors.text }}>Reportar Contenido</ThemedText>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: Colors.subtext, marginBottom: 15 }}>
+              Selecciona el motivo por el cual deseas reportar este contenido. Nuestro equipo lo revisará de inmediato.
+            </ThemedText>
+
+            {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información falsa o engañosa', 'Publicación duplicada'].map((reasonOption, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                onPress={() => setReportReason(reasonOption)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < 3 ? 1 : 0, borderBottomColor: Colors.border }}
+              >
+                <MaterialCommunityIcons 
+                  name={reportReason === reasonOption ? "radiobox-marked" : "radiobox-blank"} 
+                  size={20} 
+                  color={reportReason === reasonOption ? Colors.accent : Colors.subtext} 
+                  style={{ marginRight: 10 }}
+                />
+                <ThemedText style={{ fontSize: 14, color: Colors.text, fontWeight: reportReason === reasonOption ? '700' : '400' }}>
+                  {reasonOption}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity 
+              onPress={handleReportSubmit} 
+              disabled={isSubmittingReport}
+              style={{ marginTop: 20, backgroundColor: Colors.accent, borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 15 }}>Enviar Reporte</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </RNModal>
+
     </View>
   );
 }

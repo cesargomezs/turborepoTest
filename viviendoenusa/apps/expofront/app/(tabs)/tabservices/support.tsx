@@ -909,7 +909,7 @@ export default function SupportScreen() {
     else Alert.alert(title, message);
   };
 
-  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO
+  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO CENTRALIZADA
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
@@ -922,7 +922,7 @@ export default function SupportScreen() {
         },
         body: JSON.stringify({
           itemId: itemToReport.id,
-          itemType: 'support',
+          itemType: itemToReport.itemType || 'support',
           userId: currentUserId,
           reason: reportReason
         })
@@ -1015,9 +1015,9 @@ export default function SupportScreen() {
               <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
             </View>
 
-            {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
+            {/* 🚀 BOTÓN DE REPORTAR CONTENIDO DESDE LA TARJETA (BANDERA TOP) */}
             {!isOwner && (
-              <TouchableOpacity onPress={() => { setItemToReport(store); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+              <TouchableOpacity onPress={() => { setItemToReport({...store, itemType: 'support'}); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
                 <MaterialCommunityIcons name="flag-outline" size={18} color={DynamicColors.subtext} />
               </TouchableOpacity>
             )}
@@ -1033,11 +1033,26 @@ export default function SupportScreen() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{store.name}</ThemedText>{dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist + t.genericlabel.labelme} </ThemedText>}</View>
           {store.address && ( <ThemedText style={{ fontSize: 13, color: '#FF5F6D', fontWeight: 'bold', marginTop: 4 }}><MaterialCommunityIcons name="map-marker-outline" size={12}/> {store.address}</ThemedText> )}
           <ThemedText style={{ fontSize: 14, opacity: 0.9, marginTop: 6 , color:DynamicColors.text }} numberOfLines={isPending ? undefined : 2}>{store.description}</ThemedText>
+          
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.5 : 1 }}>
             <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}><MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.genericbtn?.reviews || "Reseñas"} {reviewCount > 0 ? `(${formattedCount})` : ''}</ThemedText></TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}><MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.genericbtn.route}</ThemedText></TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${store.phone}`)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}><MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.genericbtn.call}</ThemedText></TouchableOpacity>
           </View>
+
+          {/* 🚀 BOTÓN INFERIOR DE REPORTE FUERA DE LA TARJETA */}
+          {!isPending && !isOwner && (
+            <TouchableOpacity 
+              onPress={() => { setItemToReport({ ...store, itemType: 'support' }); setReportModalVisible(true); }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
+            >
+              <MaterialCommunityIcons name="flag-outline" size={14} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+              <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext, fontWeight: '600' }}>
+                Reportar publicación
+              </ThemedText>
+            </TouchableOpacity>
+          )}
+
           {renderAdminControls && renderAdminControls()}
         </View>
       </View>
@@ -1059,7 +1074,6 @@ export default function SupportScreen() {
            </ThemedText>
         </View>
         
-        {/* 🚀 ELIMINADA LA SECCIÓN DE MESES AQUÍ, SOLO BOTONES DE APROBAR/RECHAZAR */}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
           <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, flexDirection: 'row', backgroundColor: '#FF5252', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
              <MaterialCommunityIcons name="refresh" size={18} color="#FFF" style={{marginRight: 6}}/>
@@ -1136,11 +1150,25 @@ export default function SupportScreen() {
                 {selectedDetail?.address && <ThemedText style={{ color: '#FF5F6D', fontWeight:'700', marginBottom:10 }}>{selectedDetail.address}</ThemedText>}
                 <View style={{height:1, backgroundColor:DynamicColors.border, marginVertical:20}} />
                 <ThemedText style={{ color: DynamicColors.text, lineHeight: 26, fontSize: 15, opacity: 0.9, marginBottom: 20 }}>{selectedDetail?.description}</ThemedText>
+                
                 {isAdminMode && selectedDetail?.status === 'pending' && (
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
                         <TouchableOpacity onPress={() => { rejectStore(selectedDetail.id); handleCloseDetailModal(); }} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}><MaterialCommunityIcons name="close-circle" size={18} color="#FFF" /><ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>{t.genericbtn.rejectbtn}</ThemedText></TouchableOpacity>
                         <TouchableOpacity onPress={() => { approveStore(selectedDetail, 1); handleCloseDetailModal(); }} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}><MaterialCommunityIcons name="check-circle" size={18} color="#FFF" /><ThemedText style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 6 }}>{t.genericbtn.aprovedbtn}</ThemedText></TouchableOpacity>
                     </View>
+                )}
+
+                {/* 🚀 BOTÓN DE REPORTAR EN DETALLE DE APOYO */}
+                {selectedDetail?.userId !== currentUserId && (
+                  <TouchableOpacity 
+                    onPress={() => { setItemToReport({ ...selectedDetail, itemType: 'support' }); setSelectedDetail(null); setReportModalVisible(true); }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
+                  >
+                    <MaterialCommunityIcons name="flag-outline" size={16} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+                    <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
+                      Reportar esta publicación
+                    </ThemedText>
+                  </TouchableOpacity>
                 )}
               </View>
             </ScrollView>
@@ -1187,6 +1215,16 @@ export default function SupportScreen() {
                            </View>
                          </View>
                          <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.comment}</ThemedText>
+                         
+                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
+                            {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA */}
+                            {r.userId !== currentUserId && (
+                              <TouchableOpacity onPress={() => { setItemToReport({ id: r.id, itemType: 'review' }); setSelectedStore(null); setReportModalVisible(true); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <MaterialCommunityIcons name="flag-outline" size={14} color={DynamicColors.subtext} />
+                                <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext }}>Reportar</ThemedText>
+                              </TouchableOpacity>
+                            )}
+                         </View>
                        </View>
                     ))}
                   </ScrollView>

@@ -256,7 +256,7 @@ export default function JobsScreen() {
   
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO (SOPORTA EMPLEOS Y RESEÑAS)
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
@@ -590,7 +590,7 @@ export default function JobsScreen() {
     else { Alert.alert(title, message); }
   };
 
-  // 🚀 FUNCIÓN DE REPORTE CORREGIDA (APUNTA SIEMPRE AL ENDPOINT VÁLIDO /jobs/reports)
+  // 🚀 FUNCIÓN DE REPORTE CONECTADA AL BACKEND DE JOBS
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
@@ -1020,7 +1020,8 @@ export default function JobsScreen() {
           stars: Number(savedReview.stars || reviewForm.rating), 
           userName: savedReview.userName || (reviewForm.isAnonymous ? 'Anónimo' : (userMetadata?.name || 'Usuario')),
           image: freshReviewImage,
-          displayTime: savedReview.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          displayTime: savedReview.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          userId: currentUserId 
       };
       
       let newAverage = 0;
@@ -1246,7 +1247,7 @@ export default function JobsScreen() {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL DE REPORTE DE CONTENIDO (CONECTADO Y FUNCIONAL) */}
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
       <Modal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: DynamicColors.border }}>
@@ -1448,9 +1449,19 @@ export default function JobsScreen() {
                             <View key={job.id} style={[{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, marginBottom: 20, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)', borderColor: DynamicColors.border, opacity: !job.isOpen ? 0.65 : 1 }, isLargeWeb ? { width: '48.5%', alignSelf: 'flex-start' } : {}]}>
                               <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedJobDetail(job)}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
-                                  <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-                                    <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{job.category.toUpperCase()}</ThemedText>
+                                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                                    <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+                                      <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{job.category.toUpperCase()}</ThemedText>
+                                    </View>
+
+                                    {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
+                                    {!isOwner && (
+                                      <TouchableOpacity onPress={() => { setItemToReport({ ...job, itemType: 'job' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+                                        <MaterialCommunityIcons name="flag-outline" size={18} color={DynamicColors.subtext} />
+                                      </TouchableOpacity>
+                                    )}
                                   </View>
+
                                   <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                                     {job.isCompanyVerified && <MaterialCommunityIcons name="check-decagram" size={16} color="#4CAF50" />}
                                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
@@ -1527,10 +1538,10 @@ export default function JobsScreen() {
                                     </TouchableOpacity>
                                 )}
 
-                                {/* 🚀 ENLACE INFERIOR DE REPORTE (CONECTADO Y FUNCIONAL) */}
+                                {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA */}
                                 {!isOwner && (
                                   <TouchableOpacity 
-                                    onPress={() => { setItemToReport(job); setReportModalVisible(true); }}
+                                    onPress={() => { setItemToReport({ ...job, itemType: 'job' }); setReportModalVisible(true); }}
                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
                                   >
                                     <MaterialCommunityIcons name="alert-circle-outline" size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
@@ -2473,7 +2484,7 @@ export default function JobsScreen() {
                          </View>
                          <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.text}</ThemedText>
                          
-                         {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA DENTRO DEL MODAL (CONECTADO CORRECTAMENTE) */}
+                         {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA (CORREGIDO) */}
                          {r.userId !== currentUserId && (
                            <TouchableOpacity 
                              onPress={() => { 
@@ -2483,7 +2494,7 @@ export default function JobsScreen() {
                              }}
                              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
                            >
-                             <MaterialCommunityIcons name="alert-circle-outline" size={13} color={DynamicColors.subtext} style={{ marginRight: 4 }} />
+                             <MaterialCommunityIcons name="flag-outline" size={13} color={DynamicColors.subtext} style={{ marginRight: 4 }} />
                              <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext, fontWeight: '600' }}>
                                Reportar reseña
                              </ThemedText>

@@ -290,7 +290,11 @@ export default function StoresScreen() {
   
   const [allStores, setAllStores] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]); 
+  const [pendingItems, setPendingItems] = useState<any[]>([]);
   
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [savedItems, setSavedItems] = useState<string[]>([]); 
+
   const [userLocation, setUserLocation] = useState<any>(null);
   const [showMarkers, setShowMarkers] = useState(false);
   const [isFilteredByMap, setIsFilteredByMap] = useState(false); 
@@ -331,7 +335,7 @@ export default function StoresScreen() {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [currentTariff, setCurrentTariff] = useState<string>("50.00");
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO (SOPORTA TIENDAS Y RESEÑAS)
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
@@ -454,7 +458,7 @@ export default function StoresScreen() {
 
           const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
-             return { ...r, image: freshReviewImage };
+             return { ...r, image: freshReviewImage, userId: r.userId || r.user_id };
           })) : [];
           
           const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
@@ -530,7 +534,10 @@ export default function StoresScreen() {
             lng: Number(item.lng) || -117.5847,
             phone: item.phone || '',
             rating: Number(item.rating) || 0,
-            reviews: Array.isArray(item.reviews) ? item.reviews : [],
+            reviews: Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
+               const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
+               return { ...r, image: freshReviewImage, userId: r.userId || r.user_id };
+            })) : [],
             totalReviews: Number(item.totalReviews) || 0,
             status: isAppr ? 'approved' : 'pending',
             ownerName: item.ownerName,
@@ -803,7 +810,7 @@ export default function StoresScreen() {
     if (!result.canceled) setFormImage(result.assets[0].uri);
   };
 
-  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO
+  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO (CORREGIDA LA RUTA CENTRALIZADA)
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
@@ -816,7 +823,7 @@ export default function StoresScreen() {
         },
         body: JSON.stringify({
           itemId: itemToReport.id,
-          itemType: 'store',
+          itemType: itemToReport.itemType || 'store',
           userId: currentUserId,
           reason: reportReason
         })
@@ -1125,9 +1132,9 @@ export default function StoresScreen() {
               <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
             </View>
 
-            {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
+            {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
             {!isOwner && (
-              <TouchableOpacity onPress={() => { setItemToReport(store); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+              <TouchableOpacity onPress={() => { setItemToReport({ ...store, itemType: 'store' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
                 <MaterialCommunityIcons name="flag-outline" size={18} color={DynamicColors.subtext} />
               </TouchableOpacity>
             )}
@@ -1190,6 +1197,19 @@ export default function StoresScreen() {
               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>Llamar</ThemedText>
             </TouchableOpacity>
           </View>
+
+          {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA */}
+          {!isOwner && (
+            <TouchableOpacity 
+              onPress={() => { setItemToReport({ ...store, itemType: 'store' }); setReportModalVisible(true); }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
+            >
+              <MaterialCommunityIcons name="flag-outline" size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+              <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
+                Reportar publicación
+              </ThemedText>
+            </TouchableOpacity>
+          )}
 
           {renderAdminControls && renderAdminControls()}
         </View>
@@ -1277,10 +1297,10 @@ export default function StoresScreen() {
         </View>
         
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => rejectStore(store.id)} style={{ flex: 1, backgroundColor: '#FF5252', padding: 12, borderRadius: 12, alignItems: 'center' }}>
             <ThemedText style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Rechazar</ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => approveStore(store, 1)} style={{ flex: 1, backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => approveStore(store, 1)} style={{ flex: 1, backgroundColor: '#4CAF50', padding: 12, borderRadius: 12, alignItems: 'center' }}>
             <ThemedText style={{color:'#FFFFFF', fontWeight:'bold', fontSize:15}}>Aprobar</ThemedText>
           </TouchableOpacity>
         </View>
@@ -1426,6 +1446,23 @@ export default function StoresScreen() {
                            </View>
                          </View>
                          <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.comment}</ThemedText>
+
+                         {/* 🚀 BOTÓN DE REPORTAR RESEÑA DENTRO DEL MODAL */}
+                         {r.userId !== currentUserId && (
+                           <TouchableOpacity 
+                             onPress={() => { 
+                               setItemToReport({ id: r.id, itemType: 'review' }); 
+                               setSelectedStore(null); 
+                               setReportModalVisible(true); 
+                             }}
+                             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
+                           >
+                             <MaterialCommunityIcons name="flag-outline" size={13} color={DynamicColors.subtext} style={{ marginRight: 4 }} />
+                             <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext, fontWeight: '600' }}>
+                               Reportar reseña
+                             </ThemedText>
+                           </TouchableOpacity>
+                         )}
                        </View>
                     ))}
                   </ScrollView>
@@ -1463,7 +1500,8 @@ export default function StoresScreen() {
                             comment: commentStr,
                             name: fromDB.name || userMetadata?.name || 'Yo',
                             image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
-                            displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                            displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                            userId: currentUserId
                           };
                           
                           const updatedReviews = [newReviewFormatted, ...(selectedStore.reviews || [])];
@@ -2082,6 +2120,7 @@ export default function StoresScreen() {
                                 <ThemedText style={{ color: DynamicColors.accent, fontWeight: '800', fontSize: 13 }}>{`  ` + (t.genericbtn?.viewallresults || 'Ver todos')}</ThemedText>
                               </TouchableOpacity>
                             )}
+                            {/* 🚀 LOS PENDIENTES SE OCULTAN AQUÍ SI ESTÁ LA BALANZA PRENDIDA */}
                             {results.map((store) => <StoreCard key={store.id} store={store} isAdminMode={isAdminMode} />)}
                           </>
                         ) : (

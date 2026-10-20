@@ -833,13 +833,12 @@ export default function EntrepreneurshipScreen() {
     } catch (error) { Alert.alert("Error", "No se pudo rechazar."); }
   };
 
-  // 🚀 FUNCIÓN PARA ENVIAR EL REPORTE
+  // 🚀 FUNCIÓN DE REPORTE CORREGIDA Y UNIFICADA EN EL FRONTEND
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
     try {
-      const endpoint = itemToReport.itemType === 'review' ? `${API_ENTREPRENEURSHIP_URL}/reviews/reports` : `${API_ENTREPRENEURSHIP_URL}/reports`;
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -895,10 +894,17 @@ export default function EntrepreneurshipScreen() {
         )}
         
         <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', opacity: isPending ? 0.6 : 1 }}>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
               <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
             </View>
+
+            {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
+            {!isOwner && (
+              <TouchableOpacity onPress={() => { setItemToReport({ ...item, itemType: 'entrepreneurship' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+                <MaterialCommunityIcons name="flag-outline" size={18} color={DC.subtext} />
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
@@ -986,7 +992,7 @@ export default function EntrepreneurshipScreen() {
               onPress={() => { setItemToReport({ ...item, itemType: 'entrepreneurship' }); setReportModalVisible(true); }}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: DC.border }}
             >
-              <MaterialCommunityIcons name="alert-circle-outline" size={14} color={DC.subtext} style={{ marginRight: 6 }} />
+              <MaterialCommunityIcons name="flag-outline" size={15} color={DC.subtext} style={{ marginRight: 6 }} />
               <ThemedText style={{ fontSize: 12, color: DC.subtext, fontWeight: '600' }}>
                 Reportar publicación
               </ThemedText>
@@ -1357,7 +1363,7 @@ export default function EntrepreneurshipScreen() {
                                       }}
                                       style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: DC.border }}
                                     >
-                                      <MaterialCommunityIcons name="alert-circle-outline" size={13} color={DC.subtext} style={{ marginRight: 4 }} />
+                                      <MaterialCommunityIcons name="flag-outline" size={13} color={DC.subtext} style={{ marginRight: 4 }} />
                                       <ThemedText style={{ fontSize: 11, color: DC.subtext, fontWeight: '600' }}>
                                         Reportar reseña
                                       </ThemedText>
@@ -1415,7 +1421,7 @@ export default function EntrepreneurshipScreen() {
                                   }}
                                   style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: DC.border }}
                                 >
-                                  <MaterialCommunityIcons name="alert-circle-outline" size={13} color={DC.subtext} style={{ marginRight: 4 }} />
+                                  <MaterialCommunityIcons name="flag-outline" size={13} color={DC.subtext} style={{ marginRight: 4 }} />
                                   <ThemedText style={{ fontSize: 11, color: DC.subtext, fontWeight: '600' }}>
                                     Reportar reseña
                                   </ThemedText>

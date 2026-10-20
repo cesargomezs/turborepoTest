@@ -209,7 +209,7 @@ const RenewLawyerModal = memo(({ visible, onClose, onSuccess, lawyerToRenew, cur
             {(isWebLocal || appConfig?.payOnActive) ? (
               <>
                 <ThemedText style={{ fontSize: 14, color: Colors.text, marginBottom: 20 }}>
-                  Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de ${currentTariffs} USD y enviando el comprobante aquí abajo.
+                  Renueva la suscripción de <ThemedText style={{fontWeight: 'bold', color: Colors.accent}}>{lawyerToRenew?.name}</ThemedText> realizando el pago de \${currentTariffs} USD y enviando el comprobante aquí abajo.
                 </ThemedText>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
                   {appConfig?.zelleActive && (
@@ -344,7 +344,7 @@ const SuggestLawyerModal = memo(({ visible, onClose, onSuccess, currentUserId, c
         
         const formData = new FormData();
         const filename = formImage.split('/').pop() || 'imagen.jpg';
-        const match = /\.(\w+)$/.exec(filename);
+        const match = /\.(\w+)\$/.exec(filename);
         const type = match ? `image/${match[1]}` : `image/jpeg`;
 
         if (Platform.OS === 'web') {
@@ -723,6 +723,12 @@ export default function LawyersScreen() {
 
   const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [itemToReport, setItemToReport] = useState<any>(null);
+  const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
   const isZipValid = zipCode.length === 5;
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
@@ -736,7 +742,6 @@ export default function LawyersScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
-  // 🚀 REGLA DE FILTRO QUE DESAPARECE A LOS PENDIENTES SI LA BALANZA ESTÁ PRENDIDA
   const applyLocalFilters = useCallback((lawyersList: any[], areaName: string, lat: number, lng: number, adminMode: boolean) => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
     
@@ -747,18 +752,13 @@ export default function LawyersScreen() {
         ? new Date(item.timepostEnd) < new Date() 
         : false;
 
-      // SI ESTÁ PENDIENTE:
       if (isPending) {
-        // En modo admin NUNCA mostramos pendientes en la cuadrícula de abajo (ya están en su propia bandeja de arriba)
         if (adminMode) return false;
-        // Si es usuario normal, solo ve su propio registro pendiente
         return isOwner;
       }
 
-      // 2. Si expiró y no es el dueño, nadie más lo ve
       if (isExpired && !isOwner) return false;
 
-      // 3. Aprobados vigentes los ven todos
       return true; 
     });
 
@@ -780,7 +780,6 @@ export default function LawyersScreen() {
     return filtered;
   }, [currentUserId, PRACTICE_AREAS]);
 
-  // 🚀 FUNCIÓN SEPARADA PARA LLAMARLA AL ABRIR EL MODAL
   const fetchAppConfig = async () => {
     try {
       const res = await fetch(API_CONFIG_URL);
@@ -808,7 +807,7 @@ export default function LawyersScreen() {
         setAppConfig({
           payOnActive: isPayOn,
           zelleActive: isZelle,
-          zelleLink: zLink // 🚀 Corregido a zelleLink
+          zelleLink: zLink 
         });
 
       } else {
@@ -839,45 +838,39 @@ export default function LawyersScreen() {
     loadZelleQr();
   }, []);
 
-  // 🚀 FUNCIÓN PARA REPORTAR CON FETCH A TU BACKEND
-  const handleReportContent = (itemId: string, itemType: string) => {
-    if (Platform.OS === 'web') {
-      window.alert(
-        "Reporte enviado\nGracias por avisarnos. El equipo de moderación revisará este contenido pronto."
-      );
-    } else {
-      Alert.alert(
-        "Reportar contenido",
-        "¿Deseas reportar este contenido por infracción de derechos de autor o contenido inapropiado?",
-        [
-          { text: "Cancelar", style: "cancel" },
-          { 
-            text: "Sí, reportar", 
-            onPress: async () => {
-              try {
-                // 🚀 Petición directa al backend. Tu backend debe recibir esto y mandarte el Telegram.
-                await fetch(`${API_BASE_URL}/reports`, {
-                  method: 'POST',
-                  headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userToken}` 
-                  },
-                  body: JSON.stringify({ 
-                    itemId, 
-                    itemType, 
-                    userId: currentUserId, 
-                    reason: 'Infracción de Copyright o Contenido Inapropiado' 
-                  })
-                });
-                Alert.alert("Reporte Enviado", "Gracias por avisarnos. El equipo revisará este contenido en breve.");
-              } catch (e) {
-                // Si falla la red, igual le damos tranquilidad al usuario
-                Alert.alert("Reporte Registrado", "Tu solicitud ha sido enviada para revisión.");
-              }
-            } 
-          }
-        ]
-      );
+  const triggerAlert = (title: string, message: string) => {
+    if (isWeb) { window.alert(`${title}\n${message}`); }
+    else { Alert.alert(title, message); }
+  };
+
+  // 🚀 FUNCIÓN DE REPORTE CONECTADA AL BACKEND
+  const handleReportSubmit = async () => {
+    if (!itemToReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemToReport.id,
+          itemType: itemToReport.itemType || 'lawyer',
+          userId: currentUserId,
+          reason: reportReason
+        })
+      });
+
+      if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+      triggerAlert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+      setReportModalVisible(false);
+      setItemToReport(null);
+    } catch (error: any) {
+      triggerAlert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+    } finally {
+      setIsSubmittingReport(false);
     }
   };
 
@@ -938,7 +931,6 @@ export default function LawyersScreen() {
     );
   });
 
-  // 🚀 ESCUCHA EL MODO ADMIN Y LLAMA LA INFO DE INMEDIATO
   useEffect(() => {
     if (isAdminMode) {
       fetchAllPendingLawyers();
@@ -971,11 +963,9 @@ export default function LawyersScreen() {
     return () => subscription.remove();
   }, [isFocused, zipCode]);
 
-  // 🚀 LA CONSULTA MAGISTRAL CON USERID
   const fetchAllPendingLawyers = async () => {
     try {
       setLoading(true);
-      // 🚀 INYECTANDO EL USERID EN LA RUTA PARA QUE EL BACKEND DEVUELVA LOS PENDIENTES
       const res = await fetch(`${API_BASE_URL}?userId=${currentUserId}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
@@ -1015,7 +1005,6 @@ export default function LawyersScreen() {
             couponCode: item.couponCode 
           };
         }));
-        // Filtramos estricto todos los pendientes para que el admin los vea
         setPendingLawyers(mappedData.filter(s => s.status === 'pending'));
       }
     } catch (e) {
@@ -1395,9 +1384,19 @@ export default function LawyersScreen() {
         )}
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
-          <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-            <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{lawyer.area?.toUpperCase()}</ThemedText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+              <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{lawyer.area?.toUpperCase()}</ThemedText>
+            </View>
+            
+            {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
+            {!isPending && !isOwner && (
+              <TouchableOpacity onPress={() => { setItemToReport({ ...lawyer, itemType: 'lawyer' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+                <MaterialCommunityIcons name="flag-outline" size={18} color={Colors.subtext} />
+              </TouchableOpacity>
+            )}
           </View>
+
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
             <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
             <ThemedText style={{ color: Colors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>
@@ -1459,13 +1458,13 @@ export default function LawyersScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* 🚀 NUEVO BOTÓN DE REPORTAR EN LA TARJETA PRINCIPAL (LA FLECHA ROJA) */}
-          {!isPending && (
+          {/* 🚀 BOTÓN DE REPORTAR EN LA PARTE INFERIOR DE LA TARJETA TAMBIÉN */}
+          {!isPending && !isOwner && (
             <TouchableOpacity 
-              onPress={() => handleReportContent(lawyer.id, 'lawyer')}
+              onPress={() => { setItemToReport({ ...lawyer, itemType: 'lawyer' }); setReportModalVisible(true); }}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}
             >
-              <MaterialCommunityIcons name="alert-circle-outline" size={14} color={Colors.subtext} style={{ marginRight: 6 }} />
+              <MaterialCommunityIcons name="flag-outline" size={14} color={Colors.subtext} style={{ marginRight: 6 }} />
               <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '600' }}>
                 Reportar publicación
               </ThemedText>
@@ -1638,16 +1637,18 @@ export default function LawyersScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* 🚀 BOTÓN DE REPORTAR PUBLICACIÓN POR COPYRIGHT */}
-                <TouchableOpacity 
-                  onPress={() => handleReportContent(selectedDetail?.id, 'lawyer')}
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
-                >
-                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color={Colors.subtext} style={{ marginRight: 6 }} />
-                  <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>
-                    Reportar esta publicación por derechos de autor
-                  </ThemedText>
-                </TouchableOpacity>
+                {/* 🚀 BOTÓN DE REPORTAR PUBLICACIÓN POR COPYRIGHT EN DETALLE */}
+                {selectedDetail?.userId !== currentUserId && (
+                  <TouchableOpacity 
+                    onPress={() => { setItemToReport({ ...selectedDetail, itemType: 'lawyer' }); setSelectedDetail(null); setReportModalVisible(true); }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
+                  >
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={Colors.subtext} style={{ marginRight: 6 }} />
+                    <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>
+                      Reportar esta publicación por derechos de autor
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
 
               </View>
             </ScrollView>
@@ -1706,10 +1707,12 @@ export default function LawyersScreen() {
                          
                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}>
                             {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA */}
-                            <TouchableOpacity onPress={() => handleReportContent(r.id, 'review')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <MaterialCommunityIcons name="flag-outline" size={14} color={Colors.subtext} />
-                              <ThemedText style={{ fontSize: 11, color: Colors.subtext }}>Reportar</ThemedText>
-                            </TouchableOpacity>
+                            {r.userId !== currentUserId && (
+                              <TouchableOpacity onPress={() => { setItemToReport({ id: r.id, itemType: 'review' }); setSelectedReviews(null); setReportModalVisible(true); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <MaterialCommunityIcons name="flag-outline" size={14} color={Colors.subtext} />
+                                <ThemedText style={{ fontSize: 11, color: Colors.subtext }}>Reportar</ThemedText>
+                              </TouchableOpacity>
+                            )}
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                               <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
                               <ThemedText style={{ color: Colors.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
@@ -1878,6 +1881,90 @@ export default function LawyersScreen() {
         </View>
       </Modal>
 
+      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
+      <Modal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: Colors.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '900', color: Colors.text }}>Reportar Contenido</ThemedText>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={{ fontSize: 13, color: Colors.subtext, marginBottom: 15 }}>
+              Selecciona el motivo por el cual deseas reportar este contenido. Nuestro equipo lo revisará de inmediato.
+            </ThemedText>
+
+            {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información falsa o engañosa', 'El abogado/despacho no existe'].map((reasonOption, idx) => (
+              <TouchableOpacity
+                key={idx}
+                onPress={() => setReportReason(reasonOption)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < 3 ? 1 : 0, borderBottomColor: Colors.border }}
+              >
+                <MaterialCommunityIcons
+                  name={reportReason === reasonOption ? "radiobox-marked" : "radiobox-blank"}
+                  size={20}
+                  color={reportReason === reasonOption ? Colors.accent : Colors.subtext}
+                  style={{ marginRight: 10 }}
+                />
+                <ThemedText style={{ fontSize: 14, color: Colors.text, fontWeight: reportReason === reasonOption ? '700' : '400' }}>
+                  {reasonOption}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity
+              onPress={async () => {
+                if (!itemToReport) return;
+                setIsSubmittingReport(true);
+                try {
+                  const response = await fetch(`${API_BASE_URL}/reports`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${userToken}`
+                    },
+                    body: JSON.stringify({
+                      itemId: itemToReport.id,
+                      itemType: itemToReport.itemType || 'lawyer',
+                      userId: currentUserId,
+                      reason: reportReason
+                    })
+                  });
+
+                  if (!response.ok) throw new Error("No se pudo enviar el reporte.");
+
+                  if (Platform.OS === 'web') {
+                    window.alert("Reporte enviado\nGracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+                  } else {
+                    Alert.alert("Reporte enviado", "Gracias por colaborar. Nuestro equipo de moderación revisará este contenido.");
+                  }
+                  setReportModalVisible(false);
+                  setItemToReport(null);
+                } catch (error: any) {
+                  if (Platform.OS === 'web') {
+                    window.alert(`Error\n${error.message || "Ocurrió un error al enviar el reporte."}`);
+                  } else {
+                    Alert.alert("Error", error.message || "Ocurrió un error al enviar el reporte.");
+                  }
+                } finally {
+                  setIsSubmittingReport(false);
+                }
+              }}
+              disabled={isSubmittingReport}
+              style={{ marginTop: 20, backgroundColor: Colors.accent, borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <ThemedText style={{ color: '#FFF', fontWeight: '900', fontSize: 15 }}>Enviar Reporte</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }}>
@@ -1942,8 +2029,8 @@ export default function LawyersScreen() {
                         </View>
                       )}
                     </View>
-                  )}
-
+                  )} 
+                  
                   <View style={{ marginBottom: 15 }}>
                     {isWeb ? (
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -2033,6 +2120,7 @@ export default function LawyersScreen() {
                       ) : null
                     )}
                   </View>
+
                 </ScrollView>
               ) : (
                 <View style={{ flex: 1, flexDirection: 'row' }}>

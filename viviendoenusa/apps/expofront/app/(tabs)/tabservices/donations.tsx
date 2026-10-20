@@ -193,7 +193,7 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO (CORREGIDA LA RUTA CENTRALIZADA)
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
@@ -337,7 +337,7 @@ export default function DonationsScreen() {
     else Alert.alert(title, message);
   };
 
-  // 🚀 FUNCIÓN PARA ENVIAR EL REPORTE
+  // 🚀 FUNCIÓN PARA ENVIAR EL REPORTE (CONECTADA A LA RUTA CENTRALIZADA /reports)
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
@@ -350,7 +350,7 @@ export default function DonationsScreen() {
         },
         body: JSON.stringify({
           itemId: itemToReport.id,
-          itemType: 'donation',
+          itemType: itemToReport.itemType || 'donation',
           userId: currentUserId,
           reason: reportReason
         })
@@ -807,7 +807,7 @@ export default function DonationsScreen() {
                             isWeb={isWeb} 
                             handleShare={handleShare}
                             onReport={(donationItem: any) => {
-                              setItemToReport(donationItem);
+                              setItemToReport({ ...donationItem, itemType: 'donation' });
                               setReportModalVisible(true);
                             }} 
                           />
@@ -1112,6 +1112,19 @@ const DonationCard = ({ item, currentUserId, currentUserName, isLargeWeb, isDark
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA */}
+        {!isOwner && (
+          <TouchableOpacity 
+            onPress={() => onReport(item)}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}
+          >
+            <MaterialCommunityIcons name="flag-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
+            <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>
+              Reportar publicación
+            </ThemedText>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
