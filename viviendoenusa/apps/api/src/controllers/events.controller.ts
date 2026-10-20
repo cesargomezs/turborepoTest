@@ -852,3 +852,47 @@ Por favor verifica el contenido en el panel de administrador.`;
     throw new Error(`Error al procesar el reporte: ${error.message}`);
   }
 };
+
+// =====================================================================
+// ✅ APROBAR EVENTO DIRECTAMENTE (ADMINISTRADOR)
+// =====================================================================
+export const approveEventController = async (idParam: any, dataParam: any) => {
+  let cleanId: string = "";
+  try {
+    let rawId = idParam;
+    if (idParam && typeof idParam === 'object') {
+      if (idParam.params && idParam.params.id) {
+        rawId = idParam.params.id; 
+      } else if (idParam.id) {
+        rawId = idParam.id; 
+      }
+    }
+
+    const sanitized = sanitizeText(rawId);
+    if (!sanitized) throw new Error("ID inválido");
+    cleanId = sanitized;
+
+    const eventResult = await db.transaction(async (tx) => {
+        // Actualizar el evento como aprobado
+        const updated = await tx.update(events)
+          .set({ approved: true })
+          .where(eq(events.id, cleanId))
+          .returning();
+          
+        const event = updated[0];
+        if (!event) throw new Error("Evento no encontrado");
+
+        // Actualizar el estado del pago asociado a 'approved' si existe
+        await tx.update(payments)
+          .set({ status: 'approved', approvedAt: sql`NOW()` })
+          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));
+
+        return event;
+    });
+
+    return eventResult;
+  } catch (error: any) {
+    console.error(`❌ Error al aprobar evento ${cleanId}:`, error);
+    throw new Error(`Error al aprobar el evento: ${error.message}`);
+  }
+};

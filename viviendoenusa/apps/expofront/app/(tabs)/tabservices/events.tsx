@@ -753,7 +753,8 @@ export default function EventsScreen() {
 
   const approveEvent = async (event: any, durationMonths: number) => {
     try {
-      const response = await fetch(`${API_EVENTS_URL}/${event.id}`, {
+      // 🚀 Apuntamos a la nueva ruta específica de aprobación
+      const response = await fetch(`${API_EVENTS_URL}/${event.id}/approve`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',

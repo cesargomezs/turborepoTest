@@ -5,7 +5,8 @@ import {
     createEvent, 
     updateEvent, 
     createEventReview, 
-    reportContent      
+    reportContent,      
+    approveEventController
 } from '../controllers/events.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
@@ -122,6 +123,23 @@ router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
     return res.status(200).json(updatedEvent);
   } catch (error: any) {
     console.error(`❌ Error en PUT /events/${req.params.id}:`, error.message);
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PUT: Aprobar un evento específico (Panel de Administrador)
+router.put('/:id/approve', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
+
+    const approvedEvent = await approveEventController(id, req.body);
+    if (!approvedEvent) {
+      return res.status(404).json({ error: "Evento no encontrado" });
+    }
+    return res.status(200).json(approvedEvent);
+  } catch (error: any) {
+    console.error(`❌ Error en PUT /events/${req.params.id}/approve:`, error.message);
     return res.status(400).json({ error: error.message });
   }
 });
