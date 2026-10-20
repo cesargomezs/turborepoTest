@@ -216,7 +216,12 @@ export const getEvents = async (zip?: string, userId?: string) => {
     })
     .from(events)
     .leftJoin(users, eq(events.userId, users.id)) 
-    .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
+    // 🚀 Ajustamos el join para priorizar y traer el pago más reciente (última renovación)
+    .leftJoin(payments, and(
+      eq(payments.entityId, events.id), 
+      eq(payments.entityType, 'event'),
+      sql`${payments.id} = (SELECT p2.id FROM payments p2 WHERE p2.entity_id = ${events.id} AND p2.entity_type = 'event' ORDER BY p2.created_at DESC LIMIT 1)`
+    ))
     .leftJoin(ratingTable, eq(ratingTable.referenceId, events.id)) 
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
