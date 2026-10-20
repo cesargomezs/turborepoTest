@@ -290,9 +290,9 @@ export default function EntrepreneurshipScreen() {
   const [formImage, setFormImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO (SOPORTA EMPRENDIMIENTOS Y RESEÑAS)
   const [reportModalVisible, setReportModalVisible] = useState(false);
-  const [itemToReport, setItemToReport] = useState<Emprendimiento | null>(null);
+  const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
@@ -330,7 +330,7 @@ export default function EntrepreneurshipScreen() {
 
       const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
            const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
-           return { ...r, image: freshReviewImage };
+           return { ...r, image: freshReviewImage, userId: r.userId || r.user_id };
       })) : [];
 
       const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
@@ -392,7 +392,7 @@ export default function EntrepreneurshipScreen() {
           
           const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
-             return { ...r, image: freshReviewImage };
+             return { ...r, image: freshReviewImage, userId: r.userId || r.user_id };
           })) : [];
 
           const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
@@ -459,7 +459,7 @@ export default function EntrepreneurshipScreen() {
           
           const parsedReviews = Array.isArray(item.reviews) ? await Promise.all(item.reviews.map(async (r: any) => {
              const freshReviewImage = r.image ? await refreshSupabaseUrl(r.image, 'users') : null;
-             return { ...r, image: freshReviewImage };
+             return { ...r, image: freshReviewImage, userId: r.userId || r.user_id };
           })) : [];
 
           const isAppr = String(item.approved) === 'true' || item.approved === true || item.approved === 1;
@@ -838,7 +838,8 @@ export default function EntrepreneurshipScreen() {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
     try {
-      const response = await fetch(`${API_ENTREPRENEURSHIP_URL}/reports`, {
+      const endpoint = itemToReport.itemType === 'review' ? `${API_ENTREPRENEURSHIP_URL}/reviews/reports` : `${API_ENTREPRENEURSHIP_URL}/reports`;
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -846,7 +847,7 @@ export default function EntrepreneurshipScreen() {
         },
         body: JSON.stringify({
           itemId: itemToReport.id,
-          itemType: 'entrepreneurship',
+          itemType: itemToReport.itemType || 'entrepreneurship',
           userId: currentUserId,
           reason: reportReason
         })
@@ -898,13 +899,6 @@ export default function EntrepreneurshipScreen() {
             <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
               <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
             </View>
-
-            {/* 🚀 BOTÓN DE REPORTAR CONTENIDO */}
-            {!isOwner && (
-              <TouchableOpacity onPress={() => { setItemToReport(item); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
-                <MaterialCommunityIcons name="flag-outline" size={18} color={DC.subtext} />
-              </TouchableOpacity>
-            )}
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
@@ -985,6 +979,19 @@ export default function EntrepreneurshipScreen() {
              <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); openReviews(item, false); }} icon="comment-text-outline" text={(t?.entrepreneurshiptab?.reviews || 'Reseñas') + ` (${formatCount(item.reviews?.length || 0)})`} color={isDark ? '#FFF' : '#444'} bgColor={isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0'} />
              <ActionBtnLine disabled={isPending} onPress={(e: any) => { e.stopPropagation?.(); if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } else { Linking.openURL(`tel:${item.phone}`); } }} icon={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} text={item.contactMethod === 'whatsapp' ? "WhatsApp" : (t?.entrepreneurshiptab?.call || 'Llamar')} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} bgColor={item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)')} />
           </View>
+
+          {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA */}
+          {!isOwner && (
+            <TouchableOpacity 
+              onPress={() => { setItemToReport({ ...item, itemType: 'entrepreneurship' }); setReportModalVisible(true); }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: DC.border }}
+            >
+              <MaterialCommunityIcons name="alert-circle-outline" size={14} color={DC.subtext} style={{ marginRight: 6 }} />
+              <ThemedText style={{ fontSize: 12, color: DC.subtext, fontWeight: '600' }}>
+                Reportar publicación
+              </ThemedText>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -1339,6 +1346,23 @@ export default function EntrepreneurshipScreen() {
                                     <ThemedText style={{ color: DC.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
                                   </View> 
                                   <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
+
+                                  {/* 🚀 BOTÓN DE REPORTAR RESEÑA DENTRO DEL DETALLE */}
+                                  {r.userId !== currentUserId && (
+                                    <TouchableOpacity 
+                                      onPress={() => { 
+                                        setItemToReport({ id: r.id, itemType: 'review' }); 
+                                        setDetailItem(null); 
+                                        setReportModalVisible(true); 
+                                      }}
+                                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: DC.border }}
+                                    >
+                                      <MaterialCommunityIcons name="alert-circle-outline" size={13} color={DC.subtext} style={{ marginRight: 4 }} />
+                                      <ThemedText style={{ fontSize: 11, color: DC.subtext, fontWeight: '600' }}>
+                                        Reportar reseña
+                                      </ThemedText>
+                                    </TouchableOpacity>
+                                  )}
                                 </View>
                               ))}
                               {detailItem.reviews.length > 2 && ( <TouchableOpacity onPress={() => openReviews(detailItem, false)} style={{ alignItems: 'center', paddingVertical: 10 }}><ThemedText style={{ color: DC.accent, fontWeight: '800', fontSize: 14 }}>{t?.entrepreneurshiptab?.viewAllreviews || 'Ver todas las reseñas'}</ThemedText></TouchableOpacity> )}
@@ -1380,6 +1404,23 @@ export default function EntrepreneurshipScreen() {
                                 <ThemedText style={{ color: DC.text, fontSize: 12 ,alignContent:'flex-end',fontStyle: 'italic'}}>{r.name}</ThemedText>
                               </View> 
                               <ThemedText style={{ color: DC.text, fontSize: 14, lineHeight: 20 }}>{r.comment}</ThemedText>
+
+                              {/* 🚀 BOTÓN DE REPORTAR RESEÑA EN MODAL INDEPENDIENTE */}
+                              {r.userId !== currentUserId && (
+                                <TouchableOpacity 
+                                  onPress={() => { 
+                                    setItemToReport({ id: r.id, itemType: 'review' }); 
+                                    setReviewTarget(null); 
+                                    setReportModalVisible(true); 
+                                  }}
+                                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: DC.border }}
+                                >
+                                  <MaterialCommunityIcons name="alert-circle-outline" size={13} color={DC.subtext} style={{ marginRight: 4 }} />
+                                  <ThemedText style={{ fontSize: 11, color: DC.subtext, fontWeight: '600' }}>
+                                    Reportar reseña
+                                  </ThemedText>
+                                </TouchableOpacity>
+                              )}
                             </View>
                           ))
                         : ( <View style={{ alignItems: 'center', marginTop: 30, opacity: 0.5 }}><MaterialCommunityIcons name="comment-off-outline" size={40} color={DC.iconInactive} /><ThemedText style={{ color: DC.iconInactive, marginTop: 10 }}>{t?.entrepreneurshiptab?.whitoutReviews || 'Aún no hay reseñas.'}</ThemedText></View> )
@@ -1490,12 +1531,12 @@ export default function EntrepreneurshipScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
               <ThemedText style={{ fontSize: 18, fontWeight: '900', color: DC.text }}>Reportar Contenido</ThemedText>
               <TouchableOpacity onPress={() => setReportModalVisible(false)}>
-                <MaterialCommunityIcons name="close" size={22} color={DC.text} />
+                <MaterialCommunityIcons name="close" size= {22} color={DC.text} />
               </TouchableOpacity>
             </View>
 
             <ThemedText style={{ fontSize: 13, color: DC.subtext, marginBottom: 15 }}>
-              Selecciona el motivo por el cual deseas reportar este emprendimiento. Nuestro equipo lo revisará de inmediato.
+              Selecciona el motivo por el cual deseas reportar este contenido. Nuestro equipo lo revisará de inmediato.
             </ThemedText>
 
             {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información de contacto falsa', 'El negocio ya no existe'].map((reasonOption, idx) => (

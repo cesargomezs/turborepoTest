@@ -801,7 +801,7 @@ export const getEntrepreneurshipsByIds = async (ids: string[], userId?: string) 
 };
 
 // =====================================================================
-// 🚨 9. REPORTAR CONTENIDO (CON NOMBRES REALES Y CONSULTAS SEGURAS)
+// 🚨 9. REPORTAR CONTENIDO (CORREGIDO Y OPTIMIZADO)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
@@ -837,15 +837,35 @@ export const reportContent = async (data: any) => {
       }
     }
 
-    // 2. Consultar el nombre del emprendimiento reportado en la tabla entrepreneurship
-    let reportedName = `Emprendimiento ID: ${validItemId}`;
+    // 2. Consultar el contenido real y la compañía/negocio asociado según corresponda
+    let reportedContent = `ID: ${validItemId}`;
+    let associatedCompany = "No aplica";
+
     try {
-      const itemRows = await db.select({ name: entrepreneurship.nameEntrepren }).from(entrepreneurship).where(eq(entrepreneurship.id, validItemId)).limit(1);
-      if (itemRows && itemRows.length > 0 && itemRows[0].name) {
-        reportedName = itemRows[0].name;
+      if (validType === 'review') {
+        const reviewRows = await db.select({
+          comment: reviewsTable.comment,
+          businessName: entrepreneurship.nameEntrepren
+        })
+        .from(reviewsTable)
+        .leftJoin(ratingTable, eq(reviewsTable.relationshipId, ratingTable.id))
+        .leftJoin(entrepreneurship, eq(ratingTable.referenceId, entrepreneurship.id))
+        .where(eq(reviewsTable.id, validItemId))
+        .limit(1);
+
+        if (reviewRows && reviewRows.length > 0) {
+          reportedContent = reviewRows[0].comment || `Reseña ID: ${validItemId}`;
+          associatedCompany = reviewRows[0].businessName || "Negocio del Emprendimiento";
+        }
+      } else {
+        const itemRows = await db.select({ name: entrepreneurship.nameEntrepren }).from(entrepreneurship).where(eq(entrepreneurship.id, validItemId)).limit(1);
+        if (itemRows && itemRows.length > 0 && itemRows[0].name) {
+          reportedContent = itemRows[0].name;
+          associatedCompany = itemRows[0].name;
+        }
       }
     } catch (e) {
-      console.warn("⚠️ No se pudo obtener el nombre del emprendimiento reportado", e);
+      console.warn("⚠️ No se pudo obtener el contenido del emprendimiento o reseña reportada", e);
     }
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -856,14 +876,17 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    // 3. Mensaje claro con template literals limpios y nativos
-    const message = `🚨 *REPORTE DE CONTENIDO (EMPRENDIMIENTOS)*\n\n` +
-                    `📌 *Módulo:* ${validType.toUpperCase()}\n` +
-                    `🏷️ *Elemento:* "${reportedName}"\n` +
-                    `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
-                    `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
-                    `⚠️ *Motivo:* ${safeReason}\n\n` +
-                    `Por favor verifica el contenido en el panel de administrador.`;
+    // 3. Mensaje estructurado con interpolación correcta y limpia
+    const message = `🚨 *REPORTE DE CONTENIDO (${validType.toUpperCase()})*
+
+📌 *Módulo:* ${validType.toUpperCase()}
+🏢 *Negocio / Origen:* ${associatedCompany}
+🏷️ *Contenido:* "${reportedContent}"
+🆔 *ID Elemento:* \`\${validItemId}\`
+👤 *Reportado por:* ${reporterName} (${reporterEmail})
+⚠️ *Motivo:* ${safeReason}
+
+Por favor verifica el contenido en el panel de administrador.`;
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
