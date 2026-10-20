@@ -551,7 +551,7 @@ export const createEvent = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR O RENOVAR EVENTO (Modificar imagen, descripción o fecha)
+// 🔄 4. ACTUALIZAR O RENOVAR EVENTO (MODO RENOVACIÓN ANUAL + ESTADO PENDING)
 // =====================================================================
 export const updateEvent = async (idParam: any, dataParam: any) => {
   let cleanId: string = "";
@@ -577,32 +577,34 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
     const cleanPayload = sanitizePayload(data);
 
-    if (cleanPayload.googleReviewLink !== undefined) {
-      if (cleanPayload.googleReviewLink.trim() === '') {
-        cleanPayload.googleReviewLink = null;
-      } else if (isValidGoogleReviewUrl(cleanPayload.googleReviewLink.trim())) {
-        cleanPayload.googleReviewLink = cleanPayload.googleReviewLink.trim();
-      } else {
-        throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
-      }
-    }
+    // 🚀 VALIDACIÓN DE CUPÓN O PAGO EN LA RENOVACIÓN
+    const planSeleccionado = cleanPayload.premiumPlan || cleanPayload.premium_plan || 'basic'; 
+    const metodoPago = cleanPayload.paymentMethod ? String(cleanPayload.paymentMethod).toLowerCase().trim() : '';
+    const codigoReferencia = cleanPayload.referenceCode ? String(cleanPayload.referenceCode).trim() : '';
 
-    let pushNotificationData: any = null;
+    const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
+    let realPromoCode = cleanPayload.couponCode ? String(cleanPayload.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-    if (cleanPayload.imageEven && typeof cleanPayload.imageEven === 'string' && cleanPayload.imageEven.startsWith('events/')) {
-        cleanPayload.imageEven = cleanPayload.imageEven.replace('events/', '');
-    }
-    
     const [existingEvent] = await db.select().from(events).where(eq(events.id, cleanId));
     if (!existingEvent) throw new Error("Evento no encontrado");
-    
-    const wasApprovedBefore = existingEvent.approved === true;
 
     const eventResult = await db.transaction(async (tx) => {
-        
-        // 🚀 Si están modificando y aprobando de nuevo para el otro año, reseteamos la creación
-        if (cleanPayload.approved === true) {
-            cleanPayload.createdAt = new Date();
+
+        if (isCoupon) {
+          if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón para renovar.");
+          
+          const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
+          
+          if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
+          if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+        }
+
+        // 🚀 REGLA DE NEGOCIO: Al renovar, el evento pasa a PENDIENTE por revisión de pago/cupón
+        cleanPayload.approved = false;
+        cleanPayload.statusId = '31a06434-8ed8-45d2-b95f-65bd314bc021';
+
+        if (cleanPayload.imageEven && typeof cleanPayload.imageEven === 'string' && cleanPayload.imageEven.startsWith('events/')) {
+            cleanPayload.imageEven = cleanPayload.imageEven.replace('events/', '');
         }
 
         const updated = await tx.update(events).set(cleanPayload).where(eq(events.id, cleanId)).returning();
@@ -610,146 +612,59 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
         if (!event) throw new Error("No se pudo encontrar el evento actualizado");
 
-        // Si se cambia la fecha del evento, actualizamos también el vencimiento en la tabla de pagos
-        if (cleanPayload.dateEvent || cleanPayload.approved === true) {
-            const expirationDate = event.dateEvent ? new Date(event.dateEvent) : new Date();
-
-            const paymentUpdatePayload: any = {};
-            
-            if (cleanPayload.approved === true) {
-                paymentUpdatePayload.status = 'approved';
-                paymentUpdatePayload.approvedAt = new Date();
-            }
-
-            if ('timepostEnd' in payments) paymentUpdatePayload.timepostEnd = expirationDate;
-            else if ('timepost_end' in payments) paymentUpdatePayload.timepost_end = expirationDate;
-
-            await tx.update(payments)
-                .set(paymentUpdatePayload)
-                .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'event')));
-        }
-
-        const isApprovedNow = cleanPayload.approved === true || String(cleanPayload.approved).toLowerCase() === 'true';
-
-        if (isApprovedNow && !wasApprovedBefore && event && event.dateEvent) {
-            // ... lógica de envío de push notifications y recordatorios programados (intacta)
+        // Registrar o actualizar el pago en estado pendiente (o aprobado si es cupón)
+        if (codigoReferencia || realPromoCode) {
             const today = new Date();
             const eventDate = new Date(event.dateEvent);
             const diffTime = eventDate.getTime() - today.getTime();
-            const totalDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-            if (totalDaysLeft >= 0 && event.userId) {
-                const notifsToInsert = [];
-                for (let i = 0; i <= totalDaysLeft; i++) {
-                    const daysRemaining = totalDaysLeft - i;
-                    const showDate = new Date(today.getTime() + (i * 24 * 60 * 60 * 1000));
-                    let shouldCreate = false;
-                    let message = "";
+            const paymentPayload: any = {
+              entityType: 'event', 
+              entityId: event.id,
+              userId: event.userId, 
+              referenceCode: realPromoCode || codigoReferencia, 
+              paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
+              amount: String(isCoupon ? "0.00" : (cleanPayload.tariffPlan || "50.00")), 
+              durationDays: daysLeft, 
+              status: isCoupon ? "approved" : "pending"
+            };
 
-                    if (daysRemaining === 0) {
-                        shouldCreate = true;
-                        message = `¡Es hoy! No te pierdas: ${event.title}`;
-                    } else if (daysRemaining > 0 && daysRemaining <= 10) {
-                        shouldCreate = true;
-                        message = `¡Faltan solo ${daysRemaining} días para ${event.title}!`;
-                    } else if (daysRemaining > 10) {
-                        if (daysRemaining % 2 === 0) { 
-                            shouldCreate = true;
-                            message = `Faltan ${daysRemaining} días para el evento: ${event.title}`;
-                        }
-                    }
-
-                    if (shouldCreate) {
-                        const notifObj: any = {
-                            title: "Recordatorio de Evento 📅",
-                            description: message,
-                            type: "event", 
-                            visibleAt: showDate, 
-                            userId: event.userId as string, 
-                        };
-
-                        if ('referenceId' in notifications) notifObj.referenceId = String(event.id);
-                        else if ('reference_id' in notifications) notifObj.reference_id = String(event.id);
-
-                        notifsToInsert.push(notifObj);
-                    }
-                }
-
-                if (notifsToInsert.length > 0) {
-                    await tx.insert(notifications).values(notifsToInsert);
-                }
+            if (isCoupon) {
+              paymentPayload.approvedAt = sql`NOW()`;
+              // Si usa cupón válido, podemos dejarlo aprobado de una vez si lo prefieres, o mantenerlo pendiente de revisión
+              cleanPayload.approved = true; 
+              await tx.update(events).set({ approved: true }).where(eq(events.id, cleanId));
             }
 
-            const titleText = "¡Nuevo Evento en tu área! 🎉";
-            const bodyText = `Se ha publicado: ${event.title}. ¡Revisa los detalles!`;
-            let usersToNotify: { id: string }[] = [];
-
-            if (event.zip) {
-                const nearbyZips = zipcodes.radius(event.zip as any, Number(radiusMiles)); 
-
-                if (nearbyZips && nearbyZips.length > 0) {
-                    usersToNotify = await tx.select({ id: users.id })
-                                            .from(users)
-                                            .where(inArray(users.zip, nearbyZips as string[]));
-                } else {
-                    usersToNotify = await tx.select({ id: users.id })
-                                            .from(users)
-                                            .where(eq(users.zip, String(event.zip)));
-                }
+            if (eventDate) {
+              paymentPayload.timepostEnd = eventDate;
+              paymentPayload.timepost_end = eventDate;
             }
 
-            if (usersToNotify.length > 0) {
-                const massNotifs = usersToNotify.map(u => {
-                    const payload: any = {
-                        title: titleText,
-                        description: bodyText,
-                        type: "event", 
-                        visibleAt: new Date(), 
-                        userId: u.id,
-                        isRead: false
-                    };
-                    if ('referenceId' in notifications) payload.referenceId = String(event.id);
-                    else if ('reference_id' in notifications) payload.reference_id = String(event.id);
-                    return payload;
-                });
+            await tx.insert(payments).values(paymentPayload);
+        }
 
-                await tx.insert(notifications).values(massNotifs);
-
-                pushNotificationData = {
-                    title: titleText,
-                    body: bodyText,
-                    referenceId: String(event.id),
-                    userIds: usersToNotify.map(u => u.id) 
-                };
-            }
+        if (isCoupon && realPromoCode) {
+          await tx.update(promoCodes)
+          .set({
+            isUsed: true, 
+            usedByUserId: event.userId, 
+            usedForEntityId: event.id, 
+            entityType: 'event',
+            usedAt: new Date() 
+          })
+          .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
         }
 
         return event || null;
     });
 
-    if (pushNotificationData) {
-        sendMassPushNotification(pushNotificationData).catch(err => {
-           console.error("❌ [DEBUG PUSH] Falló el Push Notification:", err);
-        });
-    }
-
     return eventResult;
 
   } catch (error: any) { 
-    console.error(`❌ Error al actualizar evento ${cleanId}:`, error);
+    console.error(`❌ Error al actualizar/renovar evento ${cleanId}:`, error);
     throw new Error(`Error al actualizar el evento: ${error.message}`);
-  }
-};
-
-export const deleteEvent = async (id: string) => {
-  try {
-    const cleanId = sanitizeText(id);
-    if (!cleanId) throw new Error("ID inválido");
-
-    const deleted = await db.delete(events).where(eq(events.id, cleanId)).returning();
-    return deleted[0] || null;
-  } catch (error: any) {
-    throw new Error(`Error al eliminar el evento: ${error.message}`);
   }
 };
 
