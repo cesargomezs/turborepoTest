@@ -675,8 +675,6 @@ export const reportContent = async (data: any) => {
       if (validType === 'review') {
         const reviewRows = await db.select({
           comment: reviewsTable.comment,
-          review: reviewsTable.review,
-          text: reviewsTable.text,
           companyName: companies.name
         })
         .from(reviewsTable)
@@ -687,7 +685,7 @@ export const reportContent = async (data: any) => {
         .limit(1);
 
         if (reviewRows && reviewRows.length > 0) {
-          reportedContent = reviewRows[0].comment || reviewRows[0].review || reviewRows[0].text || `Reseña ID: ${validItemId}`;
+          reportedContent = reviewRows[0].comment || `Reseña ID: ${validItemId}`;
           associatedCompany = reviewRows[0].companyName || "Empresa de la Reseña";
         }
       } else {
