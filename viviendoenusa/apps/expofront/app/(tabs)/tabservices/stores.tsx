@@ -19,6 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
+// 🚀 Redux importado para manejar el estado del modal de invitados
 import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
@@ -223,6 +224,8 @@ export default function StoresScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  
+  // 🚀 Definir el dispatch para acciones globales
   const dispatch = useMockDispatch(); 
   
   const { isDark, toggleTheme } = useAppTheme();
@@ -242,6 +245,8 @@ export default function StoresScreen() {
 
   const userRoleStr = String(userMetadata?.role || userMetadata?.rol || 'User').toLowerCase();
   const isAdmin = ['sadmin', 'admin'].includes(userRoleStr); 
+  
+  // 🚀 Comprobar si es un invitado
   const isGuest = userMetadata?.typeDetail === 'Guest'; 
 
   useEffect(() => {
@@ -305,6 +310,8 @@ export default function StoresScreen() {
   const [showReviewInput, setShowReviewInput] = useState(false);
 
   const [renewModalVisible, setRenewModalVisible] = useState(false);
+  
+  // 🚀 ESTADO DEL MODAL PARA INVITADOS
   const [showRestrictedModal, setShowRestrictedModal] = useState(false); 
   const [storeToRenew, setStoreToRenew] = useState<any>(null);
 
@@ -1134,7 +1141,14 @@ export default function StoresScreen() {
 
             {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
             {!isOwner && (
-              <TouchableOpacity onPress={() => { setItemToReport({ ...store, itemType: 'store' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+              <TouchableOpacity 
+                onPress={() => { 
+                  if (isGuest) { setShowRestrictedModal(true); return; }
+                  setItemToReport({ ...store, itemType: 'store' }); 
+                  setReportModalVisible(true); 
+                }} 
+                style={{ padding: 4, opacity: 0.7 }}
+              >
                 <MaterialCommunityIcons name="flag-outline" size={18} color={DynamicColors.subtext} />
               </TouchableOpacity>
             )}
@@ -1201,7 +1215,11 @@ export default function StoresScreen() {
           {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA */}
           {!isOwner && (
             <TouchableOpacity 
-              onPress={() => { setItemToReport({ ...store, itemType: 'store' }); setReportModalVisible(true); }}
+              onPress={() => { 
+                if (isGuest) { setShowRestrictedModal(true); return; }
+                setItemToReport({ ...store, itemType: 'store' }); 
+                setReportModalVisible(true); 
+              }}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
             >
               <MaterialCommunityIcons name="flag-outline" size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
@@ -1451,6 +1469,7 @@ export default function StoresScreen() {
                          {r.userId !== currentUserId && (
                            <TouchableOpacity 
                              onPress={() => { 
+                               if (isGuest) { setShowRestrictedModal(true); return; }
                                setItemToReport({ id: r.id, itemType: 'review' }); 
                                setSelectedStore(null); 
                                setReportModalVisible(true); 
@@ -1587,7 +1606,7 @@ export default function StoresScreen() {
               </View>
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }}>
-                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8,color:DynamicColors.subtext }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
+                  {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} color={DynamicColors.text} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8,color:DynamicColors.subtext }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
                 </TouchableOpacity>
                 
                 <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none',color:DynamicColors.text}}>{t.storestab?.category || 'Categoría'}</ThemedText>
@@ -1813,6 +1832,7 @@ export default function StoresScreen() {
         </View>
       </Modal>
 
+      {/* 🚀 MODAL ACCESO RESTRINGIDO PARA INVITADOS */}
       <Modal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '90%', maxWidth: 380, backgroundColor: DynamicColors.modalBg, borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
@@ -1867,7 +1887,7 @@ export default function StoresScreen() {
             </View>
 
             <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, marginBottom: 15 }}>
-              Selecciona el motivo por el cual deseas reportar este negocio. Nuestro equipo lo revisará de inmediato.
+              Selecciona el motivo por el cual deseas reportar este contenido. Nuestro equipo lo revisará de inmediato.
             </ThemedText>
 
             {['Infracción de Copyright o Spam', 'Contenido inapropiado u ofensivo', 'Información de contacto falsa', 'El negocio ya no existe'].map((reasonOption, idx) => (

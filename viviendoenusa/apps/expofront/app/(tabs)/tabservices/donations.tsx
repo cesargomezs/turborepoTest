@@ -15,7 +15,8 @@ import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMockSelector } from '@/redux/slices';
+// 🚀 Se añadieron las acciones de Redux para manejar el login de invitados
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '../../../hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import { validarImagenEnServidor } from '@/utils/imageValidation'; 
@@ -23,12 +24,6 @@ import badWordsData from '../../../utils/babwords.json';
 import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 import { supabaseClient } from '../../../utils/supabase';
-
-/*
-const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
-const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
-*/
 
 const refreshSupabaseUrl = async (url: string, fallbackFolder = 'donations') => {
   if (!url || typeof url !== 'string' || url.length < 5) return null;
@@ -106,6 +101,9 @@ export default function DonationsScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  
+  // 🚀 Definir el dispatch para acciones globales
+  const dispatch = useMockDispatch();
 
   const { isDark, toggleTheme } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
@@ -123,10 +121,11 @@ export default function DonationsScreen() {
     }
   }, [userToken]);
 
-  // 🚀 ADMIN CHECK SEGURO
+  // 🚀 ADMIN CHECK SEGURO Y MODO INVITADO
   const userEmailClean = userMetadata?.email || '';
   const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
+  const isGuest = userMetadata?.typeDetail === 'Guest';
 
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [pendingDonations, setPendingDonations] = useState<any[]>([]);
@@ -141,7 +140,6 @@ export default function DonationsScreen() {
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
 
-  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
   const INTERNAL_IDS = t?.donationstab?.subCategories || [];
   const ICONS_ARRAY = t?.donationstab?.subCategoriesIcon || [];
 
@@ -167,7 +165,6 @@ export default function DonationsScreen() {
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
 
-  // 🚀 PROTECCIÓN ANTI BLANK-SCREEN
   const rawCategories = (t?.donationstab as any)?.subCategories || (t?.donationstab as any)?.categories;
   const CATEGORY_LABELS = Array.isArray(rawCategories) && rawCategories.length >= INTERNAL_IDS.length
       ? rawCategories 
@@ -193,7 +190,10 @@ export default function DonationsScreen() {
   const [formZip, setFormZip] = useState(''); 
   const [countryIdx, setCountryIdx] = useState(0); 
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO (CORREGIDA LA RUTA CENTRALIZADA)
+  // 🚀 ESTADO PARA EL MODAL DE ACCESO RESTRINGIDO
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false);
+
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
@@ -337,7 +337,6 @@ export default function DonationsScreen() {
     else Alert.alert(title, message);
   };
 
-  // 🚀 FUNCIÓN PARA ENVIAR EL REPORTE (CONECTADA A LA RUTA CENTRALIZADA /reports)
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
@@ -807,6 +806,7 @@ export default function DonationsScreen() {
                             isWeb={isWeb} 
                             handleShare={handleShare}
                             onReport={(donationItem: any) => {
+                              if (isGuest) { setShowRestrictedModal(true); return; }
                               setItemToReport({ ...donationItem, itemType: 'donation' });
                               setReportModalVisible(true);
                             }} 
@@ -827,7 +827,11 @@ export default function DonationsScreen() {
         </View>
       </ScrollView>
 
-      <TouchableOpacity onPress={() => setModalVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+      {/* 🚀 BOTÓN FAB PROTEGIDO CONTRA INVITADOS */}
+      <TouchableOpacity onPress={() => {
+          if (isGuest) { setShowRestrictedModal(true); return; }
+          setModalVisible(true);
+        }} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }}>
           <MaterialCommunityIcons name="hand-heart" size={32} color="#fff" />
         </LinearGradient>
@@ -937,6 +941,49 @@ export default function DonationsScreen() {
           <TouchableOpacity onPress={() => setViewerVisible(false)} style={{ position: 'absolute', top: insets.top + 20, right: 20, backgroundColor: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 25 }}>
             <MaterialCommunityIcons name="close" size={28} color="#FFF" />
           </TouchableOpacity>
+        </View>
+      </RNModal>
+
+      {/* 🚀 MODAL ACCESO RESTRINGIDO PARA INVITADOS */}
+      <RNModal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para publicar donaciones y reportar contenido, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
         </View>
       </RNModal>
 

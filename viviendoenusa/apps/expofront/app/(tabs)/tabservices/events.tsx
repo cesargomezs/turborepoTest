@@ -873,7 +873,10 @@ export default function EventsScreen() {
             handleShare={handleShare}
             isAdminMode={isAdminMode}
             currentUserId={currentUserId}
-            onReport={(eventItem: any) => { setItemToReport(eventItem); setReportModalVisible(true); }}
+            onReport={(eventItem: any) => { 
+              if (isGuest) { setShowRestrictedModal(true); return; }
+              setItemToReport(eventItem); setReportModalVisible(true); 
+            }}
             onOpenReviews={(eventItem: any) => setSelectedReviews(eventItem)}
             onEditEvent={(eventItem: any) => {
               setEditingEventId(eventItem.id);
@@ -1075,7 +1078,10 @@ export default function EventsScreen() {
                             handleShare={handleShare}
                             isAdminMode={isAdminMode}
                             currentUserId={currentUserId}
-                            onReport={(eventItem: any) => { setItemToReport(eventItem); setReportModalVisible(true); }}
+                            onReport={(eventItem: any) => { 
+                              if (isGuest) { setShowRestrictedModal(true); return; }
+                              setItemToReport(eventItem); setReportModalVisible(true); 
+                            }}
                             onOpenReviews={(eventItem: any) => setSelectedReviews(eventItem)}
                             onEditEvent={(eventItem: any) => {
                               setEditingEventId(eventItem.id);
@@ -1510,6 +1516,7 @@ export default function EventsScreen() {
                             {r.userId !== currentUserId && (
                               <TouchableOpacity 
                                 onPress={() => { 
+                                  if (isGuest) { setShowRestrictedModal(true); return; }
                                   setItemToReport({ id: r.id, itemType: 'review' }); 
                                   setSelectedEventDetails(null); 
                                   setReportModalVisible(true); 
@@ -1614,7 +1621,10 @@ export default function EventsScreen() {
               {/* 🚀 BOTÓN INFERIOR DE REPORTAR EVENTO (DETALLE) */}
               {selectedEventDetails?.userId !== currentUserId && (
                 <TouchableOpacity 
-                  onPress={() => { setItemToReport({ ...selectedEventDetails, itemType: 'event' }); setSelectedEventDetails(null); setReportModalVisible(true); }}
+                  onPress={() => { 
+                    if (isGuest) { setShowRestrictedModal(true); return; }
+                    setItemToReport({ ...selectedEventDetails, itemType: 'event' }); setSelectedEventDetails(null); setReportModalVisible(true); 
+                  }}
                   style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}
                 >
                   <MaterialCommunityIcons name="alert-circle-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
@@ -1779,6 +1789,7 @@ export default function EventsScreen() {
                            {r.userId !== currentUserId && (
                              <TouchableOpacity 
                                onPress={() => { 
+                                 if (isGuest) { setShowRestrictedModal(true); return; }
                                  setItemToReport({ id: r.id, itemType: 'review' }); 
                                  setSelectedReviews(null); 
                                  setReportModalVisible(true); 

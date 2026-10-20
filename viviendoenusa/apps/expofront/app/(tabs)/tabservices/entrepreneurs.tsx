@@ -20,7 +20,8 @@ import { createClient } from '@supabase/supabase-js';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMockSelector } from '@/redux/slices';
+// 🚀 Se añadieron las importaciones para el manejo de sesión de invitados
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
 import badWordsData from '../../../utils/babwords.json';
@@ -202,6 +203,9 @@ export default function EntrepreneurshipScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   
+  // 🚀 Definir el dispatch
+  const dispatch = useMockDispatch();
+  
   const { isDark, toggleTheme } = useAppTheme();
   const isFocused = useIsFocused();
 
@@ -218,6 +222,9 @@ export default function EntrepreneurshipScreen() {
   const userEmailClean = userMetadata?.email || '';
   const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
+  
+  // 🚀 Verificación del estado de invitado
+  const isGuest = userMetadata?.typeDetail === 'Guest';
   
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
 
@@ -290,7 +297,10 @@ export default function EntrepreneurshipScreen() {
   const [formImage, setFormImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO (SOPORTA EMPRENDIMIENTOS Y RESEÑAS)
+  // 🚀 ESTADO DEL MODAL PARA INVITADOS
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false);
+
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
@@ -901,7 +911,14 @@ export default function EntrepreneurshipScreen() {
 
             {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
             {!isOwner && (
-              <TouchableOpacity onPress={() => { setItemToReport({ ...item, itemType: 'entrepreneurship' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+              <TouchableOpacity 
+                onPress={() => { 
+                  if (isGuest) { setShowRestrictedModal(true); return; }
+                  setItemToReport({ ...item, itemType: 'entrepreneurship' }); 
+                  setReportModalVisible(true); 
+                }} 
+                style={{ padding: 4, opacity: 0.7 }}
+              >
                 <MaterialCommunityIcons name="flag-outline" size={18} color={DC.subtext} />
               </TouchableOpacity>
             )}
@@ -989,7 +1006,11 @@ export default function EntrepreneurshipScreen() {
           {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA */}
           {!isOwner && (
             <TouchableOpacity 
-              onPress={() => { setItemToReport({ ...item, itemType: 'entrepreneurship' }); setReportModalVisible(true); }}
+              onPress={() => { 
+                if (isGuest) { setShowRestrictedModal(true); return; }
+                setItemToReport({ ...item, itemType: 'entrepreneurship' }); 
+                setReportModalVisible(true); 
+              }}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: DC.border }}
             >
               <MaterialCommunityIcons name="flag-outline" size={15} color={DC.subtext} style={{ marginRight: 6 }} />
@@ -1240,8 +1261,14 @@ export default function EntrepreneurshipScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB */}
-      <TouchableOpacity onPress={() => setFormVisible(true)} style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}>
+      {/* FAB - PROTEGIDO PARA INVITADOS */}
+      <TouchableOpacity 
+        onPress={() => {
+          if (isGuest) { setShowRestrictedModal(true); return; }
+          setFormVisible(true);
+        }} 
+        style={[stylesUnified.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}
+      >
         <LinearGradient colors={OG as any} style={{ flex: 1, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
           <MaterialCommunityIcons name="lightbulb-multiple-outline" size={30} color="#fff" />
         </LinearGradient>
@@ -1332,7 +1359,13 @@ export default function EntrepreneurshipScreen() {
                         {detailItem.reviews.length > 0 && ( <View style={[S.reviewCountBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}><ThemedText style={{ color: DC.subtext, fontSize: 11, fontWeight: '800' }}>{formatCount(detailItem.reviews.length)}</ThemedText></View> )}
                       </View>
                       {!showReviewInput && (
-                          <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 12, overflow: 'hidden' }}>
+                          <TouchableOpacity 
+                            onPress={() => {
+                              if (isGuest) { setShowRestrictedModal(true); return; }
+                              setShowReviewInput(true);
+                            }} 
+                            style={{ borderRadius: 12, overflow: 'hidden' }}
+                          >
                             <LinearGradient colors={OG as any} style={{ paddingHorizontal: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 }}><MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" /><ThemedText style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>{t?.entrepreneurshiptab?.writing || 'Escribir'}</ThemedText></LinearGradient>
                           </TouchableOpacity>
                       )}
@@ -1357,6 +1390,7 @@ export default function EntrepreneurshipScreen() {
                                   {r.userId !== currentUserId && (
                                     <TouchableOpacity 
                                       onPress={() => { 
+                                        if (isGuest) { setShowRestrictedModal(true); return; }
                                         setItemToReport({ id: r.id, itemType: 'review' }); 
                                         setDetailItem(null); 
                                         setReportModalVisible(true); 
@@ -1397,7 +1431,19 @@ export default function EntrepreneurshipScreen() {
                 </View>
                 {!showReviewInput ? (
                   <View style={{ flex: 1 }}>
-                    <TouchableOpacity onPress={() => setShowReviewInput(true)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}><LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t?.entrepreneurshiptab?.writingReviews || 'Escribir reseña'}</ThemedText></LinearGradient></TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        if (isGuest) { setShowRestrictedModal(true); return; }
+                        setShowReviewInput(true);
+                      }} 
+                      style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
+                    >
+                      <LinearGradient colors={OG as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                        <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{ marginRight: 10 }} />
+                        <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t?.entrepreneurshiptab?.writingReviews || 'Escribir reseña'}</ThemedText>
+                      </LinearGradient>
+                    </TouchableOpacity>
+
                     <ScrollView showsVerticalScrollIndicator={false}>
                       {(reviewTarget?.reviews ?? []).length > 0
                         ? (reviewTarget?.reviews ?? []).map((r: any) => (
@@ -1415,6 +1461,7 @@ export default function EntrepreneurshipScreen() {
                               {r.userId !== currentUserId && (
                                 <TouchableOpacity 
                                   onPress={() => { 
+                                    if (isGuest) { setShowRestrictedModal(true); return; }
                                     setItemToReport({ id: r.id, itemType: 'review' }); 
                                     setReviewTarget(null); 
                                     setReportModalVisible(true); 
@@ -1527,6 +1574,49 @@ export default function EntrepreneurshipScreen() {
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      </RNModal>
+
+      {/* 🚀 MODAL DE ACCESO RESTRINGIDO PARA INVITADOS */}
+      <RNModal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 32, padding: 25, borderWidth: 1, borderColor: DC.border, alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DC.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para interactuar y reportar contenido en los emprendimientos, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
         </View>
       </RNModal>
 

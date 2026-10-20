@@ -14,7 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createClient } from '@supabase/supabase-js'; 
 
 import { ThemedText } from '@/components/ThemedText';
-import { useMockSelector } from '@/redux/slices';
+// 🚀 Se importaron las acciones de Redux necesarias para el modal de restricción
+import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator'; 
@@ -157,6 +158,9 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
+  // 🚀 Definir el dispatch
+  const dispatch = useMockDispatch();
+  
   const { isDark } = useAppTheme();
   const localTheme = isDark ? 'dark' : 'light';
 
@@ -171,6 +175,9 @@ export default function CommunityScreen() {
   const userEmailClean = userMetadata?.email || '';
   const userRole = userMetadata?.role || userMetadata?.rol || userMetadata?.typeDetail || 'User'; 
   const isAdmin = userRole === 'SAdmin' || userRole === 'admin' || userEmailClean === 'cesargomez853@gmail.com';
+  
+  // 🚀 Verificación de invitado
+  const isGuest = userMetadata?.typeDetail === 'Guest';
   
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [pendingPosts, setPendingPosts] = useState<any[]>([]);
@@ -253,6 +260,9 @@ export default function CommunityScreen() {
   const [visibleComments, setVisibleComments] = useState<Record<string, boolean>>({});
   const [viewerVisible, setViewerVisible] = useState(false);
   const [imageToView, setImageToView] = useState<string | null>(null);
+
+  // 🚀 ESTADO PARA EL MODAL DE ACCESO RESTRINGIDO
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false);
 
   // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -1200,7 +1210,14 @@ export default function CommunityScreen() {
 
                                     {/* 🚀 BOTÓN DE REPORTAR COMENTARIO EN COMUNIDAD */}
                                     {c.userId !== currentUserId && (
-                                      <TouchableOpacity onPress={() => { setItemToReport({ id: c.id, itemType: 'review' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.6 }}>
+                                      <TouchableOpacity 
+                                        onPress={() => { 
+                                          if (isGuest) { setShowRestrictedModal(true); return; }
+                                          setItemToReport({ id: c.id, itemType: 'review' }); 
+                                          setReportModalVisible(true); 
+                                        }} 
+                                        style={{ padding: 4, opacity: 0.6 }}
+                                      >
                                         <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} />
                                       </TouchableOpacity>
                                     )}
@@ -1247,7 +1264,11 @@ export default function CommunityScreen() {
                                   {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA EN COMUNIDAD */}
                                   {!isOwner && (
                                     <TouchableOpacity 
-                                      onPress={() => { setItemToReport({ ...post, itemType: 'community' }); setReportModalVisible(true); }}
+                                      onPress={() => { 
+                                        if (isGuest) { setShowRestrictedModal(true); return; }
+                                        setItemToReport({ ...post, itemType: 'community' }); 
+                                        setReportModalVisible(true); 
+                                      }}
                                       style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}
                                     >
                                       <MaterialCommunityIcons name="flag-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
@@ -1439,6 +1460,49 @@ export default function CommunityScreen() {
             <MaterialCommunityIcons name="close" size={28} color="#fff" />
           </TouchableOpacity>
           {imageToView && <Image source={{ uri: imageToView }} style={{ width: '100%', height: '80%', resizeMode: 'contain' }} />}
+        </View>
+      </RNModal>
+
+      {/* MODAL ACCESO RESTRINGIDO PARA REPORTES (INVITADOS) */}
+      <RNModal visible={showRestrictedModal} transparent animationType="fade" onRequestClose={() => setShowRestrictedModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '90%', maxWidth: 380, backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 32, padding: 25, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', alignItems: 'center' }}>
+            
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 95, 109, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <MaterialCommunityIcons name="lock-alert" size={32} color="#FF5F6D" />
+            </View>
+
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: Colors.text, textAlign: 'center', marginBottom: 8 }}>
+              Contenido Exclusivo
+            </ThemedText>
+            
+            <ThemedText style={{ fontSize: 13, color: isDark ? '#A0A0A5' : '#666666', textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>
+              Para interactuar y reportar contenido en la comunidad, necesitas crear tu cuenta gratuita. ¡Es rápido y seguro!
+            </ThemedText>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowRestrictedModal(false);
+                  dispatch(setUserMetadata({} as any));
+                  dispatch(toggleAuth());
+                }}
+                style={{ borderRadius: 16, overflow: 'hidden' }}
+              >
+                <LinearGradient colors={['#FF5F6D', '#FFC371']} style={{ paddingVertical: 14, alignItems: 'center' }}>
+                  <ThemedText style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Crear Cuenta Gratis</ThemedText>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setShowRestrictedModal(false)}
+                style={{ paddingVertical: 12, alignItems: 'center' }}
+              >
+                <ThemedText style={{ color: isDark ? '#A0A0A5' : '#666666', fontWeight: 'bold', fontSize: 14 }}>Seguir Explorando</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+          </View>
         </View>
       </RNModal>
 

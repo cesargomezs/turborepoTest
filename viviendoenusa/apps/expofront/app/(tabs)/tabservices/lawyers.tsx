@@ -1391,7 +1391,14 @@ export default function LawyersScreen() {
             
             {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
             {!isPending && !isOwner && (
-              <TouchableOpacity onPress={() => { setItemToReport({ ...lawyer, itemType: 'lawyer' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+              <TouchableOpacity 
+                onPress={() => { 
+                  if (isGuest) { setShowRestrictedModal(true); return; }
+                  setItemToReport({ ...lawyer, itemType: 'lawyer' }); 
+                  setReportModalVisible(true); 
+                }} 
+                style={{ padding: 4, opacity: 0.7 }}
+              >
                 <MaterialCommunityIcons name="flag-outline" size={18} color={Colors.subtext} />
               </TouchableOpacity>
             )}
@@ -1461,7 +1468,11 @@ export default function LawyersScreen() {
           {/* 🚀 BOTÓN DE REPORTAR EN LA PARTE INFERIOR DE LA TARJETA TAMBIÉN */}
           {!isPending && !isOwner && (
             <TouchableOpacity 
-              onPress={() => { setItemToReport({ ...lawyer, itemType: 'lawyer' }); setReportModalVisible(true); }}
+              onPress={() => { 
+                if (isGuest) { setShowRestrictedModal(true); return; }
+                setItemToReport({ ...lawyer, itemType: 'lawyer' }); 
+                setReportModalVisible(true); 
+              }}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}
             >
               <MaterialCommunityIcons name="flag-outline" size={14} color={Colors.subtext} style={{ marginRight: 6 }} />
@@ -1640,7 +1651,12 @@ export default function LawyersScreen() {
                 {/* 🚀 BOTÓN DE REPORTAR PUBLICACIÓN POR COPYRIGHT EN DETALLE */}
                 {selectedDetail?.userId !== currentUserId && (
                   <TouchableOpacity 
-                    onPress={() => { setItemToReport({ ...selectedDetail, itemType: 'lawyer' }); setSelectedDetail(null); setReportModalVisible(true); }}
+                    onPress={() => { 
+                      if (isGuest) { setShowRestrictedModal(true); return; }
+                      setItemToReport({ ...selectedDetail, itemType: 'lawyer' }); 
+                      setSelectedDetail(null); 
+                      setReportModalVisible(true); 
+                    }}
                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
                   >
                     <MaterialCommunityIcons name="alert-circle-outline" size={16} color={Colors.subtext} style={{ marginRight: 6 }} />
@@ -1708,7 +1724,15 @@ export default function LawyersScreen() {
                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}>
                             {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA */}
                             {r.userId !== currentUserId && (
-                              <TouchableOpacity onPress={() => { setItemToReport({ id: r.id, itemType: 'review' }); setSelectedReviews(null); setReportModalVisible(true); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <TouchableOpacity 
+                                onPress={() => { 
+                                  if (isGuest) { setShowRestrictedModal(true); return; }
+                                  setItemToReport({ id: r.id, itemType: 'review' }); 
+                                  setSelectedReviews(null); 
+                                  setReportModalVisible(true); 
+                                }} 
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                              >
                                 <MaterialCommunityIcons name="flag-outline" size={14} color={Colors.subtext} />
                                 <ThemedText style={{ fontSize: 11, color: Colors.subtext }}>Reportar</ThemedText>
                               </TouchableOpacity>
@@ -2225,7 +2249,7 @@ export default function LawyersScreen() {
             setShowRestrictedModal(true);
             return;
           }
-          fetchAppConfig(); // 🚀 ¡Consulta la validación de pagos cada vez que se presiona!
+          fetchAppConfig(); 
           setModalVisible(true);
         }}
       >

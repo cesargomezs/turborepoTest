@@ -14,6 +14,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
+// 🚀 Se importan las acciones de Redux para manejar el modal de restricción de invitados
 import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
@@ -909,7 +910,6 @@ export default function SupportScreen() {
     else Alert.alert(title, message);
   };
 
-  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO CENTRALIZADA
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
@@ -1015,9 +1015,16 @@ export default function SupportScreen() {
               <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
             </View>
 
-            {/* 🚀 BOTÓN DE REPORTAR CONTENIDO DESDE LA TARJETA (BANDERA TOP) */}
+            {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
             {!isOwner && (
-              <TouchableOpacity onPress={() => { setItemToReport({...store, itemType: 'support'}); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+              <TouchableOpacity 
+                onPress={() => { 
+                  if (isGuest) { setShowRestrictedModal(true); return; }
+                  setItemToReport({ ...store, itemType: 'support' }); 
+                  setReportModalVisible(true); 
+                }} 
+                style={{ padding: 4, opacity: 0.7 }}
+              >
                 <MaterialCommunityIcons name="flag-outline" size={18} color={DynamicColors.subtext} />
               </TouchableOpacity>
             )}
@@ -1035,15 +1042,32 @@ export default function SupportScreen() {
           <ThemedText style={{ fontSize: 14, opacity: 0.9, marginTop: 6 , color:DynamicColors.text }} numberOfLines={isPending ? undefined : 2}>{store.description}</ThemedText>
           
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15, opacity: isPending ? 0.5 : 1 }}>
-            <TouchableOpacity onPress={() => !isPending && setSelectedStore(store)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}><MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.genericbtn?.reviews || "Reseñas"} {reviewCount > 0 ? `(${formattedCount})` : ''}</ThemedText></TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => {
+                if (isGuest) {
+                  setShowRestrictedModal(true);
+                  return;
+                }
+                if (!isPending) setSelectedStore(store);
+              }} 
+              disabled={isPending || fadeCard} 
+              style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5' }}
+            >
+               <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? '#FFF' : '#444'} />
+               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFF' : '#444' }}>{t.genericbtn?.reviews || "Reseñas"} {reviewCount > 0 ? `(${formattedCount})` : ''}</ThemedText>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && openDirections(store)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD' }}><MaterialCommunityIcons name="directions" size={18} color={isDark ? '#4FC3F7' : '#1976D2'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }}>{t.genericbtn.route}</ThemedText></TouchableOpacity>
             <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${store.phone}`)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}><MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.genericbtn.call}</ThemedText></TouchableOpacity>
           </View>
 
-          {/* 🚀 BOTÓN INFERIOR DE REPORTE FUERA DE LA TARJETA */}
+          {/* 🚀 BOTÓN DE REPORTAR EN LA PARTE INFERIOR DE LA TARJETA */}
           {!isPending && !isOwner && (
             <TouchableOpacity 
-              onPress={() => { setItemToReport({ ...store, itemType: 'support' }); setReportModalVisible(true); }}
+              onPress={() => { 
+                if (isGuest) { setShowRestrictedModal(true); return; }
+                setItemToReport({ ...store, itemType: 'support' }); 
+                setReportModalVisible(true); 
+              }}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
             >
               <MaterialCommunityIcons name="flag-outline" size={14} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
@@ -1129,11 +1153,19 @@ export default function SupportScreen() {
           <View style={{ width: '90%', height: '75%', borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={{ width: '100%', height: 240 }}>
-               <Image source={{ uri: selectedDetail?.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+               {selectedDetail?.image && selectedDetail?.image.length > 5 ? (
+                 <Image source={{ uri: selectedDetail?.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+               ) : (
+                 <View style={{ width: '100%', height: '100%', backgroundColor: isDark ? '#333' : '#E0E0E0', justifyContent: 'center', alignItems: 'center' }}>
+                   <MaterialCommunityIcons name="image-off-outline" size={40} color={DynamicColors.subtext} />
+                 </View>
+               )}
                <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={StyleSheet.absoluteFill} />
-                {!isWeb &&
-               <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}><MaterialCommunityIcons name="share-variant" size={22} color="#FFF" /></TouchableOpacity>
-                }
+               {!isWeb && (
+                 <TouchableOpacity onPress={() => handleShare(selectedDetail)} style={{ position: 'absolute', top: 20, left: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}>
+                   <MaterialCommunityIcons name="share-variant" size={22} color="#FFF" />
+                 </TouchableOpacity>
+               )}
                <TouchableOpacity onPress={handleCloseDetailModal} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20 }}>
                  <MaterialCommunityIcons name="close" size={24} color="#FFF" />
                </TouchableOpacity>
@@ -1161,10 +1193,15 @@ export default function SupportScreen() {
                 {/* 🚀 BOTÓN DE REPORTAR EN DETALLE DE APOYO */}
                 {selectedDetail?.userId !== currentUserId && (
                   <TouchableOpacity 
-                    onPress={() => { setItemToReport({ ...selectedDetail, itemType: 'support' }); setSelectedDetail(null); setReportModalVisible(true); }}
+                    onPress={() => { 
+                      if (isGuest) { setShowRestrictedModal(true); return; }
+                      setItemToReport({ ...selectedDetail, itemType: 'support' }); 
+                      setSelectedDetail(null); 
+                      setReportModalVisible(true); 
+                    }}
                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
                   >
-                    <MaterialCommunityIcons name="flag-outline" size={16} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
                     <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
                       Reportar esta publicación
                     </ThemedText>
@@ -1183,8 +1220,10 @@ export default function SupportScreen() {
             <View style={{ width: width > 600 ? 500 : '92%', height: height * 0.78, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 32, padding: 25, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border }}>
               {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-                <View style={{ flex: 1 }}><ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name}</ThemedText><ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>{t.genericlabel.labelexperien}</ThemedText></View>
-                <TouchableOpacity onPress={() => { setSelectedStore(null); setShowReviewInput(false); }}><MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} /></TouchableOpacity>
+                <View style={{ flex: 1 }}><ThemedText style={{ fontSize: 22, fontWeight: '900', color: DynamicColors.text }}>{selectedStore?.name}</ThemedText><ThemedText style={{ color: DynamicColors.subtext, fontWeight: '800' }}>{t.supporttab.label || 'Opiniones'}</ThemedText></View>
+                <TouchableOpacity onPress={() => { setSelectedStore(null); setShowReviewInput(false); }}>
+                  <MaterialCommunityIcons name="close" size={28} color={DynamicColors.text} />
+                </TouchableOpacity>
               </View>
               {!showReviewInput ? (
                 <View style={{ flex: 1 }}>
@@ -1219,7 +1258,15 @@ export default function SupportScreen() {
                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
                             {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA */}
                             {r.userId !== currentUserId && (
-                              <TouchableOpacity onPress={() => { setItemToReport({ id: r.id, itemType: 'review' }); setSelectedStore(null); setReportModalVisible(true); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <TouchableOpacity 
+                                onPress={() => { 
+                                  if (isGuest) { setShowRestrictedModal(true); return; }
+                                  setItemToReport({ id: r.id, itemType: 'review' }); 
+                                  setSelectedStore(null); 
+                                  setReportModalVisible(true); 
+                                }} 
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                              >
                                 <MaterialCommunityIcons name="flag-outline" size={14} color={DynamicColors.subtext} />
                                 <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext }}>Reportar</ThemedText>
                               </TouchableOpacity>
@@ -1433,7 +1480,7 @@ export default function SupportScreen() {
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   {isAdminMode && (
-                    <View style={{ marginBottom: 20 }}>
+                    <View style={{ marginTop: 20, marginBottom: 20 }}>
                       <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{t.genericlabel.labelcheckpay} ({pendingStores.length})</ThemedText>
                       {pendingStores.length > 0 ? (
                         pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)

@@ -18,6 +18,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
+// 🚀 Se importan las acciones de Redux necesarias para el modal de restricción de invitados
 import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
@@ -256,7 +257,7 @@ export default function JobsScreen() {
   
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO (SOPORTA EMPLEOS Y RESEÑAS)
+  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
@@ -1456,7 +1457,14 @@ export default function JobsScreen() {
 
                                     {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
                                     {!isOwner && (
-                                      <TouchableOpacity onPress={() => { setItemToReport({ ...job, itemType: 'job' }); setReportModalVisible(true); }} style={{ padding: 4, opacity: 0.7 }}>
+                                      <TouchableOpacity 
+                                        onPress={() => { 
+                                          if (isGuest) { setShowRestrictedModal(true); return; }
+                                          setItemToReport({ ...job, itemType: 'job' }); 
+                                          setReportModalVisible(true); 
+                                        }} 
+                                        style={{ padding: 4, opacity: 0.7 }}
+                                      >
                                         <MaterialCommunityIcons name="flag-outline" size={18} color={DynamicColors.subtext} />
                                       </TouchableOpacity>
                                     )}
@@ -1541,7 +1549,11 @@ export default function JobsScreen() {
                                 {/* 🚀 ENLACE INFERIOR DE REPORTE FUERA DE LA TARJETA */}
                                 {!isOwner && (
                                   <TouchableOpacity 
-                                    onPress={() => { setItemToReport({ ...job, itemType: 'job' }); setReportModalVisible(true); }}
+                                    onPress={() => { 
+                                      if (isGuest) { setShowRestrictedModal(true); return; }
+                                      setItemToReport({ ...job, itemType: 'job' }); 
+                                      setReportModalVisible(true); 
+                                    }}
                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
                                   >
                                     <MaterialCommunityIcons name="alert-circle-outline" size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
@@ -1688,7 +1700,7 @@ export default function JobsScreen() {
           
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleCloseDetailModal} />
           
-          <View style={{ width: '90%', maxHeight: '80%', borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1A1A1A' : '#FFF') : 'transparent', borderColor: DynamicColors.border }}>
+          <View style={{ width: '90%', maxHeight: '80%', borderRadius: 32, overflow: 'hidden', borderWidth: 1, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={110} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: 10 }}>
@@ -1758,7 +1770,7 @@ export default function JobsScreen() {
 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 20 }}>
                     <TouchableOpacity 
-                      onPress={() => { 
+                      onPress={() => {
                         if (isGuest) {
                           setShowRestrictedModal(true);
                           return;
@@ -1772,10 +1784,10 @@ export default function JobsScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={() => handleContact('call', selectedJobDetail?.phoneCode, selectedJobDetail?.phone)} disabled={!selectedJobDetail?.isOpen} style={{ flex: 1.1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: '#E3F2FD', opacity: !selectedJobDetail?.isOpen ? 0.4 : 1 }}>
-                        <MaterialCommunityIcons name="phone" size={18} color="#1976D2" />
-                        <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: '800', color: '#1976D2' }}>
-                            Llamar
-                        </ThemedText>
+                      <MaterialCommunityIcons name="phone" size={18} color="#1976D2" />
+                      <ThemedText style={{ marginLeft: 8, fontSize: 14, fontWeight: '800', color: '#1976D2' }}>
+                          Llamar
+                      </ThemedText>
                     </TouchableOpacity>
                 </View>
 
@@ -2488,6 +2500,7 @@ export default function JobsScreen() {
                          {r.userId !== currentUserId && (
                            <TouchableOpacity 
                              onPress={() => { 
+                               if (isGuest) { setShowRestrictedModal(true); return; }
                                setItemToReport({ id: r.id, itemType: 'review' }); 
                                setSelectedCompany(null); 
                                setReportModalVisible(true); 
@@ -2547,6 +2560,26 @@ export default function JobsScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* 🚀 FAB Flotante - BLOQUEADO PARA INVITADOS */}
+      <TouchableOpacity 
+        onPress={() => { 
+          if (isGuest) {
+            setShowRestrictedModal(true);
+            return;
+          }
+          fetchAppConfig(); 
+          fetchUserCompanies(); 
+          setPublishView('company_list'); 
+          setModalVisible(true); 
+        }} 
+        style={[styles.fab, { bottom: isIOS ? insets.bottom + 75 : 85, zIndex: 99, elevation: 99 }]}
+      >
+        <LinearGradient colors={orangeGradient} style={{flex:1, borderRadius:32, justifyContent:'center', alignItems:'center'}}>
+          <MaterialCommunityIcons name="briefcase-plus" size={28} color="#fff" />
+        </LinearGradient>
+      </TouchableOpacity>
+
     </View>
   );
 }
