@@ -736,7 +736,7 @@ export const createEventReview = async (data: any) => {
 };
 
 // =====================================================================
-// 🚨 6. REPORTAR CONTENIDO DE EVENTO O RESEÑA
+// 🚨 6. REPORTAR CONTENIDO DE EVENTO O RESEÑA 
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
