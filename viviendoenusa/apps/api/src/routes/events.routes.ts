@@ -4,9 +4,8 @@ import {
     getEventById, 
     createEvent, 
     updateEvent, 
-    deleteEvent,
-    createEventReview, // 🚀 Nueva importación
-    reportContent      // 🚀 Nueva importación
+    createEventReview, 
+    reportContent      
 } from '../controllers/events.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
@@ -21,7 +20,7 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const zipParam = req.query.zip;
     const zip = typeof zipParam === 'string' ? zipParam : (Array.isArray(zipParam) ? zipParam[0] as string : undefined);
-    const userId = req.query.userId as string; // Agregado para soportar filtros por usuario en el controlador
+    const userId = req.query.userId as string; 
     
     const list = await getEvents(zip, userId);
     return res.status(200).json(list);
@@ -110,7 +109,7 @@ router.get('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 🔄 PUT: Actualizar un evento
+// 🔄 PUT: Actualizar o Renovar un evento (Mantiene reseñas y genera un nuevo pago en estado pendiente)
 router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const idParam = req.params.id;
@@ -123,23 +122,6 @@ router.put('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
     return res.status(200).json(updatedEvent);
   } catch (error: any) {
     console.error(`❌ Error en PUT /events/${req.params.id}:`, error.message);
-    return res.status(400).json({ error: error.message });
-  }
-});
-
-// 🗑️ DELETE: Eliminar un evento
-router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const idParam = req.params.id;
-    const id = typeof idParam === 'string' ? idParam : (Array.isArray(idParam) ? idParam[0] : '');
-
-    const deletedEvent = await deleteEvent(id);
-    if (!deletedEvent) {
-      return res.status(404).json({ error: "Evento no encontrado" });
-    }
-    return res.status(200).json({ message: "Evento eliminado correctamente", event: deletedEvent });
-  } catch (error: any) {
-    console.error(`❌ Error en DELETE /events/${req.params.id}:`, error.message);
     return res.status(400).json({ error: error.message });
   }
 });
