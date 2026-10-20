@@ -631,7 +631,7 @@ export const deleteJob = async (id: string) => {
 };
 
 // =====================================================================
-// 🚨 7. REPORTAR CONTENIDO (ORGANIZADO Y OPTIMIZADO)
+// 🚨 7. REPORTAR CONTENIDO (CORREGIDO Y OPTIMIZADO)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
@@ -667,7 +667,7 @@ export const reportContent = async (data: any) => {
       }
     }
 
-    // 2. Consultar el contenido real y la compañía asociada según corresponda
+    // 2. Consultar el contenido real y la compañía asociada correctamente
     let reportedContent = `ID: ${validItemId}`;
     let associatedCompany = "No aplica";
 
@@ -675,6 +675,8 @@ export const reportContent = async (data: any) => {
       if (validType === 'review') {
         const reviewRows = await db.select({
           comment: reviewsTable.comment,
+          review: reviewsTable.review,
+          text: reviewsTable.text,
           companyName: companies.name
         })
         .from(reviewsTable)
@@ -685,8 +687,8 @@ export const reportContent = async (data: any) => {
         .limit(1);
 
         if (reviewRows && reviewRows.length > 0) {
-          reportedContent = reviewRows[0].comment ||`Reseña ID: ${validItemId}`;
-          associatedCompany = reviewRows[0].companyName || "Compañía Directa";
+          reportedContent = reviewRows[0].comment || reviewRows[0].review || reviewRows[0].text || `Reseña ID: ${validItemId}`;
+          associatedCompany = reviewRows[0].companyName || "Empresa de la Reseña";
         }
       } else {
         const jobRows = await db.select({ 
@@ -717,15 +719,17 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    // 3. Mensaje estructurado, limpio y con interpolación correcta asegurada
-    const message = `🚨 *REPORTE DE CONTENIDO (${validType.toUpperCase()})*\n\n` +
-                    `📌 *Módulo:* ${validType.toUpperCase()}\n` +
-                    `🏢 *Compañía / Origen:* ${associatedCompany}\n` +
-                    `🏷️ *Contenido:* "${reportedContent}"\n` +
-                    `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
-                    `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
-                    `⚠️ *Motivo:* ${safeReason}\n\n` +
-                    `Por favor verifica el contenido en el panel de administrador.`;
+    // 3. Mensaje usando comillas invertidas (backticks) en TODO el bloque para que la variable se evalúe bien
+    const message = `🚨 *REPORTE DE CONTENIDO (${validType.toUpperCase()})*
+
+📌 *Módulo:* ${validType.toUpperCase()}
+🏢 *Compañía / Origen:* ${associatedCompany}
+🏷️ *Contenido:* "${reportedContent}"
+🆔 *ID Elemento:* \`\${validItemId}\`
+👤 *Reportado por:* ${reporterName} (${reporterEmail})
+⚠️ *Motivo:* ${safeReason}
+
+Por favor verifica el contenido en el panel de administrador.`;
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
