@@ -551,7 +551,7 @@ export const createEvent = async (data: any) => {
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR O RENOVAR EVENTO (MODO RENOVACIÓN ANUAL + ESTADO PENDING)
+// 🔄 4. ACTUALIZAR O RENOVAR EVENTO (INSERTA NUEVO PAGO Y ESTADO PENDING)
 // =====================================================================
 export const updateEvent = async (idParam: any, dataParam: any) => {
   let cleanId: string = "";
@@ -581,6 +581,11 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
     const metodoPago = cleanPayload.paymentMethod ? String(cleanPayload.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = cleanPayload.referenceCode ? String(cleanPayload.referenceCode).trim() : '';
 
+    // 🛡️ REGLA ESTRICTA DE RENOVACIÓN: Obliga a ingresar una nueva referencia o cupón al actualizar
+    if (!codigoReferencia && !cleanPayload.couponCode) {
+      throw new Error("Para actualizar o renovar el evento debes ingresar la nueva referencia de pago o cupón.");
+    }
+
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
     let realPromoCode = cleanPayload.couponCode ? String(cleanPayload.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
@@ -589,22 +594,26 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
     const eventResult = await db.transaction(async (tx) => {
 
-        if (isCoupon && realPromoCode) {
+        if (isCoupon) {
+          if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón para renovar.");
+          
           const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
-          if (promo && !promo.isUsed) {
-            await tx.update(promoCodes)
-            .set({
-              isUsed: true, 
-              usedByUserId: existingEvent.userId, 
-              usedForEntityId: cleanId, 
-              entityType: 'event',
-              usedAt: new Date() 
-            })
-            .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
-          }
+          
+          if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
+          if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+
+          await tx.update(promoCodes)
+          .set({
+            isUsed: true, 
+            usedByUserId: existingEvent.userId, 
+            usedForEntityId: cleanId, 
+            entityType: 'event',
+            usedAt: new Date() 
+          })
+          .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
         }
 
-        // 🚀 REGLA DE INTEGRIDAD: Al actualizar o renovar, pasa a PENDIENTE por revisión
+        // 🚀 FORZAR ESTADO A PENDIENTE (APPROVED = FALSE)
         cleanPayload.approved = false;
         cleanPayload.statusId = '31a06434-8ed8-45d2-b95f-65bd314bc021';
 
@@ -617,30 +626,32 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
         if (!event) throw new Error("No se pudo encontrar el evento actualizado");
 
-        if (codigoReferencia || realPromoCode) {
-            const today = new Date();
-            const eventDate = new Date(event.dateEvent);
-            const diffTime = eventDate.getTime() - today.getTime();
-            const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+        // 💰 INSERTAR UN NUEVO REGISTRO EN LA TABLA PAYMENTS PARA ESTA RENOVACIÓN
+        const today = new Date();
+        const eventDate = new Date(event.dateEvent);
+        const diffTime = eventDate.getTime() - today.getTime();
+        const daysLeft = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-            const paymentPayload: any = {
-              entityType: 'event', 
-              entityId: event.id,
-              userId: event.userId, 
-              referenceCode: realPromoCode || codigoReferencia, 
-              paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
-              amount: String(isCoupon ? "0.00" : (cleanPayload.tariffPlan || "50.00")), 
-              durationDays: daysLeft, 
-              status: isCoupon ? "approved" : "pending"
-            };
+        const paymentPayload: any = {
+          entityType: 'event', 
+          entityId: event.id,
+          userId: event.userId, 
+          referenceCode: realPromoCode || codigoReferencia, 
+          paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
+          amount: String(isCoupon ? "0.00" : (cleanPayload.tariffPlan || await getCurrentEventPrice())), 
+          durationDays: daysLeft, 
+          status: isCoupon ? "approved" : "pending" // Queda en pending para que el admin valide el nuevo pago
+        };
 
-            if (eventDate) {
-              paymentPayload.timepostEnd = eventDate;
-              paymentPayload.timepost_end = eventDate;
-            }
-
-            await tx.insert(payments).values(paymentPayload);
+        if (isCoupon) {
+          paymentPayload.approvedAt = sql`NOW()`;
         }
+        if (eventDate) {
+          paymentPayload.timepostEnd = eventDate;
+          paymentPayload.timepost_end = eventDate;
+        }
+
+        await tx.insert(payments).values(paymentPayload);
 
         return event || null;
     });
@@ -736,7 +747,7 @@ export const createEventReview = async (data: any) => {
 };
 
 // =====================================================================
-// 🚨 6. REPORTAR CONTENIDO DE EVENTO O RESEÑA 
+// 🚨 6. REPORTAR CONTENIDO DE EVENTO O RESEÑA
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {

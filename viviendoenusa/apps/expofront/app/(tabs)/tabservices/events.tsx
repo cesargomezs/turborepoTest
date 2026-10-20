@@ -282,7 +282,7 @@ export default function EventsScreen() {
   const lastProcessedNotifId = useRef<string | null>(null);
 
   const isBaseFormValid = !!(formTitle.trim() && formLocation.trim() && formZip.trim() && formPhone.trim() && formImage);
-  const isFormValid = !!(isBaseFormValid && (editingEventId || formRefCode.trim()));
+  const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
   const fetchAppConfig = async () => {
     try {
@@ -630,7 +630,7 @@ export default function EventsScreen() {
         return triggerAlert("Atención", "Título, ubicación, ZIP Code, teléfono e imagen son obligatorios.");
     }
 
-    if (!editingEventId && !formRefCode.trim()) {
+    if (!formRefCode.trim()) {
       return triggerAlert("Atención", uiPayType === 'coupon' ? "Ingresa un código de cupón válido." : "Ingresa el código de confirmación del pago.");
     }
 
@@ -709,7 +709,7 @@ export default function EventsScreen() {
         zip: trimmedZip, 
         phone: fullPhone, 
         contactMethod: formContactMethod,
-        approved: editingEventId ? true : false, // Si actualiza se aprueba o mantiene revisión según prefieras
+        approved: false, // 🚀 Al actualizar o crear siempre pasa a pending por revisión
         userId: currentUserId,
         referenceCode: finalRefCode,
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
@@ -741,7 +741,7 @@ export default function EventsScreen() {
       fetchEvents(trimmedZip);
       
       setTimeout(() => {
-        triggerAlert('¡Éxito!', editingEventId ? 'Tu evento ha sido actualizado para su nueva fecha manteniendo sus reseñas.' : 'Tu evento ha sido enviado correctamente.');
+        triggerAlert('¡Éxito!', editingEventId ? 'Tu evento ha sido actualizado y enviado a revisión con su nueva fecha y referencia.' : 'Tu evento ha sido enviado correctamente.');
       }, 150);
       
     } catch (err: any) {
@@ -1119,7 +1119,7 @@ export default function EventsScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* MODAL CREAR/EDITAR EVENTO */}
+      {/* MODAL CREAR/EDITAR EVENTO (MUESTRA CAMPO DE PAGO/CUPÓN SIEMPRE) */}
       <RNModal visible={isModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: isLargeWeb ? 'center' : 'flex-end', alignItems: isLargeWeb ? 'center' : 'stretch' }}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => !isPublishing && setModalVisible(false)} />
@@ -1269,95 +1269,92 @@ export default function EventsScreen() {
                   keyboardType="url"
                 />
 
-                {!editingEventId && (
+                {/* 🚀 MÉTODO DE ACTIVACIÓN Y PAGO (VISIBLE TANTO AL CREAR COMO AL ACTUALIZAR) */}
+                <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                  <TouchableOpacity 
+                    onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
+                    style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                  >
+                    <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
+                    <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
+                  </TouchableOpacity>
+
+                  {(isWeb || appConfig?.payOnActive) && (
+                    <TouchableOpacity 
+                      onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
+                      style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
+                    >
+                      <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
+                      <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {uiPayType === 'subscription' && (isWeb || appConfig?.payOnActive) && (
                   <>
-                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8, marginTop: 5, textTransform: 'uppercase' }}>Método de Activación *</ThemedText>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                      <TouchableOpacity 
-                        onPress={() => { setUiPayType('coupon'); setFormPlan('coupon'); setFormRefCode(''); }}
-                        style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                      >
-                        <MaterialCommunityIcons name={uiPayType === 'coupon' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'coupon' ? Colors.accent : Colors.subtext} />
-                        <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'coupon' ? Colors.accent : Colors.subtext }}>Tengo Cupón</ThemedText>
-                      </TouchableOpacity>
-
-                      {(isWeb || appConfig?.payOnActive) && (
-                        <TouchableOpacity 
-                          onPress={() => { setUiPayType('subscription'); if(formPlan === 'coupon') setFormPlan('basic'); setFormRefCode(''); }}
-                          style={{ flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderColor: uiPayType === 'subscription' ? Colors.accent : Colors.border, backgroundColor: uiPayType === 'subscription' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.05)') : Colors.inputBg }}
-                        >
-                          <MaterialCommunityIcons name={uiPayType === 'subscription' ? "radiobox-marked" : "radiobox-blank"} size={18} color={uiPayType === 'subscription' ? Colors.accent : Colors.subtext} />
-                          <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: uiPayType === 'subscription' ? Colors.accent : Colors.subtext }}>Suscripción</ThemedText>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
-                    {uiPayType === 'subscription' && (isWeb || appConfig?.payOnActive) && (
-                      <>
-                        <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
-                        <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                            {[
-                              { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
-                              { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
-                              { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
-                            ].map(plan => {
-                                const pStyle = planStyles[plan.id as keyof typeof planStyles];
-                                const isSelected = formPlan === plan.id;
-                                
-                                return (
-                                <TouchableOpacity 
-                                    key={plan.id}
-                                    onPress={() => setFormPlan(plan.id)}
-                                    style={{ 
-                                        padding: 15, 
-                                        borderRadius: 14, 
-                                        borderWidth: 1, 
-                                        borderColor: isSelected ? pStyle.selected : Colors.border, 
-                                        backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg 
-                                    }}
-                                >
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} />
-                                            <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : Colors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
-                                        </View>
-                                        <ThemedText style={{ fontWeight: '900', fontSize: 16, color: Colors.text }}>${plan.price}</ThemedText>
+                    <ThemedText style={{ fontSize: 11, fontWeight: 'bold', color: Colors.text, marginBottom: 8 }}>SELECCIONA TU PLAN DE PAGO *</ThemedText>
+                    <View style={{ flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                        {[
+                          { id: 'basic', name: t.categoryplan.basic, price: companyTariffs.basic, desc: t.categoryplan.basicdesc },
+                          { id: 'premium', name: t.categoryplan.premium, price: companyTariffs.premium, desc: t.categoryplan.premiumdesc },
+                          { id: 'unlimited', name: t.categoryplan.unlimited, price: companyTariffs.unlimited, desc: t.categoryplan.unlimiteddesc }
+                        ].map(plan => {
+                            const pStyle = planStyles[plan.id as keyof typeof planStyles];
+                            const isSelected = formPlan === plan.id;
+                            
+                            return (
+                            <TouchableOpacity 
+                                key={plan.id}
+                                onPress={() => setFormPlan(plan.id)}
+                                style={{ 
+                                    padding: 15, 
+                                    borderRadius: 14, 
+                                    borderWidth: 1, 
+                                    borderColor: isSelected ? pStyle.selected : Colors.border, 
+                                    backgroundColor: isSelected ? pStyle.unselected(isDark) : Colors.inputBg 
+                                }}
+                            >
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <MaterialCommunityIcons name={isSelected ? "radiobox-marked" : "radiobox-blank"} size={20} color={isSelected ? pStyle.selected : Colors.subtext} />
+                                        <ThemedText style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? pStyle.selected : Colors.text, marginLeft: 8 }}>{plan.name}</ThemedText>
                                     </View>
-                                    <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : Colors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
-                                </TouchableOpacity>
-                            )})}
-                        </View>
-                      </>
-                    )}
-
-                    <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                      <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.accent, marginBottom: 10 }}>
-                        {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
-                      </ThemedText>
-
-                      <TextInput 
-                        style={{ 
-                          padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, 
-                          backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.06)') : Colors.inputBg, 
-                          borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, 
-                          color: Colors.text, 
-                          textAlign: uiPayType === 'coupon' ? 'center' : 'left',
-                          fontSize: 16,
-                          ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) 
-                        }} 
-                        placeholder={uiPayType === 'coupon' ? 'ESCRIBE TU CÓDIGO AQUÍ...' : `# CONFIRMACION DE ${formPayMethod}...`} 
-                        placeholderTextColor={Colors.subtext}
-                        value={formRefCode} 
-                        onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
-                        autoCapitalize="characters"
-                      />
+                                    <ThemedText style={{ fontWeight: '900', fontSize: 16, color: Colors.text }}>${plan.price}</ThemedText>
+                                </View>
+                                <ThemedText style={{ fontSize: 13, color: isSelected ? pStyle.text(isDark) : Colors.subtext, marginTop: 6, marginLeft: 28 }}>{plan.desc}</ThemedText>
+                            </TouchableOpacity>
+                        )})}
                     </View>
                   </>
                 )}
 
+                <View style={{ marginTop: 5, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                  <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.accent, marginBottom: 10 }}>
+                    {uiPayType === 'coupon' ? 'Cupón de Activación' : 'Verificación de Pago'}
+                  </ThemedText>
+
+                  <TextInput 
+                    style={{ 
+                      padding: 15, borderRadius: 18, borderWidth: 1, fontWeight: '900', textTransform: 'uppercase', marginBottom: 20, 
+                      backgroundColor: uiPayType === 'coupon' ? (isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.06)') : Colors.inputBg, 
+                      borderColor: uiPayType === 'coupon' ? Colors.accent : Colors.border, 
+                      color: Colors.text, 
+                      textAlign: uiPayType === 'coupon' ? 'center' : 'left',
+                      fontSize: 16,
+                      ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) 
+                    }} 
+                    placeholder={uiPayType === 'coupon' ? 'ESCRIBE TU CÓDIGO AQUÍ...' : `# CONFIRMACION DE ${formPayMethod}...`} 
+                    placeholderTextColor={Colors.subtext}
+                    value={formRefCode} 
+                    onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
+                    autoCapitalize="characters"
+                  />
+                </View>
+
                 <TouchableOpacity onPress={handlePublishEvent} disabled={!isFormValid || isPublishing} style={{ alignSelf: 'center', marginTop: 10 }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{editingEventId ? 'Actualizar Evento' : (t.eventstab?.createEvent || 'Crear')}</ThemedText></>}
+                    {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{editingEventId ? 'Actualizar Evento (A Revisión)' : (t.eventstab?.createEvent || 'Crear')}</ThemedText></>}
                   </LinearGradient>
                 </TouchableOpacity>
 
