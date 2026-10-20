@@ -577,7 +577,6 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
     const cleanPayload = sanitizePayload(data);
 
-    // 🚀 VALIDACIÓN DE CUPÓN O PAGO EN LA RENOVACIÓN
     const planSeleccionado = cleanPayload.premiumPlan || cleanPayload.premium_plan || 'basic'; 
     const metodoPago = cleanPayload.paymentMethod ? String(cleanPayload.paymentMethod).toLowerCase().trim() : '';
     const codigoReferencia = cleanPayload.referenceCode ? String(cleanPayload.referenceCode).trim() : '';
@@ -590,16 +589,22 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
     const eventResult = await db.transaction(async (tx) => {
 
-        if (isCoupon) {
-          if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón para renovar.");
-          
+        if (isCoupon && realPromoCode) {
           const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
-          
-          if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
-          if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+          if (promo && !promo.isUsed) {
+            await tx.update(promoCodes)
+            .set({
+              isUsed: true, 
+              usedByUserId: existingEvent.userId, 
+              usedForEntityId: cleanId, 
+              entityType: 'event',
+              usedAt: new Date() 
+            })
+            .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
+          }
         }
 
-        // 🚀 REGLA DE NEGOCIO: Al renovar, el evento pasa a PENDIENTE por revisión de pago/cupón
+        // 🚀 REGLA DE INTEGRIDAD: Al actualizar o renovar, pasa a PENDIENTE por revisión
         cleanPayload.approved = false;
         cleanPayload.statusId = '31a06434-8ed8-45d2-b95f-65bd314bc021';
 
@@ -612,7 +617,6 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 
         if (!event) throw new Error("No se pudo encontrar el evento actualizado");
 
-        // Registrar o actualizar el pago en estado pendiente (o aprobado si es cupón)
         if (codigoReferencia || realPromoCode) {
             const today = new Date();
             const eventDate = new Date(event.dateEvent);
@@ -630,31 +634,12 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
               status: isCoupon ? "approved" : "pending"
             };
 
-            if (isCoupon) {
-              paymentPayload.approvedAt = sql`NOW()`;
-              // Si usa cupón válido, podemos dejarlo aprobado de una vez si lo prefieres, o mantenerlo pendiente de revisión
-              cleanPayload.approved = true; 
-              await tx.update(events).set({ approved: true }).where(eq(events.id, cleanId));
-            }
-
             if (eventDate) {
               paymentPayload.timepostEnd = eventDate;
               paymentPayload.timepost_end = eventDate;
             }
 
             await tx.insert(payments).values(paymentPayload);
-        }
-
-        if (isCoupon && realPromoCode) {
-          await tx.update(promoCodes)
-          .set({
-            isUsed: true, 
-            usedByUserId: event.userId, 
-            usedForEntityId: event.id, 
-            entityType: 'event',
-            usedAt: new Date() 
-          })
-          .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
         }
 
         return event || null;
