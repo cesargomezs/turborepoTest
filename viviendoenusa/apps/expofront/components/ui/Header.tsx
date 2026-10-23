@@ -38,15 +38,34 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import ITSupportButton from './ITSupportButton';
 import { handleUniversalShare } from '../../utils/shareHelper';
+import Constants from 'expo-constants';
 
 LogBox.ignoreLogs(['expo-notifications']);
 
 let Notifications: any = null;
 if (Platform.OS !== 'web') {
   try {
-    Notifications = require('expo-notifications');
+    const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+    
+    if (!isExpoGo) {
+      Notifications = require('expo-notifications');
+    } else {
+      console.log("⚠️ Omitiendo expo-notifications en Header.tsx (Expo Go).");
+      Notifications = {
+        setBadgeCountAsync: async () => false,
+        getPermissionsAsync: async () => ({ status: 'denied' }),
+        requestPermissionsAsync: async () => ({ status: 'denied' }),
+        setNotificationHandler: () => {},
+      };
+    }
   } catch (error) {
     console.log("Faltan los módulos nativos de notificaciones en el binario.");
+    Notifications = {
+      setBadgeCountAsync: async () => false,
+      getPermissionsAsync: async () => ({ status: 'denied' }),
+      requestPermissionsAsync: async () => ({ status: 'denied' }),
+      setNotificationHandler: () => {},
+    };
   }
 }
 

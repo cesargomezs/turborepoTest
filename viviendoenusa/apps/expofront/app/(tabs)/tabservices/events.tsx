@@ -1627,7 +1627,7 @@ export default function EventsScreen() {
                   }}
                   style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}
                 >
-                  <MaterialCommunityIcons name="alert-circle-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
+                  <MaterialCommunityIcons name="flag-outline"size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
                   <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>Reportar publicación</ThemedText>
                 </TouchableOpacity>
               )}
@@ -2055,7 +2055,7 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
             onPress={() => { if (onReport) onReport(item); }}
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}
           >
-            <MaterialCommunityIcons name="alert-circle-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
+            <MaterialCommunityIcons name="flag-outline"size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
             <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>Reportar publicación</ThemedText>
           </TouchableOpacity>
         )}

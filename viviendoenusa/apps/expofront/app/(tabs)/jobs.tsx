@@ -1556,7 +1556,7 @@ export default function JobsScreen() {
                                     }}
                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
                                   >
-                                    <MaterialCommunityIcons name="alert-circle-outline" size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+                                    <MaterialCommunityIcons name="flag-outline"size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
                                     <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
                                       Reportar publicación
                                     </ThemedText>
@@ -2579,7 +2579,7 @@ export default function JobsScreen() {
           <MaterialCommunityIcons name="briefcase-plus" size={28} color="#fff" />
         </LinearGradient>
       </TouchableOpacity>
-
+ 
     </View>
   );
 }

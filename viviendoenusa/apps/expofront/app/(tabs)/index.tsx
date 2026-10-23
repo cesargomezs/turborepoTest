@@ -28,7 +28,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication'; 
-import { GoogleSignin } from '@react-native-google-signin/google-signin'; // <-- NUEVA LIBRERÍA NATIVA
+import { GoogleSignin } from '@react-native-google-signin/google-signin'; // <-- LIBRERÍA NATIVA
 import Constants from 'expo-constants';
 
 let Notifications: any = null;
@@ -37,11 +37,9 @@ let StoreReview: any = null;
 
 if (Platform.OS !== 'web') {
   try {
-    // Estos se cargan normal
     Device = require('expo-device');
     StoreReview = require('expo-store-review');
 
-    // Blindaje para Android Expo Go
     const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
 
     if (Platform.OS === 'android' && isExpoGo) {
@@ -239,7 +237,6 @@ export default function HomeScreen() {
 
   const [showRateButton, setShowRateButton] = useState(false);
 
-  // 🚀 FIX PRINCIPAL: FORZAR APERTURA DE LOGIN CUANDO SE LLAMA DESDE EL FOOTER/HEADER
   useEffect(() => {
     if (params?.login === 'true') {
       setShowWebLanding(false);
@@ -327,7 +324,6 @@ export default function HomeScreen() {
 
   const isSubmitDisabled = isRegistering && (!acceptedTerms || !isPasswordStrong);
 
-  // 🚀 ¡AQUÍ ESTÁ LA SOLUCIÓN! HARDCODEAMOS LOS IDs PARA EVITAR QUE SE PIERDAN AL COMPILAR
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
     iosClientId: "504369739440-9q0jcvlj05nqokbfml6mectpu65sfnqt.apps.googleusercontent.com",
@@ -337,12 +333,22 @@ export default function HomeScreen() {
     }),
   });
 
-  // <-- CONFIGURACIÓN NATIVA PARA ANDROID
+  // 🚀 CONFIGURACIÓN NATIVA BLINDADA PARA ANDROID (Corregido con as any)
   useEffect(() => {
     if (Platform.OS === 'android') {
-      GoogleSignin.configure({
-        webClientId: "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
-      });
+      try {
+        const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+        if (!isExpoGo) {
+          const GoogleSigninModule = GoogleSignin as any;
+          if (GoogleSigninModule && typeof GoogleSigninModule.configure === 'function') {
+            GoogleSigninModule.configure({
+              webClientId: "504369739440-0ap4tu6t1nfvahb3m6581ktnvdorrreq.apps.googleusercontent.com",
+            });
+          }
+        }
+      } catch (e) {
+        console.log("GoogleSignin native module not available yet:", e);
+      }
     }
   }, []);
 
@@ -393,13 +399,21 @@ export default function HomeScreen() {
     }
   };
 
+  // 🚀 CARGA DE IMÁGENES BLINDADA CON FALLBACK
   useEffect(() => {
     const loadSignedImages = async () => {
-      if (!supabaseClient) return;
+      const fallbackLogo = 'https://pwznamxpdzwppmpiyizp.supabase.co/storage/v1/object/public/images/logoorimages/backgroundusa.webp';
+      
+      if (!supabaseClient) {
+        setMainLogoUrl(fallbackLogo);
+        return;
+      }
+      
       try {
         const { data: logoData } = await supabaseClient.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
-        if (logoData?.signedUrl) setMainLogoUrl(logoData.signedUrl);
-        const client = supabaseClient!;
+        setMainLogoUrl(logoData?.signedUrl || fallbackLogo);
+        
+        const client = supabaseClient;
         const signedServices = await Promise.all(
           INITIAL_SERVICES_DATA.map(async (service) => {
             const { data } = await client.storage.from(NOMBRE_BUCKET).createSignedUrl(service.path, 604800, {
@@ -413,8 +427,11 @@ export default function HomeScreen() {
           })
         );
         setServicesData(signedServices);
-      } catch (error) {}
+      } catch (error) {
+        setMainLogoUrl(fallbackLogo);
+      }
     };
+    
     loadSignedImages();
   }, []);
 
@@ -489,20 +506,36 @@ export default function HomeScreen() {
     router.replace('/');
   };
 
-  // <-- MANEJADOR UNIFICADO PARA GOOGLE
+  // 🚀 MANEJADOR UNIFICADO PARA GOOGLE BLINDADO (Corregido con as any)
   const handleGoogleLogin = async () => {
     if (Platform.OS === 'android') {
       try {
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        const userInfo = await GoogleSignin.signIn();
+        const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+        if (isExpoGo) {
+          Alert.alert("Aviso de desarrollo", "El inicio de sesión nativo con Google requiere una compilación de desarrollo (Development Build) o producción, no funciona en Expo Go.");
+          return;
+        }
+
+        const GoogleSigninModule = GoogleSignin as any;
+        if (!GoogleSigninModule || typeof GoogleSigninModule.hasPlayServices !== 'function') {
+          throw new Error("El módulo nativo de Google Sign-In no está disponible en este entorno.");
+        }
+
+        await GoogleSigninModule.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        await GoogleSigninModule.signOut().catch(() => {});
         
-        // El "as any" calma a TypeScript para compatibilidad con todas las versiones de la librería
+        const userInfo = await GoogleSigninModule.signIn();
+        
+        if ((userInfo as any)?.type === 'cancelled') {
+          return;
+        }
+
         const idToken = userInfo.data?.idToken || (userInfo as any).idToken; 
         
         if (idToken) {
           verifyGoogle(idToken);
         } else {
-          throw new Error("No se pudo obtener el token de acceso de Google.");
+          return; 
         }
       } catch (error: any) {
         console.error("Error en inicio de sesión de Google (Android Nativo):", error);
@@ -511,7 +544,6 @@ export default function HomeScreen() {
         }
       }
     } else {
-      // Para Web y iOS se mantiene intacto el promptAsync original
       promptAsync();
     }
   };
@@ -1123,7 +1155,6 @@ export default function HomeScreen() {
 
             <View style={{ position: 'absolute', right: 20, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               
-              {/* Botón Califícanos (Solo Web) */}
               {isWebPlatform && width > 768 && (
                 <TouchableOpacity 
                   onPress={handleRateApp}
@@ -1382,7 +1413,6 @@ export default function HomeScreen() {
                </TouchableOpacity>
              </View>
 
-             {/* BOTÓN CALIFÍCANOS CENTRADO Y ÚNICO */}
              {showRateButton && (
                <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 25, width: '100%' }}>
                  <TouchableOpacity 
@@ -1401,7 +1431,6 @@ export default function HomeScreen() {
                 {t?.hometab?.copyright || '© 2026 Viviendo en USA. Todos los derechos reservados.'}
              </Text>
              
-             {/* ENLACES LEGALES (Solo Web) - TEXTO PLANO DISCRETO Y ELEGANTE */}
              {isWebPlatform && (
                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: 14, marginBottom: 25 }}>
                  <TouchableOpacity onPress={() => { window.location.href = '/politica-de-privacidad/'; }}>
@@ -1855,7 +1884,6 @@ export default function HomeScreen() {
                                     <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
                                   )}
                                   
-                                  {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (SOLO MÓVIL) */}
                                   {!isWebPlatform && (
                                     <TouchableOpacity 
                                       activeOpacity={0.8}
@@ -1897,7 +1925,6 @@ export default function HomeScreen() {
                                       </Text>
                                     </TouchableOpacity>
                                     
-                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (SOLO MÓVIL) */}
                                     {!isWebPlatform && (
                                       <TouchableOpacity 
                                         activeOpacity={0.8}
@@ -1935,7 +1962,6 @@ export default function HomeScreen() {
                                       <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN} buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ width: '100%', height: 50, marginTop: 12 }} onPress={handleAppleLogin} />
                                     )}
 
-                                    {/* 🚀 BOTÓN PARA EXPLORAR COMO INVITADO (SOLO MÓVIL) */}
                                     {!isWebPlatform && (
                                       <TouchableOpacity 
                                         activeOpacity={0.8}
@@ -2327,6 +2353,7 @@ const styles = StyleSheet.create({
   phoneInputContainer: { flexDirection: 'row', alignItems: 'center', height: 48, borderWidth: 1, borderRadius: 14, overflow: 'hidden', marginTop: 2, marginBottom: 8 },
   countryCodeSelector: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: '100%' },
   flagIcon: { fontSize: 18, marginRight: 6 },
+  
   countryCodeText: { fontSize: 15, fontWeight: '700', marginRight: 2 },
   phoneDivider: { width: 1, height: '50%', backgroundColor: 'rgba(128,128,128,0.2)' },
   phoneTextInput: { flex: 1, height: '100%', paddingHorizontal: 12, fontSize: 15, fontWeight: '500' }

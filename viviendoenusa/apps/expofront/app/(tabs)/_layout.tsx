@@ -81,11 +81,12 @@ export default function TabLayout() {
       } as ViewStyle; 
     } 
 
-    // 🔥 CÁLCULO EXCLUSIVO PARA IOS PARA BAJAR LOS ÍCONOS
-    // Si el iPhone tiene "notch/isla" (insets.bottom > 0), le restamos 15px al espacio de abajo
-    // para que los íconos bajen más pegados al borde del teléfono, dándole más aire a la tarjeta.
     const iosPaddingBottom = insets.bottom > 0 ? insets.bottom - 8 : 10;
     const iosHeight = insets.bottom > 0 ? 55 + iosPaddingBottom : 65;
+
+    // 🚀 CÁLCULO BLINDADO PARA ANDROID (Garantiza espacio para botones o gestos)
+    const androidBottomInset = insets.bottom > 0 ? insets.bottom : 16; 
+    const androidHeight = 56 + androidBottomInset;
 
     return StyleSheet.flatten([
       {
@@ -93,13 +94,12 @@ export default function TabLayout() {
         bottom: 0,
         left: 0,
         right: 0,
-        elevation: 0, 
+        elevation: 8, // Elevemos ligeramente la barra para que destaque sobre el sistema
         borderTopWidth: 0,
-        backgroundColor: 'transparent',
-        // Aplicamos la altura y el padding restado SOLO a iOS. Android queda blindado.
-        height: Platform.OS === 'android' ? 70 : iosHeight,
-        paddingBottom: Platform.OS === 'android' ? 10 : iosPaddingBottom,
-        paddingTop: Platform.OS === 'android' ? 10 : 5,
+        backgroundColor: isDark ? '#121212' : '#FFFFFF', // Fondo sólido para evitar transparencias
+        height: Platform.OS === 'android' ? androidHeight : iosHeight,
+        paddingBottom: Platform.OS === 'android' ? androidBottomInset : iosPaddingBottom,
+        paddingTop: Platform.OS === 'android' ? 8 : 5,
       },
       Media.styles.view,
       { display: (loggedIn ? 'flex' : 'none') as any },

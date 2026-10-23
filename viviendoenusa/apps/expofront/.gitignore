@@ -15,6 +15,13 @@ env
 ios
 android
 
+# Android APKs
+*.apk
+*.aab
+
+# macOS System Files
+.DS_Store
+
 .idea/
 android/
 

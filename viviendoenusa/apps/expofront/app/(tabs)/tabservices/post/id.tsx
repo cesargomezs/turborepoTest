@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   inputBar: { 
     flexDirection: 'row', 
     padding: 15, 
-    paddingBottom: Platform.OS === 'ios' ? 35 : 15,
+    paddingBottom: Platform.OS === 'ios' ? 35 : 25,
     alignItems: 'center' 
   },
   textInput: { 
