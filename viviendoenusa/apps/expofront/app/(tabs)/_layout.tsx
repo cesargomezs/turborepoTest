@@ -81,29 +81,27 @@ export default function TabLayout() {
       } as ViewStyle; 
     } 
 
-    // 🚀 FIX EXPERTO UI/UX: Calculamos el margen exterior (no el padding)
-    // 48px es la altura estándar de los 3 botones de Android. 
-    // Usamos Math.max para asegurar que siempre haya al menos 48px de elevación.
-    const safeBottomOffset = Platform.OS === 'android' ? Math.max(insets.bottom, 48) : 0;
-    
-    // Para iOS mantenemos la lógica del padding interno
-    const iosPaddingBottom = insets.bottom > 0 ? 20 : 10;
+    const iosPaddingBottom = insets.bottom > 0 ? insets.bottom - 8 : 10;
+    const iosHeight = insets.bottom > 0 ? 55 + iosPaddingBottom : 65;
+
+    // 🚀 Reducimos el offset a 24px para que baje más y quede al ras de los botones de Android
+    const androidBottomOffset = Platform.OS === 'android' ? (insets.bottom > 0 ? insets.bottom : 24) : 0;
 
     return StyleSheet.flatten([
+      Media.styles.view,
       {
         position: 'absolute' as const,
-        bottom: safeBottomOffset, // <-- EL SECRETO: Desplazamos TODA la barra hacia arriba
+        bottom: androidBottomOffset, // Baja la barra cerca de la botonera
         left: 0,
         right: 0,
-        elevation: 15, // Forza a Android a dibujar esto por encima de todo
-        borderTopWidth: 1,
-        borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-        backgroundColor: isDark ? '#121212' : '#FFFFFF',
-        height: 65, // Altura fija y limpia para evitar que se aplaste
-        paddingBottom: Platform.OS === 'ios' ? iosPaddingBottom : 8,
-        paddingTop: 8,
+        elevation: 0,
+        borderTopWidth: 4,
+        borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+        backgroundColor: 'transparent', // Mantiene el efecto cristal intacto
+        height: 58,
+        paddingBottom: Platform.OS === 'android' ? 6 : iosPaddingBottom,
+        paddingTop: 4,
       },
-      Media.styles.view,
       { display: (loggedIn ? 'flex' : 'none') as any },
     ]) as ViewStyle;
   };
@@ -116,7 +114,7 @@ export default function TabLayout() {
         header: ({ options }) => <Header title={options.title} />,
         headerShown: loggedIn,
         tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
+        tabBarBackground: TabBarBackground, // Activa el efecto cristal
         animation: 'fade', 
         tabBarStyle: getTabBarStyle(),
         tabBarLabelStyle: {

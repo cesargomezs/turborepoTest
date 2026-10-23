@@ -1201,7 +1201,7 @@ export default function SupportScreen() {
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
                   >
-                    <MaterialCommunityIcons name="flag-outline"size={16} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+                    <MaterialCommunityIcons name="flag-outline" size={16} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
                     <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
                       Reportar esta publicación
                     </ThemedText>

@@ -1659,7 +1659,7 @@ export default function LawyersScreen() {
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
                   >
-                    <MaterialCommunityIcons name="flag-outline"size={16} color={Colors.subtext} style={{ marginRight: 6 }} />
+                    <MaterialCommunityIcons name="flag-outline" size={16} color={Colors.subtext} style={{ marginRight: 6 }} />
                     <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>
                       Reportar esta publicación por derechos de autor
                     </ThemedText>
