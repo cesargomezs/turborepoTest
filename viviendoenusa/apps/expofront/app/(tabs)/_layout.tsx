@@ -81,24 +81,26 @@ export default function TabLayout() {
       } as ViewStyle; 
     } 
 
-    const iosPaddingBottom = insets.bottom > 0 ? insets.bottom - 8 : 10;
-    const iosHeight = insets.bottom > 0 ? 55 + iosPaddingBottom : 65;
-
-    // 🚀 Ajuste definitivo para Android: Si tiene gestos toma su espacio, si tiene 3 botones usa 48px libres de choque
-    const androidBottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 48) : 16;
-    const androidHeight = 56 + androidBottomInset;
+    // 🚀 FIX EXPERTO UI/UX: Calculamos el margen exterior (no el padding)
+    // 48px es la altura estándar de los 3 botones de Android. 
+    // Usamos Math.max para asegurar que siempre haya al menos 48px de elevación.
+    const safeBottomOffset = Platform.OS === 'android' ? Math.max(insets.bottom, 48) : 0;
+    
+    // Para iOS mantenemos la lógica del padding interno
+    const iosPaddingBottom = insets.bottom > 0 ? 20 : 10;
 
     return StyleSheet.flatten([
       {
         position: 'absolute' as const,
-        bottom: 0,
+        bottom: safeBottomOffset, // <-- EL SECRETO: Desplazamos TODA la barra hacia arriba
         left: 0,
         right: 0,
-        elevation: 8,
-        borderTopWidth: 0,
+        elevation: 15, // Forza a Android a dibujar esto por encima de todo
+        borderTopWidth: 1,
+        borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
         backgroundColor: isDark ? '#121212' : '#FFFFFF',
-        height: androidHeight,
-        paddingBottom: androidBottomInset,
+        height: 65, // Altura fija y limpia para evitar que se aplaste
+        paddingBottom: Platform.OS === 'ios' ? iosPaddingBottom : 8,
         paddingTop: 8,
       },
       Media.styles.view,
