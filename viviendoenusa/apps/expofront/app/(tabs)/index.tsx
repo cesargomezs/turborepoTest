@@ -333,7 +333,6 @@ export default function HomeScreen() {
     }),
   });
 
-  // 🚀 CONFIGURACIÓN NATIVA BLINDADA PARA ANDROID (Corregido con as any)
   useEffect(() => {
     if (Platform.OS === 'android') {
       try {
@@ -399,10 +398,10 @@ export default function HomeScreen() {
     }
   };
 
-  // 🚀 CARGA DE IMÁGENES BLINDADA CON FALLBACK
+  // 🚀 CARGA DE IMÁGENES
   useEffect(() => {
     const loadSignedImages = async () => {
-      const fallbackLogo = 'https://pwznamxpdzwppmpiyizp.supabase.co/storage/v1/object/public/images/logoorimages/backgroundusa.webp';
+      const fallbackLogo = 'https://pwznamxpdzwppmpiyizp.supabase.co/storage/v1/object/public/images/logoorimages/backgroundusa.png';
       
       if (!supabaseClient) {
         setMainLogoUrl(fallbackLogo);
@@ -410,7 +409,7 @@ export default function HomeScreen() {
       }
       
       try {
-        const { data: logoData } = await supabaseClient.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.webp', 604800); 
+        const { data: logoData } = await supabaseClient.storage.from(NOMBRE_BUCKET).createSignedUrl('logoorimages/backgroundusa.png', 604800); 
         setMainLogoUrl(logoData?.signedUrl || fallbackLogo);
         
         const client = supabaseClient;
@@ -506,7 +505,6 @@ export default function HomeScreen() {
     router.replace('/');
   };
 
-  // 🚀 MANEJADOR UNIFICADO PARA GOOGLE BLINDADO (Corregido con as any)
   const handleGoogleLogin = async () => {
     if (Platform.OS === 'android') {
       try {
@@ -1552,9 +1550,7 @@ export default function HomeScreen() {
         
         {isWebPlatform && (
           <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
-            {mainLogoUrl ? (
-              <Image source={{ uri: mainLogoUrl }} style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} resizeMode="cover" />
-            ) : null}
+            <Image source={require('../../assets/images/backgroundusa.png')} style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} resizeMode="cover" />
             <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.2)' }]} />
           </View>
         )}
@@ -1589,13 +1585,7 @@ export default function HomeScreen() {
                   {isLargeWeb && !loggedIn && (
                     <View style={[styles.webSidebar, { justifyContent: 'space-between', paddingBottom: 10 }]}>
                       <View>
-                        {mainLogoUrl ? (
-                          <Image source={{ uri: mainLogoUrl }} style={[styles.sidebarLogo, { width: 100, height: 100, borderRadius: 50 }]} resizeMode="cover" />
-                        ) : (
-                          <View style={[styles.sidebarLogo, { width: 100, height: 100, borderRadius: 50, backgroundColor: DynamicColors.inputBg, justifyContent: 'center', alignItems: 'center' }]}>
-                            <ActivityIndicator size="small" color="#FF5F6D" />
-                          </View>
-                        )}
+                        <Image source={require('../../assets/images/backgroundusa.png')} style={[styles.sidebarLogo, { width: 100, height: 100, borderRadius: 50 }]} resizeMode="cover" />
                         <ThemedText style={[styles.sideMenuTitle, { color: DynamicColors.text }]}>Viviendo en USA</ThemedText>
                         <ThemedText style={{ color: DynamicColors.subtext, fontSize: 13, fontWeight: '600' }}>Portal de recursos</ThemedText>
 
@@ -1623,7 +1613,7 @@ export default function HomeScreen() {
                         >
                           <View style={{ alignItems: 'center', marginBottom: 20, marginTop: 10 }}>
                             <View style={{ width: isLargeWeb ? 160 : 140, height: isLargeWeb ? 160 : 140, borderRadius: 100, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: DynamicColors.border, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 }}>
-                               {mainLogoUrl ? <Image source={{ uri: mainLogoUrl }} style={{ width: '92%', height: '92%', borderRadius: 100 }} resizeMode="cover" /> : <ActivityIndicator size="small" color="#FF5F6D" />}
+                               <Image source={require('../../assets/images/backgroundusa.png')} style={{ width: '92%', height: '92%', borderRadius: 100 }} resizeMode="cover" />
                             </View>
                           </View>
                           <View style={{ flexDirection: isLargeWeb ? 'row' : 'column', gap: isLargeWeb ? 20 : 0, justifyContent: 'space-between' }}>
@@ -1660,7 +1650,7 @@ export default function HomeScreen() {
                           {!isLargeWeb && (
                             <View style={styles.brandHeaderContainer}>
                               <View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: DynamicColors.border, marginBottom: 6, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
-                                {mainLogoUrl ? <Image source={{ uri: mainLogoUrl }} style={{ width: '95%', height: '95%', borderRadius: 36 }} resizeMode="cover" /> : <ActivityIndicator size="small" color="#FF5F6D" />}
+                                <Image source={require('../../assets/images/backgroundusa.png')} style={{ width: '95%', height: '95%', borderRadius: 36 }} resizeMode="cover" />
                               </View>
                               <ThemedText style={[styles.brandMainTitle, { color: DynamicColors.text }]}>Viviendo en USA</ThemedText>
                             </View>
