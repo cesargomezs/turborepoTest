@@ -84,8 +84,8 @@ export default function TabLayout() {
     const iosPaddingBottom = insets.bottom > 0 ? insets.bottom - 8 : 10;
     const iosHeight = insets.bottom > 0 ? 55 + iosPaddingBottom : 65;
 
-    // 🚀 CÁLCULO BLINDADO PARA ANDROID (Garantiza espacio para botones o gestos)
-    const androidBottomInset = insets.bottom > 0 ? insets.bottom : 16; 
+    // 🚀 Ajuste definitivo para Android: Si tiene gestos toma su espacio, si tiene 3 botones usa 48px libres de choque
+    const androidBottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 48) : 16;
     const androidHeight = 56 + androidBottomInset;
 
     return StyleSheet.flatten([
@@ -94,12 +94,12 @@ export default function TabLayout() {
         bottom: 0,
         left: 0,
         right: 0,
-        elevation: 8, // Elevemos ligeramente la barra para que destaque sobre el sistema
+        elevation: 8,
         borderTopWidth: 0,
-        backgroundColor: isDark ? '#121212' : '#FFFFFF', // Fondo sólido para evitar transparencias
-        height: Platform.OS === 'android' ? androidHeight : iosHeight,
-        paddingBottom: Platform.OS === 'android' ? androidBottomInset : iosPaddingBottom,
-        paddingTop: Platform.OS === 'android' ? 8 : 5,
+        backgroundColor: isDark ? '#121212' : '#FFFFFF',
+        height: androidHeight,
+        paddingBottom: androidBottomInset,
+        paddingTop: 8,
       },
       Media.styles.view,
       { display: (loggedIn ? 'flex' : 'none') as any },
