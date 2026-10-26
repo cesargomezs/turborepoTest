@@ -37,7 +37,7 @@
       }
     },
     "android": {
-      "package": "com.viviendonoenusa.expofront",
+      "package": "com.viviendoenusa.expofront",
       "enableProguardInReleaseBuilds": false,
       "enableShrinkResourcesInReleaseBuilds": false,
       "adaptiveIcon": {
