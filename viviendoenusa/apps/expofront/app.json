@@ -37,13 +37,15 @@
       }
     },
     "android": {
+      "package": "com.viviendonoenusa.expofront",
+      "enableProguardInReleaseBuilds": true,
+      "enableShrinkResourcesInReleaseBuilds": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/backgroundusa.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.viviendoenusa.expofront",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
