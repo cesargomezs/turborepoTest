@@ -38,8 +38,8 @@
     },
     "android": {
       "package": "com.viviendonoenusa.expofront",
-      "enableProguardInReleaseBuilds": true,
-      "enableShrinkResourcesInReleaseBuilds": true,
+      "enableProguardInReleaseBuilds": false,
+      "enableShrinkResourcesInReleaseBuilds": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/backgroundusa.png",
         "backgroundColor": "#ffffff"
