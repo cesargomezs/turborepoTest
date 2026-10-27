@@ -755,6 +755,9 @@ export const createEventReview = async (data: any) => {
   try {
     const cleanPayload = sanitizePayload(data);
 
+    // 🚀 Inyectamos el ID específico del evento directamente en el payload
+    cleanPayload.relationshipId = "6c4f4076-0ccf-4f26-97c8-abe139796066";
+
     const validUserId = sanitizeText(cleanPayload.userId);
     if (!validUserId) {
         throw new Error("No estás autorizado para comentar. Se requiere iniciar sesión.");
