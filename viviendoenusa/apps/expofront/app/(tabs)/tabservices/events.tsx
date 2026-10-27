@@ -222,14 +222,14 @@ export default function EventsScreen() {
   const [showRestrictedModal, setShowRestrictedModal] = useState(false); 
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
-  // 🚀 ESTADOS PARA LIKES Y COMENTARIOS ESTILO COMUNIDAD
+  // ESTADOS PARA LIKES Y COMENTARIOS ESTILO COMUNIDAD
   const [comments, setComments] = useState<Record<string, any[]>>({}); 
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [visibleComments, setVisibleComments] = useState<Record<string, boolean>>({});
 
-  // 🚀 ESTADO PARA EDICIÓN / RENOVACIÓN ANUAL
+  // ESTADO PARA EDICIÓN / RENOVACIÓN ANUAL
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   const [isPublishing, setIsPublishing] = useState(false);
@@ -262,7 +262,7 @@ export default function EventsScreen() {
   const [pendingEvents, setPendingEvents] = useState<any[]>([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
+  // ESTADOS PARA EL REPORTE DE CONTENIDO
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
@@ -612,7 +612,6 @@ export default function EventsScreen() {
       return { ...p, likes: newLikes, dislikes: newDislikes, userVote: newVote };
     }));
     
-    // Si estamos viendo el modal de detalle, actualizamos ahí también de forma optimista
     if (selectedEventDetails && String(selectedEventDetails.id) === String(eventId)) {
       setSelectedEventDetails((prev: any) => {
         let newLikes = prev.likes || 0;
@@ -624,7 +623,7 @@ export default function EventsScreen() {
           else { newLikes += 1; newVote = 'like'; }
         } else { 
           if (prev.userVote === 'dislike') { newDislikes = Math.max(0, newDislikes - 1); newVote = null; } 
-          else if (prev.userVote === 'like') { newDislikes += 1; newLikes = Math.max(0, newLikes - 1); newVote = 'dislike'; } 
+          else if (prev.userVote === 'like') { newDislikes += 1; newDislikes = Math.max(0, newDislikes - 1); newVote = 'dislike'; } 
           else { newDislikes += 1; newVote = 'dislike'; }
         }
         return { ...prev, likes: newLikes, dislikes: newDislikes, userVote: newVote };
@@ -892,7 +891,7 @@ export default function EventsScreen() {
       setPendingEvents(pendingEvents.filter(e => e.id !== id));
       triggerAlert("Rechazado", "El evento ha sido eliminado de la lista de pendientes.");
     } catch (error) {
-      triggerAlert("Error", "No se pudo rechazar el evento en el servidor.");
+      triggerAlert("Error", "No se pudo eliminar la publicación.");
     }
   };
 
@@ -1495,7 +1494,7 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
-      {/* MODAL DETALLE EXPANDIDO CON COMENTARIOS TIPO COMUNIDAD */}
+      {/* MODAL DETALLE EXPANDIDO CON COMENTARIOS TIPO COMUNIDAD SUTIL */}
       <RNModal visible={!!selectedEventDetails} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -1528,14 +1527,6 @@ export default function EventsScreen() {
                   </LinearGradient>
                   <ThemedText style={{marginLeft:10, fontWeight:'700'}}>{selectedEventDetails?.date}</ThemedText>
                 </View>
-
-                {/* LIKES GLOBALES EN LUGAR DE ESTRELLAS */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
-                  <MaterialCommunityIcons name="thumb-up" size={14} color="#1976D2" />
-                  <ThemedText style={{ color: Colors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>
-                    {selectedEventDetails?.likes || 0} Likes
-                  </ThemedText>
-                </View>
               </View>
 
               <ThemedText style={{ fontSize: 26, fontWeight: '900', marginBottom: 15, color: Colors.text }}>{selectedEventDetails?.title}</ThemedText>
@@ -1544,7 +1535,7 @@ export default function EventsScreen() {
               <View style={{height:1, backgroundColor:Colors.border, marginVertical:20}} />
               <ThemedText style={{color:Colors.text, lineHeight:22, fontSize:15, marginBottom: 20 }}>{selectedEventDetails?.description}</ThemedText>
               
-              {/* 🚀 BOTONERA DE ACCIÓN EN EL DETALLE TIPO COMUNIDAD */}
+              {/* 🚀 BOTONERA DE ACCIÓN EN EL DETALLE */}
               <View style={{ marginTop: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1604,13 +1595,10 @@ export default function EventsScreen() {
                 )}
               </View>
 
-              {/* SECCIÓN DE COMENTARIOS EN EL DETALLE TIPO COMUNIDAD */}
+              {/* SECCIÓN DE COMENTARIOS EN EL DETALLE TIPO COMUNIDAD SUTIL */}
               {selectedEventDetails?.status === 'approved' && visibleComments[selectedEventDetails.id] && (
                 <View style={{ marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                    <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>{t.lawyerstab?.commutnityopini || 'Comentarios'}</ThemedText>
-                  </View>
-
+                  
                   <TouchableOpacity 
                     onPress={() => { 
                       if (isGuest) {
@@ -1630,19 +1618,23 @@ export default function EventsScreen() {
                   
                   {(comments[selectedEventDetails.id] || []).length > 0 ? (
                     (comments[selectedEventDetails.id] || []).map((c: any) => (
-                      <View key={c.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View key={c.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 16, padding: 14, marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, flex: 1 }}>
                             {c.image ? (
-                              <Image source={{ uri: c.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
+                              <Image source={{ uri: c.image }} style={{ width: 28, height: 28, borderRadius: 14 }} resizeMode="cover"/>
                             ) : (
-                              <MaterialCommunityIcons name="account-circle" size={24} color={Colors.subtext} />
+                               <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+                                 <MaterialCommunityIcons name="account" size={16} color={Colors.subtext} />
+                               </View>
                             )}
-                            <ThemedText style={{ color: Colors.text, fontSize: 12, fontStyle: 'italic', fontWeight: 'bold' }}>{c.userName}</ThemedText>
+                            <ThemedText style={{ flex: 1, lineHeight: 18, fontSize: 13 }}>
+                              <ThemedText style={{ color: Colors.accent, fontStyle: 'italic', fontWeight: '900' }}>{c.userName}: </ThemedText>
+                              <ThemedText style={{ color: isDark ? '#E5E7EB' : '#374151', fontStyle: 'italic' }}>{c.text}</ThemedText>
+                            </ThemedText>
                           </View>
-                          <ThemedText style={{ color: Colors.subtext, fontSize: 10 }}>{c.displayTime}</ThemedText>
+                          <ThemedText style={{ color: Colors.subtext, fontSize: 10, marginLeft: 10 }}>{c.displayTime}</ThemedText>
                         </View>
-                        <ThemedText style={{ color: Colors.text, fontSize: 14, marginTop: 4 }}>{c.text}</ThemedText>
                         
                         {/* 🚀 BOTÓN DE REPORTAR COMENTARIO */}
                         {c.userId !== currentUserId && (
@@ -1653,10 +1645,10 @@ export default function EventsScreen() {
                               setSelectedEventDetails(null); 
                               setReportModalVisible(true); 
                             }}
-                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: Colors.border }}
+                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4, paddingTop: 6 }}
                           >
                             <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} style={{ marginRight: 4 }} />
-                            <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '600' }}>Reportar comentario</ThemedText>
+                            <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '600' }}>Reportar</ThemedText>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -1891,31 +1883,33 @@ const EventCard = memo(({
       </TouchableOpacity>
 
       <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-        {/* LISTA EXPANDIBLE DE COMENTARIOS (ESTILO COMUNIDAD) */}
+        {/* LISTA EXPANDIBLE DE COMENTARIOS (ESTILO SUTIL - TIPO IMAGEN) */}
         {visibleComments && visibleComments[item.id] && (
-          <View style={{ marginTop: 6, paddingTop: 4 }}>
+          <View style={{ marginTop: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 16, padding: 14 }}>
             {(comments && comments[item.id] || []).length > 0 ? (
               (comments[item.id] || []).map((c: any) => (
-                <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', padding: 4, gap: 8, marginBottom: 4 }}>
+                <View key={c.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
                   {c.image ? (
-                    <Image source={{ uri: c.image }} style={{ width: 28, height: 28, borderRadius: 14 }} resizeMode="cover"/>
+                    <Image source={{ uri: c.image }} style={{ width: 26, height: 26, borderRadius: 13 }} resizeMode="cover"/>
                   ) : (
-                    <MaterialCommunityIcons name="account-circle" size={28} color={Colors.subtext} />
+                    <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="account" size={16} color={Colors.subtext} />
+                    </View>
                   )}
-                  <ThemedText style={{ flex: 1, lineHeight: 18 }}>
-                    <ThemedText style={{ fontWeight: 'bold' , fontStyle:'italic' }}>{c.userName}{': '}</ThemedText>
-                    <ThemedText style={{fontStyle:'italic'}}>{c.text}</ThemedText>
+                  <ThemedText style={{ flex: 1, lineHeight: 18, fontSize: 12 }}>
+                    <ThemedText style={{ fontWeight: '900' , fontStyle:'italic', color: Colors.accent, fontSize: 12 }}>{c.userName}{': '}</ThemedText>
+                    <ThemedText style={{ fontStyle:'italic', color: isDark ? '#E5E7EB' : '#374151', fontSize: 12 }}>{c.text}</ThemedText>
                   </ThemedText>
                   {c.userId !== currentUserId && (
-                    <TouchableOpacity onPress={() => { if (isGuest) { setShowRestrictedModal(true); return; } onReport && onReport({id: c.id, itemType: 'review'}); }} style={{ padding: 4, opacity: 0.6 }}>
-                      <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} />
+                    <TouchableOpacity onPress={() => { if (isGuest) { setShowRestrictedModal(true); return; } onReport && onReport({id: c.id, itemType: 'review'}); }} style={{ padding: 2, opacity: 0.4 }}>
+                      <MaterialCommunityIcons name="flag-outline" size={14} color={Colors.text} />
                     </TouchableOpacity>
                   )}
                 </View>
               ))
             ) : (
-              <ThemedText style={{ marginBottom: 4, color: Colors.subtext, fontStyle: 'italic', fontSize: 13 }}>
-                Sé el primero en comentar
+              <ThemedText style={{ marginBottom: 12, color: Colors.subtext, fontStyle: 'italic', fontSize: 12 }}>
+                {t?.communitytab?.firtscomment || 'Sé el primero en comentar'}
               </ThemedText>
             )}
             
@@ -1926,10 +1920,10 @@ const EventCard = memo(({
                 if (setActiveCommentId) setActiveCommentId(item.id); 
                 if (setShowCommentInput) setShowCommentInput(true); 
               }} 
-              style={{ marginTop: 4, opacity: isPending ? 0.4 : 1, flexDirection: 'row', alignItems: 'center' }}
+              style={{ flexDirection: 'row', alignItems: 'center' }}
             >
               <MaterialCommunityIcons name="pencil-outline" size={14} color={Colors.accent} />
-              <ThemedText style={{ color: Colors.accent, fontWeight: 'bold', fontSize: 13, marginLeft: 4 }}>Responder</ThemedText>
+              <ThemedText style={{ color: Colors.accent, fontWeight: '800', fontSize: 12, marginLeft: 6 }}>Responder</ThemedText>
             </TouchableOpacity>
           </View>
         )}
@@ -1981,6 +1975,19 @@ const EventCard = memo(({
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 🚀 ENLACE INFERIOR DE REPORTE DE PUBLICACIÓN (EVENTO) */}
+        {!isOwner && (
+          <TouchableOpacity 
+            onPress={() => { if (onReport) onReport(item); }}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border }}
+          >
+            <MaterialCommunityIcons name="flag-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
+            <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>
+              Reportar publicación
+            </ThemedText>
+          </TouchableOpacity>
+        )}
 
         {isOwner && (
           <TouchableOpacity 
