@@ -1,7 +1,5 @@
-// @ts-ignore
 import util from 'util';
 import { Jimp } from 'jimp';
-
 // Parche para Node 25+ y compatibilidad con TFJS
 if (!(util as any).isNullOrUndefined) {
   (util as any).isNullOrUndefined = (obj: any) => obj === null || obj === undefined;
@@ -14,6 +12,7 @@ import rateLimit from 'express-rate-limit'; // 🛡️ Anti-Spam / DDoS
 import multer from 'multer';
 
 import sharp from 'sharp';
+// @ts-ignore
 import convert from 'heic-convert'; // 🍏 Soporte nativo para HEIC de iPhone en el servidor
 import { createClient } from '@supabase/supabase-js';
 
