@@ -14,6 +14,7 @@ import rateLimit from 'express-rate-limit'; // 🛡️ Anti-Spam / DDoS
 import multer from 'multer';
 
 import sharp from 'sharp';
+import convert from 'heic-convert'; // 🍏 Soporte nativo para HEIC de iPhone en el servidor
 import { createClient } from '@supabase/supabase-js';
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -177,7 +178,7 @@ app.post('/api/crash-report', express.json(), async (req, res) => {
   res.status(200).json({ received: true });
 });
 
-// --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (BLINDADO CONTRA HEIC/BAD SEEK) ---
+// --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (SOPORTE TOTAL IPHONE / HEIC) ---
 app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {
   console.log(`🚨 [CONEXIÓN] Petición de subida recibida para la sección: ${req.params.carpeta}`);
   
@@ -192,21 +193,38 @@ app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async
 
   try {
     const calidadDeseada = parseInt(req.query.calidad as string) || 80;
+    let bufferAProcesar = req.file.buffer;
+
+    // 🍏 DETECTAR Y CONVERTIR HEIC/HEIF (IPHONE) AL VUELO SIN AFECTAR CALIDAD
+    const mimeType = req.file.mimetype || '';
+    const originalName = req.file.originalname || '';
+    const esHeic = mimeType.includes('heic') || mimeType.includes('heif') || originalName.toLowerCase().endsWith('.heic');
+
+    if (esHeic) {
+      console.log("🍏 Detectada imagen HEIC de iPhone, convirtiendo en servidor al vuelo...");
+      try {
+        const jpegBuffer = await convert({
+          buffer: req.file.buffer,
+          format: 'JPEG',
+          quality: 0.95
+        });
+        bufferAProcesar = Buffer.from(jpegBuffer);
+        console.log("✅ Conversión HEIC a JPEG exitosa");
+      } catch (conversionError: any) {
+        console.warn("⚠️ Falló conversión HEIC, intentando bypass con Sharp:", conversionError.message);
+      }
+    }
 
     console.log("⏳ Optimizando y convirtiendo formato a WebP...");
-    
-    // 🛡️ BLOQUE BLINDADO CONTRA ERRORES DE SHARP Y FORMATOS HEIC/HEIF DE IPHONE
     let bufferWebp;
     try {
-      bufferWebp = await sharp(req.file.buffer, { failOnError: false })
-        .rotate() // Auto-endereza la foto según la orientación del celular
+      bufferWebp = await sharp(bufferAProcesar, { failOnError: false })
+        .rotate()
         .webp({ quality: calidadDeseada })
         .toBuffer();
     } catch (sharpError: any) {
-      console.error("⚠️ [SHARP ADVERTENCIA] No se pudo procesar la imagen directamente:", sharpError.message);
-      return res.status(400).json({ 
-        error: 'El formato de la imagen no es compatible (posiblemente HEIC de iPhone o archivo dañado). Por favor selecciona otra foto en formato JPG o PNG.' 
-      });
+      console.error("❌ [SHARP ERROR CRÍTICO]:", sharpError.message);
+      return res.status(500).json({ error: 'No se pudo optimizar la imagen en el servidor.' });
     }
 
     const nombreArchivo = `${carpetaFinal}/img-${Date.now()}.webp`;
