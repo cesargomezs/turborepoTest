@@ -755,7 +755,7 @@ export const createEventReview = async (data: any) => {
   try {
     const cleanPayload = sanitizePayload(data);
 
-    // 🚀 Inyectamos el ID específico del evento directamente en el payload
+    // 🚀 Asignamos el ID directamente a type_detail_id
     cleanPayload.type_detail_id = "6c4f4076-0ccf-4f26-97c8-abe139796066";
 
     const validUserId = sanitizeText(cleanPayload.userId);
