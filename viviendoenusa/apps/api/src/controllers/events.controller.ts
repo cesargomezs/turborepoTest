@@ -1,6 +1,6 @@
 import { db } from "../../../../packages/db/src"; 
-import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes, rating as ratingTable, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
-import { eq, desc, asc, sql, and, inArray, or } from "drizzle-orm"; 
+import { events, users, notifications, payments, tariffs, typeDetail, userDevices, promoCodes, countlikes, reviews as reviewsTable } from "../../../../packages/db/src/schema"; 
+import { eq, desc, asc, sql, and, inArray, or, ne } from "drizzle-orm"; 
 import { alias } from "drizzle-orm/pg-core";
 import { createClient } from '@supabase/supabase-js';
 import zipcodes from 'zipcodes'; 
@@ -180,7 +180,7 @@ const sendTelegramAlert = async (userId: string, zip: string, eventName: string,
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (CON RESEÑAS AGREGADAS)
+// 🔍 1. CONSULTA GENERAL (CON ESTILO COMUNIDAD: LIKES Y COMENTARIOS)
 // =====================================================================
 export const getEvents = async (zip?: string, userId?: string) => {
   try {
@@ -197,7 +197,6 @@ export const getEvents = async (zip?: string, userId?: string) => {
 
     if (cleanZipParam && cleanZipParam.length === 5) {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
-
       if (nearbyZips && nearbyZips.length > 0) {
         finalConditions = and(baseConditions, inArray(events.zip, nearbyZips as string[]));
       } else {
@@ -210,21 +209,18 @@ export const getEvents = async (zip?: string, userId?: string) => {
       events: events,
       users: users,
       payments: payments,
-      rating: ratingTable,
       reviews: reviewsTable,
       reviewers: reviewers,
     })
     .from(events)
     .leftJoin(users, eq(events.userId, users.id)) 
-    // 🚀 Ajustamos el join para priorizar y traer el pago más reciente (última renovación)
     .leftJoin(payments, and(
       eq(payments.entityId, events.id), 
       eq(payments.entityType, 'event'),
       sql`${payments.id} = (SELECT p2.id FROM payments p2 WHERE p2.entity_id = ${events.id} AND p2.entity_type = 'event' ORDER BY p2.created_at DESC LIMIT 1)`
     ))
-    .leftJoin(ratingTable, eq(ratingTable.referenceId, events.id)) 
-    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
+    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, events.id)) 
+    .leftJoin(reviewers, eq(reviewsTable.userId, reviewers.id))
     .where(finalConditions)
     .$dynamic();
 
@@ -264,49 +260,59 @@ export const getEvents = async (zip?: string, userId?: string) => {
           referenceCode: dbPayment?.referenceCode,
           paymentMethod: dbPayment?.paymentMethod || '',
           googleReviewLink: dbEvent.googleReviewLink || dbEvent.googleUrl || dbEvent.google_review_link,
-          reviews: [],
-          rating: 0,
-          totalReviews: 0
+          commentsList: []
         });
       }
 
-      if (row.rating && row.rating.id) {
+      if (row.reviews && row.reviews.id) {
         const reviewerUser = row.reviewers;
-        let signedImageUrl = null;
-        if (reviewerUser?.imageUrl) {
-          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/' + reviewerUser.imageUrl, 3600);
-          if (data?.signedUrl) signedImageUrl = data.signedUrl;
-        }
         
-        const commentText = row.reviews?.comment || '';
+        const commentText = row.reviews.comment || '';
         const name = reviewerUser ? `${reviewerUser.name || ''} ${reviewerUser.lastName?.substring(0, 1) || ''}`.trim() : 'Anónimo';
 
-        itemsMap.get(itemId).reviews.push({
-           ...row.rating,
-           stars: Number(row.rating.rating) || 0,
+        itemsMap.get(itemId).commentsList.push({
+           ...row.reviews,
            comment: commentText, 
-           name: name,
-           image: signedImageUrl,
-           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+           userName: name,
+           image: reviewerUser?.imageUrl || null,
+           createdAt: row.reviews.createdAt
         });
       }
     }
 
-    const finalListPromises = Array.from(itemsMap.values()).map(async item => {
-        item.totalReviews = item.reviews.length;
-        item.rating = item.totalReviews > 0 
-          ? Math.round((item.reviews.reduce((sum: number, r: any) => sum + r.stars, 0) / item.totalReviews) * 10) / 10 
-          : 0;
+    const rawPosts = Array.from(itemsMap.values());
 
+    // 🚀 OBTENER LIKES Y DISLIKES (COUNTLIKES)
+    if (rawPosts.length > 0) {
+      const postIds = rawPosts.map(post => post.id);
+      const targetColName = (countlikes as any).eventId ? 'eventId' : ((countlikes as any).communityId ? 'communityId' : 'relationshipId');
+      const targetColumn = (countlikes as any)[targetColName];
+
+      const votesFromDb = await db.select().from(countlikes).where(inArray(targetColumn, postIds));
+
+      rawPosts.forEach((post: any) => {
+        const postVotes = votesFromDb.filter((v: any) => String(v[targetColName]) === String(post.id));
+        post.likes = postVotes.reduce((sum, v) => sum + (Number(v.likes) || 0), 0);
+        post.dislikes = postVotes.reduce((sum, v) => sum + (Number(v.dislikes) || 0), 0);
+        
+        if (cleanUserId) {
+          const userVoteObj = postVotes.find((v: any) => String(v.userId) === String(cleanUserId));
+          if (userVoteObj) {
+            if (userVoteObj.likes === 1) post.userVote = 'like';
+            else if (userVoteObj.dislikes === 1) post.userVote = 'dislike';
+          }
+        }
+      });
+    }
+
+    const finalListPromises = rawPosts.map(async item => {
         const fileName = item.imageEven;
         let publicUrl = fileName; 
-
         if (fileName && typeof fileName === 'string' && fileName.trim() !== '' && !fileName.startsWith('http')) {
             const cleanName = fileName.replace('events/', '');
             const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(`events/${cleanName}`, 3600); 
             if (!error && data?.signedUrl) publicUrl = data.signedUrl;
         }
-
         return { ...item, imageEven: publicUrl, imageUrl: publicUrl }; 
     });
 
@@ -318,11 +324,12 @@ export const getEvents = async (zip?: string, userId?: string) => {
 };
 
 // =====================================================================
-// 🔍 2. CONSULTA INDIVIDUAL POR ID (CON RESEÑAS AGREGADAS)
+// 🔍 2. CONSULTA INDIVIDUAL POR ID (ESTILO COMUNIDAD)
 // =====================================================================
 export const getEventById = async (id: string, userId?: string) => {
   try {
     const cleanId = sanitizeText(id);
+    const cleanUserId = userId ? sanitizeText(String(userId)) : null;
     if (!cleanId) return null;
 
     const rows = await db
@@ -330,16 +337,14 @@ export const getEventById = async (id: string, userId?: string) => {
         events: events,
         users: users,
         payments: payments,
-        rating: ratingTable,
         reviews: reviewsTable,
         reviewers: reviewers,
       })
       .from(events)
       .leftJoin(users, eq(events.userId, users.id))
       .leftJoin(payments, and(eq(payments.entityId, events.id), eq(payments.entityType, 'event')))
-      .leftJoin(ratingTable, eq(ratingTable.referenceId, events.id)) 
-      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, events.id)) 
+      .leftJoin(reviewers, eq(reviewsTable.userId, reviewers.id))
       .where(eq(events.id, cleanId));
 
     if (!rows || rows.length === 0) return null;
@@ -358,39 +363,40 @@ export const getEventById = async (id: string, userId?: string) => {
         referenceCode: dbPayment?.referenceCode,
         paymentMethod: dbPayment?.paymentMethod || '',
         googleReviewLink: dbEvent.googleReviewLink,
-        reviews: [],
-        rating: 0,
-        totalReviews: 0
+        commentsList: []
     };
 
     for (const row of rows) {
-      if (row.rating && row.rating.id) {
+      if (row.reviews && row.reviews.id) {
         const reviewerUser = row.reviewers;
-        let signedImageUrl = null;
-        if (reviewerUser?.imageUrl) {
-            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/' + reviewerUser.imageUrl, 3600);
-            if (data?.signedUrl) signedImageUrl = data.signedUrl;
-        }
-
-        const commentText = row.reviews?.comment || '';
+        const commentText = row.reviews.comment || '';
         const namePart = reviewerUser?.name || reviewerUser?.lastName || 'Anónimo';
         const lastNamePart = reviewerUser?.lastName ? reviewerUser.lastName.substring(0, 1) : '';
 
-        itemFinal.reviews.push({
-          ...row.rating,
-          stars: Number(row.rating.rating) || 0,
+        itemFinal.commentsList.push({
+          ...row.reviews,
           comment: commentText,
-          name: `${namePart} ${lastNamePart}`.trim(),
-          image: signedImageUrl,
-          displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          userName: `${namePart} ${lastNamePart}`.trim(),
+          image: reviewerUser?.imageUrl || null,
+          createdAt: row.reviews.createdAt
         });
       }
     }
 
-    itemFinal.totalReviews = itemFinal.reviews.length;
-    if (itemFinal.totalReviews > 0) {
-      const sum = itemFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
-      itemFinal.rating = Math.round((sum / itemFinal.totalReviews) * 10) / 10;
+    // 🚀 OBTENER LIKES Y DISLIKES (COUNTLIKES)
+    const targetColName = (countlikes as any).eventId ? 'eventId' : ((countlikes as any).communityId ? 'communityId' : 'relationshipId');
+    const targetColumn = (countlikes as any)[targetColName];
+
+    const postVotes = await db.select().from(countlikes).where(eq(targetColumn, cleanId));
+    itemFinal.likes = postVotes.reduce((sum, v) => sum + (Number(v.likes) || 0), 0);
+    itemFinal.dislikes = postVotes.reduce((sum, v) => sum + (Number(v.dislikes) || 0), 0);
+
+    if (cleanUserId) {
+      const userVoteObj = postVotes.find((v: any) => String(v.userId) === String(cleanUserId));
+      if (userVoteObj) {
+        if (userVoteObj.likes === 1) itemFinal.userVote = 'like';
+        else if (userVoteObj.dislikes === 1) itemFinal.userVote = 'dislike';
+      }
     }
 
     let publicUrl = dbEvent.imageEven;
@@ -406,6 +412,79 @@ export const getEventById = async (id: string, userId?: string) => {
     return itemFinal;
   } catch (error: any) {
     throw new Error(`Error al obtener el evento por ID: ${error.message}`);
+  }
+};
+
+// =====================================================================
+// 🔄 2.5 MANEJAR VOTOS ESTILO COMUNIDAD (LIKES / DISLIKES)
+// =====================================================================
+export const handleEventVote = async (eventId: string, userId: string, voteType: 'like' | 'dislike') => {
+  try {
+    const cleanEventId = sanitizeText(eventId);
+    const cleanUserId = sanitizeText(userId);
+
+    if (!cleanUserId) {
+      throw new Error("Debes iniciar sesión para votar.");
+    }
+    if (!cleanEventId) throw new Error("Parámetros de voto inválidos.");
+
+    const targetColName = (countlikes as any).eventId ? 'eventId' : ((countlikes as any).communityId ? 'communityId' : 'relationshipId');
+    const targetColumn = (countlikes as any)[targetColName];
+
+    const votosPrevios = await db
+      .select()
+      .from(countlikes)
+      .where(and(eq(targetColumn, cleanEventId), eq(countlikes.userId, cleanUserId)));
+
+    const existingVote = votosPrevios.length > 0 ? votosPrevios[0] : null;
+    const hasLiked = existingVote && existingVote.likes === 1;
+    const hasDisliked = existingVote && existingVote.dislikes === 1;
+
+    if (voteType === 'like') {
+      if (hasLiked) {
+        await db.delete(countlikes).where(eq(countlikes.id, existingVote.id));
+      } else if (hasDisliked) {
+        await db.update(countlikes).set({ likes: 1, dislikes: 0 }).where(eq(countlikes.id, existingVote.id));
+      } else {
+        await db.insert(countlikes).values({ [targetColName]: cleanEventId, userId: cleanUserId, likes: 1, dislikes: 0 } as any);
+      }
+    } else if (voteType === 'dislike') {
+      if (hasDisliked) {
+        await db.delete(countlikes).where(eq(countlikes.id, existingVote.id));
+      } else if (hasLiked) {
+        await db.update(countlikes).set({ likes: 0, dislikes: 1 }).where(eq(countlikes.id, existingVote.id));
+      } else {
+        await db.insert(countlikes).values({ [targetColName]: cleanEventId, userId: cleanUserId, likes: 0, dislikes: 1 } as any);
+      }
+    }
+
+    const allPostVotes = await db.select().from(countlikes).where(eq(targetColumn, cleanEventId));
+    let trueLikes = 0;
+    let trueDislikes = 0;
+    
+    allPostVotes.forEach((v: any) => {
+      trueLikes += (Number(v.likes) || 0);
+      trueDislikes += (Number(v.dislikes) || 0);
+    });
+
+    try {
+      await db.execute(sql`UPDATE events SET likes = ${trueLikes}, dislikes = ${trueDislikes} WHERE id = ${cleanEventId}`);
+    } catch(e: any) {}
+
+    let finalUserVote = null;
+    if (voteType === 'like' && !hasLiked) finalUserVote = 'like';
+    if (voteType === 'dislike' && !hasDisliked) finalUserVote = 'dislike';
+
+    return {
+      success: true,
+      likes: trueLikes,     
+      dislikes: trueDislikes, 
+      userVote: finalUserVote
+    };
+
+  } catch (error: any) {
+    console.error("❌ ERROR CRÍTICO EN VOTO:", error.message);
+    throw new Error(`Error en la transacción de voto: ${error.message}`);
   }
 };
 
@@ -670,52 +749,19 @@ export const updateEvent = async (idParam: any, dataParam: any) => {
 };
 
 // =====================================================================
-// 📥 5. CREAR RESEÑA PARA EVENTO
+// 📥 5. CREAR COMENTARIO PARA EVENTO (ESTILO COMUNIDAD)
 // =====================================================================
 export const createEventReview = async (data: any) => {
   try {
-    const validUserId = data.userId;
+    const cleanPayload = sanitizePayload(data);
+
+    const validUserId = sanitizeText(cleanPayload.userId);
     if (!validUserId) {
-        throw new Error("Se requiere iniciar sesión para dejar una reseña.");
-    } 
-
-    const existingReview = await db
-      .select()
-      .from(ratingTable)
-      .where(
-        and(
-          eq(ratingTable.referenceId, data.reference_id),
-          eq(ratingTable.userId, validUserId)
-        )
-      )
-      .limit(1);
-
-    if (existingReview.length > 0) {
-      throw new Error("Ya has escrito una reseña para este evento.");
+        throw new Error("No estás autorizado para comentar. Se requiere iniciar sesión.");
     }
 
-    const ratingPayload: any = {
-      rating: String(data.stars || 5),
-      userId: validUserId,
-      referenceId: data.reference_id, 
-      typeEntry: 'event'
-    };
-
-    const newRating = await db.insert(ratingTable).values(ratingPayload).returning();
-    const generatedRatingId = newRating[0].id;
-
-    let savedComment = '';
-    if (data.comment && data.comment.trim() !== '') {
-      const reviewPayload: any = {
-        userId: validUserId,
-        comment: data.comment,
-        relationshipId: generatedRatingId,
-        typeDetailId: '035118eb-612e-41a2-ac95-b4f339b4e388' 
-      };
-
-      const newReview = await db.insert(reviewsTable).values(reviewPayload).returning();
-      savedComment = newReview[0].comment || '';
-    }
+    const newReview = await db.insert(reviewsTable).values(cleanPayload).returning();
+    const savedComment = newReview[0];
 
     const [userRecord] = await db.select({
       name: users.name,
@@ -734,20 +780,16 @@ export const createEventReview = async (data: any) => {
 
     const formattedName = userRecord 
       ? `${userRecord.name} ${userRecord.lastName ? userRecord.lastName.substring(0, 1) : ''}`
-      : 'Usuario';
+      : 'Usuario Anónimo';
 
     return {
-      id: generatedRatingId,
-      stars: Number(newRating[0].rating),
-      comment: savedComment,
-      name: formattedName,
-      image: signedImageUrl,
-      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      ...savedComment,
+      userName: formattedName,
+      image: signedImageUrl
     };
 
   } catch (error: any) { 
-    console.error("❌ Error en createEventReview:", error);
-    throw error; 
+    throw new Error(`Error al crear el comentario: ${error.message}`);
   }
 };
 
@@ -797,8 +839,7 @@ export const reportContent = async (data: any) => {
           eventName: events.title
         })
         .from(reviewsTable)
-        .leftJoin(ratingTable, eq(reviewsTable.relationshipId, ratingTable.id))
-        .leftJoin(events, eq(ratingTable.referenceId, events.id))
+        .leftJoin(events, eq(reviewsTable.relationshipId, events.id))
         .where(eq(reviewsTable.id, validItemId))
         .limit(1);
 

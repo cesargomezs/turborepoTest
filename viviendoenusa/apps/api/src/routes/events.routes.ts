@@ -6,7 +6,8 @@ import {
     updateEvent, 
     createEventReview, 
     reportContent,      
-    approveEventController
+    approveEventController,
+    handleEventVote // 🚀 Importamos la nueva función para los votos
 } from '../controllers/events.controller';
 import { AuthRequest, verifyToken } from '../middleware/authMiddleware'; 
 
@@ -54,8 +55,24 @@ router.post('/', verifyToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 📥 POST: Crear una reseña de evento
-router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => {
+// 🚀 POST: Manejar votos (Like / Dislike) al estilo comunidad
+router.post('/vote', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { eventId, userId, voteType } = req.body;
+    // Por seguridad, priorizamos el ID del token si está disponible
+    const userIdFromToken = req.user?.id || req.user?.userId;
+    const actualUserId = userIdFromToken || userId;
+
+    const result = await handleEventVote(eventId, actualUserId, voteType);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error en POST /events/vote:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// 📥 POST: Crear una reseña de evento (Comentario) - Se ajusta a /review
+router.post('/review', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
     const userIdFromToken = req.user?.id || req.user?.userId;
     const payload = {
@@ -66,7 +83,7 @@ router.post('/reviews', verifyToken, async (req: AuthRequest, res: Response) => 
     const newReview = await createEventReview(payload);
     return res.status(201).json(newReview);
   } catch (error: any) {
-    console.error("❌ Error en POST /events/reviews:", error.message);
+    console.error("❌ Error en POST /events/review:", error.message);
     return res.status(400).json({ error: error.message });
   }
 });

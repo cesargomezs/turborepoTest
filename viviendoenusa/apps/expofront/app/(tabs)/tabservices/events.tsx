@@ -95,6 +95,45 @@ const containsBadWords = (text: string): boolean => {
   });
 };
 
+const parseSafeDate = (dateString: string | Date) => {
+  if (!dateString) return new Date();
+  const s = dateString.toString();
+  
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
+  
+  if (match) {
+    return new Date(
+      parseInt(match[1]),      
+      parseInt(match[2]) - 1,  
+      parseInt(match[3]),      
+      parseInt(match[4]),      
+      parseInt(match[5]),      
+      parseInt(match[6])       
+    );
+  }
+  
+  const parsed = new Date(s);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+const getRelativeTime = (dateString: string | Date) => {
+  const past = parseSafeDate(dateString);
+  const now = new Date();
+  
+  const diffMs = now.getTime() - past.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMs < 0 || diffMins < 1) return 'Hace un momento';
+  if (diffMins < 60) return `Hace ${diffMins} min`;
+  if (diffHours < 24) return `Hace ${diffHours} h`;
+  if (diffDays === 1) return 'Ayer';
+  if (diffDays < 7) return `Hace ${diffDays} días`;
+  
+  return past.toLocaleDateString();
+};
+
 const COUNTRIES = [ { code: '+1', flag: '🇺🇸', name: 'USA' }, { code: '+1', flag: '🇺🇸', name: 'USA' } ];
 
 const API_EVENTS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/events';
@@ -106,54 +145,6 @@ const planStyles: any = {
   basic: { selected: '#FF5F6D', unselected: (isDark: boolean) => isDark ? 'rgba(255, 95, 109, 0.15)' : 'rgba(255, 95, 109, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
   premium: { selected: '#F5A623', unselected: (isDark: boolean) => isDark ? 'rgba(245, 166, 35, 0.15)' : 'rgba(245, 166, 35, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' },
   unlimited: { selected: '#10B981', unselected: (isDark: boolean) => isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)', text: (isDark: boolean) => isDark ? '#FFF' : '#333' }
-};
-
-const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
-
-  const handlePrePublish = () => {
-    if (containsBadWords(comment)) {
-      const errorMsg = t.communitytab?.textInappropriateDescription || "Comentario inapropiado";
-      if (Platform.OS === 'web') { window.alert(errorMsg); } 
-      else { Alert.alert("Error", errorMsg); }
-      return;
-    }
-    onPublish(rating, comment);
-  };
-
-  return (
-    <View style={{ flex: 1, paddingVertical: 10 }}>
-      <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" />
-        <ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>{t.lawyerstab?.backBtn || 'Volver'}</ThemedText>
-      </TouchableOpacity>
-      <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20, color: isDark ? '#FFF' : '#1A1A1A' }}>{t.lawyerstab?.experience || 'Tu Experiencia'}</ThemedText>
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
-        {[1, 2, 3, 4, 5].map(s => (
-          <TouchableOpacity key={s} onPress={() => setRating(s)}>
-            <MaterialCommunityIcons name={s <= rating ? "star" : "star-outline"} size={40} color={s <= rating ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)")} />
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderRadius: 20, padding: 15, height: 150, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
-        <TextInput 
-          value={comment} 
-          onChangeText={setComment} 
-          placeholder={t.genericlabel?.labelopinion || "Escribe tu opinión..."} 
-          placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'} 
-          multiline 
-          autoCapitalize="sentences"
-          style={{ color: isDark ? '#FFF' : '#1A1A1A', flex: 1, textAlignVertical: 'top', fontSize: 16, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
-        />
-      </View>
-      <TouchableOpacity onPress={handlePrePublish} disabled={!comment.trim()} style={{ marginTop: 20, borderRadius: 18, overflow: 'hidden' }}>
-        <LinearGradient colors={comment.trim() ? ['#FF5F6D', '#FFC371'] : ['#555', '#777']} style={{ padding: 18, alignItems: 'center' }}>
-          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.lawyerstab?.publishBtn || 'Publicar'}</ThemedText>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  );
 };
 
 export default function EventsScreen() {
@@ -231,6 +222,13 @@ export default function EventsScreen() {
   const [showRestrictedModal, setShowRestrictedModal] = useState(false); 
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
+  // 🚀 ESTADOS PARA LIKES Y COMENTARIOS ESTILO COMUNIDAD
+  const [comments, setComments] = useState<Record<string, any[]>>({}); 
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState('');
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [visibleComments, setVisibleComments] = useState<Record<string, boolean>>({});
+
   // 🚀 ESTADO PARA EDICIÓN / RENOVACIÓN ANUAL
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
@@ -269,10 +267,6 @@ export default function EventsScreen() {
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-
-  // 🚀 ESTADOS PARA RESEÑAS DE EVENTOS
-  const [showReviewInput, setShowReviewInput] = useState(false);
-  const [selectedReviews, setSelectedReviews] = useState<any>(null);
 
   const [currentTariff, setCurrentTariff] = useState<string>("50.00");
   const [companyTariffs, setCompanyTariffs] = useState({
@@ -419,11 +413,31 @@ export default function EventsScreen() {
             approved: isAppr,
             status: isAppr ? 'approved' : 'pending',
             userId: item.userId || item.user_id,
-            reviews: Array.isArray(item.reviews) ? item.reviews : [],
-            totalReviews: Number(item.totalReviews) || 0,
-            rating: Number(item.rating) || 0,
+            likes: item.likes || 0,
+            dislikes: item.dislikes || 0,
+            userVote: item.userVote || null,
+            commentsList: Array.isArray(item.commentsList) ? item.commentsList : []
           };
         }));
+
+        const commentsMap: Record<string, any[]> = {};
+        await Promise.all(mappedData.map(async (p: any) => {
+          if (p.commentsList && Array.isArray(p.commentsList)) {
+            commentsMap[p.id] = await Promise.all(p.commentsList.map(async (c: any) => {
+              const freshReviewImage = c.image ? await refreshSupabaseUrl(c.image, 'users') : null;
+              return {
+                id: c.id,
+                text: c.comment || c.review || c.text || '',
+                createdAt: c.createdAt || new Date().toISOString(),
+                displayTime: c.createdAt ? getRelativeTime(c.createdAt) : 'Hace un momento',
+                userName: c.userName || 'Usuario Anónimo',
+                image: freshReviewImage,
+                userId: c.userId
+              };
+            }));
+          }
+        }));
+        setComments(commentsMap);
 
         setEvents(mappedData.filter(e => e.approved === true || (e.status === 'pending' && e.userId === currentUserId)));
         setPendingEvents(mappedData.filter(e => e.status === 'pending'));
@@ -509,10 +523,19 @@ export default function EventsScreen() {
                   image: freshImage,
                   location: data.locationEven || '',
                   approved: isAppr,
-                  reviews: Array.isArray(data.reviews) ? data.reviews : [],
-                  totalReviews: Number(data.totalReviews) || 0,
-                  rating: Number(data.rating) || 0,
+                  likes: data.likes || 0,
+                  dislikes: data.dislikes || 0,
+                  userVote: data.userVote || null,
+                  commentsList: Array.isArray(data.commentsList) ? data.commentsList : []
                 };
+
+                if (eventMapped.commentsList.length > 0) {
+                  const mappedC = await Promise.all(eventMapped.commentsList.map(async (c: any) => {
+                    const img = c.image ? await refreshSupabaseUrl(c.image, 'users') : null;
+                    return { id: c.id, text: c.comment || c.text || '', createdAt: c.createdAt || new Date().toISOString(), displayTime: c.createdAt ? getRelativeTime(c.createdAt) : 'Hace un momento', userName: c.userName || 'Usuario Anónimo', image: img, userId: c.userId };
+                  }));
+                  setComments(prev => ({...prev, [eventMapped.id]: mappedC}));
+                }
 
                 setSelectedEventDetails(eventMapped); 
 
@@ -570,7 +593,90 @@ export default function EventsScreen() {
     else Alert.alert(title, message);
   };
 
-  // 🚀 FUNCIÓN DE REPORTE DE CONTENIDO
+  // 🚀 LÓGICA DE VOTOS ESTILO COMUNIDAD
+  const handleVote = async (eventId: string, type: 'like' | 'dislike') => {
+    setEvents(prev => prev.map(p => {
+      if (String(p.id) !== String(eventId)) return p;
+      let newLikes = p.likes || 0;
+      let newDislikes = p.dislikes || 0;
+      let newVote = p.userVote;
+      if (type === 'like') {
+        if (p.userVote === 'like') { newLikes = Math.max(0, newLikes - 1); newVote = null; } 
+        else if (p.userVote === 'dislike') { newLikes += 1; newDislikes = Math.max(0, newDislikes - 1); newVote = 'like'; } 
+        else { newLikes += 1; newVote = 'like'; }
+      } else { 
+        if (p.userVote === 'dislike') { newDislikes = Math.max(0, newDislikes - 1); newVote = null; } 
+        else if (p.userVote === 'like') { newDislikes += 1; newLikes = Math.max(0, newLikes - 1); newVote = 'dislike'; } 
+        else { newDislikes += 1; newVote = 'dislike'; }
+      }
+      return { ...p, likes: newLikes, dislikes: newDislikes, userVote: newVote };
+    }));
+    
+    // Si estamos viendo el modal de detalle, actualizamos ahí también de forma optimista
+    if (selectedEventDetails && String(selectedEventDetails.id) === String(eventId)) {
+      setSelectedEventDetails((prev: any) => {
+        let newLikes = prev.likes || 0;
+        let newDislikes = prev.dislikes || 0;
+        let newVote = prev.userVote;
+        if (type === 'like') {
+          if (prev.userVote === 'like') { newLikes = Math.max(0, newLikes - 1); newVote = null; } 
+          else if (prev.userVote === 'dislike') { newLikes += 1; newDislikes = Math.max(0, newDislikes - 1); newVote = 'like'; } 
+          else { newLikes += 1; newVote = 'like'; }
+        } else { 
+          if (prev.userVote === 'dislike') { newDislikes = Math.max(0, newDislikes - 1); newVote = null; } 
+          else if (prev.userVote === 'like') { newDislikes += 1; newLikes = Math.max(0, newLikes - 1); newVote = 'dislike'; } 
+          else { newDislikes += 1; newVote = 'dislike'; }
+        }
+        return { ...prev, likes: newLikes, dislikes: newDislikes, userVote: newVote };
+      });
+    }
+
+    try {
+      const response = await fetch(`${API_EVENTS_URL}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+        body: JSON.stringify({ eventId: eventId, userId: currentUserId, voteType: type })
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      if (!response.ok) fetchEvents(zipCode); 
+    } catch (error) { fetchEvents(zipCode); }
+  };
+
+  // 🚀 LÓGICA DE COMENTARIOS ESTILO COMUNIDAD
+  const handleAddComment = async () => {
+    const trimmed = commentText.trim();
+    if (!trimmed || !activeCommentId) return;
+    if (containsBadWords(trimmed)) {
+      triggerAlert(t.communitytab?.textInappropriateTittle || "Bloqueado", t.communitytab?.textInappropriateDescription || "Inapropiado.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_EVENTS_URL}/review`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+        body: JSON.stringify({ relationshipId: String(activeCommentId), comment: trimmed, userId: currentUserId })
+      });
+      if (response.status === 401) { router.replace('/'); return; }
+      const savedReview = await response.json();
+      const rawCreatedAt = savedReview.createdAt || new Date().toISOString();
+      const newLocalComment = {
+        id: savedReview.id || Date.now(),
+        text: trimmed,
+        createdAt: rawCreatedAt,
+        displayTime: getRelativeTime(rawCreatedAt),
+        userName: savedReview.userName || userMetadata?.name || 'Usuario',
+        image: savedReview.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
+        userId: currentUserId
+      };
+      setComments(prev => ({ ...prev, [activeCommentId]: [...(prev[activeCommentId] || []), newLocalComment] }));
+      setCommentText('');
+      setShowCommentInput(false);
+      setVisibleComments(prev => ({ ...prev, [activeCommentId]: true }));
+    } catch (error) {
+       triggerAlert("Error", "No se pudo guardar el comentario.");
+    }
+  };
+
   const handleReportSubmit = async () => {
     if (!itemToReport) return;
     setIsSubmittingReport(true);
@@ -619,7 +725,6 @@ export default function EventsScreen() {
     if (!result.canceled) setFormImage(result.assets[0].uri);
   };
 
-  // 🚀 FUNCIÓN UNIFICADA PARA CREAR O ACTUALIZAR (RENOVAR ANUALMENTE)
   const handlePublishEvent = async () => {
     const trimmedTitle = formTitle.trim();
     const trimmedDesc = formDescription.trim();
@@ -709,7 +814,7 @@ export default function EventsScreen() {
         zip: trimmedZip, 
         phone: fullPhone, 
         contactMethod: formContactMethod,
-        approved: false, // 🚀 Al actualizar o crear siempre pasa a pending por revisión
+        approved: false,
         userId: currentUserId,
         referenceCode: finalRefCode,
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
@@ -753,7 +858,6 @@ export default function EventsScreen() {
 
   const approveEvent = async (event: any, durationMonths: number) => {
     try {
-      // 🚀 Apuntamos a la nueva ruta específica de aprobación
       const response = await fetch(`${API_EVENTS_URL}/${event.id}/approve`, {
         method: 'PUT',
         headers: { 
@@ -877,7 +981,6 @@ export default function EventsScreen() {
               if (isGuest) { setShowRestrictedModal(true); return; }
               setItemToReport(eventItem); setReportModalVisible(true); 
             }}
-            onOpenReviews={(eventItem: any) => setSelectedReviews(eventItem)}
             onEditEvent={(eventItem: any) => {
               setEditingEventId(eventItem.id);
               setFormTitle(eventItem.title || '');
@@ -891,6 +994,14 @@ export default function EventsScreen() {
               if (eventItem.dateEvent) setFormDate(new Date(eventItem.dateEvent));
               setModalVisible(true);
             }}
+            handleVote={handleVote}
+            comments={comments}
+            visibleComments={visibleComments}
+            setVisibleComments={setVisibleComments}
+            setActiveCommentId={setActiveCommentId}
+            setShowCommentInput={setShowCommentInput}
+            isGuest={isGuest}
+            setShowRestrictedModal={setShowRestrictedModal}
         />
     );
   };
@@ -934,7 +1045,6 @@ export default function EventsScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                {/* 🚀 BOTÓN DE ADMINISTRADOR BLINDADO Y REACTIVO */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <TouchableOpacity 
                     activeOpacity={0.6}
@@ -1082,7 +1192,6 @@ export default function EventsScreen() {
                               if (isGuest) { setShowRestrictedModal(true); return; }
                               setItemToReport(eventItem); setReportModalVisible(true); 
                             }}
-                            onOpenReviews={(eventItem: any) => setSelectedReviews(eventItem)}
                             onEditEvent={(eventItem: any) => {
                               setEditingEventId(eventItem.id);
                               setFormTitle(eventItem.title || '');
@@ -1096,6 +1205,14 @@ export default function EventsScreen() {
                               if (eventItem.dateEvent) setFormDate(new Date(eventItem.dateEvent));
                               setModalVisible(true);
                             }}
+                            handleVote={handleVote}
+                            comments={comments}
+                            visibleComments={visibleComments}
+                            setVisibleComments={setVisibleComments}
+                            setActiveCommentId={setActiveCommentId}
+                            setShowCommentInput={setShowCommentInput}
+                            isGuest={isGuest}
+                            setShowRestrictedModal={setShowRestrictedModal}
                           />
                         ))
                       )}
@@ -1378,7 +1495,7 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
-      {/* MODAL DETALLE EXPANDIDO CON RESEÑAS */}
+      {/* MODAL DETALLE EXPANDIDO CON COMENTARIOS TIPO COMUNIDAD */}
       <RNModal visible={!!selectedEventDetails} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -1412,11 +1529,11 @@ export default function EventsScreen() {
                   <ThemedText style={{marginLeft:10, fontWeight:'700'}}>{selectedEventDetails?.date}</ThemedText>
                 </View>
 
-                {/* ESTRELLAS GLOBALES */}
+                {/* LIKES GLOBALES EN LUGAR DE ESTRELLAS */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
-                  <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
+                  <MaterialCommunityIcons name="thumb-up" size={14} color="#1976D2" />
                   <ThemedText style={{ color: Colors.text, fontWeight: '900', fontSize: 13, marginLeft: 4 }}>
-                    {selectedEventDetails?.rating > 0 ? selectedEventDetails.rating.toFixed(1) : "Nuevo"}
+                    {selectedEventDetails?.likes || 0} Likes
                   </ThemedText>
                 </View>
               </View>
@@ -1427,30 +1544,45 @@ export default function EventsScreen() {
               <View style={{height:1, backgroundColor:Colors.border, marginVertical:20}} />
               <ThemedText style={{color:Colors.text, lineHeight:22, fontSize:15, marginBottom: 20 }}>{selectedEventDetails?.description}</ThemedText>
               
-              {/* 🚀 BOTONERA DE ACCIÓN EN EL DETALLE CON ESTILO 2 FILAS */}
+              {/* 🚀 BOTONERA DE ACCIÓN EN EL DETALLE TIPO COMUNIDAD */}
               <View style={{ marginTop: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                  <TouchableOpacity 
-                    disabled={!selectedEventDetails?.approved}
-                    onPress={() => setSelectedReviews(selectedEventDetails)} 
-                    style={{ flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5', opacity: !selectedEventDetails?.approved ? 0.4 : 1 }}
-                  >
-                     <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
-                     <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '700', color: isDark ? '#FFF' : '#444' }} numberOfLines={1}>
-                        Reseñas {selectedEventDetails?.reviews?.length > 0 ? `(${selectedEventDetails.reviews.length})` : ''}
-                     </ThemedText>
-                  </TouchableOpacity>
-
-                  {!isWeb && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {/* LIKE */}
                     <TouchableOpacity 
                       disabled={!selectedEventDetails?.approved} 
-                      onPress={() => handleShare(selectedEventDetails)} 
-                      style={{ flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD', opacity: !selectedEventDetails?.approved ? 0.4 : 1 }}
+                      onPress={() => handleVote(selectedEventDetails.id, 'like')} 
+                      style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: selectedEventDetails?.userVote === 'like' ? '#1976D2' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }}
                     >
-                      <MaterialCommunityIcons name="share-variant" size={17} color={isDark ? '#4FC3F7' : '#1976D2'} />
-                      <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }} numberOfLines={1}>
-                        {t.genericbtn?.sharingbtn || 'Compartir'}
-                      </ThemedText>
+                      <MaterialCommunityIcons name="thumb-up" size={16} color={selectedEventDetails?.userVote === 'like' ? '#fff' : (isDark ? '#4FC3F7' : '#1976D2')} />
+                      <ThemedText style={{ marginLeft: 6, fontWeight: 'bold', fontSize: 13, color: selectedEventDetails?.userVote === 'like' ? '#fff' : (isDark ? '#4FC3F7' : '#1976D2') }}>{selectedEventDetails?.likes || 0}</ThemedText>
+                    </TouchableOpacity>
+
+                    {/* COMMENT */}
+                    <TouchableOpacity 
+                      disabled={!selectedEventDetails?.approved} 
+                      onPress={() => setVisibleComments(v => ({...v, [selectedEventDetails.id]: !v[selectedEventDetails.id]}))} 
+                      style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: visibleComments[selectedEventDetails?.id] ? (isDark ? '#FFF' : '#000') : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }}
+                    >
+                      <MaterialCommunityIcons name="comment-text-multiple" size={16} color={visibleComments[selectedEventDetails?.id] ? (isDark ? '#000' : '#FFF') : Colors.text} />
+                      <ThemedText style={{ marginLeft: 6, fontWeight: 'bold', fontSize: 13, color: visibleComments[selectedEventDetails?.id] ? (isDark ? '#000' : '#FFF') : Colors.text }}>{(comments[selectedEventDetails?.id] || []).length}</ThemedText>
+                    </TouchableOpacity>
+
+                    {/* DISLIKE */}
+                    <TouchableOpacity 
+                      disabled={!selectedEventDetails?.approved} 
+                      onPress={() => handleVote(selectedEventDetails.id, 'dislike')} 
+                      style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: selectedEventDetails?.userVote === 'dislike' ? '#FA8072' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }}
+                    >
+                      <MaterialCommunityIcons name="thumb-down" size={16} color={selectedEventDetails?.userVote === 'dislike' ? '#fff' : '#FA8072'} />
+                      <ThemedText style={{ marginLeft: 6, fontWeight: 'bold', fontSize: 13, color: selectedEventDetails?.userVote === 'dislike' ? '#fff' : '#FA8072' }}>{selectedEventDetails?.dislikes || 0}</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* COMPARTIR */}
+                  {!isWeb && (
+                    <TouchableOpacity disabled={!selectedEventDetails?.approved} onPress={() => handleShare(selectedEventDetails)} style={{ padding: 8 }}>
+                      <MaterialCommunityIcons name="share-variant" size={20} color={Colors.iconInactive} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1472,155 +1604,68 @@ export default function EventsScreen() {
                 )}
               </View>
 
-              {/* SECCIÓN DE RESEÑAS EN EL DETALLE */}
-              {selectedEventDetails?.status === 'approved' && (
+              {/* SECCIÓN DE COMENTARIOS EN EL DETALLE TIPO COMUNIDAD */}
+              {selectedEventDetails?.status === 'approved' && visibleComments[selectedEventDetails.id] && (
                 <View style={{ marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: Colors.border }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                    <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>{t.lawyerstab?.commutnityopini || 'Opiniones'}</ThemedText>
+                    <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>{t.lawyerstab?.commutnityopini || 'Comentarios'}</ThemedText>
                   </View>
 
-                  {!showReviewInput ? (
-                    <View>
-                      <TouchableOpacity 
-                        onPress={() => { 
-                          if (isGuest) {
-                            setShowRestrictedModal(true);
-                            return;
-                          }
-                          const hasReviewed = selectedEventDetails?.reviews?.some((r: any) => r.userId === currentUserId); 
-                          if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } 
-                          setShowReviewInput(true); 
-                        }} 
-                        style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
-                      >
-                        <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                          <MaterialCommunityIcons name="pencil-outline" size={18} color="#FFF" style={{marginRight: 10}} />
-                          <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                      
-                      {selectedEventDetails?.reviews?.length > 0 ? (
-                        selectedEventDetails.reviews.map((r: any) => (
-                          <View key={r.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                              <View style={{ flexDirection: 'row', gap: 2 }}>
-                                {[1, 2, 3, 4, 5].map((s) => (
-                                  <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
-                                ))}
-                              </View>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                {r.image ? (
-                                  <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
-                                ) : (
-                                  <MaterialCommunityIcons name="account-circle" size={24} color={Colors.subtext} />
-                                )}
-                                <ThemedText style={{ color: Colors.text, fontSize: 12, fontStyle: 'italic' }}>{r.name || r.userName || 'Anónimo'}</ThemedText>
-                              </View>
-                            </View>
-                            <ThemedText style={{ color: Colors.text, fontSize: 14, marginTop: 4 }}>{r.comment}</ThemedText>
-                            
-                            {/* 🚀 BOTÓN DE REPORTAR RESEÑA */}
-                            {r.userId !== currentUserId && (
-                              <TouchableOpacity 
-                                onPress={() => { 
-                                  if (isGuest) { setShowRestrictedModal(true); return; }
-                                  setItemToReport({ id: r.id, itemType: 'review' }); 
-                                  setSelectedEventDetails(null); 
-                                  setReportModalVisible(true); 
-                                }}
-                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: Colors.border }}
-                              >
-                                <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} style={{ marginRight: 4 }} />
-                                <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '600' }}>Reportar reseña</ThemedText>
-                              </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => { 
+                      if (isGuest) {
+                        setShowRestrictedModal(true);
+                        return;
+                      }
+                      setActiveCommentId(selectedEventDetails.id);
+                      setShowCommentInput(true); 
+                    }} 
+                    style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
+                  >
+                    <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                      <MaterialCommunityIcons name="pencil-outline" size={18} color="#FFF" style={{marginRight: 10}} />
+                      <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>Escribir comentario</ThemedText>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  
+                  {(comments[selectedEventDetails.id] || []).length > 0 ? (
+                    (comments[selectedEventDetails.id] || []).map((c: any) => (
+                      <View key={c.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            {c.image ? (
+                              <Image source={{ uri: c.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
+                            ) : (
+                              <MaterialCommunityIcons name="account-circle" size={24} color={Colors.subtext} />
                             )}
+                            <ThemedText style={{ color: Colors.text, fontSize: 12, fontStyle: 'italic', fontWeight: 'bold' }}>{c.userName}</ThemedText>
                           </View>
-                        ))
-                      ) : (
-                        <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}>
-                           <MaterialCommunityIcons name="comment-off-outline" size={40} color={Colors.iconInactive} />
-                           <ThemedText style={{ color: Colors.iconInactive, marginTop: 10, fontSize: 13 }}>Aún no hay reseñas.</ThemedText>
+                          <ThemedText style={{ color: Colors.subtext, fontSize: 10 }}>{c.displayTime}</ThemedText>
                         </View>
-                      )}
-                    </View>
+                        <ThemedText style={{ color: Colors.text, fontSize: 14, marginTop: 4 }}>{c.text}</ThemedText>
+                        
+                        {/* 🚀 BOTÓN DE REPORTAR COMENTARIO */}
+                        {c.userId !== currentUserId && (
+                          <TouchableOpacity 
+                            onPress={() => { 
+                              if (isGuest) { setShowRestrictedModal(true); return; }
+                              setItemToReport({ id: c.id, itemType: 'review' }); 
+                              setSelectedEventDetails(null); 
+                              setReportModalVisible(true); 
+                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: Colors.border }}
+                          >
+                            <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} style={{ marginRight: 4 }} />
+                            <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '600' }}>Reportar comentario</ThemedText>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))
                   ) : (
-                    <ReviewForm 
-                      isDark={isDark} 
-                      t={t} 
-                      onCancel={() => setShowReviewInput(false)} 
-                      onPublish={async (ratingNum: number, commentStr: string) => { 
-                          try {
-                            const reviewPayload = {
-                              reference_id: selectedEventDetails.id,
-                              stars: ratingNum,
-                              comment: commentStr,
-                              userId: currentUserId
-                            };
-
-                            const res = await fetch(`${API_EVENTS_URL}/reviews`, {
-                              method: 'POST',
-                              headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${userToken}` 
-                              },
-                              body: JSON.stringify(reviewPayload)
-                            });
-
-                            if (res.status === 401) { router.replace('/'); return; }
-                            if (!res.ok) throw new Error();
-                            const fromDB = await res.json();
-
-                            const newReviewFormatted = { 
-                              id: fromDB.id || Date.now().toString(), 
-                              stars: Number(ratingNum), 
-                              comment: commentStr,
-                              name: fromDB.name || userMetadata?.name || 'Yo',
-                              image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
-                              displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                              userId: currentUserId
-                            };
-                            
-                            const updatedReviews = [newReviewFormatted, ...(selectedEventDetails.reviews || [])];
-                            const totalStars = updatedReviews.reduce((sum: number, r: any) => sum + r.stars, 0);
-                            const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
-
-                            const updatedEventObj = {
-                              ...selectedEventDetails,
-                              reviews: updatedReviews,
-                              rating: newAverage,
-                              totalReviews: updatedReviews.length
-                            };
-
-                            setSelectedEventDetails(updatedEventObj);
-                            setEvents(prev => prev.map(s => s.id === selectedEventDetails.id ? updatedEventObj : s));
-
-                            const plan = selectedEventDetails.premiumPlan ? String(selectedEventDetails.premiumPlan).toLowerCase() : 'free';
-                            const isEligibleForGoogleReview = ['premium', 'unlimited'].includes(plan);
-                            const googleReviewUrl = selectedEventDetails.googleReviewLink || selectedEventDetails.googleUrl || selectedEventDetails.google_review_link || 'https://g.page/r/CXrYzP8Yb7XzECE/review';
-
-                            if (isEligibleForGoogleReview && googleReviewUrl && commentStr.trim()) {
-                              try { Clipboard.setStringAsync(commentStr); } catch (clipError) { }
-                              if (Platform.OS === 'web') {
-                                const confirmWeb = window.confirm("🌟 ¡Apoya este evento en Google!\n\nTu opinión ya se guardó con éxito. Como este evento es Premium, ¿te gustaría pegar tu comentario directamente en su perfil de Google?");
-                                if (confirmWeb) { window.open(googleReviewUrl, '_blank'); } 
-                                else { window.alert("¡Gracias! Tu reseña se ha publicado con éxito."); }
-                              } else {
-                                Alert.alert("🌟 ¡Apoya este evento en Google!", "Tu opinión ya se guardó con éxito. ¿Te gustaría pegar tu comentario directamente en su perfil de Google?",
-                                  [ { text: "No, gracias", style: "cancel" }, { text: "Ir a Google", onPress: () => { Linking.openURL(googleReviewUrl); } } ]
-                                );
-                              }
-                            } else {
-                              if (Platform.OS === 'web') { window.alert("¡Gracias! Tu reseña se ha publicado con éxito."); } 
-                              else { Alert.alert("¡Gracias!", "Tu reseña se ha publicado exitosamente."); }
-                            }
-
-                          } catch (e) {
-                            Alert.alert("Error", "No se pudo conectar al servidor.");
-                          } finally {
-                            setShowReviewInput(false);
-                          }
-                      }} 
-                    />
+                    <View style={{ alignItems: 'center', paddingVertical: 20, opacity: 0.5 }}>
+                       <MaterialCommunityIcons name="comment-off-outline" size={40} color={Colors.iconInactive} />
+                       <ThemedText style={{ color: Colors.iconInactive, marginTop: 10, fontSize: 13 }}>Aún no hay comentarios.</ThemedText>
+                    </View>
                   )}
                 </View>
               )}
@@ -1642,6 +1687,29 @@ export default function EventsScreen() {
             </ScrollView>
           </View>
         </View>
+      </RNModal>
+
+      {/* MODAL COMENTARIO RÁPIDO */}
+      <RNModal transparent visible={showCommentInput} animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
+         <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end'}}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCommentInput(false)} />
+            <KeyboardAvoidingView behavior={isIOS ? "padding" : "height"}>
+              <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={[stylesUnified.modalContent, { paddingBottom: isIOS ? insets.bottom + 20 : 30 }]}>
+                <TextInput 
+                  style={[{backgroundColor: Colors.inputBg, borderRadius: 15, padding: 15, color: Colors.text, minHeight: 80, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {})}]} 
+                  placeholder="Escribe tu comentario..." 
+                  placeholderTextColor={Colors.iconInactive} 
+                  value={commentText} 
+                  onChangeText={setCommentText} 
+                  multiline autoFocus 
+                />
+                <TouchableOpacity onPress={handleAddComment} style={{ backgroundColor: '#FF5F6D', marginTop: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', alignSelf: 'center', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 20 }}>
+                  <MaterialCommunityIcons name="check-all" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <ThemedText style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>Enviar</ThemedText>
+                </TouchableOpacity>
+              </BlurView>
+            </KeyboardAvoidingView>
+         </View>
       </RNModal>
 
       {/* MODAL ACCESO RESTRINGIDO */}
@@ -1735,153 +1803,6 @@ export default function EventsScreen() {
         </View>
       </RNModal>
 
-      {/* MODAL DE RESEÑAS INDEPENDIENTE (VER TODAS) */}
-      <RNModal visible={!!selectedReviews} transparent animationType="slide" statusBarTranslucent onRequestClose={() => { setSelectedReviews(null); setShowReviewInput(false); }}>
-        <KeyboardAvoidingView behavior={isIOS ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => { setSelectedReviews(null); setShowReviewInput(false); }} />
-            <View style={{ width: width > 600 ? 500 : '92%', height: height * 0.78, backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', borderRadius: 32, padding: 25, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border }}>
-              {!isAndroid && <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-                <View style={{ flex: 1 }}>
-                    <ThemedText style={{ fontSize: 22, fontWeight: '900', color: Colors.text }}>{selectedReviews?.title}</ThemedText>
-                    <ThemedText style={{ color: Colors.subtext, fontWeight: '800' }}>{t.lawyerstab?.commutnityopini || 'Opiniones de la comunidad'}</ThemedText>
-                </View>
-                <TouchableOpacity onPress={() => { setSelectedReviews(null); setShowReviewInput(false); }}>
-                  <MaterialCommunityIcons name="close" size={28} color={Colors.text} />
-                </TouchableOpacity>
-              </View>
-              
-              {!showReviewInput ? (
-                <View style={{ flex: 1 }}>
-                  <TouchableOpacity 
-                    onPress={() => { 
-                      if (isGuest) {
-                        setShowRestrictedModal(true);
-                        return;
-                      }
-                      const hasReviewed = selectedReviews?.reviews?.some((r: any) => r.userId === currentUserId); 
-                      if (hasReviewed) { return Alert.alert("Aviso", "Ya dejaste una reseña"); } 
-                      setShowReviewInput(true); 
-                    }} 
-                    style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}
-                  >
-                    <LinearGradient colors={orangeGradient} start={{x:0, y:0}} end={{x:1, y:0}} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                       <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFF" style={{marginRight: 10}} />
-                       <ThemedText style={{ color: '#FFF', fontWeight: '800' }}>{t.storestab?.writingreview || 'Escribir reseña'}</ThemedText>
-                    </LinearGradient>
-                  </TouchableOpacity>
-
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    {selectedReviews?.reviews?.length > 0 ? (
-                      selectedReviews.reviews.map((r: any) => (
-                         <View key={r.id} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                             <View style={{ flexDirection: 'row', gap: 2 }}>
-                               {[1, 2, 3, 4, 5].map((s) => (
-                                 <MaterialCommunityIcons key={s} name="star" size={14} color={s <= r.stars ? "#FFB300" : (isDark ? "rgba(255,255,255,0.2)" : "#DDD")} />
-                               ))}
-                             </View>
-                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                               {r.image ? (
-                                 <Image source={{ uri: r.image }} style={{ width: 24, height: 24, borderRadius: 12 }} resizeMode="cover"/>
-                               ) : (
-                                 <MaterialCommunityIcons name="account-circle" size={24} color={Colors.subtext} />
-                               )}
-                               <ThemedText style={{ color: Colors.text, fontSize: 12, fontStyle: 'italic' }}>{r.name || r.userName || 'Anónimo'}</ThemedText>
-                             </View>
-                           </View>
-                           <ThemedText style={{ color: Colors.text, fontSize: 14, marginTop: 4 }}>{r.comment}</ThemedText>
-
-                           {r.userId !== currentUserId && (
-                             <TouchableOpacity 
-                               onPress={() => { 
-                                 if (isGuest) { setShowRestrictedModal(true); return; }
-                                 setItemToReport({ id: r.id, itemType: 'review' }); 
-                                 setSelectedReviews(null); 
-                                 setReportModalVisible(true); 
-                               }}
-                               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: Colors.border }}
-                             >
-                               <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} style={{ marginRight: 4 }} />
-                               <ThemedText style={{ fontSize: 11, color: Colors.subtext, fontWeight: '600' }}>Reportar reseña</ThemedText>
-                             </TouchableOpacity>
-                           )}
-                         </View>
-                      ))
-                    ) : (
-                      <View style={{ alignItems: 'center', marginTop: 30, opacity: 0.5 }}>
-                        <MaterialCommunityIcons name="comment-off-outline" size={40} color={Colors.iconInactive} />
-                        <ThemedText style={{ color: Colors.iconInactive, marginTop: 10 }}>Aún no hay reseñas.</ThemedText>
-                      </View>
-                    )}
-                  </ScrollView>
-                </View>
-              ) : (
-                <ReviewForm 
-                    isDark={isDark} 
-                    t={t} 
-                    onCancel={() => setShowReviewInput(false)} 
-                    onPublish={async (ratingNum: number, commentStr: string) => { 
-                        try {
-                          const reviewPayload = {
-                            reference_id: selectedReviews.id,
-                            stars: ratingNum,
-                            comment: commentStr,
-                            userId: currentUserId
-                          };
-
-                          const res = await fetch(`${API_EVENTS_URL}/reviews`, {
-                            method: 'POST',
-                            headers: { 
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${userToken}` 
-                            },
-                            body: JSON.stringify(reviewPayload)
-                          });
-
-                          if (res.status === 401) { router.replace('/'); return; }
-                          if (!res.ok) throw new Error();
-                          const fromDB = await res.json();
-
-                          const newReviewFormatted = { 
-                            id: fromDB.id || Date.now().toString(), 
-                            stars: Number(ratingNum), 
-                            comment: commentStr,
-                            name: fromDB.name || userMetadata?.name || 'Yo',
-                            image: fromDB.image || userMetadata?.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg',
-                            displayTime: fromDB.displayTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                            userId: currentUserId
-                          };
-                          
-                          const updatedReviews = [newReviewFormatted, ...(selectedReviews.reviews || [])];
-                          const totalStars = updatedReviews.reduce((sum: number, r: any) => sum + r.stars, 0);
-                          const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
-
-                          const updatedEventObj = {
-                            ...selectedReviews,
-                            reviews: updatedReviews,
-                            rating: newAverage,
-                            totalReviews: updatedReviews.length
-                          };
-
-                          setSelectedReviews(updatedEventObj);
-                          setEvents(prev => prev.map(s => s.id === selectedReviews.id ? updatedEventObj : s));
-
-                          Alert.alert("¡Gracias!", "Tu reseña se ha publicado con éxito.");
-                        } catch (e) {
-                          Alert.alert("Error", "No se pudo conectar al servidor.");
-                        } finally {
-                          setShowReviewInput(false);
-                        }
-                    }} 
-                />
-              )}
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </RNModal>
-
       {isWeb && (
         <style dangerouslySetInnerHTML={{ __html: `
           .native-web-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
@@ -1892,29 +1813,21 @@ export default function EventsScreen() {
   );
 }
 
-const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, t, categoryLabels, internalCategories, renderAdminControls, isWeb, handleShare, isAdminMode, currentUserId, onReport, onOpenReviews, onEditEvent }: any) => {
+const EventCard = memo(({ 
+    item, isLargeWeb, isDark, Colors, orangeGradient, onOpen, t, categoryLabels, internalCategories, 
+    renderAdminControls, isWeb, handleShare, isAdminMode, currentUserId, onReport, 
+    onEditEvent, handleVote, comments, visibleComments, setVisibleComments, 
+    setActiveCommentId, setShowCommentInput, isGuest, setShowRestrictedModal 
+}: any) => {
   const catIndex = internalCategories.indexOf(item.category);
   const catLabel = catIndex >= 0 ? categoryLabels[catIndex] : item.category;
   
   const isPending = item.status === 'pending';
   const isOwner = item.userId === currentUserId;
-  
-  const cardBgColor = isPending 
-      ? (isDark ? '#1E1E1E' : '#FFFFFF') 
-      : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)');
-
-  const reviewCount = item.reviews?.length || item.totalReviews || 0;
-  let formattedCount = reviewCount.toString();
-  if (reviewCount >= 1000) {
-    formattedCount = (reviewCount / 1000).toFixed(1) + 'k';
-  }
+  const cardBgColor = isPending ? (isDark ? '#1E1E1E' : '#FFFFFF') : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)');
 
   return (
-    <TouchableOpacity 
-        activeOpacity={0.9} 
-        onPress={() => onOpen(item)} 
-        style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}
-    >
+    <View style={{ borderWidth: 1, marginBottom: 20, overflow: 'hidden', width: isLargeWeb ? '48.5%' : '100%', backgroundColor: cardBgColor, borderColor: isPending ? '#FFB74D' : Colors.border, borderRadius: 28 }}>
       {isPending && !isAdminMode && (
         <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: 10 , pointerEvents: 'none'}]}  />
       )}
@@ -1931,11 +1844,8 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
       <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-            <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>
-              {catLabel.toUpperCase()}
-            </ThemedText>
+            <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{catLabel.toUpperCase()}</ThemedText>
           </View>
-          {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
           {!isOwner && (
             <TouchableOpacity onPress={() => onReport && onReport(item)} style={{ padding: 4, opacity: 0.7 }}>
               <MaterialCommunityIcons name="flag-outline" size={18} color={Colors.subtext} />
@@ -1943,132 +1853,147 @@ const EventCard = memo(({ item, isLargeWeb, isDark, Colors, orangeGradient, onOp
           )}
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
-            <MaterialCommunityIcons name="star" size={14} color="#FFB300" />
-            <ThemedText style={{ marginLeft: 4, fontSize: 13, fontWeight: '900', color: Colors.text }}>
-              {item.rating > 0 ? item.rating.toFixed(1) : "Nuevo"}
-            </ThemedText>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
-            <MaterialCommunityIcons name="calendar-month" size={14} color="#FFB300" />
-            <ThemedText style={{ marginLeft: 4, fontSize: 13, fontWeight: '900', color: Colors.text }}>
-              {item.date}
-            </ThemedText>
-          </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
+          <MaterialCommunityIcons name="calendar-month" size={14} color="#FFB300" />
+          <ThemedText style={{ marginLeft: 4, fontSize: 13, fontWeight: '900', color: Colors.text }}>{item.date}</ThemedText>
         </View>
       </View>
       
-      <View style={{ width: '100%', height: 180, backgroundColor: 'transparent' }}>
-        {item.image && (item.image as string).length > 5 ? (
-          <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-        ) : (
-          <View style={{ width: '100%', height: '100%', backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
-            <MaterialCommunityIcons name="image-off-outline" size={40} color={Colors.subtext} />
+      <TouchableOpacity activeOpacity={0.9} onPress={() => onOpen(item)}>
+        <View style={{ width: '100%', height: 180, backgroundColor: 'transparent' }}>
+          {item.image && (item.image as string).length > 5 ? (
+            <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          ) : (
+            <View style={{ width: '100%', height: '100%', backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center' }}>
+              <MaterialCommunityIcons name="image-off-outline" size={40} color={Colors.subtext} />
+            </View>
+          )}
+           <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
+             <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
+             <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>Ver detalle</ThemedText>
+           </View>
+        </View>
+        
+        <View style={{ padding: 16 }}>
+          <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }} numberOfLines={1}>{item.title}</ThemedText>
+          <ThemedText style={{ color: Colors.subtext, fontSize: 13, marginTop: 4, marginBottom: 8 }} numberOfLines={isPending ? undefined : 2}>{item.description}</ThemedText>
+          <View style={{ marginTop: 4, gap: 4 }}>
+            <View style={{flexDirection:'row', alignItems:'center'}}>
+              <MaterialCommunityIcons name="clock-outline" size={14} color={Colors.accent} />
+              <ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.text }}>{item.time} - {item.timeEnd}</ThemedText>
+            </View>
+            <View style={{flexDirection:'row', alignItems:'center'}}>
+              <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} />
+              <ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+        {/* LISTA EXPANDIBLE DE COMENTARIOS (ESTILO COMUNIDAD) */}
+        {visibleComments && visibleComments[item.id] && (
+          <View style={{ marginTop: 6, paddingTop: 4 }}>
+            {(comments && comments[item.id] || []).length > 0 ? (
+              (comments[item.id] || []).map((c: any) => (
+                <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', padding: 4, gap: 8, marginBottom: 4 }}>
+                  {c.image ? (
+                    <Image source={{ uri: c.image }} style={{ width: 28, height: 28, borderRadius: 14 }} resizeMode="cover"/>
+                  ) : (
+                    <MaterialCommunityIcons name="account-circle" size={28} color={Colors.subtext} />
+                  )}
+                  <ThemedText style={{ flex: 1, lineHeight: 18 }}>
+                    <ThemedText style={{ fontWeight: 'bold' , fontStyle:'italic' }}>{c.userName}{': '}</ThemedText>
+                    <ThemedText style={{fontStyle:'italic'}}>{c.text}</ThemedText>
+                  </ThemedText>
+                  {c.userId !== currentUserId && (
+                    <TouchableOpacity onPress={() => { if (isGuest) { setShowRestrictedModal(true); return; } onReport && onReport({id: c.id, itemType: 'review'}); }} style={{ padding: 4, opacity: 0.6 }}>
+                      <MaterialCommunityIcons name="flag-outline" size={13} color={Colors.subtext} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))
+            ) : (
+              <ThemedText style={{ marginBottom: 4, color: Colors.subtext, fontStyle: 'italic', fontSize: 13 }}>
+                Sé el primero en comentar
+              </ThemedText>
+            )}
+            
+            <TouchableOpacity 
+              disabled={isPending} 
+              onPress={() => { 
+                if (isGuest) { setShowRestrictedModal(true); return; }
+                if (setActiveCommentId) setActiveCommentId(item.id); 
+                if (setShowCommentInput) setShowCommentInput(true); 
+              }} 
+              style={{ marginTop: 4, opacity: isPending ? 0.4 : 1, flexDirection: 'row', alignItems: 'center' }}
+            >
+              <MaterialCommunityIcons name="pencil-outline" size={14} color={Colors.accent} />
+              <ThemedText style={{ color: Colors.accent, fontWeight: 'bold', fontSize: 13, marginLeft: 4 }}>Responder</ThemedText>
+            </TouchableOpacity>
           </View>
         )}
-         
-         <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}>
-           <MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} />
-           <ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
-             {t.entrepreneurshiptab?.viewdetail || 'Ver detalle'}
-           </ThemedText>
-         </View>
-      </View>
-      
-      <View style={{ padding: 16 }}>
-        <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Colors.text }} numberOfLines={1}>{item.title}</ThemedText>
-        <ThemedText style={{ color: Colors.subtext, fontSize: 13, marginTop: 4, marginBottom: 8 }} numberOfLines={isPending ? undefined : 2}>{item.description}</ThemedText>
-        <View style={{ marginTop: 4, gap: 4 }}>
-          <View style={{flexDirection:'row', alignItems:'center'}}>
-            <MaterialCommunityIcons name="clock-outline" size={14} color={Colors.accent} />
-            <ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.text }}>{item.time} - {item.timeEnd}</ThemedText>
-          </View>
-          <View style={{flexDirection:'row', alignItems:'center'}}>
-            <MaterialCommunityIcons name="map-marker-outline" size={14} color={Colors.accent} />
-            <ThemedText style={{ fontSize: 12, marginLeft: 8, fontWeight: '700', color: Colors.subtext }} numberOfLines={1}>{item.location}</ThemedText>
-          </View>
-        </View>
 
-        {/* 🚀 BOTONERA DE ACCIÓN EN EL DETALLE CON ESTILO 2 FILAS */}
-        <View style={{ marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-            <TouchableOpacity 
-              disabled={isPending}
-              onPress={(e: any) => {
-                e.stopPropagation?.();
-                if (onOpenReviews) onOpenReviews(item);
-              }} 
-              style={{ flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#F5F5F5', opacity: isPending ? 0.4 : 1 }}
-            >
-               <MaterialCommunityIcons name="comment-text-outline" size={17} color={isDark ? '#FFF' : '#444'} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '700', color: isDark ? '#FFF' : '#444' }} numberOfLines={1}>
-                  Reseñas {reviewCount > 0 ? `(${formattedCount})` : ''}
-               </ThemedText>
-            </TouchableOpacity>
-
-            {!isWeb && (
-              <TouchableOpacity 
-                disabled={isPending} 
-                onPress={(e: any) => { e.stopPropagation?.(); handleShare(item); }} 
-                style={{ flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(79, 195, 247, 0.15)' : '#E3F2FD', opacity: isPending ? 0.4 : 1 }}
-              >
-                <MaterialCommunityIcons name="share-variant" size={17} color={isDark ? '#4FC3F7' : '#1976D2'} />
-                <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '700', color: isDark ? '#4FC3F7' : '#1976D2' }} numberOfLines={1}>
-                  {t.genericbtn?.sharingbtn || 'Compartir'}
-                </ThemedText>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {item.phone && (
-            <TouchableOpacity 
-              disabled={isPending}
-              onPress={(e: any) => {
-                e.stopPropagation?.();
-                if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
-                else { Linking.openURL(`tel:${item.phone}`); }
-              }} 
-              style={{ width: '100%', height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)'), opacity: isPending ? 0.4 : 1 }}
-            >
-               <MaterialCommunityIcons name={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={18} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} />
-               <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D" }} numberOfLines={1}>
-                 {item.contactMethod === 'whatsapp' ? "WhatsApp" : "Llamar"}
-               </ThemedText>
-            </TouchableOpacity>
-          )}
-
-          {/* 🚀 BOTÓN DE ACTUALIZAR / RENOVAR EVENTO (SÓLO SI ES EL DUEÑO) */}
-          {isOwner && (
-            <TouchableOpacity 
-              onPress={(e: any) => {
-                e.stopPropagation?.();
-                if (onEditEvent) onEditEvent(item);
-              }}
-              style={{ width: '100%', height: 40, marginTop: 8, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderWidth: 1, borderColor: 'rgba(255, 193, 7, 0.4)' }}
-            >
-               <MaterialCommunityIcons name="update" size={16} color="#FFB300" />
-               <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: '#FFB300' }}>
-                 Actualizar Evento (Nuevo Año)
-               </ThemedText>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* 🚀 BOTÓN INFERIOR DE REPORTE (FUERA DE LA TARJETA) */}
-        {!isPending && !isOwner && (
+        {/* 🚀 BOTÓN DE CONTACTO (WhatsApp o Llamada) AFUERA DE LA TARJETA */}
+        {item.phone && (
           <TouchableOpacity 
-            onPress={() => { if (onReport) onReport(item); }}
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}
+            disabled={isPending}
+            onPress={(e: any) => {
+              e.stopPropagation();
+              if(item.contactMethod === 'whatsapp') { Linking.openURL(`https://wa.me/${item.phone.replace(/\D/g, '')}`); } 
+              else { Linking.openURL(`tel:${item.phone}`); }
+            }} 
+            style={{ width: '100%', height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: item.contactMethod === 'whatsapp' ? (isDark ? 'rgba(37,211,102,0.15)' : 'rgba(46,110,69,0.12)') : (isDark ? 'rgba(255,95,109,0.15)' : 'rgba(125,31,20,0.1)'), opacity: isPending ? 0.4 : 1, marginTop: 10 }}
           >
-            <MaterialCommunityIcons name="flag-outline" size={15} color={Colors.subtext} style={{ marginRight: 6 }} />
-            <ThemedText style={{ fontSize: 12, color: Colors.subtext, fontWeight: '600' }}>Reportar publicación</ThemedText>
+             <MaterialCommunityIcons name={item.contactMethod === 'whatsapp' ? "whatsapp" : "phone"} size={18} color={item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D"} />
+             <ThemedText style={{ marginLeft: 6, fontSize: 13, fontWeight: '800', color: item.contactMethod === 'whatsapp' ? "#25D366" : "#FF5F6D" }}>
+               {item.contactMethod === 'whatsapp' ? "WhatsApp" : "Llamar"}
+             </ThemedText>
+          </TouchableOpacity>
+        )}
+
+        {/* BOTONERA ESTILO COMUNIDAD (Likes, Comments, Dislikes) */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {/* LIKE */}
+            <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation(); if(handleVote) handleVote(item.id, 'like'); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: item.userVote === 'like' ? '#1976D2' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }}>
+              <MaterialCommunityIcons name="thumb-up" size={16} color={item.userVote === 'like' ? '#fff' : (isDark ? '#4FC3F7' : '#1976D2')} />
+              <ThemedText style={{ marginLeft: 6, fontWeight: 'bold', fontSize: 13, color: item.userVote === 'like' ? '#fff' : (isDark ? '#4FC3F7' : '#1976D2') }}>{item.likes || 0}</ThemedText>
+            </TouchableOpacity>
+
+            {/* COMMENT */}
+            <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation(); if(setVisibleComments) setVisibleComments((v: any) => ({...v, [item.id]: !v[item.id]})); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: visibleComments && visibleComments[item.id] ? (isDark ? '#FFF' : '#000') : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }}>
+              <MaterialCommunityIcons name="comment-text-multiple" size={16} color={visibleComments && visibleComments[item.id] ? (isDark ? '#000' : '#FFF') : Colors.text} />
+              <ThemedText style={{ marginLeft: 6, fontWeight: 'bold', fontSize: 13, color: visibleComments && visibleComments[item.id] ? (isDark ? '#000' : '#FFF') : Colors.text }}>{(comments && comments[item.id] || []).length}</ThemedText>
+            </TouchableOpacity>
+
+            {/* DISLIKE */}
+            <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation(); if(handleVote) handleVote(item.id, 'dislike'); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: item.userVote === 'dislike' ? '#FA8072' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }}>
+              <MaterialCommunityIcons name="thumb-down" size={16} color={item.userVote === 'dislike' ? '#fff' : '#FA8072'} />
+              <ThemedText style={{ marginLeft: 6, fontWeight: 'bold', fontSize: 13, color: item.userVote === 'dislike' ? '#fff' : '#FA8072' }}>{item.dislikes || 0}</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {/* COMPARTIR */}
+          {!isWeb && (
+            <TouchableOpacity disabled={isPending} onPress={(e: any) => { e.stopPropagation(); handleShare(item); }} style={{ padding: 8 }}>
+              <MaterialCommunityIcons name="share-variant" size={20} color={Colors.iconInactive} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {isOwner && (
+          <TouchableOpacity 
+            onPress={(e: any) => { e.stopPropagation(); if (onEditEvent) onEditEvent(item); }}
+            style={{ width: '100%', height: 40, marginTop: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderWidth: 1, borderColor: 'rgba(255, 193, 7, 0.4)' }}
+          >
+             <MaterialCommunityIcons name="update" size={16} color="#FFB300" />
+             <ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: 'bold', color: '#FFB300' }}>Actualizar Evento (Nuevo Año)</ThemedText>
           </TouchableOpacity>
         )}
 
         {renderAdminControls && renderAdminControls()}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 });
