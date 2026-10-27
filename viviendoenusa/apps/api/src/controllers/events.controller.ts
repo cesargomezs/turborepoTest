@@ -755,8 +755,9 @@ export const createEventReview = async (data: any) => {
   try {
     const cleanPayload = sanitizePayload(data);
 
-    // 🚀 Asignamos el ID directamente a type_detail_id
-    cleanPayload.type_detail_id = "6c4f4076-0ccf-4f26-97c8-abe139796066";
+    // 🚀 Drizzle espera la propiedad en camelCase (typeDetailId)
+    cleanPayload.typeDetailId = "6c4f4076-0ccf-4f26-97c8-abe139796066";
+    cleanPayload.type_detail_id = "6c4f4076-0ccf-4f26-97c8-abe139796066"; // Cubrimos ambos por si acaso
 
     const validUserId = sanitizeText(cleanPayload.userId);
     if (!validUserId) {
