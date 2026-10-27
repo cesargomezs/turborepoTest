@@ -177,7 +177,7 @@ app.post('/api/crash-report', express.json(), async (req, res) => {
   res.status(200).json({ received: true });
 });
 
-// --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE ---
+// --- ENDPOINT DE OPTIMIZACIÓN Y SUBIDA A SUPABASE (BLINDADO CONTRA HEIC/BAD SEEK) ---
 app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async (req, res) => {
   console.log(`🚨 [CONEXIÓN] Petición de subida recibida para la sección: ${req.params.carpeta}`);
   
@@ -194,9 +194,20 @@ app.post('/api/subir-imagen-optimizada/:carpeta', upload.single('imagen'), async
     const calidadDeseada = parseInt(req.query.calidad as string) || 80;
 
     console.log("⏳ Optimizando y convirtiendo formato a WebP...");
-    const bufferWebp = await sharp(req.file.buffer)
-      .webp({ quality: calidadDeseada })
-      .toBuffer();
+    
+    // 🛡️ BLOQUE BLINDADO CONTRA ERRORES DE SHARP Y FORMATOS HEIC/HEIF DE IPHONE
+    let bufferWebp;
+    try {
+      bufferWebp = await sharp(req.file.buffer, { failOnError: false })
+        .rotate() // Auto-endereza la foto según la orientación del celular
+        .webp({ quality: calidadDeseada })
+        .toBuffer();
+    } catch (sharpError: any) {
+      console.error("⚠️ [SHARP ADVERTENCIA] No se pudo procesar la imagen directamente:", sharpError.message);
+      return res.status(400).json({ 
+        error: 'El formato de la imagen no es compatible (posiblemente HEIC de iPhone o archivo dañado). Por favor selecciona otra foto en formato JPG o PNG.' 
+      });
+    }
 
     const nombreArchivo = `${carpetaFinal}/img-${Date.now()}.webp`;
     console.log(`⏳ Almacenando en el bucket: "${NOMBRE_BUCKET}" como: ${nombreArchivo}`);
