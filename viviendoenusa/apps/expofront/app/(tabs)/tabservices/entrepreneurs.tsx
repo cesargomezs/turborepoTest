@@ -1566,6 +1566,13 @@ export default function EntrepreneurshipScreen() {
                 <ThemedText style={[S.label, { color: DC.text }]}>{t?.entrepreneurshiptab?.promotion || 'Promoción'}</ThemedText>
                 <TextInput value={formPromo}  onChangeText={(text) => setFormPromo(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" placeholder={t?.entrepreneurshiptab?.exampleoffet || 'Ej: 10% de descuento'} placeholderTextColor={isDark ? '#B0BEC5' : '#364045'} style={[S.input, { color: DC.text, backgroundColor: DC.inputBg, borderColor: DC.border, marginBottom: 20, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} />
 
+                {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+                <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: DC.border }}>
+                  <ThemedText style={{ fontSize: 11, color: DC.subtext, lineHeight: 16, textAlign: 'center' }}>
+                    ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: DC.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: DC.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                  </ThemedText>
+                </View>
+
                 <TouchableOpacity onPress={handlePublish} disabled={!formName.trim() || !formAddress.trim() || !formDesc.trim() || !formPhone.trim() || !formImage || formZip.length < 5 || isSubmitting}>
                   <LinearGradient colors={(formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? OG as any : DG as any} style={[S.publishBtn, { opacity: (formName.trim() && formAddress.trim() && formDesc.trim() && formPhone.trim() && formImage && formZip.length === 5) ? 1 : 0.55 }]}>
                     {isSubmitting ? <ActivityIndicator color="#fff" /> : <><MaterialCommunityIcons name="store-plus-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t?.entrepreneurshiptab?.publishEntrepre || 'Publicar'}</ThemedText></>}

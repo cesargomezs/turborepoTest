@@ -1556,7 +1556,7 @@ export default function JobsScreen() {
                                     }}
                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: DynamicColors.border }}
                                   >
-                                    <MaterialCommunityIcons name="flag-outline" size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+                                    <MaterialCommunityIcons name="flag-outline"  size={15} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
                                     <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
                                       Reportar publicación
                                     </ThemedText>
@@ -2148,6 +2148,13 @@ export default function JobsScreen() {
                              autoCapitalize="characters"
                            />
                          </View>
+
+                          {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+                          <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: DynamicColors.border }}>
+                            <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext, lineHeight: 16, textAlign: 'center' }}>
+                              ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                            </ThemedText>
+                          </View>
 
                          <TouchableOpacity onPress={handleRegisterCompany} disabled={isCreatingCompany}>
                              <LinearGradient colors={isCreatingCompany || !newCompanyForm.name || !newCompanyForm.phone || !formRefCode.trim() ? disabledGradient : orangeGradient} style={{ height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>

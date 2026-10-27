@@ -82,7 +82,7 @@ export default function TabLayout() {
     } 
 
     const iosPaddingBottom = insets.bottom > 0 ? insets.bottom - 8 : 10;
-    const iosHeight = insets.bottom > 0 ? 55 + iosPaddingBottom : 65;
+    const iosHeight = insets.bottom > 0 ? 58 + iosPaddingBottom : 65;
 
     // 🚀 Reducimos el offset a 24px para que baje más y quede al ras de los botones de Android
     const androidBottomOffset = Platform.OS === 'android' ? (insets.bottom > 0 ? insets.bottom : 24) : 0;
@@ -98,7 +98,7 @@ export default function TabLayout() {
         borderTopWidth: 4,
         borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
         backgroundColor: 'transparent', // Mantiene el efecto cristal intacto
-        height: 58,
+        height: Platform.OS === 'ios' ? iosHeight : 58, // 🚀 AQUI ESTA LA CORRECCION PARA iOS
         paddingBottom: Platform.OS === 'android' ? 6 : iosPaddingBottom,
         paddingTop: 4,
       },
@@ -183,7 +183,7 @@ export default function TabLayout() {
       <Tabs.Screen name="tabservices/community" options={{ title: t?.servicestab?.service2 || 'Comunidad', href: null }} />
       <Tabs.Screen name="tabservices/donations" options={{ title: t?.servicestab?.service3 || 'Donaciones', href: null }} />
       <Tabs.Screen name="tabservices/events" options={{ title: t?.servicestab?.service4 || 'Eventos', href: null }} />
-      <Tabs.Screen name="tabservices/stores" options={{ title: t?.servicestab?.service5 || 'Tiendas', href: null }} />
+      <Tabs.Screen name="tabservices/stores" options={{ title: t?.servicestab?.service5 || 'Negocio', href: null }} />
       <Tabs.Screen name="tabservices/entrepreneurs" options={{ title: t?.servicestab?.service6 || 'Emprendedores', href: null }} />
       <Tabs.Screen name="tabservices/support" options={{ title: t?.servicestab?.service7 || 'Soporte', href: null }} />
       <Tabs.Screen name="tabservices/post/id" options={{ href: null }} />

@@ -922,6 +922,13 @@ export default function DonationsScreen() {
                 <TextInput value={formTitle} onChangeText={(val) => setFormTitle(toSentenceCase(val))} autoCapitalize="sentences" placeholder={(t?.donationstab as any)?.newdonnationTittle || 'Título'} placeholderTextColor={DynamicColors.subtext} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, marginBottom: 15, color: DynamicColors.text, borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }}  />
                 <TextInput value={formDescription} onChangeText={(val) => setFormDescription(toSentenceCase(val))} autoCapitalize="sentences" placeholder={(t?.donationstab as any)?.newdonnationdescription || 'Descripción'} placeholderTextColor={DynamicColors.subtext} multiline numberOfLines={4} style={{ backgroundColor: DynamicColors.inputBg, borderRadius: 18, padding: 15, height: 90, marginBottom: 20, color: DynamicColors.text, textAlignVertical: 'top', borderWidth: 1, borderColor: DynamicColors.border, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
 
+                {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+                <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: DynamicColors.border }}>
+                  <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext, lineHeight: 16, textAlign: 'center' }}>
+                    ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                  </ThemedText>
+                </View>
+
                 <TouchableOpacity onPress={handlePublish} disabled={isPublishing || !isFormValid} style={{ alignSelf: 'center' }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : ['#CFD8DC', '#B0BEC5']} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}

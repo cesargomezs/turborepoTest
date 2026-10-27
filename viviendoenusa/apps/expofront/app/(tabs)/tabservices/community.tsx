@@ -1387,6 +1387,13 @@ export default function CommunityScreen() {
                   </View>
                 )}
 
+                {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+                <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: Colors.border }}>
+                  <ThemedText style={{ fontSize: 11, color: Colors.subtext, lineHeight: 16, textAlign: 'center' }}>
+                    ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                  </ThemedText>
+                </View>
+
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
                   <TouchableOpacity onPress={async () => { 
                       let r = await ImagePicker.launchImageLibraryAsync({

@@ -56,6 +56,8 @@ if (Platform.OS !== 'web') {
         getPermissionsAsync: async () => ({ status: 'denied' }),
         requestPermissionsAsync: async () => ({ status: 'denied' }),
         setNotificationHandler: () => {},
+        addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+        addNotificationReceivedListener: () => ({ remove: () => {} }),
       };
     }
   } catch (error) {
@@ -65,6 +67,8 @@ if (Platform.OS !== 'web') {
       getPermissionsAsync: async () => ({ status: 'denied' }),
       requestPermissionsAsync: async () => ({ status: 'denied' }),
       setNotificationHandler: () => {},
+      addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+      addNotificationReceivedListener: () => ({ remove: () => {} }),
     };
   }
 }

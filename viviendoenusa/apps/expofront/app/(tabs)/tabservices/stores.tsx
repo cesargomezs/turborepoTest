@@ -334,6 +334,7 @@ export default function StoresScreen() {
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
   const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
+
   const [companyTariffs, setCompanyTariffs] = useState({
     coupon: '0.00', basic: '50.00', premium: '99.00', unlimited: '149.56' 
   });
@@ -1136,7 +1137,7 @@ export default function StoresScreen() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <View style={{ backgroundColor: 'rgba(255, 95, 109, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-              <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
+              <ThemedText style={{ fontSize: 12, color: '#FF5F6D', fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
             </View>
 
             {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
@@ -1600,10 +1601,17 @@ export default function StoresScreen() {
             <View style={{ backgroundColor: isAndroid ? (isDark ? '#1E1E1E' : '#FFF') : 'transparent', height: isLargeWeb ? 'auto' : height * 0.88, maxHeight: height * 0.9, borderColor: DynamicColors.border, borderWidth: 1, borderRadius: isLargeWeb ? 40 : undefined, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' }}>
               {!isAndroid && <BlurView intensity={130} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
               {!isLargeWeb && <View style={{ width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginVertical: 15, borderRadius: 2 }} />}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 25, marginBottom: 20, marginTop: isLargeWeb ? 25 : 0 }}>
-                <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialCommunityIcons name="close" size={24} color={DynamicColors.text} /></TouchableOpacity>
-                <View style={{ width: 24 }} />
+              
+              {/* 🚀 CABECERA UNIFICADA CON TÍTULO A LA IZQUIERDA Y X A LA DERECHA */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, marginBottom: 15, marginTop: isLargeWeb ? 25 : 0 }}>
+                <ThemedText style={{ fontSize: 20, fontWeight: '900', color: DynamicColors.text }}>
+                  {t.storestab.labelstore || 'Nuevo Negocio'}
+                </ThemedText>
+                <TouchableOpacity onPress={() => setModalVisible(false)} disabled={isPublishing}>
+                  <MaterialCommunityIcons name="close" size={26} color={DynamicColors.text} />
+                </TouchableOpacity>
               </View>
+
               <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
                 <TouchableOpacity onPress={pickImage} style={{ height: 150, borderStyle: 'dashed', borderWidth: 2, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderColor: DynamicColors.border, backgroundColor: DynamicColors.inputBg }}>
                   {formImage ? <Image source={{ uri: formImage }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={{ alignItems: 'center' }}><MaterialCommunityIcons name="camera-plus" size={32} color={DynamicColors.text} /><ThemedText style={{ fontWeight: '800', fontSize: 11, marginTop: 8,color:DynamicColors.subtext }}>{t.storestab?.textphoto || 'FOTO'}</ThemedText></View>}
@@ -1818,6 +1826,13 @@ export default function StoresScreen() {
                     onChangeText={(text) => setFormRefCode(text.toUpperCase())} 
                     autoCapitalize="characters"
                   />
+                </View>
+
+                {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+                <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: DynamicColors.border }}>
+                  <ThemedText style={{ fontSize: 11, color: DynamicColors.subtext, lineHeight: 16, textAlign: 'center' }}>
+                    ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: DynamicColors.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                  </ThemedText>
                 </View>
 
                 <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isAdminMode} style={{ alignSelf: 'center', marginTop: 10 }}>

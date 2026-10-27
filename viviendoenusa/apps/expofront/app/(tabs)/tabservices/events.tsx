@@ -1359,6 +1359,13 @@ export default function EventsScreen() {
                   />
                 </View>
 
+                {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+                <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: Colors.border }}>
+                  <ThemedText style={{ fontSize: 11, color: Colors.subtext, lineHeight: 16, textAlign: 'center' }}>
+                    ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                  </ThemedText>
+                </View>
+
                 <TouchableOpacity onPress={handlePublishEvent} disabled={!isFormValid || isPublishing} style={{ alignSelf: 'center', marginTop: 10 }}>
                   <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                     {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} /><ThemedText style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{editingEventId ? 'Actualizar Evento (A Revisión)' : (t.eventstab?.createEvent || 'Crear')}</ThemedText></>}
@@ -1848,7 +1855,7 @@ export default function EventsScreen() {
                           };
                           
                           const updatedReviews = [newReviewFormatted, ...(selectedReviews.reviews || [])];
-                          const totalStars = updatedReviews.reduce((sum, r) => sum + r.stars, 0);
+                          const totalStars = updatedReviews.reduce((sum: number, r: any) => sum + r.stars, 0);
                           const newAverage = updatedReviews.length > 0 ? (totalStars / updatedReviews.length) : 0;
 
                           const updatedEventObj = {

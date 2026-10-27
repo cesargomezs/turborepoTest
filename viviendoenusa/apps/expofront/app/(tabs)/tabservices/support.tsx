@@ -508,6 +508,13 @@ const SupportFormModal = memo(({
                 />
               </View>
 
+              {/* 🚀 AVISO LEGAL DE RESPONSABILIDAD DE COPYRIGHT (TEXTOS E IMÁGENES) */}
+              <View style={{ marginBottom: 15, padding: 12, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: Colors.border }}>
+                <ThemedText style={{ fontSize: 11, color: Colors.subtext, lineHeight: 16, textAlign: 'center' }}>
+                  ⚠️ Al publicar, declaras que cuentas con los derechos de autor o la autorización expresa sobre las <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>imágenes y textos</ThemedText> ingresados. <ThemedText style={{ fontWeight: 'bold', color: Colors.text }}>Viviendo en USA</ThemedText> no se hace responsable por el uso indebido de material protegido por copyright y se reserva el derecho de eliminar el contenido reportado.
+                </ThemedText>
+              </View>
+
               <TouchableOpacity onPress={handlePublishStore} disabled={!isFormValid || isPublishing} style={{ marginTop: 20, alignSelf: 'center', width: '100%' }}>
                 <LinearGradient colors={isFormValid ? orangeGradient : disabledGradient} style={{ paddingHorizontal: 30, paddingVertical: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
                   {isPublishing ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="content-save-outline" size={20} color="#fff" style={{ marginRight: 10 }} />}
@@ -1201,7 +1208,7 @@ export default function SupportScreen() {
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingVertical: 10 }}
                   >
-                    <MaterialCommunityIcons name="flag-outline" size={16} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
+                    <MaterialCommunityIcons name="flag-outline"  size={16} color={DynamicColors.subtext} style={{ marginRight: 6 }} />
                     <ThemedText style={{ fontSize: 12, color: DynamicColors.subtext, fontWeight: '600' }}>
                       Reportar esta publicación
                     </ThemedText>

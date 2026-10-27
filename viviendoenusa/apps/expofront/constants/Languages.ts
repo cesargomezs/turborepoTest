@@ -150,7 +150,7 @@ export const translations = {
       icon3: "hand-heart",
       service4: "Eventos",
       icon4: "calendar-clock",
-      service5: "Tiendas",
+      service5: "Negocios",
       icon5: "shopping-search",
       service6: "Emprendimientos",
       icon6: "lightbulb-multiple-outline",
@@ -307,7 +307,8 @@ export const translations = {
         categoriesListIcons:['calendar-range', 'account-group', 'heart-pulse', 'school', 'basketball']
     },
     storestab:{
-      label: "Tiendas ",
+      label: "Tiendas",
+      labelstore: "Nuevo Negocio",
       categoryentre: [
         'Todas', 
         'Odontología', 
@@ -647,7 +648,7 @@ export const translations = {
       icon3: "hand-heart",
       service4: "Events",
       icon4: "calendar-clock",
-      service5: "Stores",
+      service5: "Businesses",
       icon5: "shopping-search",
       service6: "Entrepreneurs",
       icon6: "lightbulb-multiple-outline",
@@ -806,6 +807,7 @@ export const translations = {
       },
       storestab:{
         label: "Stores ",
+        labelstore: "New Business",
         categoryentre: [
           'All', 
           'Dentistry', 
