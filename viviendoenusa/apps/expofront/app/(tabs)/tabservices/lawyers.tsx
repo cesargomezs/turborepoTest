@@ -717,6 +717,7 @@ export default function LawyersScreen() {
   const [serviceScope, setServiceScope] = useState<'local' | 'national'>('local');
 
   const [zipCode, setZipCode] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState(''); // 🚀 ESTADO INDEPENDIENTE PARA BÚSQUEDA POR TEXTO EN NACIONAL
   const [selectedArea, setSelectedArea] = useState(PRACTICE_AREAS[0]); 
   const [loading, setLoading] = useState(false);
   
@@ -765,9 +766,17 @@ export default function LawyersScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
-  const applyLocalFilters = useCallback((lawyersList: any[], areaName: string, lat: number, lng: number, adminMode: boolean) => {
+  const applyLocalFilters = useCallback((lawyersList: any[], areaName: string, lat: number, lng: number, adminMode: boolean, keyword: string = '') => {
     let filtered = (areaName === PRACTICE_AREAS[0]) ? [...lawyersList] : lawyersList.filter(l => l.area === areaName);
     
+    if (keyword.trim() !== '') {
+      const lowerKey = keyword.toLowerCase();
+      filtered = filtered.filter(item => 
+        (item.name && item.name.toLowerCase().includes(lowerKey)) || 
+        (item.description && item.description.toLowerCase().includes(lowerKey))
+      );
+    }
+
     filtered = filtered.filter(item => {
       const isOwner = item.userId === currentUserId;
       const isPending = item.status === 'pending';
@@ -1104,9 +1113,10 @@ export default function LawyersScreen() {
     }
   };
 
-  const handleSearch = async (forcedArea?: string, forcedZip?: string, forcedScope?: 'local' | 'national') => {
+  const handleSearch = async (forcedArea?: string, forcedZip?: string, forcedScope?: 'local' | 'national', forcedKeyword?: string) => {
     const targetScope = forcedScope || serviceScope;
     const targetZip = forcedZip || zipCode;
+    const keyword = forcedKeyword !== undefined ? forcedKeyword : searchKeyword;
     
     if (targetScope === 'local' && targetZip.length !== 5) return;
     
@@ -1134,7 +1144,46 @@ export default function LawyersScreen() {
       setShowMarkers(false);
     }
 
-    await fetchLawyersData(targetZip, targetScope);
+    try {
+      setLoading(true);
+      const queryParam = targetScope === 'national' 
+        ? `scope=national&keyword=${encodeURIComponent(keyword.trim())}` 
+        : `zip=${targetZip.trim()}&keyword=${encodeURIComponent(keyword.trim())}`;
+      
+      const res = await fetch(`${API_BASE_URL}?${queryParam}&userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      if (res.status === 401) { router.replace('/'); return; }
+
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.image || item.imageUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
+          const freshImage = await refreshSupabaseUrl(rawImage, 'lawyers');
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
+
+          return {
+            id: item.id, name: item.nameLawy || 'Sin nombre', description: item.description || '', address: item.address || '', area: item.area || 'General', zip: item.zip, image: freshImage,
+            lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.totalRating) || 0, reviews: item.reviews || [], totalReviews: item.totalReviews || 0,
+            status: isAppr ? 'approved' : 'pending', referenceCode: item.referenceCode, paymentMethod: item.paymentMethod, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd, premiumPlan: item.premiumPlan, googleReviewLink: item.googleReviewLink
+          };
+        }));
+
+        const approvedOrOwned = mappedData.filter(s => s.status === 'approved' || (s.status === 'pending' && s.userId === currentUserId));
+        setAllLawyers(approvedOrOwned);
+        setLocalData(approvedOrOwned);
+        
+        const latFilter = userLocation ? userLocation.latitude : 34.0934;
+        const lngFilter = userLocation ? userLocation.longitude : -117.5847;
+        setResults(applyLocalFilters(approvedOrOwned, selectedArea, latFilter, lngFilter, isAdminMode, keyword));
+      }
+    } catch (e) {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+    
     setMapKey(k => k + 1);
   };
 
@@ -1182,7 +1231,7 @@ export default function LawyersScreen() {
   const handleCategorySelect = (areaName: string) => {
     setSelectedArea(areaName);
     if ((serviceScope === 'local' && zipCode.length === 5) || serviceScope === 'national') {
-      handleSearch(areaName, zipCode, serviceScope); 
+      handleSearch(areaName, zipCode, serviceScope, searchKeyword); 
     }
   };
 
@@ -1277,10 +1326,10 @@ export default function LawyersScreen() {
     if (!isFilteredByMap) {
       const lat = userLocation ? userLocation.latitude : 34.0934;
       const lng = userLocation ? userLocation.longitude : -117.5847;
-      const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng, isAdminMode);
+      const filtered = applyLocalFilters(allLawyers, selectedArea, lat, lng, isAdminMode, searchKeyword);
       setResults(filtered);
     }
-  }, [allLawyers, selectedArea, userLocation, isFilteredByMap, applyLocalFilters, isAdminMode]);
+  }, [allLawyers, selectedArea, userLocation, isFilteredByMap, applyLocalFilters, isAdminMode, searchKeyword]);
 
   useEffect(() => {
     Animated.loop(
@@ -2012,27 +2061,24 @@ export default function LawyersScreen() {
         </View>
       </Modal>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View style={[stylesUnified.centerContainer, { marginTop: verticalOffset }]}>
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: Colors.border }}>
             {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
-            
             <View style={stylesUnified.cardContent}>
               
-              {/* 🚀 1. TOGGLE DE LOCAL / NACIONAL ARRIBA DE TODO */}
-              <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 3, marginBottom: 15, marginHorizontal: 4, height: 38 }}>
+              {/* 🚀 1. TOGGLE DE LOCAL / NACIONAL ARRIBA */}
+              <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 3, marginBottom: 15, height: 38 }}>
                 <TouchableOpacity 
                   onPress={() => { 
                     setServiceScope('local'); 
-                    if(zipCode.length === 5) {
-                      handleSearch(selectedArea, zipCode, 'local'); 
-                    } else {
-                      setAllLawyers([]);
-                      setLocalData([]);
-                      setResults([]); 
-                      setShowMarkers(false); 
-                      setIsFilteredByMap(false);
-                    }
+                    setZipCode(''); 
+                    setSearchKeyword('');
+                    setAllLawyers([]);
+                    setLocalData([]);
+                    setResults([]); 
+                    setShowMarkers(false); 
+                    setIsFilteredByMap(false);
                   }} 
                   style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'local' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
                   <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'local' ? Colors.text : Colors.subtext }}>📍 Local</ThemedText>
@@ -2040,43 +2086,47 @@ export default function LawyersScreen() {
                 <TouchableOpacity 
                   onPress={() => { 
                     setServiceScope('national'); 
-                    handleSearch(selectedArea, '', 'national'); 
+                    setZipCode(''); 
+                    setSearchKeyword('');
+                    handleSearch(selectedArea, '', 'national', ''); 
                   }} 
                   style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'national' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
                   <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'national' ? Colors.accent : Colors.subtext }}>🌐 Nacional</ThemedText>
                 </TouchableOpacity>
               </View>
 
-              {/* 🚀 2. HEADER CON BUSCADOR ADAPTATIVO (TEXTO LIBRE EN NACIONAL) Y SIN REFRESH */}
-              <View style={[stylesUnified.headerRow, { marginBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }]}>
-                <TouchableOpacity onPress={() => router.push('/services')} style={{ paddingRight: 4 }}>
-                  <MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} />
-                </TouchableOpacity>
-
+              {/* 🚀 2. HEADER CON BUSCADOR DINÁMICO (UNIFICADO PARA PREVENIR BLOQUEO) */}
+              <View style={[stylesUnified.headerRow, { marginBottom: 15, alignItems: 'center', flexDirection: 'row', gap: 12 }]}>
+                <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
+                
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
-                  {serviceScope === 'local' ? (
-                    <TextInput 
-                      style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                      placeholder={(t.lawyerstab as any)?.messagezip || "Código postal..."} 
-                      keyboardType="numeric" maxLength={5} value={zipCode} 
-                      onChangeText={handleZipChange} onSubmitEditing={() => { if(zipCode.length === 5) handleSearch(selectedArea, zipCode, 'local'); }} 
-                      placeholderTextColor={Colors.subtext} 
-                    />
-                  ) : (
-                    <TextInput 
-                      style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                      placeholder="Buscar por nombre o servicio..." 
-                      value={zipCode} 
-                      onChangeText={setZipCode} 
-                      onSubmitEditing={() => handleSearch(selectedArea, '', 'national')} 
-                      placeholderTextColor={Colors.subtext} 
-                    />
-                  )}
+                  <TextInput 
+                    style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: Colors.text, backgroundColor: Colors.inputBg, borderColor: Colors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                    placeholder={serviceScope === 'local' ? ((t.lawyerstab as any)?.messagezip || "Código postal...") : "Buscar por nombre o servicio..."} 
+                    keyboardType={serviceScope === 'local' ? "numeric" : "default"}
+                    maxLength={serviceScope === 'local' ? 5 : 50} 
+                    value={serviceScope === 'local' ? zipCode : searchKeyword} 
+                    onChangeText={(text) => {
+                      if (serviceScope === 'local') {
+                        handleZipChange(text);
+                      } else {
+                        setSearchKeyword(text);
+                      }
+                    }} 
+                    onSubmitEditing={() => { 
+                      if (serviceScope === 'local') {
+                        if (zipCode.length === 5) handleSearch(selectedArea, zipCode, 'local'); 
+                      } else {
+                        handleSearch(selectedArea, '', 'national', searchKeyword);
+                      }
+                    }} 
+                    placeholderTextColor={Colors.subtext} 
+                  />
                   
                   <TouchableOpacity 
                     onPress={() => {
                       if (serviceScope === 'national') {
-                        handleSearch(selectedArea, '', 'national');
+                        handleSearch(selectedArea, '', 'national', searchKeyword);
                       } else if (zipCode.length === 5) {
                         handleSearch(selectedArea, zipCode, 'local');
                       }
@@ -2090,24 +2140,21 @@ export default function LawyersScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 SOLO QUEDA EL BOTÓN DE ADMIN (BALANZA) */}
+                {/* 🚀 REFRESH ACTIVO SOLO EN LOCAL + BALANZA ADMIN */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <TouchableOpacity onPress={() => { 
-                      if(isAdmin) {
-                        const nextMode = !isAdminMode;
-                        setIsAdminMode(nextMode);
-                        if(nextMode) {
-                          fetchAllPendingLawyers(); 
-                        }
-                      }
-                  }}>
-                    <MaterialCommunityIcons name="scale-balance" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2, marginLeft: 5}} />
+                  {serviceScope === 'local' && (
+                    <TouchableOpacity onPress={() => { setResults([]); setAllLawyers([]); setLocalData([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
+                        <MaterialCommunityIcons name="refresh" size={24} color={Colors.text} style={{opacity: 0.7}} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={() => { if(isAdmin) { const nextMode = !isAdminMode; setIsAdminMode(nextMode); if(nextMode) fetchAllPendingLawyers(); } }}>
+                    <MaterialCommunityIcons name="scale-balance" size={40} color={isAdminMode ? '#FF5F6D' : Colors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
                   </TouchableOpacity>
                 </View>
               </View>
 
               {!isLargeWeb ? (
-                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
+                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   
                   {isAdminMode && (
                     <View style={{ marginBottom: 20 }}>

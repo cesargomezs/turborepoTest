@@ -152,15 +152,16 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (REGLA ESTRICTA: NACIONAL = REMOTO O UNLIMITED)
+// 🔍 1. CONSULTA GENERAL (REGLA ESTRICTA DE PLANES Y REMOTOS)
 // =====================================================================
-export const getLawyers = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
+export const getLawyers = async (rawZip?: string | number, currentUserId?: string, scope?: string, keyword?: string) => {
   try {
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
     const cleanScope = sanitizeText(scope) || 'local';
+    const cleanKeyword = keyword && String(keyword) !== 'undefined' ? sanitizeText(String(keyword)) : null;
 
     let baseConditions = cleanUserId 
       ? sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${cleanUserId})`
@@ -168,9 +169,9 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 
     let finalConditions: any = baseConditions;
 
-    // 🚀 LÓGICA DE NEGOCIO ESTRICTA CORREGIDA:
+    // 🚀 LÓGICA DE NEGOCIO ESTRICTA CORREGIDA PARA AMBAS VISTAS:
     if (cleanScope === 'national') {
-      // Nacional: SOLO remotos (isRemote = true) O plan Unlimited. (Los Premium operan desde su oficina local).
+      // Nacional: SOLO remotos (isRemote = true) O plan Unlimited. 
       finalConditions = and(
         baseConditions,
         or(
@@ -183,12 +184,13 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
-        // Local con ZIP: Coincidencia por radio (oficinas de Basic y Premium) + Unlimited
+        // Local con ZIP: Coincidencia por radio físico + Unlimited + REMOTOS (para que se vean en ambas)
         finalConditions = and(
           baseConditions, 
           or(
             inArray(lawyers.zip, nearbyZips as string[]),
-            sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
+            sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`,
+            eq(lawyers.isRemote, true) // 🔥 ESTO SOLUCIONA EL BUG QUE REPORTASTE
           )
         );
       } else {
@@ -196,7 +198,8 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
           baseConditions, 
           or(
             eq(lawyers.zip, cleanZipParam),
-            sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
+            sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`,
+            eq(lawyers.isRemote, true) // 🔥 ESTO SOLUCIONA EL BUG QUE REPORTASTE
           )
         );
       }
@@ -217,6 +220,18 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       } else {
         return [];
       }
+    }
+
+    // 🚀 APLICAR FILTRO DE PALABRA CLAVE (KEYWORD) SI EXISTE EN LA BÚSQUEDA
+    if (cleanKeyword && cleanKeyword !== '') {
+      finalConditions = and(
+        finalConditions,
+        or(
+          sql`${lawyers.nameLawy} ILIKE ${`%${cleanKeyword}%`}`,
+          sql`${lawyers.description} ILIKE ${`%${cleanKeyword}%`}`,
+          sql`${lawyers.area} ILIKE ${`%${cleanKeyword}%`}`
+        )
+      );
     }
 
     let query = db
@@ -242,9 +257,8 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         sql`CASE 
               WHEN ${lawyers.userId} = ${cleanUserId} THEN 0 
               WHEN LOWER(${lawyers.premiumPlan}) = 'unlimited' THEN 1
-              WHEN LOWER(${lawyers.premiumPlan}) = 'premium' THEN 2
-              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
-              ELSE 4 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+              ELSE 3 
             END`,
         desc(lawyers.createdAt)
       );
@@ -252,9 +266,8 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       query = query.orderBy(
         sql`CASE 
               WHEN LOWER(${lawyers.premiumPlan}) = 'unlimited' THEN 0
-              WHEN LOWER(${lawyers.premiumPlan}) = 'premium' THEN 1
-              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-              ELSE 3 
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
             END`,
         desc(lawyers.createdAt)
       );
@@ -509,6 +522,7 @@ export const createLawyer = async (data: any) => {
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
       const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true' || isUnlimited);
+
       let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
       if (isCoupon) {

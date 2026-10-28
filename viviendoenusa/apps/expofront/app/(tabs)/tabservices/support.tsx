@@ -114,7 +114,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   return (
     <View style={{ flex: 1, paddingVertical: 10 }}>
       <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" /><ThemedText style={{ color: '#FFF6D', fontWeight: '600' }}>Volver</ThemedText>
+        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" /><ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>Volver</ThemedText>
       </TouchableOpacity>
       <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>Tu Experiencia</ThemedText>
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
@@ -598,6 +598,7 @@ export default function SupportScreen() {
   
   const [serviceScope, setServiceScope] = useState<'local' | 'national'>('local');
   const [zipCode, setZipCode] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState(''); // 🚀 ESTADO INDEPENDIENTE PARA BUSCAR POR TEXTO EN REMOTO
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [loading, setLoading] = useState(false);
   const [allStores, setAllStores] = useState<any[]>([]);
@@ -681,9 +682,18 @@ export default function SupportScreen() {
     loadZelleQr();
   }, []);
 
-  const applyLocalFilters = useCallback((supportList: any[], categoryIdx: number, lat: number, lng: number, adminMode: boolean) => {
+  const applyLocalFilters = useCallback((supportList: any[], categoryIdx: number, lat: number, lng: number, adminMode: boolean, keyword: string = '') => {
     let filtered = (categoryIdx === 0) ? [...supportList] : supportList.filter(l => Number(l.categoryId) === categoryIdx);
     
+    // 🚀 FILTRO POR PALABRA CLAVE
+    if (keyword.trim() !== '') {
+      const lowerKey = keyword.toLowerCase();
+      filtered = filtered.filter(item => 
+        (item.name && item.name.toLowerCase().includes(lowerKey)) || 
+        (item.description && item.description.toLowerCase().includes(lowerKey))
+      );
+    }
+
     filtered = filtered.filter(item => {
       const isOwner = item.userId === currentUserId;
       const isPending = item.status === 'pending';
@@ -856,9 +866,10 @@ export default function SupportScreen() {
     return () => subscription.remove();
   }, [isFocused, zipCode, serviceScope]);
 
-  const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string, forcedScope?: 'local' | 'national') => {
+  const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string, forcedScope?: 'local' | 'national', forcedKeyword?: string) => {
     const targetScope = forcedScope || serviceScope;
     const targetZip = forcedZip || zipCode;
+    const keyword = forcedKeyword !== undefined ? forcedKeyword : searchKeyword;
     
     if (targetScope === 'local' && targetZip.length !== 5) return;
     
@@ -875,11 +886,45 @@ export default function SupportScreen() {
       setShowMarkers(false);
     }
 
-    const approvedSupport = await fetchSupportData(targetZip, targetScope);
+    try {
+      setLoading(true);
+      const queryParam = targetScope === 'national' 
+        ? `scope=national&keyword=${encodeURIComponent(keyword.trim())}` 
+        : `zip=${targetZip.trim()}&keyword=${encodeURIComponent(keyword.trim())}`;
+
+      const res = await fetch(`${API_STORES_URL}?${queryParam}&userId=${currentUserId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' }
+      });
+      if (res.status === 401) { router.replace('/'); return; }
+
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const mappedData = await Promise.all(data.map(async (item: any) => {
+          const rawImage = item.imageSupp || item.image || item.imageUrl;
+          const freshImage = rawImage ? await refreshSupabaseUrl(rawImage, 'support') : 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800';
+          const isAppr = String(item.approved) === 'true' || item.approved === 1 || item.approved === true;
+
+          return {
+            id: item.id, name: item.nameSupp || 'Sin nombre', description: item.descriptionSupp || '', address: item.addressSupp || '', categoryId: item.categoryId || 0, zip: item.zip, image: freshImage,
+            lat: Number(item.lat) || 34.0934, lng: Number(item.lng) || -117.5847, phone: item.phone || '', rating: Number(item.rating) || 0, reviews: item.reviews || [], totalReviews: item.totalReviews || 0,
+            status: isAppr ? 'approved' : 'pending', premiumPlan: item.premiumPlan, couponCode: item.couponCode, referenceCode: item.referenceCode, paymentMethod: item.paymentMethod,
+            googleReviewLink: item.googleReviewLink || item.googleUrl, userId: item.userId || item.user_id, timepostEnd: item.timepostEnd
+          };
+        }));
+
+        const approvedOrOwned = mappedData.filter(s => s.status === 'approved' || (s.status === 'pending' && s.userId === currentUserId));
+        setAllStores(approvedOrOwned);
+        const latFilter = userLocation ? userLocation.latitude : 34.0934;
+        const lngFilter = userLocation ? userLocation.longitude : -117.5847;
+        setResults(applyLocalFilters(approvedOrOwned, categoryToSearch, latFilter, lngFilter, isAdminMode, keyword)); 
+      }
+    } catch (e) {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
     
-    const latFilter = userLocation ? userLocation.latitude : 34.0934;
-    const lngFilter = userLocation ? userLocation.longitude : -117.5847;
-    setResults(applyLocalFilters(approvedSupport, categoryToSearch, latFilter, lngFilter, isAdminMode)); 
     setMapKey(k => k + 1);
   };
 
@@ -930,7 +975,7 @@ export default function SupportScreen() {
     if ((serviceScope === 'local' && zipCode.length === 5) || serviceScope === 'national') { 
       const lat = userLocation ? userLocation.latitude : 34.0934; 
       const lng = userLocation ? userLocation.longitude : -117.5847; 
-      setResults(applyLocalFilters(allStores, index, lat, lng, isAdminMode)); 
+      setResults(applyLocalFilters(allStores, index, lat, lng, isAdminMode, searchKeyword)); 
     } 
   };
 
@@ -997,7 +1042,7 @@ export default function SupportScreen() {
       if (!response.ok) throw new Error(t.genericlabel.labelerrorserver);
       const updatedStoreFromServer = await response.json(); const futureDate = new Date(); futureDate.setMonth(futureDate.getMonth() + durationMonths);
       const approvedStore = { ...store, ...updatedStoreFromServer, status: 'approved', timepostEnd: updatedStoreFromServer.timepostEnd || updatedStoreFromServer.timepost_end || futureDate.toISOString() };
-      if (store.zip === zipCode) { const newAllStores = [approvedStore, ...allStores]; setAllStores(newAllStores); if (showMarkers || isZipValid) { const lat = userLocation ? userLocation.latitude : 34.0934; const lng = userLocation ? userLocation.longitude : -117.5847; setResults(applyLocalFilters(newAllStores, selectedCategoryIdx, lat, lng, isAdminMode)); } setMapKey(k => k + 1); }
+      if (store.zip === zipCode) { const newAllStores = [approvedStore, ...allStores]; setAllStores(newAllStores); if (showMarkers || isZipValid) { const lat = userLocation ? userLocation.latitude : 34.0934; const lng = userLocation ? userLocation.longitude : -117.5847; setResults(applyLocalFilters(newAllStores, selectedCategoryIdx, lat, lng, isAdminMode, searchKeyword)); } setMapKey(k => k + 1); }
       setPendingStores(pendingStores.filter(s => s.id !== store.id)); Alert.alert(t.genericlabel.labelaprov, t.genericlabel.labelmessajeaprov +` ${durationMonths} `+t.genericlabel.labelmonth);
     } catch (error) { Alert.alert("Error", t.genericlabel.labelaproval); }
   };
@@ -1023,9 +1068,9 @@ export default function SupportScreen() {
   useEffect(() => {
     const lat = userLocation ? userLocation.latitude : 34.0934;
     const lng = userLocation ? userLocation.longitude : -117.5847;
-    const filtered = applyLocalFilters(allStores, selectedCategoryIdx, lat, lng, isAdminMode);
+    const filtered = applyLocalFilters(allStores, selectedCategoryIdx, lat, lng, isAdminMode, searchKeyword);
     setResults(filtered);
-  }, [allStores, selectedCategoryIdx, userLocation, isAdminMode, applyLocalFilters]);
+  }, [allStores, selectedCategoryIdx, userLocation, isAdminMode, applyLocalFilters, searchKeyword]);
 
   const SupportCard = ({ store, renderAdminControls }: { store: any, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
@@ -1493,7 +1538,8 @@ export default function SupportScreen() {
                 <TouchableOpacity 
                   onPress={() => { 
                     setServiceScope('local'); 
-                    setZipCode(''); // Limpia el estado al cambiar
+                    setZipCode(''); 
+                    setSearchKeyword('');
                     setAllStores([]);
                     setResults([]);
                     setShowMarkers(false);
@@ -1506,41 +1552,46 @@ export default function SupportScreen() {
                   onPress={() => { 
                     setServiceScope('national'); 
                     setZipCode(''); 
-                    handleSearch(selectedCategoryIdx, '', 'national'); 
+                    setSearchKeyword('');
+                    handleSearch(selectedCategoryIdx, '', 'national', ''); 
                   }} 
                   style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'national' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
                   <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'national' ? DynamicColors.accent : DynamicColors.subtext }}>🌐 Nacional</ThemedText>
                 </TouchableOpacity>
               </View>
 
-              {/* 🚀 2. HEADER CON BUSCADOR Y REFRESH CONDICIONAL (SOLO EN LOCAL) */}
+              {/* 🚀 2. HEADER CON BUSCADOR DINÁMICO UNIFICADO */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, alignItems: 'center', flexDirection: 'row', gap: 12 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} /></TouchableOpacity>
                 
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
-                  {serviceScope === 'local' ? (
-                    <TextInput 
-                      style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                      placeholder={t.genericlabel.labelcodepostal} 
-                      keyboardType="numeric" maxLength={5} value={zipCode} 
-                      onChangeText={handleZipChange} onSubmitEditing={() => { if(zipCode.length === 5) handleSearch(selectedCategoryIdx, zipCode, 'local'); }} 
-                      placeholderTextColor={DynamicColors.subtext} 
-                    />
-                  ) : (
-                    <TextInput 
-                      style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
-                      placeholder="Buscar por nombre o servicio..." 
-                      value={zipCode} 
-                      onChangeText={setZipCode} 
-                      onSubmitEditing={() => handleSearch(selectedCategoryIdx, '', 'national')} 
-                      placeholderTextColor={DynamicColors.subtext} 
-                    />
-                  )}
+                  <TextInput 
+                    style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                    placeholder={serviceScope === 'local' ? t.genericlabel.labelcodepostal : "Buscar por nombre o servicio..."} 
+                    keyboardType={serviceScope === 'local' ? "numeric" : "default"}
+                    maxLength={serviceScope === 'local' ? 5 : 50} 
+                    value={serviceScope === 'local' ? zipCode : searchKeyword} 
+                    onChangeText={(text) => {
+                      if (serviceScope === 'local') {
+                        handleZipChange(text);
+                      } else {
+                        setSearchKeyword(text);
+                      }
+                    }} 
+                    onSubmitEditing={() => { 
+                      if (serviceScope === 'local') {
+                        if (zipCode.length === 5) handleSearch(selectedCategoryIdx, zipCode, 'local'); 
+                      } else {
+                        handleSearch(selectedCategoryIdx, '', 'national', searchKeyword);
+                      }
+                    }} 
+                    placeholderTextColor={DynamicColors.subtext} 
+                  />
                   
                   <TouchableOpacity 
                     onPress={() => {
                       if (serviceScope === 'national') {
-                        handleSearch(selectedCategoryIdx, '', 'national');
+                        handleSearch(selectedCategoryIdx, '', 'national', searchKeyword);
                       } else if (zipCode.length === 5) {
                         handleSearch(selectedCategoryIdx, zipCode, 'local');
                       }
@@ -1554,7 +1605,7 @@ export default function SupportScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 BOTÓN REFRESH RECUPERADO EXCLUSIVAMENTE PARA MODO LOCAL + BALANZA DE ADMIN */}
+                {/* 🚀 REFRESH ACTIVO SOLO EN LOCAL + BALANZA ADMIN */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   {serviceScope === 'local' && (
                     <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>

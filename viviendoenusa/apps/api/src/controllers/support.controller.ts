@@ -155,19 +155,86 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (REGLA ESTRICTA: NACIONAL = REMOTO O UNLIMITED)
+// 🔍 1. CONSULTA GENERAL (CON FILTRO DE TEXTO Y REGLA NACIONAL ESTRICTA)
 // =====================================================================
-export const getSupports = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
+export const getSupports = async (rawZip?: string | number, currentUserId?: string, scope?: string, keyword?: string) => {
   try {
-    const zip = rawZip && String(rawZip) !== 'undefined' ? sanitizeText(String(rawZip)) || '' : '';
+    const cleanZipParam = rawZip && String(rawZip) !== 'undefined' ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
     const cleanScope = sanitizeText(scope) || 'local';
+    const cleanKeyword = keyword && String(keyword) !== 'undefined' ? sanitizeText(String(keyword)) : null;
 
-    const visibilityCondition = cleanUserId 
+    let baseConditions = cleanUserId 
       ? sql`(${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${cleanUserId})`
       : sql`(${support.approved} = true OR ${support.timepostEnd} > NOW())`;
+
+    let finalConditions: any = baseConditions;
+
+    // 🚀 LÓGICA DE ALCANCE (NACIONAL VS LOCAL)
+    if (cleanScope === 'national') {
+      // Nacional: SOLO los que son remotos (isRemote = true) o tienen plan Unlimited.
+      finalConditions = and(
+        baseConditions,
+        or(
+          eq(support.isRemote, true),
+          sql`LOWER(${support.premiumPlan}) = 'unlimited'`
+        )
+      );
+    } 
+    else if (cleanZipParam && cleanZipParam.length === 5 && cleanZipParam !== '00000') {
+      const { lat, lng } = await getCoordsFromZip(cleanZipParam); 
+      const radiusMilesForSearch = 4; 
+
+      const distanceFormula = sql`(
+        3959 * acos(
+          LEAST(1.0, GREATEST(-1.0,
+            cos(radians(${lat}::numeric)) * cos(radians(${support.lat}::numeric)) * cos(radians(${support.lng}::numeric) - radians(${lng}::numeric)) + 
+            sin(radians(${lat}::numeric)) * sin(radians(${support.lat}::numeric))
+          ))
+        )
+      )`;
+
+      // En Local: Coincidencia por radio físico + Unlimited + REMOTOS (para que se vean en ambas vistas sin importar el plan)
+      finalConditions = and(
+        baseConditions,
+        or(
+          sql`${distanceFormula} <= ${radiusMilesForSearch}`,
+          sql`LOWER(${support.premiumPlan}) = 'unlimited'`,
+          eq(support.isRemote, true) // 🔥 ESTO SOLUCIONA EL BUG PARA REMOTOS EN CUALQUIER PLAN
+        )
+      );
+    } 
+    else {
+      let isAdmin = false;
+      if (cleanUserId) {
+        const userCheck = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId)).limit(1);
+        if (userCheck && userCheck.length > 0) {
+          const role = userCheck[0].typeDetail;
+          if (role === 'SAdmin' || role === 'admin') isAdmin = true;
+        }
+      }
+
+      if (isAdmin) {
+        finalConditions = baseConditions;
+      } else if (cleanUserId) {
+        finalConditions = and(baseConditions, eq(support.userId, cleanUserId));
+      } else {
+        return [];
+      }
+    }
+
+    // 🚀 APLICAR FILTRO DE PALABRA CLAVE (KEYWORD) SI EXISTE
+    if (cleanKeyword && cleanKeyword !== '') {
+      finalConditions = and(
+        finalConditions,
+        or(
+          sql`${support.nameSupp} ILIKE ${`%${cleanKeyword}%`}`,
+          sql`${support.descriptionSupp} ILIKE ${`%${cleanKeyword}%`}`
+        )
+      );
+    }
 
     let query = db
     .select({
@@ -184,46 +251,12 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
     .leftJoin(payments, and(eq(payments.entityId, support.id), eq(payments.entityType, 'support')))
     .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
+    .where(finalConditions)
     .$dynamic();
 
-    // 🚀 LÓGICA DE NEGOCIO CORREGIDA:
-    if (cleanScope === 'national') {
-      // Nacional: SOLO los que son remotos (isRemote = true) o tienen plan Unlimited. (Los premium operan desde su oficina local).
-      query = query.where(
-        and(
-          visibilityCondition,
-          or(
-            eq(support.isRemote, true),
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
-          )
-        )
-      );
-
-      if (cleanUserId) {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN ${support.userId} = ${cleanUserId} THEN 0 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
-              END`,
-          desc(support.createdAt)
-        );
-      } else {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-                ELSE 2 
-              END`,
-          desc(support.createdAt)
-        );
-      }
-    } 
-    else if (zip && zip.length === 5 && zip !== '00000') {
-      const { lat, lng } = await getCoordsFromZip(zip); 
-      const radiusMilesForSearch = 4; 
-
+    // 🚀 ORDENAMIENTO (APLICANDO DISTANCIA SI ES LOCAL Y HAY ZIP)
+    if (cleanScope !== 'national' && cleanZipParam && cleanZipParam.length === 5 && cleanZipParam !== '00000') {
+      const { lat, lng } = await getCoordsFromZip(cleanZipParam);
       const distanceFormula = sql`(
         3959 * acos(
           LEAST(1.0, GREATEST(-1.0,
@@ -232,17 +265,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           ))
         )
       )`;
-
-      // En Local: Coincidencia por radio físico (para oficinas locales de Basic y Premium) + Unlimited
-      query = query.where(
-        and(
-          visibilityCondition,
-          or(
-            sql`${distanceFormula} <= ${radiusMilesForSearch}`,
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
-          )
-        )
-      );
       
       if (cleanUserId) {
         query = query.orderBy(
@@ -264,25 +286,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           distanceFormula
         );
       }
-    } 
-    else {
-      let isAdmin = false;
-      if (cleanUserId) {
-        const userCheck = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId)).limit(1);
-        if (userCheck && userCheck.length > 0) {
-          const role = userCheck[0].typeDetail;
-          if (role === 'SAdmin' || role === 'admin') isAdmin = true;
-        }
-      }
-
-      if (isAdmin) {
-        query = query.where(visibilityCondition);
-      } else if (cleanUserId) {
-        query = query.where(and(visibilityCondition, eq(support.userId, cleanUserId)));
-      } else {
-        return [];
-      }
-      
+    } else {
       if (cleanUserId) {
         query = query.orderBy(
           sql`CASE 
@@ -510,6 +514,7 @@ export const createSupport = async (data: any) => {
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
+    // 🚀 LÓGICA DE NEGOCIO: Si el plan es Unlimited, se activa modo Remoto (Nacional) por defecto.
     const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true' || isUnlimited);
 
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
@@ -657,8 +662,22 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
         }
       }
 
+      if (data && data.premiumPlan !== undefined) {
+        updatePayload.premiumPlan = sanitizeText(data.premiumPlan);
+      }
+      
+      const currentPlan = data?.premiumPlan || existingSupport.premiumPlan || 'basic';
+      const isUnlimited = String(currentPlan).toLowerCase() === 'unlimited';
+
+      let isNat = existingSupport.isRemote === true;
       if (data && data.isRemote !== undefined) {
-        const isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+        isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+      }
+      
+      // 🚀 Fuerza la bandera isRemote si el plan es Unlimited
+      isNat = isNat || isUnlimited;
+
+      if ((data && data.isRemote !== undefined) || isUnlimited) {
         updatePayload.isRemote = isNat;
         if (isNat) {
           updatePayload.addressSupp = 'Atención a Nivel Nacional (Remoto)';
