@@ -157,12 +157,13 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 // =====================================================================
 // 🔍 1. CONSULTA GENERAL (EL BACKEND RETORNA TODO, EL FRONTEND FILTRA)
 // =====================================================================
-export const getSupports = async (rawZip?: string | number, currentUserId?: string) => {
+export const getSupports = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
     const zip = rawZip && String(rawZip) !== 'undefined' ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
+    const cleanScope = sanitizeText(scope) || 'local';
 
     // 🚀 EL BACKEND SOLO RETORNA LA INFORMACIÓN (ACTIVOS Y PENDIENTES)
     const visibilityCondition = cleanUserId 
@@ -186,7 +187,36 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .$dynamic();
 
-    if (zip && zip.length === 5) {
+    // 🚀 LÓGICA SCOPE (NACIONAL VS LOCAL)
+    if (cleanScope === 'national') {
+      // Ignora el ZIP, filtra solo por los remotos y visibles
+      query = query.where(
+        and(
+          visibilityCondition,
+          eq(support.isRemote, true)
+        )
+      );
+
+      if (cleanUserId) {
+        query = query.orderBy(
+          sql`CASE 
+                WHEN ${support.userId} = ${cleanUserId} THEN 0 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+                ELSE 2 
+              END`,
+          desc(support.createdAt)
+        );
+      } else {
+        query = query.orderBy(
+          sql`CASE 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 
+                ELSE 1 
+              END`,
+          desc(support.createdAt)
+        );
+      }
+    } 
+    else if (zip && zip.length === 5 && zip !== '00000') {
       const { lat, lng } = await getCoordsFromZip(zip); 
       const radiusMilesForSearch = 4; 
 
@@ -202,7 +232,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       query = query.where(
         and(
           sql`${distanceFormula} <= ${radiusMilesForSearch}`,
-          visibilityCondition 
+          visibilityCondition,
+          eq(support.isRemote, false) // 🚀 EXCLUIMOS NACIONALES DEL MAPA LOCAL
         )
       );
       
@@ -224,8 +255,15 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
               END`
         );
       }
-    } else {
-      query = query.where(visibilityCondition);
+    } 
+    else {
+      // Fallback si no mandan ni ZIP ni national (caso base o error)
+      query = query.where(
+        and(
+          visibilityCondition,
+          eq(support.isRemote, false)
+        )
+      );
       
       if (cleanUserId) {
         query = query.orderBy(
@@ -450,6 +488,9 @@ export const createSupport = async (data: any) => {
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
+    // 🚀 CAPTURAR SI ES REMOTO DESDE EL FRONTEND
+    const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
     const createdSupportResult = await db.transaction(async (tx) => {
@@ -470,8 +511,8 @@ export const createSupport = async (data: any) => {
       const supportPayload: any = {
         nameSupp: sanitizeText(data.nameSupp || data.name) || 'Sin nombre',
         categoryId: sanitizeText(data.categoryId) || '0',
-        addressSupp: sanitizeText(data.addressSupp || data.address) || '',
-        zip: sanitizeText(data.zip) || null,
+        addressSupp: isNational ? 'Atención a Nivel Nacional (Remoto)' : (sanitizeText(data.addressSupp || data.address) || ''),
+        zip: isNational ? '00000' : (sanitizeText(data.zip) || null),
         phone: sanitizeText(data.phone) || '',
         imageSupp: cleanImage,
         descriptionSupp: safeDesc,
@@ -483,6 +524,7 @@ export const createSupport = async (data: any) => {
         estate: data.estate,
         approved: false, 
         googleReviewLink: safeGoogleLink, 
+        isRemote: isNational // 🚀 SE GUARDA EN LA BASE DE DATOS
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
@@ -594,6 +636,16 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
         }
       }
 
+      // 🚀 Aceptamos actualización de status isRemote
+      if (data && data.isRemote !== undefined) {
+        const isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+        updatePayload.isRemote = isNat;
+        if (isNat) {
+          updatePayload.addressSupp = 'Atención a Nivel Nacional (Remoto)';
+          updatePayload.zip = '00000';
+        }
+      }
+
       if (data && data.googleReviewLink !== undefined) {
         if (data.googleReviewLink.trim() === '') {
           updatePayload.googleReviewLink = null;
@@ -658,31 +710,35 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
       const supportItem = updated[0];
 
       if (isApproved && !wasApprovedBefore && supportItem) {
-        console.log("✅ [DEBUG PUSH APOYO] Apoyo verificado manualmente. Calculando usuarios en zona...");
-        const titleText = "¡Nuevo Apoyo en tu área! 🤝";
-        const bodyText = `El contacto de apoyo ${supportItem.nameSupp} ahora es parte de la red. ¡Visita su perfil!`;
+        const isRemoteNow = supportItem.isRemote === true;
 
-        let usersToNotify: { id: string }[] = [];
+        if (!isRemoteNow) {
+          console.log("✅ [DEBUG PUSH APOYO] Apoyo verificado manualmente. Calculando usuarios en zona...");
+          const titleText = "¡Nuevo Apoyo en tu área! 🤝";
+          const bodyText = `El contacto de apoyo ${supportItem.nameSupp} ahora es parte de la red. ¡Visita su perfil!`;
 
-        if (supportItem.zip) {
-          const nearbyZips = zipcodes.radius(supportItem.zip as any, Number(radiusMiles)); 
-          if (nearbyZips && nearbyZips.length > 0) {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
-          } else {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(supportItem.zip)));
+          let usersToNotify: { id: string }[] = [];
+
+          if (supportItem.zip && supportItem.zip !== '00000') {
+            const nearbyZips = zipcodes.radius(supportItem.zip as any, Number(radiusMiles)); 
+            if (nearbyZips && nearbyZips.length > 0) {
+              usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
+            } else {
+              usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(supportItem.zip)));
+            }
           }
-        }
 
-        if (usersToNotify.length > 0) {
-          const notificationsToInsert = usersToNotify.map(u => {
-            const payloadNotif: any = { title: titleText, description: bodyText, type: "support", visibleAt: new Date(), userId: u.id, isRead: false };
-            if ('referenceId' in notifications) payloadNotif.referenceId = String(supportItem.id);
-            else if ('reference_id' in notifications) payloadNotif.reference_id = String(supportItem.id);
-            return payloadNotif;
-          });
+          if (usersToNotify.length > 0) {
+            const notificationsToInsert = usersToNotify.map(u => {
+              const payloadNotif: any = { title: titleText, description: bodyText, type: "support", visibleAt: new Date(), userId: u.id, isRead: false };
+              if ('referenceId' in notifications) payloadNotif.referenceId = String(supportItem.id);
+              else if ('reference_id' in notifications) payloadNotif.reference_id = String(supportItem.id);
+              return payloadNotif;
+            });
 
-          await tx.insert(notifications).values(notificationsToInsert);
-          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(supportItem.id), userIds: usersToNotify.map(u => u.id) };
+            await tx.insert(notifications).values(notificationsToInsert);
+            pushNotificationData = { title: titleText, body: bodyText, referenceId: String(supportItem.id), userIds: usersToNotify.map(u => u.id) };
+          }
         }
       }
 

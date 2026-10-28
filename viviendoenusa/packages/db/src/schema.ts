@@ -109,6 +109,7 @@ import {
     estate: text("estate"),
     approved: boolean("approved").default(false),
     googleReviewLink: text("google_review_link"),
+    isRemote: boolean('is_remote').default(false),
   });
   
   // 6. TABLA: LIKES
@@ -231,6 +232,7 @@ import {
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
     googleReviewLink: text("google_review_link"),
+    isRemote: boolean('is_remote').default(false),
   });
   
   // 12. TABLA: JOBS

@@ -138,7 +138,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
-// 🚀 MODAL DE REGISTRO
+// 🚀 MODAL DE REGISTRO CON TOGGLE REMOTO
 const SupportFormModal = memo(({
   visible, onClose, onSuccess, currentUserId, userToken, userMetadata, companyTariffs,
   t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
@@ -161,7 +161,10 @@ const SupportFormModal = memo(({
   const [formRefCode, setFormRefCode] = useState(''); 
   const [isPublishing, setIsPublishing] = useState(false);
 
-  const isBaseFormValid = !!(formName.trim() && formAddress.trim() && formZip.length === 5 && formPhone.trim() && formImage);
+  // 🚀 ESTADO PARA SABER SI EL SERVICIO ES REMOTO O LOCAL
+  const [isNational, setIsNational] = useState(false);
+
+  const isBaseFormValid = !!(formName.trim() && (isNational ? true : formAddress.trim()) && (isNational ? true : formZip.length === 5) && formPhone.trim() && formImage);
   const isFormValid = !!(isBaseFormValid && formRefCode.trim());
 
   const showSubscriptionOption = isWebLocal || appConfig?.payOnActive;
@@ -178,6 +181,7 @@ const SupportFormModal = memo(({
       setFormImage(null); setFormCategoryIdx(1); 
       setFormPayMethod(appConfig?.zelleActive ? 'Zelle' : '');
       setFormPlan('coupon'); setUiPayType('coupon'); setFormRefCode('');
+      setIsNational(false);
     }
   }, [visible, appConfig]);
 
@@ -187,7 +191,7 @@ const SupportFormModal = memo(({
   };
 
   const handlePublishStore = async () => {
-    if (!formName.trim() || !formAddress.trim() || formZip.length < 5) { 
+    if (!formName.trim() || (!isNational && !formAddress.trim()) || (!isNational && formZip.length < 5)) { 
       return triggerAlert('Atención', t.genericlabel.labelfields); 
     }
 
@@ -249,18 +253,21 @@ const SupportFormModal = memo(({
       }
 
       let lat = 34.0934, lng = -117.5847;
-      try { const geo = await Location.geocodeAsync(formZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
+      if (!isNational && formZip) {
+        try { const geo = await Location.geocodeAsync(formZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
+      }
       
       const fullPhone = formPhone.trim() ? `${COUNTRIES[countryIdx].code}${formPhone.trim()}` : '';
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
       const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
 
+      // 🚀 AGREGAMOS LA VARIABLE isRemote AL PAYLOAD 
       const payload = { 
         nameSupp: formName.trim(),
         descriptionSupp: formDesc.trim(), 
-        addressSupp: formAddress.trim(), 
+        addressSupp: isNational ? 'Atención a Nivel Nacional (Remoto)' : formAddress.trim(), 
         categoryId: String(formCategoryIdx), 
-        zip: formZip.trim(), 
+        zip: isNational ? '00000' : formZip.trim(), 
         imageSupp: finalImageName, 
         lat, 
         lng, 
@@ -273,7 +280,8 @@ const SupportFormModal = memo(({
         referenceCode: finalRefCode, 
         paymentMethod: uiPayType === 'coupon' ? 'Coupon' : formPayMethod,
         tariffPlan: (companyTariffs as any)[finalPlan],
-        googleReviewLink: formGoogleLink.trim() 
+        googleReviewLink: formGoogleLink.trim(),
+        isRemote: isNational
       };
       
       const response = await fetch(API_STORES_URL, { 
@@ -373,9 +381,26 @@ const SupportFormModal = memo(({
                 })}
               </View>
 
+              {/* 🚀 TOGGLE LOCAL VS NACIONAL AL REGISTRARSE */}
+              <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Colors.text, marginBottom: 8 }}>Cobertura del Servicio</ThemedText>
+              <View style={{ flexDirection: 'row', backgroundColor: Colors.inputBg, borderRadius: 14, padding: 4, marginBottom: 15, borderWidth: 1, borderColor: Colors.border }}>
+                 <TouchableOpacity onPress={() => setIsNational(false)} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: !isNational ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', alignItems: 'center', shadowColor: !isNational ? '#000' : 'transparent', shadowOpacity: 0.1, shadowRadius: 4, elevation: !isNational ? 2 : 0 }}>
+                   <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: !isNational ? Colors.text : Colors.subtext }}>📍 Local (Presencial)</ThemedText>
+                 </TouchableOpacity>
+                 <TouchableOpacity onPress={() => setIsNational(true)} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: isNational ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', alignItems: 'center', shadowColor: isNational ? '#000' : 'transparent', shadowOpacity: 0.1, shadowRadius: 4, elevation: isNational ? 2 : 0 }}>
+                   <ThemedText style={{ fontWeight: 'bold', fontSize: 13, color: isNational ? Colors.accent : Colors.subtext }}>🌐 Nacional (Remoto)</ThemedText>
+                 </TouchableOpacity>
+              </View>
+
               <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelnameprof} placeholderTextColor={Colors.subtext} value={formName} onChangeText={(text) => setFormName(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" />
-              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelcityaddres} placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" />
-              <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelzipcde} placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
+              
+              {!isNational && (
+                <>
+                  <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelcityaddres} placeholderTextColor={Colors.subtext} value={formAddress} onChangeText={(text) => setFormAddress(text.replace(/(^\S|\s\S)/g, m => m.toUpperCase()))} autoCapitalize="words" />
+                  <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.labelzipcde} placeholderTextColor={Colors.subtext} value={formZip} onChangeText={setFormZip} keyboardType="numeric" maxLength={5} />
+                </>
+              )}
+
               <TextInput style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 15, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, height: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} placeholder={t.genericlabel.lablelespecia} placeholderTextColor={Colors.subtext} value={formDesc} onChangeText={(text) => setFormDesc(text ? text.charAt(0).toUpperCase() + text.slice(1) : '')} multiline autoCapitalize="sentences" />
 
               <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color:Colors.text }}>{t.genericlabel.labelphonecont}</ThemedText>
@@ -577,6 +602,8 @@ export default function SupportScreen() {
     modalBg: isDark ? '#1C1C1E' : '#FFFFFF',
   };
   
+  // 🚀 ESTADO DE SCOPE LOCAL VS NACIONAL
+  const [serviceScope, setServiceScope] = useState<'local' | 'national'>('local');
   const [zipCode, setZipCode] = useState('');
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [loading, setLoading] = useState(false);
@@ -605,7 +632,8 @@ export default function SupportScreen() {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
-  const isZipValid = zipCode.length === 5;
+  // 🚀 ZIPCODE ES OPCIONAL SI ES NACIONAL
+  const isZipValid = serviceScope === 'national' || zipCode.length === 5;
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
   const verticalOffset = isWeb ? -90 : (isIOS ? -85 : -100);
@@ -764,11 +792,14 @@ export default function SupportScreen() {
     finally { setLoading(false); }
   };
 
-  const fetchSupportData = async (searchZip?: string) => {
+  // 🚀 ADAPTADO PARA RECIBIR SCOPE (LOCAL/NACIONAL)
+  const fetchSupportData = async (searchZip?: string, scope: 'local' | 'national' = serviceScope) => {
     try {
       setLoading(true);
       let url = `${API_STORES_URL}?userId=${currentUserId}`;
-      if (searchZip && searchZip.trim().length === 5) {
+      if (scope === 'national') {
+        url = `${API_STORES_URL}?scope=national&userId=${currentUserId}`;
+      } else if (searchZip && searchZip.trim().length === 5) {
         url = `${API_STORES_URL}?zip=${searchZip.trim()}&userId=${currentUserId}`;
       }
 
@@ -811,8 +842,8 @@ export default function SupportScreen() {
     if (isAdminMode) {
       fetchAllPendingStores();
     } else {
-      if (zipCode.length === 5) {
-        fetchSupportData(zipCode);
+      if (serviceScope === 'national' || zipCode.length === 5) {
+        fetchSupportData(zipCode, serviceScope);
       } else {
         setPendingStores([]);
         setAllStores([]);
@@ -823,32 +854,46 @@ export default function SupportScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (zipCode.length === 5) fetchSupportData(zipCode);
-    }, [zipCode])
+      if (serviceScope === 'national' || zipCode.length === 5) fetchSupportData(zipCode, serviceScope);
+    }, [zipCode, serviceScope])
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && isFocused) {
-        if (zipCode.length === 5) fetchSupportData(zipCode);
+        if (serviceScope === 'national' || zipCode.length === 5) fetchSupportData(zipCode, serviceScope);
       }
     });
-
     return () => subscription.remove();
-  }, [isFocused, zipCode]);
+  }, [isFocused, zipCode, serviceScope]);
 
-  const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string) => {
+  // 🚀 ADAPTADO PARA RECIBIR SCOPE (LOCAL/NACIONAL)
+  const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string, forcedScope?: 'local' | 'national') => {
+    const targetScope = forcedScope || serviceScope;
     const targetZip = forcedZip || zipCode;
-    if (targetZip.length !== 5) return;
+    
+    if (targetScope === 'local' && targetZip.length !== 5) return;
+    
     const categoryToSearch = forcedCategoryIdx !== undefined ? forcedCategoryIdx : selectedCategoryIdx;
     setIsFilteredByMap(false);
-    let lat = userLocation ? userLocation.latitude : 34.0934, lng = userLocation ? userLocation.longitude : -117.5847;
-    try { const geo = await Location.geocodeAsync(targetZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
-    const newCoords = { latitude: lat, longitude: lng, latitudeDelta: 0.06, longitudeDelta: 0.06 };
-    setUserLocation(newCoords); setShowMarkers(true); 
-    if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
-    const approvedSupport = await fetchSupportData(targetZip);
-    setResults(applyLocalFilters(approvedSupport, categoryToSearch, lat, lng, isAdminMode)); setMapKey(k => k + 1);
+
+    if (targetScope === 'local') {
+      let lat = userLocation ? userLocation.latitude : 34.0934, lng = userLocation ? userLocation.longitude : -117.5847;
+      try { const geo = await Location.geocodeAsync(targetZip); if (geo.length > 0) { lat = geo[0].latitude; lng = geo[0].longitude; } } catch (e) { }
+      const newCoords = { latitude: lat, longitude: lng, latitudeDelta: 0.06, longitudeDelta: 0.06 };
+      setUserLocation(newCoords); setShowMarkers(true); 
+      if (!isWeb && mapRef.current) mapRef.current.animateToRegion(newCoords, 1000);
+    } else {
+      setShowMarkers(false);
+    }
+
+    const approvedSupport = await fetchSupportData(targetZip, targetScope);
+    
+    // Asumimos centro de USA si es nacional solo por pasar lat/lng al filtro local (el backend ya filtró)
+    const latFilter = userLocation ? userLocation.latitude : 34.0934;
+    const lngFilter = userLocation ? userLocation.longitude : -117.5847;
+    setResults(applyLocalFilters(approvedSupport, categoryToSearch, latFilter, lngFilter, isAdminMode)); 
+    setMapKey(k => k + 1);
   };
 
   const lastProcessedNotifId = useRef<string | null>(null);
@@ -857,7 +902,7 @@ export default function SupportScreen() {
     const cleanNotifId = String(notificationId).trim();
     if (cleanNotifId && cleanNotifId !== lastProcessedNotifId.current) {
       lastProcessedNotifId.current = cleanNotifId; router.setParams({ id: '', supportId: '', referenceId: '' });
-      const syncSearchAndDetail = async (item: any) => { setSelectedDetail(item); if (item.zip && String(item.zip).length === 5) { setZipCode(String(item.zip)); await handleSearch(0, String(item.zip)); } };
+      const syncSearchAndDetail = async (item: any) => { setSelectedDetail(item); if (item.zip && String(item.zip).length === 5) { setZipCode(String(item.zip)); await handleSearch(0, String(item.zip), 'local'); } };
       const localMatch = allStores.find(s => String(s.id) === cleanNotifId) || pendingStores.find(s => String(s.id) === cleanNotifId);
       if (localMatch) { syncSearchAndDetail(localMatch); } else {
         const fetchSpecificSupport = async () => {
@@ -890,13 +935,16 @@ export default function SupportScreen() {
   const handleZipChange = (text: string) => {
     setZipCode(text);
     if (text.length < 5) { setResults([]); setAllStores([]); if (!isAdminMode) { setPendingStores([]); } setShowMarkers(false); setIsFilteredByMap(false); } 
-    else if (text.length === 5) { handleSearch(selectedCategoryIdx, text); }
+    else if (text.length === 5) { handleSearch(selectedCategoryIdx, text, 'local'); }
   };
 
   const handleCategorySelect = (index: number) => {
     setSelectedCategoryIdx(index);
-    if (isZipValid && allStores.length > 0) { const lat = userLocation ? userLocation.latitude : 34.0934; const lng = userLocation ? userLocation.longitude : -117.5847; setResults(applyLocalFilters(allStores, index, lat, lng, isAdminMode)); } 
-    else if (isZipValid) { handleSearch(index); }
+    if ((serviceScope === 'local' && zipCode.length === 5) || serviceScope === 'national') { 
+      const lat = userLocation ? userLocation.latitude : 34.0934; 
+      const lng = userLocation ? userLocation.longitude : -117.5847; 
+      setResults(applyLocalFilters(allStores, index, lat, lng, isAdminMode)); 
+    } 
   };
 
   const handleMarkerSelection = (store: any) => { setResults([store]); setIsFilteredByMap(true); const region = { latitude: store.lat, longitude: store.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 }; if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800); };
@@ -1044,7 +1092,7 @@ export default function SupportScreen() {
           <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.52)', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 18 }}><MaterialCommunityIcons name="arrow-expand" size={11} color="#FFF" style={{ marginRight: 4 }} /><ThemedText style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{t.genericlabel.labelviewdetail}</ThemedText></View>
         </TouchableOpacity>
         <View style={{ padding: 15, paddingBottom: isPending ? 15 : 15, opacity: fadeCard ? 0.6 : 1 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{store.name}</ThemedText>{dist !== null && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist + t.genericlabel.labelme} </ThemedText>}</View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><ThemedText style={{ fontWeight: '800', fontSize: 18, color: DynamicColors.text }}>{store.name}</ThemedText>{dist !== null && serviceScope === 'local' && <ThemedText style={{ color: '#FF5F6D', fontSize: 13, fontWeight: '700' }}>{dist + t.genericlabel.labelme} </ThemedText>}</View>
           {store.address && ( <ThemedText style={{ fontSize: 13, color: '#FF5F6D', fontWeight: 'bold', marginTop: 4 }}><MaterialCommunityIcons name="map-marker-outline" size={12}/> {store.address}</ThemedText> )}
           <ThemedText style={{ fontSize: 14, opacity: 0.9, marginTop: 6 , color:DynamicColors.text }} numberOfLines={isPending ? undefined : 2}>{store.description}</ThemedText>
           
@@ -1128,9 +1176,9 @@ export default function SupportScreen() {
         onSuccess={(newEntryLocal: any, formZip: string) => {
           setPendingStores(prev => [newEntryLocal, ...prev]);
           setModalVisible(false);
-          if (!zipCode || zipCode.length < 5) {
+          if (serviceScope === 'national' || !zipCode || zipCode.length < 5) {
             setZipCode(formZip);
-            handleSearch(0, formZip);
+            handleSearch(0, formZip, serviceScope);
           }
         }}
         currentUserId={currentUserId}
@@ -1460,8 +1508,24 @@ export default function SupportScreen() {
               <View style={[stylesUnified.headerRow, { marginBottom: 15, alignItems: 'center', flexDirection: 'row', gap: 12 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} /></TouchableOpacity>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
-                  <TextInput style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} placeholder={t.genericlabel.labelcodepostal} keyboardType="numeric" maxLength={5} value={zipCode} onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} placeholderTextColor={DynamicColors.subtext} />
-                  <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 42, height: 42, marginLeft: 8 }}><LinearGradient colors={isZipValid ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>{loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={isZipValid ? "#fff" : DynamicColors.iconInactive} />}</LinearGradient></TouchableOpacity>
+                  {serviceScope === 'local' ? (
+                    <TextInput 
+                      style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                      placeholder={t.genericlabel.labelcodepostal} 
+                      keyboardType="numeric" maxLength={5} value={zipCode} 
+                      onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
+                      placeholderTextColor={DynamicColors.subtext} 
+                    />
+                  ) : (
+                    <View style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, justifyContent: 'center', backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1 }]}>
+                      <ThemedText style={{ color: DynamicColors.text, fontSize: 14, fontWeight: '600' }}>Buscando a Nivel Nacional</ThemedText>
+                    </View>
+                  )}
+                  <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 42, height: 42, marginLeft: 8 }}>
+                    <LinearGradient colors={isZipValid ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={isZipValid ? "#fff" : DynamicColors.iconInactive} />}
+                    </LinearGradient>
+                  </TouchableOpacity>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
                   <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}><MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} /></TouchableOpacity>
@@ -1484,10 +1548,24 @@ export default function SupportScreen() {
                 </View>
               </View>
 
+              {/* 🚀 TOGGLE COMPACTO (LOCAL VS NACIONAL) */}
+              <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 3, marginBottom: 15, height: 38 }}>
+                <TouchableOpacity 
+                  onPress={() => { setServiceScope('local'); if(zipCode.length===5) handleSearch(selectedCategoryIdx, zipCode, 'local'); }} 
+                  style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'local' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                  <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'local' ? DynamicColors.text : DynamicColors.subtext }}>📍 Local</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => { setServiceScope('national'); handleSearch(selectedCategoryIdx, zipCode, 'national'); }} 
+                  style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'national' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                  <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'national' ? DynamicColors.accent : DynamicColors.subtext }}>🌐 Nacional</ThemedText>
+                </TouchableOpacity>
+              </View>
+
               {!isLargeWeb ? (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 130 }}>
                   {isAdminMode && (
-                    <View style={{ marginTop: 20, marginBottom: 20 }}>
+                    <View style={{ marginTop: 10, marginBottom: 20 }}>
                       <ThemedText style={{ color: '#FFB74D', fontWeight: 'bold', marginBottom: 15 }}>{t.genericlabel.labelcheckpay} ({pendingStores.length})</ThemedText>
                       {pendingStores.length > 0 ? (
                         pendingStores.map(store => <PendingSupportItem key={store.id} store={store} />)
@@ -1535,10 +1613,14 @@ export default function SupportScreen() {
                     )}
                   </View>
 
-                  <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
-                    <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={showMarkers ? results : []} mapKey={mapKey} onMarkerPress={handleMarkerSelection} showsUserLocation={true} />
-                    {isWeb && ( <TouchableOpacity onPress={() => getCurrentLocation(true)} style={{ position: 'absolute', bottom: 15, right: 15, backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 25, borderWidth: 1, borderColor: DynamicColors.border, zIndex: 99, elevation: 99 }}><MaterialCommunityIcons name="crosshairs-gps" size={22} color={DynamicColors.text} /></TouchableOpacity> )}
-                  </View>
+                  {/* 🚀 EL MAPA SOLO SE MUESTRA SI ES LOCAL */}
+                  {serviceScope === 'local' && (
+                    <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
+                      <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={showMarkers ? results : []} mapKey={mapKey} onMarkerPress={handleMarkerSelection} showsUserLocation={true} />
+                      {isWeb && ( <TouchableOpacity onPress={() => getCurrentLocation(true)} style={{ position: 'absolute', bottom: 15, right: 15, backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 25, borderWidth: 1, borderColor: DynamicColors.border, zIndex: 99, elevation: 99 }}><MaterialCommunityIcons name="crosshairs-gps" size={22} color={DynamicColors.text} /></TouchableOpacity> )}
+                    </View>
+                  )}
+
                   <View style={{ marginTop: 20 }}>
                     {results.length > 0 && <ThemedText style={{ fontSize: 13, color: DynamicColors.subtext, fontWeight: '700', marginBottom: 10 }}>{results.length + ' ' + (t.genericbtn.results || "resultados")}</ThemedText>}
                     {isFilteredByMap && ( <TouchableOpacity onPress={() => { setIsFilteredByMap(false); setShowMarkers(false); handleSearch(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255, 95, 109, 0.12)' : 'rgba(255, 95, 109, 0.08)', paddingVertical: 12, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: DynamicColors.accenticon }}><MaterialCommunityIcons name="filter-remove-outline" size={16} color={DynamicColors.accenticon} /><ThemedText style={{ color: DynamicColors.accenticon, fontWeight: '800', fontSize: 13 }}>{`  ${(t.genericbtn as any)?.viewallresults || 'Ver todos'}`}</ThemedText></TouchableOpacity> )}
@@ -1602,8 +1684,18 @@ export default function SupportScreen() {
                       </ScrollView>
                     </View>
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
-                      <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={showMarkers ? results : []} mapKey={mapKey} onMarkerPress={handleMarkerSelection} onZoom={handleZoom} showsUserLocation={true} />
-                      {isWeb && ( <TouchableOpacity onPress={() => getCurrentLocation(true)} style={{ position: 'absolute', bottom: 20, right: 20, backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)', padding: 12, borderRadius: 30, borderWidth: 1, borderColor: DynamicColors.border, zIndex: 99, elevation: 99 }}><MaterialCommunityIcons name="crosshairs-gps" size={24} color={DynamicColors.text} /></TouchableOpacity> )}
+                      {/* 🚀 CONDICIONAL WEB: MAPA SOLO SI ES LOCAL */}
+                      {serviceScope === 'local' ? (
+                        <>
+                          <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={showMarkers ? results : []} mapKey={mapKey} onMarkerPress={handleMarkerSelection} onZoom={handleZoom} showsUserLocation={true} />
+                          {isWeb && ( <TouchableOpacity onPress={() => getCurrentLocation(true)} style={{ position: 'absolute', bottom: 20, right: 20, backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)', padding: 12, borderRadius: 30, borderWidth: 1, borderColor: DynamicColors.border, zIndex: 99, elevation: 99 }}><MaterialCommunityIcons name="crosshairs-gps" size={24} color={DynamicColors.text} /></TouchableOpacity> )}
+                        </>
+                      ) : (
+                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: DynamicColors.inputBg }}>
+                          <MaterialCommunityIcons name="earth" size={80} color={DynamicColors.subtext} style={{ opacity: 0.3 }} />
+                          <ThemedText style={{ marginTop: 20, color: DynamicColors.subtext, fontWeight: 'bold', fontSize: 16 }}>Resultados a Nivel Nacional</ThemedText>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>

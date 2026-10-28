@@ -154,12 +154,13 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 // =====================================================================
 // 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
 // =====================================================================
-export const getLawyers = async (rawZip?: string | number, currentUserId?: string) => {
+export const getLawyers = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
     const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
     const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
       ? sanitizeText(String(currentUserId)) 
       : null;
+    const cleanScope = sanitizeText(scope) || 'local';
 
     let baseConditions = cleanUserId 
       ? sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${cleanUserId})`
@@ -167,13 +168,29 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 
     let finalConditions: any = baseConditions;
 
-    if (cleanZipParam && cleanZipParam.length === 5) {
+    // 🚀 NUEVA LÓGICA: FILTRAR POR SCOPE (NACIONAL O LOCAL)
+    if (cleanScope === 'national') {
+      // Ignorar ZIP y traer todos los que tienen isRemote = true
+      finalConditions = and(
+        baseConditions,
+        eq(lawyers.isRemote, true)
+      );
+    } 
+    else if (cleanZipParam && cleanZipParam.length === 5 && cleanZipParam !== '00000') {
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
-        finalConditions = and(baseConditions, inArray(lawyers.zip, nearbyZips as string[]));
+        finalConditions = and(
+          baseConditions, 
+          inArray(lawyers.zip, nearbyZips as string[]),
+          eq(lawyers.isRemote, false) // 🚀 Excluir los remotos para que no salgan en el mapa local
+        );
       } else {
-        finalConditions = and(baseConditions, eq(lawyers.zip, cleanZipParam));
+        finalConditions = and(
+          baseConditions, 
+          eq(lawyers.zip, cleanZipParam),
+          eq(lawyers.isRemote, false) // 🚀 Excluir los remotos
+        );
       }
     }
 
@@ -461,6 +478,9 @@ export const createLawyer = async (data: any) => {
       const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
+      // 🚀 CAPTURAMOS SI ES REMOTO DESDE EL FRONTEND
+      const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+
       let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
       if (isCoupon) {
@@ -481,8 +501,8 @@ export const createLawyer = async (data: any) => {
       const lawyerPayload: any = {
         nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
         area: sanitizeText(data.area) || 'General',
-        address: sanitizeText(data.address) || '',
-        zip: sanitizeText(data.zip) || null,
+        address: isNational ? 'Atención a Nivel Nacional (Remoto)' : (sanitizeText(data.address) || ''),
+        zip: isNational ? '00000' : (sanitizeText(data.zip) || null),
         phone: sanitizeText(data.phone) || '',
         imageUrl: cleanImage,
         description: safeDesc,
@@ -493,7 +513,8 @@ export const createLawyer = async (data: any) => {
         userId: validUserId, 
         approved: false, 
         estate: finalEstate,
-        googleReviewLink: safeGoogleLink, // 🚀 AÑADIDO AL PAYLOAD DE INSERCIÓN
+        googleReviewLink: safeGoogleLink, 
+        isRemote: isNational // 🚀 SE GUARDA EN LA BD
       };
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
@@ -592,8 +613,20 @@ export const updateLawyer = async (id: string, data: any) => {
       if (data) {
         if (data.nameLawy !== undefined) updatePayload.nameLawy = sanitizeText(data.nameLawy);
         if (data.area !== undefined) updatePayload.area = sanitizeText(data.area);
-        if (data.address !== undefined) updatePayload.address = sanitizeText(data.address);
-        if (data.zip !== undefined) updatePayload.zip = sanitizeText(data.zip);
+        
+        // 🚀 Aceptamos actualización de status isRemote
+        if (data.isRemote !== undefined) {
+          const isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+          updatePayload.isRemote = isNat;
+          if (isNat) {
+            updatePayload.address = 'Atención a Nivel Nacional (Remoto)';
+            updatePayload.zip = '00000';
+          }
+        }
+
+        if (data.address !== undefined && !updatePayload.isRemote) updatePayload.address = sanitizeText(data.address);
+        if (data.zip !== undefined && !updatePayload.isRemote) updatePayload.zip = sanitizeText(data.zip);
+        
         if (data.phone !== undefined) updatePayload.phone = sanitizeText(data.phone);
         if (data.lat !== undefined) updatePayload.lat = Number(data.lat);
         if (data.lng !== undefined) updatePayload.lng = Number(data.lng);
@@ -660,32 +693,37 @@ export const updateLawyer = async (id: string, data: any) => {
 
       const wasApprovedBefore = existingLawyer.approved === true;
       if (isApproved && !wasApprovedBefore && lawyer) {
-        const titleText = "¡Nuevo Abogado en tu área! ⚖️";
-        const bodyText = `El abogado ${lawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
+        // 🚀 Si es remoto NO MANDA PUSH LOCAL.
+        const isRemoteNow = lawyer.isRemote === true;
 
-        let usersToNotify: { id: string }[] = [];
-        if (lawyer.zip) {
-          const nearbyZips = zipcodes.radius(lawyer.zip as any, Number(radiusMiles)); 
-          if (nearbyZips && nearbyZips.length > 0) {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
-          } else {
-            usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(lawyer.zip)));
+        if (!isRemoteNow) {
+          const titleText = "¡Nuevo Abogado en tu área! ⚖️";
+          const bodyText = `El abogado ${lawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
+
+          let usersToNotify: { id: string }[] = [];
+          if (lawyer.zip && lawyer.zip !== '00000') {
+            const nearbyZips = zipcodes.radius(lawyer.zip as any, Number(radiusMiles)); 
+            if (nearbyZips && nearbyZips.length > 0) {
+              usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
+            } else {
+              usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(lawyer.zip)));
+            }
           }
-        }
 
-        if (usersToNotify.length > 0) {
-          const notificationsToInsert = usersToNotify.map(u => ({
-            title: titleText,
-            description: bodyText,
-            type: "lawyer", 
-            visibleAt: new Date(), 
-            userId: u.id,
-            isRead: false,
-            referenceId: String(lawyer.id)
-          }));
+          if (usersToNotify.length > 0) {
+            const notificationsToInsert = usersToNotify.map(u => ({
+              title: titleText,
+              description: bodyText,
+              type: "lawyer", 
+              visibleAt: new Date(), 
+              userId: u.id,
+              isRead: false,
+              referenceId: String(lawyer.id)
+            }));
 
-          await tx.insert(notifications).values(notificationsToInsert);
-          pushNotificationData = { title: titleText, body: bodyText, referenceId: String(lawyer.id), userIds: usersToNotify.map(u => u.id) };
+            await tx.insert(notifications).values(notificationsToInsert);
+            pushNotificationData = { title: titleText, body: bodyText, referenceId: String(lawyer.id), userIds: usersToNotify.map(u => u.id) };
+          }
         }
       }
 
