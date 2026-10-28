@@ -498,6 +498,8 @@ export const createLawyer = async (data: any) => {
       
       const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
       const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+      const isUnlimited = String(planSeleccionado).toLowerCase() === 'unlimited';
+      
       const finalEstate = sanitizeText(data.estate) || 'CA';
       
       const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
@@ -506,8 +508,7 @@ export const createLawyer = async (data: any) => {
       const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-      const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
-
+      const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true' || isUnlimited);
       let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
 
       if (isCoupon) {
