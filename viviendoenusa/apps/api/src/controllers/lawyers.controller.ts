@@ -152,7 +152,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (OPTIMIZADA Y BLINDADA)
+// 🔍 1. CONSULTA GENERAL (CON REGLA DE NEGOCIO PREMIUM Y UNLIMITED)
 // =====================================================================
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
@@ -168,13 +168,15 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 
     let finalConditions: any = baseConditions;
 
-    // 🚀 LÓGICA DE NEGOCIO Y PROTECCIÓN DE DATOS
+    // 🚀 LÓGICA DE NEGOCIO MAESTRA PARA LOCAL Y NACIONAL SEGÚN EL PLAN
     if (cleanScope === 'national') {
+      // Nacional: Remotos + Unlimited + Premium (que operan a escala nacional)
       finalConditions = and(
         baseConditions,
         or(
           eq(lawyers.isRemote, true),
-          sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
+          sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`,
+          sql`LOWER(${lawyers.premiumPlan}) = 'premium'`
         )
       );
     } 
@@ -182,6 +184,7 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
+        // Local con ZIP: Coincidencia por radio (para oficinas locales) + Unlimited
         finalConditions = and(
           baseConditions, 
           or(
@@ -199,7 +202,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         );
       }
     } else {
-      // 🚀 PROTECCIÓN DEL BACKEND: Si es local pero NO enviaron código postal
       let isAdmin = false;
       if (cleanUserId) {
         const userCheck = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId)).limit(1);
@@ -210,13 +212,10 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       }
 
       if (isAdmin) {
-        // El admin necesita traer todo para su bandeja de aprobación
         finalConditions = baseConditions;
       } else if (cleanUserId) {
-        // Un usuario normal sin ZIP solo ve sus propias publicaciones
         finalConditions = and(baseConditions, eq(lawyers.userId, cleanUserId));
       } else {
-        // Invitados o sin ZIP válido reciben array vacío al instante
         return [];
       }
     }
@@ -244,8 +243,9 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         sql`CASE 
               WHEN ${lawyers.userId} = ${cleanUserId} THEN 0 
               WHEN LOWER(${lawyers.premiumPlan}) = 'unlimited' THEN 1
-              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-              ELSE 3 
+              WHEN LOWER(${lawyers.premiumPlan}) = 'premium' THEN 2
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
+              ELSE 4 
             END`,
         desc(lawyers.createdAt)
       );
@@ -253,8 +253,9 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       query = query.orderBy(
         sql`CASE 
               WHEN LOWER(${lawyers.premiumPlan}) = 'unlimited' THEN 0
-              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-              ELSE 2 
+              WHEN LOWER(${lawyers.premiumPlan}) = 'premium' THEN 1
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+              ELSE 3 
             END`,
         desc(lawyers.createdAt)
       );
@@ -479,7 +480,6 @@ export const createLawyer = async (data: any) => {
       throw new Error("El ID del usuario es obligatorio para registrar un abogado.");
     }
 
-    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EL BACKEND
     let safeGoogleLink = null;
     if (data.googleReviewLink) {
       const trimmedLink = data.googleReviewLink.trim();
@@ -507,7 +507,6 @@ export const createLawyer = async (data: any) => {
       const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
       let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-      // 🚀 CAPTURAMOS SI ES REMOTO DESDE EL FRONTEND
       const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
 
       let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
@@ -543,7 +542,7 @@ export const createLawyer = async (data: any) => {
         approved: false, 
         estate: finalEstate,
         googleReviewLink: safeGoogleLink, 
-        isRemote: isNational // 🚀 SE GUARDA EN LA BD
+        isRemote: isNational 
       };
 
       const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
@@ -643,7 +642,6 @@ export const updateLawyer = async (id: string, data: any) => {
         if (data.nameLawy !== undefined) updatePayload.nameLawy = sanitizeText(data.nameLawy);
         if (data.area !== undefined) updatePayload.area = sanitizeText(data.area);
         
-        // 🚀 Aceptamos actualización de status isRemote
         if (data.isRemote !== undefined) {
           const isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
           updatePayload.isRemote = isNat;
@@ -661,7 +659,6 @@ export const updateLawyer = async (id: string, data: any) => {
         if (data.lng !== undefined) updatePayload.lng = Number(data.lng);
         if (data.premiumPlan !== undefined) updatePayload.premiumPlan = sanitizeText(data.premiumPlan);
         
-        // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
         if (data.googleReviewLink !== undefined) {
           if (data.googleReviewLink.trim() === '') {
             updatePayload.googleReviewLink = null;
@@ -722,7 +719,6 @@ export const updateLawyer = async (id: string, data: any) => {
 
       const wasApprovedBefore = existingLawyer.approved === true;
       if (isApproved && !wasApprovedBefore && lawyer) {
-        // 🚀 Si es remoto NO MANDA PUSH LOCAL.
         const isRemoteNow = lawyer.isRemote === true;
 
         if (!isRemoteNow) {
@@ -966,7 +962,6 @@ export const reportContent = async (data: any) => {
       throw new Error("El ID del elemento es obligatorio para reportar.");
     }
 
-    // 1. Consultar el nombre y correo del usuario que reporta
     let reporterName = "Usuario Anónimo";
     let reporterEmail = "No disponible";
     if (validUserId) {
@@ -987,7 +982,6 @@ export const reportContent = async (data: any) => {
       }
     }
 
-    // 2. Consultar el nombre del abogado directamente de la tabla lawyers
     let reportedName = `Abogado ID: ${validItemId}`;
     try {
       const itemRows = await db.select({ name: lawyers.nameLawy }).from(lawyers).where(eq(lawyers.id, validItemId)).limit(1);
@@ -1006,7 +1000,6 @@ export const reportContent = async (data: any) => {
       return { success: false, message: "Reporte registrado en sistema local." };
     }
 
-    // 3. Mensaje claro con template literals limpios y nativos
     const message = `🚨 *REPORTE DE CONTENIDO (DMCA/MODERACIÓN)*\n\n` +
                     `📌 *Módulo:* ${validType.toUpperCase()}\n` +
                     `🏷️ *Elemento:* "${reportedName}"\n` +

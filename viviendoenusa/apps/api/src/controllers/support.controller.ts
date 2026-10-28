@@ -155,7 +155,7 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (OPTIMIZADA Y BLINDADA)
+// 🔍 1. CONSULTA GENERAL (CON REGLA DE NEGOCIO PREMIUM Y UNLIMITED)
 // =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
@@ -186,14 +186,16 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .$dynamic();
 
-    // 🚀 LÓGICA DE NEGOCIO Y PROTECCIÓN DE DATOS
+    // 🚀 LÓGICA DE NEGOCIO MAESTRA PARA LOCAL Y NACIONAL SEGÚN EL PLAN
     if (cleanScope === 'national') {
+      // A nivel nacional: Remotos + Unlimited + Premium (que tienen oficina local pero operan a escala nacional)
       query = query.where(
         and(
           visibilityCondition,
           or(
             eq(support.isRemote, true),
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
+            sql`LOWER(${support.premiumPlan}) = 'unlimited'`,
+            sql`LOWER(${support.premiumPlan}) = 'premium'`
           )
         )
       );
@@ -203,8 +205,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           sql`CASE 
                 WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
+                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 2
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
+                ELSE 4 
               END`,
           desc(support.createdAt)
         );
@@ -212,8 +215,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         query = query.orderBy(
           sql`CASE 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-                ELSE 2 
+                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 1
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+                ELSE 3 
               END`,
           desc(support.createdAt)
         );
@@ -232,6 +236,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         )
       )`;
 
+      // En Local: Coincidencia por radio físico (para oficinas locales) + Unlimited
       query = query.where(
         and(
           visibilityCondition,
@@ -247,8 +252,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           sql`CASE 
                 WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
+                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 2
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
+                ELSE 4 
               END`,
           distanceFormula
         );
@@ -256,15 +262,15 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         query = query.orderBy(
           sql`CASE 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-                ELSE 2 
+                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 1
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+                ELSE 3 
               END`,
           distanceFormula
         );
       }
     } 
     else {
-      // 🚀 PROTECCIÓN DEL BACKEND: Si es local pero NO enviaron código postal
       let isAdmin = false;
       if (cleanUserId) {
         const userCheck = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId)).limit(1);
@@ -275,13 +281,10 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       }
 
       if (isAdmin) {
-        // Los admins traen todo para la bandeja
         query = query.where(visibilityCondition);
       } else if (cleanUserId) {
-        // Usuario normal sin zip solo ve lo suyo
         query = query.where(and(visibilityCondition, eq(support.userId, cleanUserId)));
       } else {
-        // Invitados sin zip reciben array vacío
         return [];
       }
       
@@ -290,8 +293,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           sql`CASE 
                 WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
+                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 2
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
+                ELSE 4 
               END`,
           desc(support.createdAt)
         );
@@ -299,8 +303,9 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         query = query.orderBy(
           sql`CASE 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-                ELSE 2 
+                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 1
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+                ELSE 3 
               END`,
           desc(support.createdAt)
         );
@@ -510,7 +515,6 @@ export const createSupport = async (data: any) => {
     const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
     let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
 
-    // 🚀 CAPTURAR SI ES REMOTO DESDE EL FRONTEND
     const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
 
     let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
@@ -546,7 +550,7 @@ export const createSupport = async (data: any) => {
         estate: data.estate,
         approved: false, 
         googleReviewLink: safeGoogleLink, 
-        isRemote: isNational // 🚀 SE GUARDA EN LA BASE DE DATOS
+        isRemote: isNational 
       };
       
       const [newSupport] = await tx.insert(support).values(supportPayload).returning();
@@ -658,7 +662,6 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
         }
       }
 
-      // 🚀 Aceptamos actualización de status isRemote
       if (data && data.isRemote !== undefined) {
         const isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
         updatePayload.isRemote = isNat;
