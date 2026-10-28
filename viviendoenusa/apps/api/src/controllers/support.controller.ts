@@ -155,7 +155,7 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (CON REGLA DE NEGOCIO PREMIUM Y UNLIMITED)
+// 🔍 1. CONSULTA GENERAL (REGLA ESTRICTA: NACIONAL = REMOTO O UNLIMITED)
 // =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
@@ -186,16 +186,15 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .$dynamic();
 
-    // 🚀 LÓGICA DE NEGOCIO MAESTRA PARA LOCAL Y NACIONAL SEGÚN EL PLAN
+    // 🚀 LÓGICA DE NEGOCIO CORREGIDA:
     if (cleanScope === 'national') {
-      // A nivel nacional: Remotos + Unlimited + Premium (que tienen oficina local pero operan a escala nacional)
+      // Nacional: SOLO los que son remotos (isRemote = true) o tienen plan Unlimited. (Los premium operan desde su oficina local).
       query = query.where(
         and(
           visibilityCondition,
           or(
             eq(support.isRemote, true),
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`,
-            sql`LOWER(${support.premiumPlan}) = 'premium'`
+            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
           )
         )
       );
@@ -205,9 +204,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           sql`CASE 
                 WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 2
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
-                ELSE 4 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+                ELSE 3 
               END`,
           desc(support.createdAt)
         );
@@ -215,9 +213,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         query = query.orderBy(
           sql`CASE 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+                ELSE 2 
               END`,
           desc(support.createdAt)
         );
@@ -236,7 +233,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         )
       )`;
 
-      // En Local: Coincidencia por radio físico (para oficinas locales) + Unlimited
+      // En Local: Coincidencia por radio físico (para oficinas locales de Basic y Premium) + Unlimited
       query = query.where(
         and(
           visibilityCondition,
@@ -252,9 +249,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           sql`CASE 
                 WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 2
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
-                ELSE 4 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+                ELSE 3 
               END`,
           distanceFormula
         );
@@ -262,9 +258,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         query = query.orderBy(
           sql`CASE 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+                ELSE 2 
               END`,
           distanceFormula
         );
@@ -293,9 +288,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
           sql`CASE 
                 WHEN ${support.userId} = ${cleanUserId} THEN 0 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 2
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 3 
-                ELSE 4 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+                ELSE 3 
               END`,
           desc(support.createdAt)
         );
@@ -303,9 +297,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         query = query.orderBy(
           sql`CASE 
                 WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN LOWER(${support.premiumPlan}) = 'premium' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
+                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+                ELSE 2 
               END`,
           desc(support.createdAt)
         );

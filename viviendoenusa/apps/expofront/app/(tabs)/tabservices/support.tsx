@@ -114,7 +114,7 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   return (
     <View style={{ flex: 1, paddingVertical: 10 }}>
       <TouchableOpacity onPress={onCancel} style={{ marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" /><ThemedText style={{ color: '#FF5F6D', fontWeight: '600' }}>Volver</ThemedText>
+        <MaterialCommunityIcons name="chevron-left" size={24} color="#FF5F6D" /><ThemedText style={{ color: '#FFF6D', fontWeight: '600' }}>Volver</ThemedText>
       </TouchableOpacity>
       <ThemedText style={{ fontSize: 20, fontWeight: '800', marginBottom: 20 }}>Tu Experiencia</ThemedText>
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 25 }}>
@@ -1493,14 +1493,11 @@ export default function SupportScreen() {
                 <TouchableOpacity 
                   onPress={() => { 
                     setServiceScope('local'); 
-                    if(zipCode.length === 5) {
-                      handleSearch(selectedCategoryIdx, zipCode, 'local'); 
-                    } else {
-                      setAllStores([]);
-                      setResults([]);
-                      setShowMarkers(false);
-                      setIsFilteredByMap(false);
-                    }
+                    setZipCode(''); // Limpia el estado al cambiar
+                    setAllStores([]);
+                    setResults([]);
+                    setShowMarkers(false);
+                    setIsFilteredByMap(false);
                   }} 
                   style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'local' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
                   <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'local' ? DynamicColors.text : DynamicColors.subtext }}>📍 Local</ThemedText>
@@ -1508,6 +1505,7 @@ export default function SupportScreen() {
                 <TouchableOpacity 
                   onPress={() => { 
                     setServiceScope('national'); 
+                    setZipCode(''); 
                     handleSearch(selectedCategoryIdx, '', 'national'); 
                   }} 
                   style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'national' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
@@ -1515,7 +1513,7 @@ export default function SupportScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* 🚀 2. HEADER CON BUSCADOR ADAPTATIVO (TEXTO LIBRE EN NACIONAL) Y SIN REFRESH */}
+              {/* 🚀 2. HEADER CON BUSCADOR Y REFRESH CONDICIONAL (SOLO EN LOCAL) */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, alignItems: 'center', flexDirection: 'row', gap: 12 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} /></TouchableOpacity>
                 
@@ -1556,8 +1554,13 @@ export default function SupportScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🚀 SOLO QUEDA EL BOTÓN DE ADMIN */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+                {/* 🚀 BOTÓN REFRESH RECUPERADO EXCLUSIVAMENTE PARA MODO LOCAL + BALANZA DE ADMIN */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  {serviceScope === 'local' && (
+                    <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}>
+                        <MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} />
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity 
                     activeOpacity={0.6}
                     hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}

@@ -152,7 +152,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (CON REGLA DE NEGOCIO PREMIUM Y UNLIMITED)
+// 🔍 1. CONSULTA GENERAL (REGLA ESTRICTA: NACIONAL = REMOTO O UNLIMITED)
 // =====================================================================
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
@@ -168,15 +168,14 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 
     let finalConditions: any = baseConditions;
 
-    // 🚀 LÓGICA DE NEGOCIO MAESTRA PARA LOCAL Y NACIONAL SEGÚN EL PLAN
+    // 🚀 LÓGICA DE NEGOCIO ESTRICTA CORREGIDA:
     if (cleanScope === 'national') {
-      // Nacional: Remotos + Unlimited + Premium (que operan a escala nacional)
+      // Nacional: SOLO remotos (isRemote = true) O plan Unlimited. (Los Premium operan desde su oficina local).
       finalConditions = and(
         baseConditions,
         or(
           eq(lawyers.isRemote, true),
-          sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`,
-          sql`LOWER(${lawyers.premiumPlan}) = 'premium'`
+          sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
         )
       );
     } 
@@ -184,7 +183,7 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
-        // Local con ZIP: Coincidencia por radio (para oficinas locales) + Unlimited
+        // Local con ZIP: Coincidencia por radio (oficinas de Basic y Premium) + Unlimited
         finalConditions = and(
           baseConditions, 
           or(
