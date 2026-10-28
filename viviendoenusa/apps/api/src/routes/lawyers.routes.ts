@@ -24,7 +24,10 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
     
     const currentUserId = req.user?.id || req.user?.userId || queryUserId;
     
-    const list = await getLawyers(zip, currentUserId);
+    // 🚀 PASANDO EL SCOPE AL CONTROLADOR
+    const scopeParam = req.query.scope as string;
+
+    const list = await getLawyers(zip, currentUserId, scopeParam);
     return res.status(200).json(list);
   } catch (error: any) {
     console.error("❌ Error en GET /lawyers:", error.message);

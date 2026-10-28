@@ -22,7 +22,10 @@ router.get('/', verifyToken, async (req: AuthRequest, res: Response) => {
     
     const currentUserId = req.user?.id || req.user?.userId || queryUserId;
 
-    const supportList = await getSupports(zipCode, currentUserId);
+    // 🚀 PASANDO EL SCOPE AL CONTROLADOR
+    const scopeParam = req.query.scope as string;
+
+    const supportList = await getSupports(zipCode, currentUserId, scopeParam);
     res.json(supportList);
   } catch (error: any) {
     console.error("❌ Error en GET /support:", error.message);
@@ -133,7 +136,7 @@ router.delete('/:id', verifyToken, async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Registro de soporte eliminado correctamente', support: deletedSupport });
   } catch (error: any) {
     console.error(`❌ Error en DELETE /support/${req.params.id}:`, error.message);
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: error.message }); 
   }
 });
 
