@@ -1,40 +1,46 @@
 import { db } from "../../../../packages/db/src"; 
-import { support, users, rating as ratingTable, reviews as reviewsTable, payments, tariffs, typeDetail, promoCodes, userDevices, notifications } from "../../../../packages/db/src/schema"; 
+import { lawyers, users, rating as ratingTable, reviews as reviewsTable, payments, notifications, tariffs, typeDetail, userDevices, promoCodes } from "../../../../packages/db/src/schema"; 
 import { eq, desc, sql, and, inArray, or } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/pg-core"; 
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { createClient } from '@supabase/supabase-js'; 
-import NodeGeocoder from 'node-geocoder';
+import { imag } from "@tensorflow/tfjs";
+import { logAuditEvent } from "../services/audit.service.js";
 import zipcodes from 'zipcodes'; 
+import ws from "ws";
+
+if (!(global as any).WebSocket) {
+  (global as any).WebSocket = ws;
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const radiusMiles = process.env.RADIUMILE || 20; 
+export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false }
+})
+const NOMBRE_BUCKET = 'images'; 
+const API_TARIFFS_URL = process.env.EXPO_PUBLIC_URL_BACKEND+'/tariffs'; 
+
+const reviewers = alias(users, 'reviewers');
 
 // =====================================================================
-// 🌍 CONFIGURACIÓN DE GEOCODER
+// 🚀 FUNCIÓN LOCAL PARA COORDENADAS (Sin internet, súper rápida)
 // =====================================================================
-const geocoder = NodeGeocoder({
-  provider: 'openstreetmap'
-});
-
-const getCoordsFromZip = async (zip: string) => {
-  try {
-    const res = await geocoder.geocode(`${zip}, USA`);
-    if (res && res.length > 0) {
-      return { lat: res[0].latitude, lng: res[0].longitude };
-    }
-  } catch (err) {
-    console.error(`⚠️ Error al geocodificar el ZIP ${zip}:`, err);
+const getCoordsFromZip = (zip: string) => {
+  if (!zip) return { lat: 34.0934, lng: -117.5847 };
+  
+  const locationInfo = zipcodes.lookup(zip as any);
+  
+  if (locationInfo) {
+    return { 
+      lat: locationInfo.latitude, 
+      lng: locationInfo.longitude 
+    };
   }
   
-  console.warn("⚠️ Usando coordenadas por defecto");
   return { lat: 34.0934, lng: -117.5847 };
 };
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const NOMBRE_BUCKET = 'images'; 
-const radiusMiles = process.env.RADIUMILE || 20; 
-
-const TEMP_USER_ID = 'baeb641a-3fa4-4fef-9846-d75947d1bca9';
-const reviewers = alias(users, 'reviewers');
 
 // 🛡️ FUNCIÓN DE SEGURIDAD ANTI-XSS MEJORADA PARA UUIDs
 const sanitizeText = (str: any) => {
@@ -51,7 +57,7 @@ const isValidGoogleReviewUrl = (url: string) => {
 };
 
 // 💰 FUNCIÓN AUXILIAR: Trae el precio actual de la BD
-const getCurrentSupportPrice = async () => {
+const getCurrentLawyerPrice = async () => {
   try {
     const currentYear = new Date().getFullYear().toString();
 
@@ -60,7 +66,7 @@ const getCurrentSupportPrice = async () => {
     .innerJoin(typeDetail, sql`${tariffs.referenceId} = ${typeDetail.id}::text`) 
     .where(
       and(
-        sql`${typeDetail.typeCode} ILIKE 'Support%'`, 
+        sql`${typeDetail.typeCode} ILIKE 'Lawyer%'`, 
         eq(tariffs.isActive, true),
         eq(tariffs.planType, currentYear) 
       )
@@ -77,7 +83,7 @@ const getCurrentSupportPrice = async () => {
 };
 
 // ============================================================================
-// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS)
+// 🚀 FUNCIÓN LOCAL PARA ENVÍO MASIVO (FILTRADO POR USUARIOS CERCANOS + BADGE DINÁMICO)
 // ============================================================================
 const sendMassPushNotification = async (payload: { title: string, body: string, referenceId: string, userIds: string[] }) => {
   try {
@@ -88,28 +94,45 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
       .where(inArray(userDevices.userId, payload.userIds)); 
 
     if (!devices || devices.length === 0) {
-      console.log("🔕 [PUSH MASIVO APOYO] Ningún usuario cercano tiene dispositivos registrados.");
+      console.log("🔕 [PUSH MASIVO] Ningún usuario cercano tiene dispositivos registrados.");
       return;
     }
 
-    const messages = devices.map(device => ({
-      to: device.expoPushToken,
-      sound: 'default',
-      title: payload.title,
-      body: payload.body,
-      badge: 1,
-      data: { type: "support", referenceId: payload.referenceId },
-    }));
+    const messages = [];
+
+    for (const device of devices) {
+      const [unreadResult] = await db.select({
+        count: sql<number>`count(*)`
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, device.userId),
+          eq(notifications.isRead, false)
+        )
+      );
+
+      const unreadCount = Number(unreadResult?.count) || 1;
+
+      messages.push({
+        to: device.expoPushToken,
+        sound: 'default',
+        title: payload.title,
+        body: payload.body,
+        badge: unreadCount, 
+        data: { type: "lawyer", referenceId: payload.referenceId },
+      });
+    }
 
     const chunks = [];
     for (let i = 0; i < messages.length; i += 100) {
       chunks.push(messages.slice(i, i + 100));
     }
 
-    console.log(`📱 [PUSH MASIVO APOYO] Enviando ${messages.length} notificaciones en la zona...`);
+    console.log(`📱 [PUSH MASIVO] Se enviarán ${messages.length} notificaciones a celulares cercanos...`);
 
     for (const chunk of chunks) {
-      await fetch('https://exp.host/--/api/v2/push/send', {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -118,17 +141,298 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
         },
         body: JSON.stringify(chunk),
       });
+      
+      const responseJson = await response.json();
+      console.log("📥 [RESPUESTA DE EXPO PUSH]:", JSON.stringify(responseJson));
     }
-    console.log(`✅ [PUSH MASIVO APOYO] ¡Envío completado exitosamente!`);
+    console.log(`✅ [PUSH MASIVO] ¡Envío geolocalizado completado exitosamente!`);
   } catch (error) {
-    console.error("❌ [PUSH MASIVO APOYO] Error enviando notificaciones:", error);
+    console.error("❌ [PUSH MASIVO] Error enviando notificaciones:", error);
   }
 };
 
 // =====================================================================
-// 📲 ALERTA DE TELEGRAM PARA APOYO
+// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
 // =====================================================================
-const sendTelegramAlert = async (supportName: string, refCode: string, method: string) => {
+export const getLawyers = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
+  try {
+    const cleanZipParam = rawZip ? sanitizeText(String(rawZip)) || '' : '';
+    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
+      ? sanitizeText(String(currentUserId)) 
+      : null;
+    const cleanScope = sanitizeText(scope) || 'local';
+
+    let baseConditions = cleanUserId 
+      ? sql`(${lawyers.approved} = false OR ${lawyers.timepostEnd} > NOW() OR ${lawyers.userId} = ${cleanUserId})`
+      : sql`(${lawyers.approved} = true OR ${lawyers.timepostEnd} > NOW())`;
+
+    let finalConditions: any = baseConditions;
+
+    // 🚀 NUEVA LÓGICA: FILTRAR POR SCOPE E INCLUIR UNLIMITED SIEMPRE
+    if (cleanScope === 'national') {
+      finalConditions = and(
+        baseConditions,
+        or(
+          eq(lawyers.isRemote, true),
+          sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
+        )
+      );
+    } 
+    else if (cleanZipParam && cleanZipParam.length === 5 && cleanZipParam !== '00000') {
+      const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
+
+      if (nearbyZips && nearbyZips.length > 0) {
+        finalConditions = and(
+          baseConditions, 
+          or(
+            inArray(lawyers.zip, nearbyZips as string[]),
+            sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
+          )
+        );
+      } else {
+        finalConditions = and(
+          baseConditions, 
+          or(
+            eq(lawyers.zip, cleanZipParam),
+            sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
+          )
+        );
+      }
+    } else {
+      // Fallback
+      finalConditions = and(
+        baseConditions,
+        or(
+          eq(lawyers.isRemote, false),
+          sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
+        )
+      );
+    }
+
+    let query = db
+      .select({
+        lawyers: lawyers,
+        users: users,
+        rating: ratingTable,
+        reviews: reviewsTable,
+        reviewers: reviewers,
+        payments: payments
+      })
+      .from(lawyers)
+      .leftJoin(users, eq(lawyers.userId, users.id))
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
+      .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
+      .where(finalConditions)
+      .$dynamic(); 
+
+    // 🚀 ORDENAMIENTO: ¡Los de plan Unlimited van primero siempre como destacados!
+    if (cleanUserId) {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN ${lawyers.userId} = ${cleanUserId} THEN 0 
+              WHEN LOWER(${lawyers.premiumPlan}) = 'unlimited' THEN 1
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
+              ELSE 3 
+            END`,
+        desc(lawyers.createdAt)
+      );
+    } else {
+      query = query.orderBy(
+        sql`CASE 
+              WHEN LOWER(${lawyers.premiumPlan}) = 'unlimited' THEN 0
+              WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
+              ELSE 2 
+            END`,
+        desc(lawyers.createdAt)
+      );
+    }
+
+    const rows = await query;
+    if (!rows || rows.length === 0) return [];
+
+    const lawyersMap = new Map<string, any>();
+
+    for (const row of rows) {
+      const lawyerId = row.lawyers.id;
+
+      if (!lawyersMap.has(lawyerId)) {
+        const isAppr = row.lawyers.approved === true || String(row.lawyers.approved).toLowerCase() === 'true';
+        lawyersMap.set(lawyerId, {
+          ...row.lawyers,
+          approved: isAppr,
+          status: isAppr ? 'approved' : 'pending',
+          referenceCode: row.payments?.referenceCode || null,
+          paymentMethod: row.payments?.paymentMethod || null,
+          googleReviewLink: row.lawyers.googleReviewLink || null,
+          reviews: [], 
+          totalRating: 0,
+          totalReviews: 0
+        });
+      }
+
+      if (row.rating && row.rating.id) {
+        const commentText = row.reviews?.comment || '';
+
+        let signedReviewerUrl = null;
+        if (row.reviewers?.imageUrl && supabase) {
+          try {
+            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+            signedReviewerUrl = data?.signedUrl || null;
+          } catch(e) {}
+        }
+        
+        lawyersMap.get(lawyerId).reviews.push({
+           ...row.rating,
+           stars: Number(row.rating.rating) || 0,
+           comment: commentText,
+           name: row.reviewers?.name + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
+           image: signedReviewerUrl,
+           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    }
+
+    const finalResult = await Promise.all(Array.from(lawyersMap.values()).map(async (lawyer: any) => {
+      lawyer.totalReviews = lawyer.reviews.length;
+
+      if (lawyer.totalReviews > 0) {
+        const sum = lawyer.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+        lawyer.totalRating = Math.round((sum / lawyer.totalReviews) * 10) / 10;
+        lawyer.rating = lawyer.totalRating; 
+      } else {
+        lawyer.totalRating = 0;
+        lawyer.rating = 0;
+      }
+
+      const safeDescription = lawyer.description || lawyer.descriptionLawy || '';
+      lawyer.description = safeDescription;
+      lawyer.descriptionLawy = safeDescription;
+
+      if (lawyer.imageUrl && lawyer.imageUrl.trim() !== '' && !lawyer.imageUrl.startsWith('http')) {
+          const rutaArchivo = lawyer.imageUrl.startsWith('lawyers/') 
+              ? lawyer.imageUrl : `lawyers/${lawyer.imageUrl}`;
+          
+          const { data, error } = await supabase
+              .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
+
+          if (!error && data) {
+              return { ...lawyer, image: data.signedUrl, imageUrl: data.signedUrl }; 
+          }
+      }
+
+      return { ...lawyer, image: lawyer.imageUrl }; 
+    }));
+
+    return finalResult;
+  } catch (error: any) {
+    console.error("❌ Error en getLawyers:", error);
+    return [];
+  }
+};
+
+// =====================================================================
+// 🔍 2. CONSULTA INDIVIDUAL POR ID (OPTIMIZADA)
+// =====================================================================
+export const getLawyerByIdWithReviews = async (id: string) => {
+  try {
+    const cleanId = sanitizeText(id);
+    if (!cleanId) return null;
+
+    const rows = await db
+      .select({
+         lawyers: lawyers,
+         users: users,
+         rating: ratingTable,
+         reviews: reviewsTable,
+         reviewers: reviewers,
+         payments: payments
+      })
+      .from(lawyers)
+      .leftJoin(users, eq(lawyers.userId, users.id))
+      .leftJoin(ratingTable, eq(ratingTable.referenceId, lawyers.id))
+      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
+      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
+      .leftJoin(payments, and(eq(payments.entityId, lawyers.id), eq(payments.entityType, 'lawyer')))
+      .where(eq(lawyers.id, cleanId));
+  
+    if (!rows || rows.length === 0) return null;
+  
+    const dbLawyer = rows[0].lawyers;
+    const isAppr = dbLawyer.approved === true || String(dbLawyer.approved).toLowerCase() === 'true';
+
+    const lawyerFinal: any = {
+      ...dbLawyer, 
+      approved: isAppr,
+      status: isAppr ? 'approved' : 'pending',
+      googleReviewLink: dbLawyer.googleReviewLink ,
+      reviews: [],
+      payments: rows[0].payments?.amount,
+      totalRating: 0,
+      totalReviews: 0           
+    };
+
+    for (const row of rows) {
+      let signedReviewerUrl = null;
+      if (row.reviewers && row.reviewers.imageUrl && supabase) {
+        try {
+          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
+          signedReviewerUrl = data?.signedUrl || null;
+        } catch(e) {}
+      }
+
+      if (row.rating && row.rating.id) {
+        const commentText = row.reviews?.comment || '';
+        lawyerFinal.reviews.push({
+          ...row.rating,
+          stars: Number(row.rating.rating) || 0,
+          comment: commentText,
+          name: row.reviewers?.name ? `${row.reviewers.name} ${row.reviewers.lastName ? row.reviewers.lastName.substring(0, 1) : ''}` : 'Anónimo',
+          image: signedReviewerUrl,
+          displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
+      }
+    }
+
+    lawyerFinal.totalReviews = lawyerFinal.reviews.length;
+    if (lawyerFinal.totalReviews > 0) {
+      const sum = lawyerFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
+      lawyerFinal.totalRating = Math.round((sum / lawyerFinal.totalReviews) * 10) / 10;
+      lawyerFinal.rating = lawyerFinal.totalRating;
+    }
+
+    const safeDescription = lawyerFinal.description || lawyerFinal.descriptionLawy || '';
+    lawyerFinal.description = safeDescription;
+    lawyerFinal.descriptionLawy = safeDescription;
+
+    if (lawyerFinal.imageUrl && lawyerFinal.imageUrl.trim() !== '' && !lawyerFinal.imageUrl.startsWith('http')) {
+        const rutaArchivo = lawyerFinal.imageUrl.startsWith('lawyers/') 
+            ? lawyerFinal.imageUrl : `lawyers/${lawyerFinal.imageUrl}`;
+
+        const { data, error } = await supabase
+            .storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
+            
+        if (!error && data) {
+            lawyerFinal.image = data.signedUrl;
+            lawyerFinal.imageUrl = data.signedUrl;
+        }
+    } else {
+        lawyerFinal.image = lawyerFinal.imageUrl;
+    }
+    
+    lawyerFinal.amount = lawyerFinal.payment?.amount;
+
+    return lawyerFinal;
+  } catch (error: any) {
+    throw new Error(`Error al obtener el abogado por ID: ${error.message}`);
+  }
+};
+
+// =====================================================================
+// 📲 NUEVA FUNCIÓN: ALERTA DE TELEGRAM
+// =====================================================================
+const sendTelegramAlert = async (lawyerName: string, refCode: string, method: string) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   
@@ -137,7 +441,7 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
     return;
   }
 
-  const message = `🤝 *NUEVO CONTACTO DE APOYO REGISTRADO*\n\n*Nombre:* ${supportName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
+  const message = `⚖️ *NUEVO ABOGADO REGISTRADO*\n\n*Nombre:* ${lawyerName}\n*Pago:* ${method}\n*Referencia:* ${refCode}\n\n⚠️ Ingresa al panel de administrador en la app para verificar y aprobar.`;
 
   try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -155,338 +459,16 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (EL BACKEND RETORNA TODO, EL FRONTEND FILTRA)
+// 📥 3. CREAR ABOGADO (NACE PENDIENTE + ALERTA TELEGRAM)
 // =====================================================================
-export const getSupports = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
+export const createLawyer = async (data: any) => {
   try {
-    const zip = rawZip && String(rawZip) !== 'undefined' ? sanitizeText(String(rawZip)) || '' : '';
-    const cleanUserId = (currentUserId && currentUserId !== 'undefined' && currentUserId !== 'null' && !String(currentUserId).startsWith('guest_')) 
-      ? sanitizeText(String(currentUserId)) 
-      : null;
-    const cleanScope = sanitizeText(scope) || 'local';
-
-    // 🚀 EL BACKEND SOLO RETORNA LA INFORMACIÓN (ACTIVOS Y PENDIENTES)
-    const visibilityCondition = cleanUserId 
-      ? sql`(${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${cleanUserId})`
-      : sql`(${support.approved} = true OR ${support.timepostEnd} > NOW())`;
-
-    let query = db
-    .select({
-      support: support,
-      rating: ratingTable,
-      reviews: reviewsTable,
-      payments: payments,
-      users: users,
-      reviewers: reviewers,
-    })
-    .from(support)
-    .leftJoin(users, eq(support.userId, users.id))
-    .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
-    .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id)) 
-    .leftJoin(payments, and(eq(payments.entityId, support.id), eq(payments.entityType, 'support')))
-    .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
-    .$dynamic();
-
-    // 🚀 LÓGICA SCOPE E INCLUSIÓN DEL PLAN UNLIMITED
-    if (cleanScope === 'national') {
-      // Ignora el ZIP, filtra remotos o plan ilimitado
-      query = query.where(
-        and(
-          visibilityCondition,
-          or(
-            eq(support.isRemote, true),
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
-          )
-        )
-      );
-
-      if (cleanUserId) {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN ${support.userId} = ${cleanUserId} THEN 0 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
-              END`,
-          desc(support.createdAt)
-        );
-      } else {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-                ELSE 2 
-              END`,
-          desc(support.createdAt)
-        );
-      }
-    } 
-    else if (zip && zip.length === 5 && zip !== '00000') {
-      const { lat, lng } = await getCoordsFromZip(zip); 
-      const radiusMilesForSearch = 4; 
-
-      const distanceFormula = sql`(
-        3959 * acos(
-          LEAST(1.0, GREATEST(-1.0,
-            cos(radians(${lat}::numeric)) * cos(radians(${support.lat}::numeric)) * cos(radians(${support.lng}::numeric) - radians(${lng}::numeric)) + 
-            sin(radians(${lat}::numeric)) * sin(radians(${support.lat}::numeric))
-          ))
-        )
-      )`;
-
-      query = query.where(
-        and(
-          visibilityCondition,
-          or(
-            sql`${distanceFormula} <= ${radiusMilesForSearch}`,
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
-          )
-        )
-      );
-      
-      // 🚀 Destacar primero los del plan ilimitado y luego por la distancia real
-      if (cleanUserId) {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN ${support.userId} = ${cleanUserId} THEN 0 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
-              END`,
-          distanceFormula
-        );
-      } else {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-                ELSE 2 
-              END`,
-          distanceFormula
-        );
-      }
-    } 
-    else {
-      // Fallback
-      query = query.where(
-        and(
-          visibilityCondition,
-          or(
-            eq(support.isRemote, false),
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
-          )
-        )
-      );
-      
-      if (cleanUserId) {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN ${support.userId} = ${cleanUserId} THEN 0 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 1
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 2 
-                ELSE 3 
-              END`,
-          desc(support.createdAt)
-        );
-      } else {
-        query = query.orderBy(
-          sql`CASE 
-                WHEN LOWER(${support.premiumPlan}) = 'unlimited' THEN 0
-                WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 
-                ELSE 2 
-              END`,
-          desc(support.createdAt)
-        );
-      }
-    }
-
-    const rows = await query;
-    if (!rows || rows.length === 0) return [];
-
-    const supportsMap = new Map<string, any>();
-
-    for (const row of rows) {
-      const supportId = row.support.id;
-
-      if (!supportsMap.has(supportId)) {
-        const isAppr = row.support.approved === true || String(row.support.approved).toLowerCase() === 'true';
-        supportsMap.set(supportId, {
-          ...row.support,
-          approved: isAppr,
-          status: isAppr ? 'approved' : 'pending',
-          referenceCode: row.payments?.referenceCode || null,
-          paymentMethod: row.payments?.paymentMethod || null,
-          premiumPlan: row.support.premiumPlan || 'basic', 
-          googleReviewLink: row.support.googleReviewLink || null,
-          reviews: [], 
-          totalRating: 0,
-          totalReviews: 0
-        });
-      }
-
-      if (row.rating && row.rating.id) {
-        const commentText = row.reviews?.comment || '';
-
-        let signedReviewerImage = null;
-        if (row.reviewers?.imageUrl) {
-          try {
-            const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
-            if (data?.signedUrl) signedReviewerImage = data.signedUrl;
-          } catch(e) {}
-        }
-
-        supportsMap.get(supportId).reviews.push({
-           ...row.rating,
-           stars: Number(row.rating.rating) || 0,
-           comment: commentText,
-           name: (row.reviewers?.name || '') + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
-           image: signedReviewerImage,
-           displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-      }
-    }
-
-    const finalResult = await Promise.all(Array.from(supportsMap.values()).map(async (supportItem: any) => {
-      supportItem.totalReviews = supportItem.reviews.length;
-
-      if (supportItem.totalReviews > 0) {
-        const sum = supportItem.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
-        supportItem.totalRating = Math.round((sum / supportItem.totalReviews) * 10) / 10;
-        supportItem.rating = supportItem.totalRating; 
-      } else {
-        supportItem.totalRating = 0;
-        supportItem.rating = 0;
-      }
-
-      const safeDescription = supportItem.description || supportItem.descriptionSupp || '';
-      supportItem.description = safeDescription;
-      supportItem.descriptionSupp = safeDescription;
-
-      if (supportItem.imageSupp && supportItem.imageSupp.trim() !== '' && !supportItem.imageSupp.startsWith('http')) {
-          const rutaArchivo = supportItem.imageSupp.startsWith('support/') 
-              ? supportItem.imageSupp : `support/${supportItem.imageSupp}`;
-
-          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600); 
-
-          if (data) {
-              return { ...supportItem, image: data.signedUrl, imageSupp: data.signedUrl }; 
-          }
-      }
-      return { ...supportItem, image: supportItem.imageSupp }; 
-    }));
-
-    return finalResult;
-  } catch (error: any) {
-    console.error("❌ Error en getSupports:", error);
-    return [];
-  }
-};
-
-// =====================================================================
-// 🔍 2. CONSULTA INDIVIDUAL POR ID
-// =====================================================================
-export const getSupportById = async (id: string) => {
-  try {
-    const cleanId = sanitizeText(id);
-    if (!cleanId) return null;
-
-    const rows = await db
-      .select({
-        support: support,
-        users: users,
-        rating: ratingTable,
-        reviews: reviewsTable,
-        reviewers: reviewers
-      })
-      .from(support)
-      .leftJoin(users, eq(support.userId, users.id))
-      .leftJoin(ratingTable, eq(ratingTable.referenceId, support.id))
-      .leftJoin(reviewsTable, eq(reviewsTable.relationshipId, ratingTable.id))
-      .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
-      .where(eq(support.id, cleanId));
-  
-    if (!rows || rows.length === 0) return null;
-  
-    const dbSupport = rows[0].support;
-    const isAppr = dbSupport.approved === true || String(dbSupport.approved).toLowerCase() === 'true';
-
-    const supportFinal: any = {
-      ...dbSupport, 
-      approved: isAppr,
-      status: isAppr ? 'approved' : 'pending',
-      premiumPlan: dbSupport.premiumPlan || 'basic', 
-      googleReviewLink: dbSupport.googleReviewLink ,
-      reviews: [],
-      totalRating: 0,
-      totalReviews: 0           
-    };
-
-    for (const row of rows) {
-      if (row.rating && row.rating.id) {
-        let signedReviewerImage = null;
-        if (row.reviewers?.imageUrl) {
-          const { data } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl('users/'+row.reviewers.imageUrl, 3600);
-          if (data?.signedUrl) signedReviewerImage = data.signedUrl;
-        }
-
-        const commentText = row.reviews?.comment || '';
-        supportFinal.reviews.push({
-          ...row.rating,
-          stars: Number(row.rating.rating) || 0,
-          comment: commentText,
-          name: (row.reviewers?.name || '') + ' ' + (row.reviewers?.lastName ? row.reviewers.lastName.substring(0, 1) : ''),
-          image: signedReviewerImage,
-          displayTime: new Date(row.rating.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-      }
-    }
-
-    supportFinal.totalReviews = supportFinal.reviews.length;
-    if (supportFinal.totalReviews > 0) {
-      const sum = supportFinal.reviews.reduce((acc: number, curr: any) => acc + (Number(curr.stars) || 0), 0);
-      supportFinal.totalRating = Math.round((sum / supportFinal.totalReviews) * 10) / 10;
-      supportFinal.rating = supportFinal.totalRating;
-    }
-
-    const safeDescription = supportFinal.description || supportFinal.descriptionSupp || '';
-    supportFinal.description = safeDescription;
-    supportFinal.descriptionSupp = safeDescription;
-
-    if (supportFinal.imageSupp && supportFinal.imageSupp.trim() !== '' && !supportFinal.imageSupp.startsWith('http')) {
-        const rutaArchivo = supportFinal.imageSupp.startsWith('support/') 
-            ? supportFinal.imageSupp : `support/${supportFinal.imageSupp}`;
-
-        const { data, error } = await supabase.storage.from(NOMBRE_BUCKET).createSignedUrl(rutaArchivo, 3600);
-            
-        if (!error && data) {
-            supportFinal.image = data.signedUrl;
-            supportFinal.imageSupp = data.signedUrl;
-        }
-    } else {
-        supportFinal.image = supportFinal.imageSupp;
-    }
-
-    return supportFinal;
-  } catch (error: any) {
-    throw new Error(`Error al obtener el contacto de apoyo por ID: ${error.message}`);
-  }
-};
-
-// =====================================================================
-// 📥 3. CREAR CONTACTO DE APOYO (NACE PENDIENTE + ALERTA TELEGRAM)
-// =====================================================================
-export const createSupport = async (data: any) => {
-  try {
-    let cleanImage = sanitizeText(data.imageSupp) || '';
-    if (cleanImage.startsWith('support/')) {
-      cleanImage = cleanImage.replace('support/', '');
-    }
-
-    const validUserId = sanitizeText(data.userId) || (typeof TEMP_USER_ID !== 'undefined' ? TEMP_USER_ID : null);
+    const validUserId = sanitizeText(data.userId);
     if (!validUserId) {
-      throw new Error("El ID del usuario es obligatorio para registrar un contacto de apoyo.");
+      throw new Error("El ID del usuario es obligatorio para registrar un abogado.");
     }
 
+    // 🚀 VALIDACIÓN DE SEGURIDAD PARA EL ENLACE DE GOOGLE EN EL BACKEND
     let safeGoogleLink = null;
     if (data.googleReviewLink) {
       const trimmedLink = data.googleReviewLink.trim();
@@ -496,64 +478,75 @@ export const createSupport = async (data: any) => {
       safeGoogleLink = trimmedLink;
     }
 
-    const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
-    const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
-    const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
+    let cleanImage = sanitizeText(data.imageUrl) || '';
+    if (cleanImage.startsWith('lawyers/')) {
+      cleanImage = cleanImage.replace('lawyers/', '');
+    }
 
-    const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
-    let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
-
-    // 🚀 CAPTURAR SI ES REMOTO DESDE EL FRONTEND
-    const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
-
-    let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
-
-    const createdSupportResult = await db.transaction(async (tx) => {
+    const createdLawyerResult = await db.transaction(async (tx) => {
+      const { lat, lng } = getCoordsFromZip(data.zip || '');
       
+      const safeDesc = sanitizeText(data.description || data.descriptionLawy) || '';
+      const planSeleccionado = data.premiumPlan || data.premium_plan || 'basic'; 
+      const finalEstate = sanitizeText(data.estate) || 'CA';
+      
+      const metodoPago = data.paymentMethod ? String(data.paymentMethod).toLowerCase().trim() : '';
+      const codigoReferencia = data.referenceCode ? String(data.referenceCode).trim() : '';
+
+      const isCoupon = planSeleccionado === 'coupon' || metodoPago === 'coupon' || planSeleccionado === 'cupon' || metodoPago === 'cupon';
+      let realPromoCode = data.couponCode ? String(data.couponCode).trim() : codigoReferencia.replace('COUPON-', '').trim();
+
+      // 🚀 CAPTURAMOS SI ES REMOTO DESDE EL FRONTEND
+      const isNational = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+
+      let customMessage = "Enviado con éxito, pendiente de revisión de pago.";
+
       if (isCoupon) {
         if (!realPromoCode) throw new Error("Por favor, ingresa el código del cupón.");
         
         const [promo] = await tx.select().from(promoCodes).where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`);
         
-        if (!promo) throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
-        if (promo.isUsed) throw new Error("Este cupón ya fue utilizado anteriormente.");
+        if (!promo) {
+          throw new Error(`El cupón '${realPromoCode}' es inválido o no existe.`);
+        }
+        if (promo.isUsed) {
+          throw new Error("Este cupón ya fue utilizado anteriormente.");
+        }
 
-        customMessage = "¡Cupón VIP aplicado! Tu publicación ha sido registrada y está en revisión.";
+        customMessage = "¡Cupón aplicado! Perfil recibido con éxito y pendiente de revisión.";
       }
 
-      const safeDesc = sanitizeText(data.description || data.descriptionSupp) || '';
-
-      const supportPayload: any = {
-        nameSupp: sanitizeText(data.nameSupp || data.name) || 'Sin nombre',
-        categoryId: sanitizeText(data.categoryId) || '0',
-        addressSupp: isNational ? 'Atención a Nivel Nacional (Remoto)' : (sanitizeText(data.addressSupp || data.address) || ''),
+      const lawyerPayload: any = {
+        nameLawy: sanitizeText(data.nameLawy || data.name) || 'Sin nombre',
+        area: sanitizeText(data.area) || 'General',
+        address: isNational ? 'Atención a Nivel Nacional (Remoto)' : (sanitizeText(data.address) || ''),
         zip: isNational ? '00000' : (sanitizeText(data.zip) || null),
         phone: sanitizeText(data.phone) || '',
-        imageSupp: cleanImage,
-        descriptionSupp: safeDesc,
-        lat: data.lat ? Number(data.lat) : null, 
-        lng: data.lng ? Number(data.lng) : null, 
+        imageUrl: cleanImage,
+        description: safeDesc,
+        descriptionLawy: safeDesc,
+        lat: data.lat ? Number(data.lat) : lat, 
+        lng: data.lng ? Number(data.lng) : lng, 
+        premiumPlan: isCoupon ? 'coupon' : planSeleccionado,
         userId: validUserId, 
-        premiumPlan: isCoupon ? 'coupon' : planSeleccionado, 
-        couponCode: isCoupon ? realPromoCode : '', 
-        estate: data.estate,
         approved: false, 
+        estate: finalEstate,
         googleReviewLink: safeGoogleLink, 
-        isRemote: isNational // 🚀 SE GUARDA EN LA BASE DE DATOS
+        isRemote: isNational // 🚀 SE GUARDA EN LA BD
       };
-      
-      const [newSupport] = await tx.insert(support).values(supportPayload).returning();
+
+      const [newLawyer] = await tx.insert(lawyers).values(lawyerPayload).returning();
 
       if (codigoReferencia || realPromoCode) {
-        const basePrice = await getCurrentSupportPrice(); 
-
+        const basePrice = await getCurrentLawyerPrice();
+        
         const paymentPayload: any = {
-          entityType: 'support',
-          entityId: newSupport.id,
+          entityType: 'lawyer',
+          entityId: newLawyer.id,
           userId: validUserId,
           referenceCode: realPromoCode || codigoReferencia, 
           paymentMethod: isCoupon ? 'Coupon' : metodoPago, 
-          amount: String(isCoupon ? "0.00" : basePrice), 
+          amount: String(isCoupon ? "0.00" : (data.tariffPlan || basePrice)), 
           durationDays: 30, 
           status: isCoupon ? "approved" : "pending"
         };
@@ -568,116 +561,119 @@ export const createSupport = async (data: any) => {
       }
 
       if (isCoupon) {
-        await tx.update(promoCodes)
-        .set({
-          isUsed: true, 
-          usedByUserId: validUserId, 
-          usedForEntityId: newSupport.id, 
-          entityType: 'support', 
-          usedAt: new Date() 
-        })
-        .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
+          await tx.update(promoCodes)
+          .set({
+            isUsed: true, 
+            usedByUserId: validUserId,
+            usedForEntityId: newLawyer.id,
+            entityType: 'lawyer',
+            usedAt: new Date() 
+          })
+          .where(sql`LOWER(${promoCodes.code}) = LOWER(${realPromoCode})`); 
       }
 
       return {
-         ...newSupport,
+         ...newLawyer,
          approved: false,
          status: 'pending',
          referenceCode: isCoupon ? realPromoCode : codigoReferencia,
          paymentMethod: isCoupon ? 'Coupon' : metodoPago,
          description: safeDesc,
-         descriptionSupp: safeDesc,
+         descriptionLawy: safeDesc,
          googleReviewLink: safeGoogleLink,
          message: customMessage 
       };
     });
 
-    if (createdSupportResult) {
-      await sendTelegramAlert(
-        createdSupportResult.nameSupp,
-        createdSupportResult.referenceCode || 'N/A',
-        createdSupportResult.paymentMethod || 'N/A'
+    if (createdLawyerResult) {
+      sendTelegramAlert(
+        createdLawyerResult.nameLawy, 
+        createdLawyerResult.referenceCode || 'N/A', 
+        createdLawyerResult.paymentMethod || 'N/A'
       ).catch(e => console.log("Notificación de Telegram falló en segundo plano", e));
     }
 
-    return createdSupportResult;
+    return createdLawyerResult;
 
   } catch (error: any) { 
-    console.error("❌ Error en createSupport:", error);
-    if (error.code === '23505' || (error.message && error.message.includes('unique constraint')) || (error.message && error.message.includes('duplicate key'))) {
+    console.error("❌ Error en createLawyer:", error);
+    if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
        throw new Error("El código de referencia de pago ya está en uso.");
     }
-    throw new Error(error.message || "Error al crear el contacto de apoyo.");
+    throw new Error(error.message || "Error al crear el abogado.");
   }
 };
 
 // =====================================================================
-// 🔄 4. ACTUALIZAR CONTACTO DE APOYO Y NOTIFICAR (BLINDADO)
+// 🔄 4. ACTUALIZAR ABOGADO (Y DISPARAR PUSH AL APROBAR)
 // =====================================================================
-export const updateSupport = async (idParam: any, dataParam: any) => {
+export const updateLawyer = async (id: string, data: any) => {
   try {
-    let rawId = idParam;
-    let data = dataParam;
-
-    if (idParam && typeof idParam === 'object') {
-      if (idParam.params && idParam.params.id) {
-        rawId = idParam.params.id; 
-      } else if (idParam.id) {
-        rawId = idParam.id; 
-      }
-    }
-
-    const cleanId = sanitizeText(rawId);
+    const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
-    if (!data && idParam && idParam.body) {
-      data = idParam.body;
-    }
+    const [existingLawyer] = await db.select().from(lawyers).where(eq(lawyers.id, cleanId));
+    if (!existingLawyer) throw new Error("Abogado no encontrado");
 
-    const [existingSupport] = await db.select().from(support).where(eq(support.id, cleanId));
-    if (!existingSupport) throw new Error("Contacto de apoyo no encontrado");
+    let amount = 0;
+    try {
+      const existingPayment = await db.select().from(payments)
+        .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')))
+        .limit(1);
+      if (existingPayment.length > 0) amount = Number(existingPayment[0].amount) || 0;
+    } catch (err) {}
 
-    const wasApprovedBefore = existingSupport.approved === true;
     let pushNotificationData: any = null;
 
-    const updatedSupportResult = await db.transaction(async (tx) => {
-      
-      const allowedFields = ['nameSupp', 'categoryId', 'addressSupp', 'zip', 'phone', 'lat', 'lng', 'imageSupp', 'descriptionSupp', 'premiumPlan', 'couponCode']; 
+    const updatedLawyerResult = await db.transaction(async (tx) => {
       const updatePayload: any = {};
-      
-      for (const key of allowedFields) {
-        if (data && data[key] !== undefined) {
-           updatePayload[key] = (key === 'lat' || key === 'lng') ? Number(data[key]) : sanitizeText(data[key]);
+
+      if (data) {
+        if (data.nameLawy !== undefined) updatePayload.nameLawy = sanitizeText(data.nameLawy);
+        if (data.area !== undefined) updatePayload.area = sanitizeText(data.area);
+        
+        // 🚀 Aceptamos actualización de status isRemote
+        if (data.isRemote !== undefined) {
+          const isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
+          updatePayload.isRemote = isNat;
+          if (isNat) {
+            updatePayload.address = 'Atención a Nivel Nacional (Remoto)';
+            updatePayload.zip = '00000';
+          }
         }
-      }
 
-      // 🚀 Aceptamos actualización de status isRemote
-      if (data && data.isRemote !== undefined) {
-        const isNat = Boolean(data.isRemote === true || String(data.isRemote).toLowerCase() === 'true');
-        updatePayload.isRemote = isNat;
-        if (isNat) {
-          updatePayload.addressSupp = 'Atención a Nivel Nacional (Remoto)';
-          updatePayload.zip = '00000';
+        if (data.address !== undefined && !updatePayload.isRemote) updatePayload.address = sanitizeText(data.address);
+        if (data.zip !== undefined && !updatePayload.isRemote) updatePayload.zip = sanitizeText(data.zip);
+        
+        if (data.phone !== undefined) updatePayload.phone = sanitizeText(data.phone);
+        if (data.lat !== undefined) updatePayload.lat = Number(data.lat);
+        if (data.lng !== undefined) updatePayload.lng = Number(data.lng);
+        if (data.premiumPlan !== undefined) updatePayload.premiumPlan = sanitizeText(data.premiumPlan);
+        
+        // 🚀 VALIDACIÓN ANTI-XSS PARA GOOGLE REVIEW LINK EN LA EDICIÓN
+        if (data.googleReviewLink !== undefined) {
+          if (data.googleReviewLink.trim() === '') {
+            updatePayload.googleReviewLink = null;
+          } else if (isValidGoogleReviewUrl(data.googleReviewLink.trim())) {
+            updatePayload.googleReviewLink = data.googleReviewLink.trim();
+          } else {
+            throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+          }
         }
-      }
-
-      if (data && data.googleReviewLink !== undefined) {
-        if (data.googleReviewLink.trim() === '') {
-          updatePayload.googleReviewLink = null;
-        } else if (isValidGoogleReviewUrl(data.googleReviewLink.trim())) {
-          updatePayload.googleReviewLink = data.googleReviewLink.trim();
-        } else {
-          throw new Error("El enlace proporcionado no es una URL válida de reseñas de Google.");
+        
+        if (data.description !== undefined || data.descriptionLawy !== undefined) {
+          const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionLawy);
+          updatePayload.description = safeDesc;
+          updatePayload.descriptionLawy = safeDesc;
         }
-      }
 
-      if (data && (data.description !== undefined || data.descriptionSupp !== undefined)) {
-        const safeDesc = sanitizeText(data.description !== undefined ? data.description : data.descriptionSupp);
-        updatePayload.descriptionSupp = safeDesc;
-      }
+        if (data.imageUrl !== undefined && typeof data.imageUrl === 'string') {
+          updatePayload.imageUrl = data.imageUrl.startsWith('lawyers/') ? data.imageUrl.replace('lawyers/', '') : sanitizeText(data.imageUrl);
+        }
 
-      if (data && data.imageSupp && typeof data.imageSupp === 'string' && data.imageSupp.startsWith('support/')) {
-        updatePayload.imageSupp = data.imageSupp.replace('support/', '');
+        if (data.approved !== undefined) {
+          updatePayload.approved = Boolean(data.approved);
+        }
       }
 
       const isApproved = data && (data.approved === true || String(data.approved).toLowerCase() === 'true');
@@ -689,99 +685,88 @@ export const updateSupport = async (idParam: any, dataParam: any) => {
         let monthsToAdd = 1; 
         if (data && data.durationMonths) {
           const parsedMonths = Number(data.durationMonths);
-          if (!isNaN(parsedMonths)) {
-            monthsToAdd = parsedMonths;
-          }
+          if (!isNaN(parsedMonths)) monthsToAdd = parsedMonths;
         }
         
         const expirationDate = new Date();
         expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
         
         updatePayload.timepostEnd = expirationDate; 
+        if ('timepost_end' in lawyers) updatePayload.timepost_end = expirationDate;
 
-        const basePriceString = await getCurrentSupportPrice();
-        const basePriceNum = Number(basePriceString) || 50; 
-        const totalAmount = (monthsToAdd * basePriceNum).toFixed(2); 
-
+        const totalAmount = (monthsToAdd * amount).toFixed(2); 
         const daysToAdd = monthsToAdd * 30; 
 
         await tx.update(payments)
-          .set({ 
-             status: "approved", 
-             approvedAt: new Date(), 
-             durationDays: daysToAdd, 
-             amount: String(totalAmount), 
-             timepost_end: expirationDate 
-          } as any)
-          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'support')));
+          .set({ status: "approved", approvedAt: new Date(), durationDays: daysToAdd, amount: String(totalAmount), timepost_end: expirationDate } as any)
+          .where(and(eq(payments.entityId, cleanId), eq(payments.entityType, 'lawyer')));
       }
 
-      const updated = await tx
-        .update(support)
-        .set(updatePayload) 
-        .where(eq(support.id, cleanId))
-        .returning();
-        
-      const supportItem = updated[0];
+      if (Object.keys(updatePayload).length === 0) {
+        throw new Error("No values to set: El objeto de actualización está vacío.");
+      }
 
-      if (isApproved && !wasApprovedBefore && supportItem) {
-        const isRemoteNow = supportItem.isRemote === true;
+      const updated = await tx.update(lawyers).set(updatePayload).where(eq(lawyers.id, cleanId)).returning();
+      const lawyer = updated[0];
+
+      const wasApprovedBefore = existingLawyer.approved === true;
+      if (isApproved && !wasApprovedBefore && lawyer) {
+        // 🚀 Si es remoto NO MANDA PUSH LOCAL.
+        const isRemoteNow = lawyer.isRemote === true;
 
         if (!isRemoteNow) {
-          console.log("✅ [DEBUG PUSH APOYO] Apoyo verificado manualmente. Calculando usuarios en zona...");
-          const titleText = "¡Nuevo Apoyo en tu área! 🤝";
-          const bodyText = `El contacto de apoyo ${supportItem.nameSupp} ahora es parte de la red. ¡Visita su perfil!`;
+          const titleText = "¡Nuevo Abogado en tu área! ⚖️";
+          const bodyText = `El abogado ${lawyer.nameLawy} ahora está disponible cerca de ti. ¡Visita su perfil!`;
 
           let usersToNotify: { id: string }[] = [];
-
-          if (supportItem.zip && supportItem.zip !== '00000') {
-            const nearbyZips = zipcodes.radius(supportItem.zip as any, Number(radiusMiles)); 
+          if (lawyer.zip && lawyer.zip !== '00000') {
+            const nearbyZips = zipcodes.radius(lawyer.zip as any, Number(radiusMiles)); 
             if (nearbyZips && nearbyZips.length > 0) {
               usersToNotify = await tx.select({ id: users.id }).from(users).where(inArray(users.zip, nearbyZips as string[]));
             } else {
-              usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(supportItem.zip)));
+              usersToNotify = await tx.select({ id: users.id }).from(users).where(eq(users.zip, String(lawyer.zip)));
             }
           }
 
           if (usersToNotify.length > 0) {
-            const notificationsToInsert = usersToNotify.map(u => {
-              const payloadNotif: any = { title: titleText, description: bodyText, type: "support", visibleAt: new Date(), userId: u.id, isRead: false };
-              if ('referenceId' in notifications) payloadNotif.referenceId = String(supportItem.id);
-              else if ('reference_id' in notifications) payloadNotif.reference_id = String(supportItem.id);
-              return payloadNotif;
-            });
+            const notificationsToInsert = usersToNotify.map(u => ({
+              title: titleText,
+              description: bodyText,
+              type: "lawyer", 
+              visibleAt: new Date(), 
+              userId: u.id,
+              isRead: false,
+              referenceId: String(lawyer.id)
+            }));
 
             await tx.insert(notifications).values(notificationsToInsert);
-            pushNotificationData = { title: titleText, body: bodyText, referenceId: String(supportItem.id), userIds: usersToNotify.map(u => u.id) };
+            pushNotificationData = { title: titleText, body: bodyText, referenceId: String(lawyer.id), userIds: usersToNotify.map(u => u.id) };
           }
         }
       }
 
-      return supportItem || null;
+      return lawyer || null;
     });
 
     if (pushNotificationData) {
-      await sendMassPushNotification(pushNotificationData).catch(err => {
-         console.error("❌ [DEBUG PUSH APOYO] Falló el Push Notification:", err);
-      });
+      sendMassPushNotification(pushNotificationData).catch(() => {});
     }
 
-    return updatedSupportResult;
-
+    return updatedLawyerResult;
   } catch (error: any) { 
-    console.error("❌ Error en updateSupport:", error);
-    throw new Error(`Error al actualizar el contacto de apoyo: ${error.message}`);
+    console.error("❌ Error en updateLawyer:", error);
+    throw new Error(`Error al actualizar el abogado: ${error.message}`);
   }
 };
 
 // =====================================================================
 // 🚀 5. INGRESO DE RATING Y RESEÑA
 // =====================================================================
-export const createSupportReview = async (data: any) => {
+export const createRating = async (data: any) => {
   try {
-    let validUserId = sanitizeText(data.userId) || null;
+    const validUserId = sanitizeText(data.userId);
     if (!validUserId || validUserId.length < 20) {
-        validUserId = TEMP_USER_ID; 
+        throw new Error("No estás autorizado para publicar una reseña. Se requiere iniciar sesión.");
     }
 
     const targetReferenceId = sanitizeText(data.reference_id || data.referenceId);
@@ -798,7 +783,7 @@ export const createSupportReview = async (data: any) => {
           .limit(1);
 
         if (existingRating && existingRating.length > 0) {
-            throw new Error("El usuario ya ha publicado una reseña para este contacto de apoyo.");
+            throw new Error("El usuario ya ha publicado una reseña para este abogado.");
         }
     }
 
@@ -807,8 +792,8 @@ export const createSupportReview = async (data: any) => {
       userId: validUserId,
     };
 
-    if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'support';
-    else ratingPayload.type_entry = 'support';
+    if ('typeEntry' in ratingTable) ratingPayload.typeEntry = 'lawyers';
+    else ratingPayload.type_entry = 'lawyers';
 
     if ('referenceId' in ratingTable) ratingPayload.referenceId = targetReferenceId;
     else ratingPayload.reference_id = targetReferenceId;
@@ -820,9 +805,7 @@ export const createSupportReview = async (data: any) => {
     const incomingText = sanitizeText(data.comment || data.text || data.review);
     
     if (incomingText && incomingText !== '') {
-      const reviewPayload: any = {
-        userId: validUserId
-      };
+      const reviewPayload: any = { userId: validUserId };
 
       if ('review' in reviewsTable) reviewPayload.review = incomingText;
       else if ('text' in reviewsTable) reviewPayload.text = incomingText;
@@ -834,11 +817,11 @@ export const createSupportReview = async (data: any) => {
       
       const typeCodeRecord = await db.select({ id: typeDetail.id })
         .from(typeDetail)
-        .where(sql`${typeDetail.typeCode} ILIKE 'Support%'`)
+        .where(sql`${typeDetail.typeCode} = 'Lawyers'`)
         .limit(1);
 
       if (!typeCodeRecord || typeCodeRecord.length === 0) {
-        throw new Error("Error en la Base de Datos: La categoría 'Support' no existe en la tabla typeDetail.");
+        throw new Error("Error en la Base de Datos: La categoría 'Lawyers' no existe en la tabla typeDetail.");
       }
 
       const typeDetailIdResolved = typeCodeRecord[0].id;
@@ -878,44 +861,55 @@ export const createSupportReview = async (data: any) => {
       comment: savedComment,
       name: formattedName,
       image: signedImageUrl,
-      displayTime: new Date(newRating[0].createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      displayTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
   } catch (error: any) {
-    console.error("❌ Error CRÍTICO en createSupportReview:", error.message);
+    console.error("❌ Error CRÍTICO en createRating de Abogados:", error.message);
     throw new Error(`Error al crear la calificación: ${error.message}`);
   }
 };
 
-export const deleteSupport = async (id: string) => {
+// =====================================================================
+// 🗑️ 6. ELIMINAR ABOGADO 
+// =====================================================================
+export const deleteLawyer = async (id: string) => {
   try {
     const cleanId = sanitizeText(id);
     if (!cleanId) throw new Error("ID inválido");
 
-    const deleted = await db.delete(support).where(eq(support.id, cleanId)).returning();
+    const deleted = await db.delete(lawyers).where(eq(lawyers.id, cleanId)).returning();
     return deleted[0] || null;
   } catch (error: any) {
-    throw new Error(`Error al eliminar el contacto de apoyo: ${error.message}`);
+    throw new Error(`Error al eliminar el abogado: ${error.message}`);
   }
 };
 
-export const renewSupport = async (id: string, data: any) => {
+// =====================================================================
+// 🔄 7. RENOVAR ABOGADO
+// =====================================================================
+export const renewLawyer = async (id: string, data: any) => {
   try {
     const cleanId = sanitizeText(id);
     const refCode = sanitizeText(data.referenceCode);
     const payMethod = sanitizeText(data.paymentMethod);
+
+    const validUserId = sanitizeText(data.userId);
+    if (!validUserId) {
+      throw new Error("El ID del usuario es obligatorio para renovar.");
+    }
 
     if (!refCode || !payMethod || !cleanId) {
       throw new Error("Se requiere el código de referencia y método de pago.");
     }
 
     return await db.transaction(async (tx) => {
-      const basePrice = await getCurrentSupportPrice();
+      const basePrice = await getCurrentLawyerPrice();
 
       await tx.insert(payments).values({
-        entityType: 'support',
+        entityType: 'lawyer',
         entityId: cleanId,
-        userId: sanitizeText(data.userId) || TEMP_USER_ID, 
+        userId: validUserId, 
         referenceCode: refCode, 
         paymentMethod: payMethod, 
         amount: String(basePrice), 
@@ -924,9 +918,9 @@ export const renewSupport = async (id: string, data: any) => {
       } as any);
 
       const updated = await tx
-        .update(support)
+        .update(lawyers)
         .set({ approved: false }) 
-        .where(eq(support.id, cleanId))
+        .where(eq(lawyers.id, cleanId))
         .returning();
         
       return {
@@ -937,25 +931,25 @@ export const renewSupport = async (id: string, data: any) => {
     });
 
   } catch (error: any) { 
-    console.error("❌ Error en renewSupport:", error);
+    console.error("❌ Error en renewLawyer:", error);
     if (error.code === '23505' || (error.message && error.message.includes('unique constraint'))) {
        throw new Error("Ese código de referencia de pago ya fue utilizado en otra transacción.");
     }
-    throw new Error(`Error al renovar el contacto de apoyo: ${error.message}`);
+    throw new Error(`Error al renovar el abogado: ${error.message}`);
   }
 };
 
 // =====================================================================
-// 🚨 6. REPORTAR CONTENIDO (CON NOMBRES REALES Y CONSULTAS SEGURAS)
+// 🚨 REPORTE DE CONTENIDO (CON NOMBRES REALES Y CONSULTAS SEGURAS)
 // =====================================================================
 export const reportContent = async (data: any) => {
   try {
     const { itemId, itemType, userId, reason } = data;
 
     const validItemId = sanitizeText(itemId);
-    const validType = sanitizeText(itemType) || 'support';
+    const validType = sanitizeText(itemType) || 'lawyer';
     const validUserId = sanitizeText(userId);
-    const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Spam';
+    const safeReason = sanitizeText(reason) || 'Infracción de Copyright o Contenido Inapropiado';
 
     if (!validItemId) {
       throw new Error("El ID del elemento es obligatorio para reportar.");
@@ -982,15 +976,15 @@ export const reportContent = async (data: any) => {
       }
     }
 
-    // 2. Consultar el nombre del contacto de apoyo reportado en la tabla support
-    let reportedName = `Apoyo ID: ${validItemId}`;
+    // 2. Consultar el nombre del abogado directamente de la tabla lawyers
+    let reportedName = `Abogado ID: ${validItemId}`;
     try {
-      const itemRows = await db.select({ name: support.nameSupp }).from(support).where(eq(support.id, validItemId)).limit(1);
+      const itemRows = await db.select({ name: lawyers.nameLawy }).from(lawyers).where(eq(lawyers.id, validItemId)).limit(1);
       if (itemRows && itemRows.length > 0 && itemRows[0].name) {
         reportedName = itemRows[0].name;
       }
     } catch (e) {
-      console.warn("⚠️ No se pudo obtener el nombre del contacto de apoyo reportado", e);
+      console.warn("⚠️ No se pudo obtener el nombre del abogado reportado", e);
     }
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -1002,13 +996,13 @@ export const reportContent = async (data: any) => {
     }
 
     // 3. Mensaje claro con template literals limpios y nativos
-    const message = `🚨 *REPORTE DE CONTENIDO (APOYO)*\n\n` +
+    const message = `🚨 *REPORTE DE CONTENIDO (DMCA/MODERACIÓN)*\n\n` +
                     `📌 *Módulo:* ${validType.toUpperCase()}\n` +
                     `🏷️ *Elemento:* "${reportedName}"\n` +
                     `🆔 *ID Elemento:* \`\${validItemId}\`\n` +
                     `👤 *Reportado por:* ${reporterName} (${reporterEmail})\n` +
                     `⚠️ *Motivo:* ${safeReason}\n\n` +
-                    `Por favor verifica el contenido en el panel de administrador.`;
+                    `Por favor verifica el contenido en el panel de administrador para evaluar si infringe las normas.`;
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
