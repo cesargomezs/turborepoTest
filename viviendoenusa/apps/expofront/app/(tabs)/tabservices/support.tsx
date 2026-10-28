@@ -14,7 +14,6 @@ import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useColorScheme } from '@/hooks/useColorScheme';
-// 🚀 Se importan las acciones de Redux para manejar el modal de restricción de invitados
 import { useMockSelector, setUserMetadata, toggleAuth, useMockDispatch } from '@/redux/slices';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUnifiedCardStyles } from '@/hooks/useUnifiedCardStyles';
@@ -138,7 +137,6 @@ const ReviewForm = ({ onPublish, onCancel, isDark, t }: any) => {
   );
 };
 
-// 🚀 MODAL DE REGISTRO CON TOGGLE REMOTO
 const SupportFormModal = memo(({
   visible, onClose, onSuccess, currentUserId, userToken, userMetadata, companyTariffs,
   t, isDark, Colors, orangeGradient, disabledGradient, isLargeWeb, isAndroid, isIOS,
@@ -160,8 +158,6 @@ const SupportFormModal = memo(({
   const [formPlan, setFormPlan] = useState('coupon');
   const [formRefCode, setFormRefCode] = useState(''); 
   const [isPublishing, setIsPublishing] = useState(false);
-
-  // 🚀 ESTADO PARA SABER SI EL SERVICIO ES REMOTO O LOCAL
   const [isNational, setIsNational] = useState(false);
 
   const isBaseFormValid = !!(formName.trim() && (isNational ? true : formAddress.trim()) && (isNational ? true : formZip.length === 5) && formPhone.trim() && formImage);
@@ -261,7 +257,6 @@ const SupportFormModal = memo(({
       const finalPlan = uiPayType === 'coupon' ? 'coupon' : formPlan;
       const finalRefCode = uiPayType === 'coupon' ? `COUPON-${formRefCode.trim().toUpperCase()}` : formRefCode;
 
-      // 🚀 AGREGAMOS LA VARIABLE isRemote AL PAYLOAD 
       const payload = { 
         nameSupp: formName.trim(),
         descriptionSupp: formDesc.trim(), 
@@ -381,7 +376,6 @@ const SupportFormModal = memo(({
                 })}
               </View>
 
-              {/* 🚀 TOGGLE LOCAL VS NACIONAL AL REGISTRARSE */}
               <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Colors.text, marginBottom: 8 }}>Cobertura del Servicio</ThemedText>
               <View style={{ flexDirection: 'row', backgroundColor: Colors.inputBg, borderRadius: 14, padding: 4, marginBottom: 15, borderWidth: 1, borderColor: Colors.border }}>
                  <TouchableOpacity onPress={() => setIsNational(false)} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: !isNational ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', alignItems: 'center', shadowColor: !isNational ? '#000' : 'transparent', shadowOpacity: 0.1, shadowRadius: 4, elevation: !isNational ? 2 : 0 }}>
@@ -602,7 +596,6 @@ export default function SupportScreen() {
     modalBg: isDark ? '#1C1C1E' : '#FFFFFF',
   };
   
-  // 🚀 ESTADO DE SCOPE LOCAL VS NACIONAL
   const [serviceScope, setServiceScope] = useState<'local' | 'national'>('local');
   const [zipCode, setZipCode] = useState('');
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
@@ -625,14 +618,12 @@ export default function SupportScreen() {
   const [zelleQrUrl, setZelleQrUrl] = useState<string>('');
   const [appConfig, setAppConfig] = useState({ payOnActive: false, zelleActive: true, zelleLink: '' });
 
-  // 🚀 ESTADOS PARA EL REPORTE DE CONTENIDO
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [itemToReport, setItemToReport] = useState<any>(null);
   const [reportReason, setReportReason] = useState('Infracción de Copyright o Spam');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const currentUserId = userMetadata?.id || userMetadata?.userId || "baeb641a-3fa4-4fef-9846-d75947d1bca9";
-  // 🚀 ZIPCODE ES OPCIONAL SI ES NACIONAL
   const isZipValid = serviceScope === 'national' || zipCode.length === 5;
   const cardWidth = isLargeWeb ? '96%' : (width > 768 ? 500 : (loggedIn ? width * 0.92 : width * 0.85));
   const cardHeight = isLargeWeb ? height * 0.70 : (isAndroid ? height * 0.67 : (loggedIn ? height * 0.69 : height * 0.65));
@@ -642,7 +633,6 @@ export default function SupportScreen() {
   const pulseRingAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacityAnim = useRef(new Animated.Value(0.5)).current;
 
-  // 🚀 Función separada para poder llamarla al abrir el modal si falla el internet inicial
   const fetchAppConfig = async () => {
     try {
       const res = await fetch(API_CONFIG_URL);
@@ -792,7 +782,6 @@ export default function SupportScreen() {
     finally { setLoading(false); }
   };
 
-  // 🚀 ADAPTADO PARA RECIBIR SCOPE (LOCAL/NACIONAL)
   const fetchSupportData = async (searchZip?: string, scope: 'local' | 'national' = serviceScope) => {
     try {
       setLoading(true);
@@ -867,7 +856,6 @@ export default function SupportScreen() {
     return () => subscription.remove();
   }, [isFocused, zipCode, serviceScope]);
 
-  // 🚀 ADAPTADO PARA RECIBIR SCOPE (LOCAL/NACIONAL)
   const handleSearch = async (forcedCategoryIdx?: number, forcedZip?: string, forcedScope?: 'local' | 'national') => {
     const targetScope = forcedScope || serviceScope;
     const targetZip = forcedZip || zipCode;
@@ -889,7 +877,6 @@ export default function SupportScreen() {
 
     const approvedSupport = await fetchSupportData(targetZip, targetScope);
     
-    // Asumimos centro de USA si es nacional solo por pasar lat/lng al filtro local (el backend ya filtró)
     const latFilter = userLocation ? userLocation.latitude : 34.0934;
     const lngFilter = userLocation ? userLocation.longitude : -117.5847;
     setResults(applyLocalFilters(approvedSupport, categoryToSearch, latFilter, lngFilter, isAdminMode)); 
@@ -1070,7 +1057,6 @@ export default function SupportScreen() {
               <ThemedText style={{ color: '#FF5F6D', fontSize: 11, fontWeight: '900' }}>{categoryName.toUpperCase()}</ThemedText>
             </View>
 
-            {/* 🚀 BOTÓN DE REPORTAR EN LA ESQUINA SUPERIOR DE LA TARJETA */}
             {!isOwner && (
               <TouchableOpacity 
                 onPress={() => { 
@@ -1115,7 +1101,6 @@ export default function SupportScreen() {
             <TouchableOpacity onPress={() => !isPending && RNLinking.openURL(`tel:${store.phone}`)} disabled={isPending || fadeCard} style={{ flexGrow: 1, flexBasis: 100, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', backgroundColor: isDark ? 'rgba(255, 183, 77, 0.15)' : '#FFF3E0' }}><MaterialCommunityIcons name="phone" size={18} color={isDark ? '#FFB74D' : '#EF6C00'} /><ThemedText style={{ marginLeft: 6, fontSize: 12, fontWeight: '700', color: isDark ? '#FFB74D' : '#EF6C00' }}>{t.genericbtn.call}</ThemedText></TouchableOpacity>
           </View>
 
-          {/* 🚀 BOTÓN DE REPORTAR EN LA PARTE INFERIOR DE LA TARJETA */}
           {!isPending && !isOwner && (
             <TouchableOpacity 
               onPress={() => { 
@@ -1245,7 +1230,6 @@ export default function SupportScreen() {
                     </View>
                 )}
 
-                {/* 🚀 BOTÓN DE REPORTAR EN DETALLE DE APOYO */}
                 {selectedDetail?.userId !== currentUserId && (
                   <TouchableOpacity 
                     onPress={() => { 
@@ -1311,7 +1295,6 @@ export default function SupportScreen() {
                          <ThemedText style={{ color: DynamicColors.text, fontSize: 14, marginTop: 4 }}>{r.comment}</ThemedText>
                          
                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: DynamicColors.border }}>
-                            {/* 🚀 BOTÓN DE REPORTAR EN CADA RESEÑA */}
                             {r.userId !== currentUserId && (
                               <TouchableOpacity 
                                 onPress={() => { 
@@ -1452,7 +1435,6 @@ export default function SupportScreen() {
         </View>
       </Modal>
 
-      {/* 🚀 MODAL DE REPORTE DE CONTENIDO */}
       <Modal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '100%', maxWidth: 400, backgroundColor: isDark ? '#1E1E1E' : '#FFF', borderRadius: 24, padding: 25, borderWidth: 1, borderColor: DynamicColors.border }}>
@@ -1505,31 +1487,77 @@ export default function SupportScreen() {
           <View style={{ width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 28, backgroundColor: isAndroid ? (isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)') : 'transparent', borderWidth: isAndroid ? 1 : 0, borderColor: DynamicColors.border }}>
             {!isAndroid && <BlurView intensity={isDark ? 100 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />}
             <View style={stylesUnified.cardContent}>
+              
+              {/* 🚀 1. TOGGLE DE LOCAL / NACIONAL ARRIBA */}
+              <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 3, marginBottom: 15, height: 38 }}>
+                <TouchableOpacity 
+                  onPress={() => { 
+                    setServiceScope('local'); 
+                    if(zipCode.length === 5) {
+                      handleSearch(selectedCategoryIdx, zipCode, 'local'); 
+                    } else {
+                      setAllStores([]);
+                      setResults([]);
+                      setShowMarkers(false);
+                      setIsFilteredByMap(false);
+                    }
+                  }} 
+                  style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'local' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                  <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'local' ? DynamicColors.text : DynamicColors.subtext }}>📍 Local</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => { 
+                    setServiceScope('national'); 
+                    handleSearch(selectedCategoryIdx, '', 'national'); 
+                  }} 
+                  style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'national' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                  <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'national' ? DynamicColors.accent : DynamicColors.subtext }}>🌐 Nacional</ThemedText>
+                </TouchableOpacity>
+              </View>
+
+              {/* 🚀 2. HEADER CON BUSCADOR ADAPTATIVO (TEXTO LIBRE EN NACIONAL) Y SIN REFRESH */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, alignItems: 'center', flexDirection: 'row', gap: 12 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} /></TouchableOpacity>
+                
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, height: 42 }}>
                   {serviceScope === 'local' ? (
                     <TextInput 
                       style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
                       placeholder={t.genericlabel.labelcodepostal} 
                       keyboardType="numeric" maxLength={5} value={zipCode} 
-                      onChangeText={handleZipChange} onSubmitEditing={() => handleSearch()} 
+                      onChangeText={handleZipChange} onSubmitEditing={() => { if(zipCode.length === 5) handleSearch(selectedCategoryIdx, zipCode, 'local'); }} 
                       placeholderTextColor={DynamicColors.subtext} 
                     />
                   ) : (
-                    <View style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, justifyContent: 'center', backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1 }]}>
-                      <ThemedText style={{ color: DynamicColors.text, fontSize: 14, fontWeight: '600' }}>Buscando a Nivel Nacional</ThemedText>
-                    </View>
+                    <TextInput 
+                      style={[{ flex: 1, height: '100%', borderRadius: 14, paddingHorizontal: 15, fontSize: 14, color: DynamicColors.text, backgroundColor: DynamicColors.inputBg, borderColor: DynamicColors.border, borderWidth: 1, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }]} 
+                      placeholder="Buscar por nombre o servicio..." 
+                      value={zipCode} 
+                      onChangeText={setZipCode} 
+                      onSubmitEditing={() => handleSearch(selectedCategoryIdx, '', 'national')} 
+                      placeholderTextColor={DynamicColors.subtext} 
+                    />
                   )}
-                  <TouchableOpacity onPress={() => handleSearch()} disabled={!isZipValid} style={{ width: 42, height: 42, marginLeft: 8 }}>
-                    <LinearGradient colors={isZipValid ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
-                      {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={isZipValid ? "#fff" : DynamicColors.iconInactive} />}
+                  
+                  <TouchableOpacity 
+                    onPress={() => {
+                      if (serviceScope === 'national') {
+                        handleSearch(selectedCategoryIdx, '', 'national');
+                      } else if (zipCode.length === 5) {
+                        handleSearch(selectedCategoryIdx, zipCode, 'local');
+                      }
+                    }} 
+                    disabled={serviceScope === 'local' && zipCode.length !== 5} 
+                    style={{ width: 42, height: 42, marginLeft: 8 }}
+                  >
+                    <LinearGradient colors={(serviceScope === 'national' || zipCode.length === 5) ? orangeGradient : disabledGradient} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                      {loading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="magnify" size={20} color={(serviceScope === 'national' || zipCode.length === 5) ? "#fff" : DynamicColors.iconInactive} />}
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
+
+                {/* 🚀 SOLO QUEDA EL BOTÓN DE ADMIN */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
-                  <TouchableOpacity onPress={() => { setResults([]); setAllStores([]); setPendingStores([]); setZipCode(''); setShowMarkers(false); setIsFilteredByMap(false); setMapKey(k => k + 1); }}><MaterialCommunityIcons name="refresh" size={24} color={DynamicColors.text} style={{opacity: 0.7}} /></TouchableOpacity>
-                  
                   <TouchableOpacity 
                     activeOpacity={0.6}
                     hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
@@ -1544,22 +1572,7 @@ export default function SupportScreen() {
                   >
                     <MaterialCommunityIcons name="heart-pulse" size={40} color={isAdminMode ? '#FF5F6D' : DynamicColors.text} style={{opacity: isAdminMode ? 1 : 0.2}} />
                   </TouchableOpacity>
-
                 </View>
-              </View>
-
-              {/* 🚀 TOGGLE COMPACTO (LOCAL VS NACIONAL) */}
-              <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 3, marginBottom: 15, height: 38 }}>
-                <TouchableOpacity 
-                  onPress={() => { setServiceScope('local'); if(zipCode.length===5) handleSearch(selectedCategoryIdx, zipCode, 'local'); }} 
-                  style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'local' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
-                  <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'local' ? DynamicColors.text : DynamicColors.subtext }}>📍 Local</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={() => { setServiceScope('national'); handleSearch(selectedCategoryIdx, zipCode, 'national'); }} 
-                  style={{ flex: 1, borderRadius: 10, backgroundColor: serviceScope === 'national' ? (isDark ? 'rgba(255,255,255,0.1)' : '#FFF') : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
-                  <ThemedText style={{ fontWeight: '800', fontSize: 12, color: serviceScope === 'national' ? DynamicColors.accent : DynamicColors.subtext }}>🌐 Nacional</ThemedText>
-                </TouchableOpacity>
               </View>
 
               {!isLargeWeb ? (
@@ -1613,7 +1626,6 @@ export default function SupportScreen() {
                     )}
                   </View>
 
-                  {/* 🚀 EL MAPA SOLO SE MUESTRA SI ES LOCAL */}
                   {serviceScope === 'local' && (
                     <View style={{ height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
                       <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} onZoom={handleZoom} dataSource={showMarkers ? results : []} mapKey={mapKey} onMarkerPress={handleMarkerSelection} showsUserLocation={true} />
@@ -1684,7 +1696,6 @@ export default function SupportScreen() {
                       </ScrollView>
                     </View>
                     <View style={{ flex: 1.4, marginLeft: 25, height: '100%', borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: DynamicColors.border, position: 'relative' }}>
-                      {/* 🚀 CONDICIONAL WEB: MAPA SOLO SI ES LOCAL */}
                       {serviceScope === 'local' ? (
                         <>
                           <MapComponent mapRef={mapRef} userLocation={userLocation} showMarkers={showMarkers} dataSource={showMarkers ? results : []} mapKey={mapKey} onMarkerPress={handleMarkerSelection} onZoom={handleZoom} showsUserLocation={true} />
@@ -1712,7 +1723,7 @@ export default function SupportScreen() {
             setShowRestrictedModal(true);
             return;
           }
-          fetchAppConfig(); // 🚀 ¡Consulta la validación de pagos cada vez que se presiona!
+          fetchAppConfig(); 
           setModalVisible(true);
         }}
       >
