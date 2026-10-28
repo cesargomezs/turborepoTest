@@ -196,13 +196,13 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         )
       )`;
 
-      // En Local: Coincidencia por radio físico + Unlimited + REMOTOS (para que se vean en ambas vistas sin importar el plan)
+      // En Local: Coincidencia por radio físico + Unlimited, BLOQUEANDO TOTALMENTE LOS ZIP '00000' (Remotos puros)
       finalConditions = and(
         baseConditions,
+        sql`${support.zip} != '00000'`, // 🔥 EXCLUYE DRÁSTICAMENTE LOS REMOTOS DE LA VISTA LOCAL
         or(
           sql`${distanceFormula} <= ${radiusMilesForSearch}`,
-          sql`LOWER(${support.premiumPlan}) = 'unlimited'`,
-          eq(support.isRemote, true) // 🔥 ESTO HACE QUE LOS REMOTOS APAREZCAN TAMBIÉN EN LA BÚSQUEDA LOCAL
+          sql`LOWER(${support.premiumPlan}) = 'unlimited'`
         )
       );
     } 
