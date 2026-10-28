@@ -184,13 +184,13 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       const nearbyZips = zipcodes.radius(cleanZipParam as any, Number(radiusMiles)); 
 
       if (nearbyZips && nearbyZips.length > 0) {
-        // Local con ZIP: Coincidencia por radio físico + Unlimited + REMOTOS (para que se vean en ambas)
+        // Local con ZIP: Coincidencia por radio físico + Unlimited + REMOTOS (para que se vean en ambas vistas sin importar el plan o cupón)
         finalConditions = and(
           baseConditions, 
           or(
             inArray(lawyers.zip, nearbyZips as string[]),
             sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`,
-            eq(lawyers.isRemote, true) // 🔥 ESTO SOLUCIONA EL BUG QUE REPORTASTE
+            eq(lawyers.isRemote, true) // 🔥 ESTO HACE QUE LOS REMOTOS APAREZCAN TAMBIÉN EN LA VISTA LOCAL
           )
         );
       } else {
@@ -199,7 +199,7 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
           or(
             eq(lawyers.zip, cleanZipParam),
             sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`,
-            eq(lawyers.isRemote, true) // 🔥 ESTO SOLUCIONA EL BUG QUE REPORTASTE
+            eq(lawyers.isRemote, true) // 🔥 ESTO HACE QUE LOS REMOTOS APAREZCAN TAMBIÉN EN LA VISTA LOCAL
           )
         );
       }

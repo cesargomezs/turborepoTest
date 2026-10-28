@@ -202,7 +202,7 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         or(
           sql`${distanceFormula} <= ${radiusMilesForSearch}`,
           sql`LOWER(${support.premiumPlan}) = 'unlimited'`,
-          eq(support.isRemote, true) // 🔥 ESTO SOLUCIONA EL BUG PARA REMOTOS EN CUALQUIER PLAN
+          eq(support.isRemote, true) // 🔥 ESTO HACE QUE LOS REMOTOS APAREZCAN TAMBIÉN EN LA BÚSQUEDA LOCAL
         )
       );
     } 
