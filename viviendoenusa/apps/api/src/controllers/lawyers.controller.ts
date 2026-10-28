@@ -152,7 +152,7 @@ const sendMassPushNotification = async (payload: { title: string, body: string, 
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (OPTIMIZADA PARA INVITADOS Y USUARIOS)
+// 🔍 1. CONSULTA GENERAL (OPTIMIZADA Y BLINDADA)
 // =====================================================================
 export const getLawyers = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
@@ -168,7 +168,7 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
 
     let finalConditions: any = baseConditions;
 
-    // 🚀 NUEVA LÓGICA: FILTRAR POR SCOPE E INCLUIR UNLIMITED SIEMPRE
+    // 🚀 LÓGICA DE NEGOCIO Y PROTECCIÓN DE DATOS
     if (cleanScope === 'national') {
       finalConditions = and(
         baseConditions,
@@ -199,14 +199,26 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
         );
       }
     } else {
-      // Fallback
-      finalConditions = and(
-        baseConditions,
-        or(
-          eq(lawyers.isRemote, false),
-          sql`LOWER(${lawyers.premiumPlan}) = 'unlimited'`
-        )
-      );
+      // 🚀 PROTECCIÓN DEL BACKEND: Si es local pero NO enviaron código postal
+      let isAdmin = false;
+      if (cleanUserId) {
+        const userCheck = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId)).limit(1);
+        if (userCheck && userCheck.length > 0) {
+          const role = userCheck[0].typeDetail;
+          if (role === 'SAdmin' || role === 'admin') isAdmin = true;
+        }
+      }
+
+      if (isAdmin) {
+        // El admin necesita traer todo para su bandeja de aprobación
+        finalConditions = baseConditions;
+      } else if (cleanUserId) {
+        // Un usuario normal sin ZIP solo ve sus propias publicaciones
+        finalConditions = and(baseConditions, eq(lawyers.userId, cleanUserId));
+      } else {
+        // Invitados o sin ZIP válido reciben array vacío al instante
+        return [];
+      }
     }
 
     let query = db
@@ -227,7 +239,6 @@ export const getLawyers = async (rawZip?: string | number, currentUserId?: strin
       .where(finalConditions)
       .$dynamic(); 
 
-    // 🚀 ORDENAMIENTO: ¡Los de plan Unlimited van primero siempre como destacados!
     if (cleanUserId) {
       query = query.orderBy(
         sql`CASE 

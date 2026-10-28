@@ -155,7 +155,7 @@ const sendTelegramAlert = async (supportName: string, refCode: string, method: s
 };
 
 // =====================================================================
-// 🔍 1. CONSULTA GENERAL (EL BACKEND RETORNA TODO, EL FRONTEND FILTRA)
+// 🔍 1. CONSULTA GENERAL (OPTIMIZADA Y BLINDADA)
 // =====================================================================
 export const getSupports = async (rawZip?: string | number, currentUserId?: string, scope?: string) => {
   try {
@@ -165,7 +165,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       : null;
     const cleanScope = sanitizeText(scope) || 'local';
 
-    // 🚀 EL BACKEND SOLO RETORNA LA INFORMACIÓN (ACTIVOS Y PENDIENTES)
     const visibilityCondition = cleanUserId 
       ? sql`(${support.approved} = false OR ${support.timepostEnd} > NOW() OR ${support.userId} = ${cleanUserId})`
       : sql`(${support.approved} = true OR ${support.timepostEnd} > NOW())`;
@@ -187,9 +186,8 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
     .leftJoin(reviewers, eq(ratingTable.userId, reviewers.id))
     .$dynamic();
 
-    // 🚀 LÓGICA SCOPE E INCLUSIÓN DEL PLAN UNLIMITED
+    // 🚀 LÓGICA DE NEGOCIO Y PROTECCIÓN DE DATOS
     if (cleanScope === 'national') {
-      // Ignora el ZIP, filtra remotos o plan ilimitado
       query = query.where(
         and(
           visibilityCondition,
@@ -244,7 +242,6 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
         )
       );
       
-      // 🚀 Destacar primero los del plan ilimitado y luego por la distancia real
       if (cleanUserId) {
         query = query.orderBy(
           sql`CASE 
@@ -267,16 +264,26 @@ export const getSupports = async (rawZip?: string | number, currentUserId?: stri
       }
     } 
     else {
-      // Fallback si no mandan ni ZIP ni national (caso base o error)
-      query = query.where(
-        and(
-          visibilityCondition,
-          or(
-            eq(support.isRemote, false),
-            sql`LOWER(${support.premiumPlan}) = 'unlimited'`
-          )
-        )
-      );
+      // 🚀 PROTECCIÓN DEL BACKEND: Si es local pero NO enviaron código postal
+      let isAdmin = false;
+      if (cleanUserId) {
+        const userCheck = await db.select({ typeDetail: users.typeDetail }).from(users).where(eq(users.id, cleanUserId)).limit(1);
+        if (userCheck && userCheck.length > 0) {
+          const role = userCheck[0].typeDetail;
+          if (role === 'SAdmin' || role === 'admin') isAdmin = true;
+        }
+      }
+
+      if (isAdmin) {
+        // Los admins traen todo para la bandeja
+        query = query.where(visibilityCondition);
+      } else if (cleanUserId) {
+        // Usuario normal sin zip solo ve lo suyo
+        query = query.where(and(visibilityCondition, eq(support.userId, cleanUserId)));
+      } else {
+        // Invitados sin zip reciben array vacío
+        return [];
+      }
       
       if (cleanUserId) {
         query = query.orderBy(
