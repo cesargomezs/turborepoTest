@@ -32,7 +32,6 @@ import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { useAppTheme } from '../../../context/ThemeContext';
 import { handleUniversalShare } from '../../../utils/shareHelper';
 
-// 🚀 CONFIGURACIÓN SUPABASE PARA FIRMA AL VUELO
 const supabaseUrlConfig = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pwznamxpdzwppmpiyizp.supabase.co';
 const supabaseAnonKeyConfig = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = supabaseUrlConfig && supabaseAnonKeyConfig ? createClient(supabaseUrlConfig, supabaseAnonKeyConfig) : null;
@@ -2095,7 +2094,7 @@ export default function LawyersScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* 🚀 2. HEADER CON BUSCADOR DINÁMICO (UNIFICADO PARA PREVENIR BLOQUEO) */}
+              {/* 🚀 2. HEADER CON BUSCADOR DINÁMICO (UNIFICADO Y FLUIDO SIN SALTOS) */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, alignItems: 'center', flexDirection: 'row', gap: 12 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={Colors.text} /></TouchableOpacity>
                 
@@ -2111,6 +2110,9 @@ export default function LawyersScreen() {
                         handleZipChange(text);
                       } else {
                         setSearchKeyword(text);
+                        const latFilter = userLocation ? userLocation.latitude : 34.0934;
+                        const lngFilter = userLocation ? userLocation.longitude : -117.5847;
+                        setResults(applyLocalFilters(allLawyers, selectedArea, latFilter, lngFilter, isAdminMode, text));
                       }
                     }} 
                     onSubmitEditing={() => { 
@@ -2378,7 +2380,7 @@ export default function LawyersScreen() {
         }}
       >
         <LinearGradient colors={orangeGradient} style={{ width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#FF5F6D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
-          <MaterialCommunityIcons name="scale-balance" size={32} color="#FFF" />
+          <MaterialCommunityIcons name="scale-balance" size= {32} color="#FFF" />
         </LinearGradient>
       </TouchableOpacity>
     </View>

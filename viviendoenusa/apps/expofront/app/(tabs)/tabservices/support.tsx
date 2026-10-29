@@ -403,7 +403,7 @@ const SupportFormModal = memo(({
                 <TextInput value={formPhone} onChangeText={setFormPhone} placeholder="(909) 000-0000" placeholderTextColor={Colors.subtext} keyboardType="phone-pad" style={{ flex: 1, color: Colors.text, padding: 15, fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} />
               </View>
 
-              <ThemedText style={{ fontSize: 12, fontWeight: '900', marginBottom: 8, textTransform:'none', color: Colors.text }}>Enlace de Google Reviews (Opcional)</ThemedText>
+              <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Colors.text, marginBottom: 8 }}>Enlace de Google Reviews (Opcional)</ThemedText>
               <TextInput 
                 style={{ padding: 15, borderRadius: 18, borderWidth: 1, marginBottom: 20, backgroundColor: Colors.inputBg, borderColor: Colors.border, color: Colors.text, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) }} 
                 placeholder="https://g.page/r/..." 
@@ -598,7 +598,7 @@ export default function SupportScreen() {
   
   const [serviceScope, setServiceScope] = useState<'local' | 'national'>('local');
   const [zipCode, setZipCode] = useState('');
-  const [searchKeyword, setSearchKeyword] = useState(''); // 🚀 ESTADO INDEPENDIENTE PARA BUSCAR POR TEXTO EN REMOTO
+  const [searchKeyword, setSearchKeyword] = useState(''); 
   const [selectedCategoryIdx, setSelectedCategoryIdx] = useState(0); 
   const [loading, setLoading] = useState(false);
   const [allStores, setAllStores] = useState<any[]>([]);
@@ -685,7 +685,6 @@ export default function SupportScreen() {
   const applyLocalFilters = useCallback((supportList: any[], categoryIdx: number, lat: number, lng: number, adminMode: boolean, keyword: string = '') => {
     let filtered = (categoryIdx === 0) ? [...supportList] : supportList.filter(l => Number(l.categoryId) === categoryIdx);
     
-    // 🚀 FILTRO POR PALABRA CLAVE
     if (keyword.trim() !== '') {
       const lowerKey = keyword.toLowerCase();
       filtered = filtered.filter(item => 
@@ -979,11 +978,16 @@ export default function SupportScreen() {
     } 
   };
 
-  const handleMarkerSelection = (store: any) => { setResults([store]); setIsFilteredByMap(true); const region = { latitude: store.lat, longitude: store.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 }; if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800); };
+  const handleMarkerSelection = (store: any) => { 
+    setResults([store]); 
+    setIsFilteredByMap(true); 
+    const region = { latitude: store.lat, longitude: store.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 }; 
+    if (!isWeb && mapRef.current) mapRef.current.animateToRegion(region, 800); 
+  };
 
   const handleShare = async (support: any) => {
     await handleUniversalShare({
-      title: t.supporttab.label+support.name,
+      title: t.supporttab.label + support.name,
       description: support.description,
       phone: support.phone,
       address: support.address,
@@ -1065,12 +1069,13 @@ export default function SupportScreen() {
 
   const handleCloseDetailModal = () => { setSelectedDetail(null); lastProcessedNotifId.current = null; router.setParams({ id: '', supportId: '', referenceId: '' }); };
 
+  // 🚀 SOLO REMOVIMOS searchKeyword DE ESTE USEEFFECT PARA ELIMINAR EL SALTO AL ESCRIBIR
   useEffect(() => {
     const lat = userLocation ? userLocation.latitude : 34.0934;
     const lng = userLocation ? userLocation.longitude : -117.5847;
     const filtered = applyLocalFilters(allStores, selectedCategoryIdx, lat, lng, isAdminMode, searchKeyword);
     setResults(filtered);
-  }, [allStores, selectedCategoryIdx, userLocation, isAdminMode, applyLocalFilters, searchKeyword]);
+  }, [allStores, selectedCategoryIdx, userLocation, isAdminMode, applyLocalFilters]);
 
   const SupportCard = ({ store, renderAdminControls }: { store: any, renderAdminControls?: any }) => {
     const dist = userLocation ? getDistance(userLocation.latitude, userLocation.longitude, store.lat, store.lng) : null;
@@ -1560,7 +1565,7 @@ export default function SupportScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* 🚀 2. HEADER CON BUSCADOR DINÁMICO UNIFICADO */}
+              {/* 🚀 2. HEADER CON BUSCADOR DINÁMICO FLUIDO SIN SALTOS */}
               <View style={[stylesUnified.headerRow, { marginBottom: 15, alignItems: 'center', flexDirection: 'row', gap: 12 }]}>
                 <TouchableOpacity onPress={() => router.push('/services')}><MaterialCommunityIcons name="arrow-left" size={26} color={DynamicColors.text} /></TouchableOpacity>
                 
