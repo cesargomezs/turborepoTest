@@ -6,6 +6,7 @@ if (!(util as any).isNullOrUndefined) {
 }
 import 'dotenv/config';
 import express from 'express';
+import compression from 'compression'; // 🚀 IMPORTACIÓN DE COMPRESIÓN AÑADIDA
 import cors from 'cors';
 import helmet from 'helmet'; // 🛡️ Seguridad de Cabeceras
 import rateLimit from 'express-rate-limit'; // 🛡️ Anti-Spam / DDoS
@@ -48,6 +49,11 @@ const app = express();
 // 🚀 LA LÍNEA MÁGICA QUE SOLUCIONA EL CRASHEO (502) Y EL FALSO CORS EN RAILWAY 🚀
 // ============================================================================
 app.set('trust proxy', 1);
+
+// ============================================================================
+// 📦 ACTIVACIÓN DE COMPRESIÓN GLOBAL (GZIP/BROTLI)
+// ============================================================================
+app.use(compression()); // 🚀 MIDDLEWARE DE COMPRESIÓN AÑADIDO ANTES DE LAS RUTAS
 
 console.log("Puerto desde .env:", process.env.PORT);
 const port = process.env.PORT || 3000;
