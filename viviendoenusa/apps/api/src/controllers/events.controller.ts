@@ -224,17 +224,11 @@ export const getEvents = async (zip?: string, userId?: string) => {
     .where(finalConditions)
     .$dynamic();
 
-    if (cleanUserId) {
-      query = query.orderBy(
-        sql`CASE WHEN ${events.userId} = ${cleanUserId} THEN 0 WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 1 ELSE 2 END`,
-        desc(events.id)
-      );
-    } else {
-      query = query.orderBy(
-        sql`CASE WHEN ${users.typeDetail} IN ('SAdmin', 'admin') THEN 0 ELSE 1 END`,
-        desc(events.id)
-      );
-    }
+    // 🚀 NUEVA LÓGICA DE ORDENAMIENTO (Aprobados arriba ordenados por fecha ascendente, luego pendientes)
+    query = query.orderBy(
+      sql`CASE WHEN ${events.approved} = true THEN 0 ELSE 1 END`, // 1. Aprobados primero
+      asc(events.dateEvent) // 2. Orden cronológico (los más cercanos a hoy primero)
+    );
 
     const rows = await query;
     if (!rows || rows.length === 0) return [];
