@@ -12,7 +12,7 @@ import helmet from 'helmet'; // 🛡️ Seguridad de Cabeceras
 import rateLimit from 'express-rate-limit'; // 🛡️ Anti-Spam / DDoS
 import multer from 'multer';
 
-import sharp from 'sharp';
+import sharp from 'sharp'; 
 // @ts-ignore
 import convert from 'heic-convert'; // 🍏 Soporte nativo para HEIC de iPhone en el servidor
 import { createClient } from '@supabase/supabase-js';
